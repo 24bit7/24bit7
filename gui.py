@@ -45,7 +45,7 @@ class PlayTab(tk.Frame):
         header = tk.Frame(self, padx=16, pady=12)
         header.pack(fill="x")
         tk.Label(header, text="24bit7", font=("Segoe UI", 18, "bold")).pack(anchor="w")
-        tk.Label(header, text="Smart Playlist Creator and Music Discovery tool",
+        tk.Label(header, text="Smart Playlist Creator and Music Discovery Tool",
                  font=("Segoe UI", 10), fg="#666").pack(anchor="w")
 
         frame = tk.Frame(self, padx=16, pady=8)
@@ -66,6 +66,7 @@ class PlayTab(tk.Frame):
             ("Similar Artists", self.on_similar),
             ("Top Tracks", self.on_top_tracks),
             ("Show Credits", self.on_credits),
+            ("Vibe Playlist", self.on_vibe),
         ]:
             b = tk.Button(frame, text=text, command=handler, width=16, height=2)
             b.pack(side="left", padx=(0, 8))
@@ -112,10 +113,10 @@ class PlayTab(tk.Frame):
         self.log.delete("1.0", "end")
         self.log.config(state="disabled")
 
-    def _run_job(self, target):
+    def _run_job(self, target, needs_playing=True):
         if self.running:
             return
-        if not self.last_playing:
+        if needs_playing and not self.last_playing:
             messagebox.showinfo("Nothing playing",
                                 "Start a track in JRiver first, then try again.")
             return
@@ -147,6 +148,75 @@ class PlayTab(tk.Frame):
 
     def on_credits(self):
         self._run_job(lambda: engine.explore_credits(report=self.report))
+
+    def on_vibe(self):
+        VibeDialog(self.root, on_submit=lambda vibe: self._run_job(
+            lambda: engine.create_vibe_playlist(vibe, report=self.report), needs_playing=False))
+
+
+class VibeDialog(tk.Toplevel):
+    """
+    Asks for a mood description. Three AI-suggested vibes load in the background
+    and appear as clickable buttons; click one to use it, or type your own.
+    """
+    def __init__(self, master, on_submit):
+        super().__init__(master)
+        self.title("Vibe Playlist")
+        self.resizable(False, False)
+        self.on_submit = on_submit
+        self.transient(master)
+
+        body = tk.Frame(self, padx=16, pady=14)
+        body.pack(fill="both", expand=True)
+        tk.Label(body, text="Describe the mood, era, activity or feeling:",
+                 font=("Segoe UI", 10)).pack(anchor="w")
+        self.entry = tk.Entry(body, width=48, font=("Segoe UI", 11))
+        self.entry.pack(fill="x", pady=(6, 10))
+        self.entry.focus_set()
+        self.entry.bind("<Return>", lambda e: self.submit())
+
+        tk.Label(body, text="Or try one of these:", fg="#666").pack(anchor="w")
+        self.suggest_frame = tk.Frame(body)
+        self.suggest_frame.pack(fill="x", pady=(4, 12))
+        self.loading = tk.Label(self.suggest_frame, text="Thinking...", fg="#999")
+        self.loading.pack(anchor="w")
+
+        bar = tk.Frame(body)
+        bar.pack(fill="x")
+        tk.Button(bar, text="Create playlist", width=16, command=self.submit).pack(side="right")
+        tk.Button(bar, text="Cancel", width=10, command=self.destroy).pack(side="right", padx=(0, 8))
+
+        threading.Thread(target=self._load_suggestions, daemon=True).start()
+
+    def _load_suggestions(self):
+        try:
+            ideas = engine.ai_vibe_suggestions()
+        except Exception:
+            ideas = []
+        self.after(0, lambda: self._show_suggestions(ideas))
+
+    def _show_suggestions(self, ideas):
+        if not self.winfo_exists():
+            return
+        self.loading.destroy()
+        if not ideas:
+            tk.Label(self.suggest_frame, text="(no suggestions right now)", fg="#999").pack(anchor="w")
+            return
+        for idea in ideas:
+            tk.Button(self.suggest_frame, text=idea, anchor="w",
+                      command=lambda t=idea: self._use(t)).pack(fill="x", pady=2)
+
+    def _use(self, text):
+        self.entry.delete(0, "end")
+        self.entry.insert(0, text)
+        self.entry.focus_set()
+
+    def submit(self):
+        vibe = self.entry.get().strip()
+        if not vibe:
+            return
+        self.destroy()
+        self.on_submit(vibe)
 
 
 def _enable_dpi_awareness():

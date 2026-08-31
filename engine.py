@@ -41,7 +41,7 @@ def load_settings():
     global SIMILAR_SOURCES, TOP_TRACK_SOURCES, LISTENBRAINZ_ALGORITHM_SETTING
     global DIGITAL_STORE, DEBUG, SIMILAR_ARTIST_LIMIT, TRACKS_PER_ARTIST_POOL
     global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, CACHE_DAYS
-    global TABLE_FONT_SIZE
+    global TABLE_FONT_SIZE, VIBE_TRACK_COUNT
 
     load_dotenv(ENV_FILE, override=True)
 
@@ -69,6 +69,7 @@ def load_settings():
         TOP_TRACKS_ORDER = "popular"
     CACHE_DAYS = _int_setting("CACHE_DAYS", 30, 1, 365)
     TABLE_FONT_SIZE = _int_setting("TABLE_FONT_SIZE", 9, 6, 16)   # Discover table font
+    VIBE_TRACK_COUNT = _int_setting("VIBE_TRACK_COUNT", 20, 5, 100)  # target size for vibe playlists
 
 
 def refresh_settings_if_changed():
@@ -348,6 +349,26 @@ def strip_accents(s):
     return ''.join(c for c in decomposed if not unicodedata.combining(c))
 
 
+def strip_initial_dots(s):
+    """
+    Collapses dotted initials: 'U.N.K.L.E.' -> 'UNKLE', 'M.I.A.' -> 'MIA',
+    'R.E.M.' -> 'REM'. Only touches dots between single letters, so
+    'Mr. Scruff' and 'Jr.' are left alone.
+    """
+    # Repeatedly remove a dot that sits between two single letters (or after a
+    # single letter at the end), which is the initials pattern.
+    prev = None
+    while prev != s:
+        prev = s
+        s = re.sub(r'\b([A-Za-z])\.(?=[A-Za-z]\b|[A-Za-z]\.|\s|$)', r'\1', s)
+    return s
+
+
+def norm_artist_text(s):
+    """Accent-free, dot-collapsed form used wherever two artist names are compared."""
+    return strip_accents(strip_initial_dots(s))
+
+
 def deinvert_the(name):
     """
     Turns a trailing ', The' into a leading 'The' so library-style names match
@@ -367,7 +388,9 @@ def jriver_search_artist_items(artist_name):
     that keep accents still match.
     """
     term_original = normalise_artist(artist_name)
-    term_ascii = strip_accents(term_original)
+    term_ascii = norm_artist_text(term_original)
+    # Try the normalised form first (no accents, no dotted initials), then the
+    # original spelling, so libraries tagged either way still match.
     queries = [term_ascii] if term_ascii == term_original else [term_ascii, term_original]
     for query in queries:
         r = requests.get(
@@ -384,9 +407,9 @@ def jriver_search_artist_items(artist_name):
 
 
 def artist_matches(pattern, fields):
-    """Applies the artist regex to the accent-stripped artist field of an MPL item."""
+    """Applies the artist regex to the normalised (accent-free, dot-collapsed) artist field."""
     actual_artist = fields.get("Artist", "") or fields.get("Album Artist", "")
-    return bool(pattern.search(strip_accents(actual_artist)))
+    return bool(pattern.search(norm_artist_text(actual_artist)))
 
 
 # ---------------------------------------------------------------------------
@@ -644,6 +667,17 @@ AI_SIMILAR_PROMPT = (
     "Consider sound, era, scene and audience. Use each artist's most common spelling. "
     "Respond with a JSON array of artist name strings only, no commentary, no code fences."
 )
+AI_VIBE_PROMPT = (
+    "Suggest {count} songs that fit this mood or description: \"{vibe}\".\n"
+    "Favour well-known, widely-available recordings across a range of artists. "
+    "Respond with a JSON array of objects with keys \"artist\" and \"track\" only, "
+    "no commentary, no code fences."
+)
+AI_VIBE_SUGGESTIONS_PROMPT = (
+    "Suggest three short, evocative music playlist moods a listener might enjoy, "
+    "each under eight words (for example a time of day, activity, feeling or era). "
+    "Respond with a JSON array of three strings only, no commentary, no code fences."
+)
 AI_TOP_TRACKS_PROMPT = (
     "List the {limit} most popular songs by \"{artist}\", most popular first, "
     "judged by overall listenership. Use official song titles without album or version notes. "
@@ -690,6 +724,48 @@ def ai_ask_list(prompt):
     except Exception as e:
         print(f"[AI] Request failed: {e}")
     return []
+
+
+def ai_ask_json(prompt, max_tokens=2000):
+    """Sends a prompt expecting JSON; returns the parsed value or None."""
+    if not ANTHROPIC_API_KEY:
+        print("[AI] ANTHROPIC_API_KEY is missing from .env.")
+        return None
+    try:
+        import anthropic
+    except ImportError:
+        print("[AI] The anthropic package isn't installed. Run: pip install anthropic")
+        return None
+    try:
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        message = client.messages.create(model=AI_MODEL, max_tokens=max_tokens,
+                                         messages=[{"role": "user", "content": prompt}])
+        text = "".join(b.text for b in message.content if getattr(b, "type", "") == "text")
+        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
+        return json.loads(text)
+    except Exception as e:
+        print(f"[AI] Request failed: {e}")
+        return None
+
+
+def ai_vibe_suggestions():
+    """Three random playlist moods for the vibe dialog. Returns a list of strings (may be empty)."""
+    data = ai_ask_json(AI_VIBE_SUGGESTIONS_PROMPT, max_tokens=200)
+    if isinstance(data, list):
+        return [str(x).strip() for x in data if str(x).strip()][:3]
+    return []
+
+
+def ai_vibe_tracks(vibe, count):
+    """Artist/track pairs for a vibe. Returns [(artist, track)]."""
+    data = ai_ask_json(AI_VIBE_PROMPT.format(vibe=vibe, count=count))
+    pairs = []
+    if isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict) and item.get("artist") and item.get("track"):
+                pairs.append((canonicalise_conjunction(str(item["artist"]).strip()),
+                              str(item["track"]).strip()))
+    return pairs
 
 
 def ai_similar(artist_name, limit=20):
@@ -776,7 +852,7 @@ def blend_lists(results, key_fn):
 
 
 def artist_key(name):
-    return strip_accents(canonicalise_conjunction(name)).lower().strip()
+    return norm_artist_text(canonicalise_conjunction(name)).lower().strip()
 
 
 BLEND_DEPTH = 2   # ask each source for this many times the wanted count, so overlaps deeper down still merge
@@ -953,6 +1029,111 @@ def create_similar_playlist(report=print):
     else:
         report("No library matches found.")
     session_finish(session_id, queued, sources=source_label, report=report)
+
+
+# ---------------------------------------------------------------------------
+# Mode 4: Vibe Playlist (AI-described mood, two-step)
+# ---------------------------------------------------------------------------
+
+VIBE_BACKFILL_THRESHOLD = 0.50   # run step 2 when this share (or more) of step-1 picks are misses
+
+
+def create_vibe_playlist(vibe, report=print):
+    """
+    Builds a playlist from a text description of a mood.
+    Step 1: AI suggests artist/track pairs (always AI, regardless of source
+            settings, since no other source takes a description). Hits queue,
+            misses are logged as discoveries.
+    Step 2: only if the step-1 miss rate reaches VIBE_BACKFILL_THRESHOLD, the
+            step-1 HIT artists become seeds for Last.fm + Deezer similar artists
+            (no AI), and library tracks from those fill up to VIBE_TRACK_COUNT.
+    Everything is shuffled before queueing.
+    """
+    refresh_settings_if_changed()
+    vibe = (vibe or "").strip()
+    if not vibe:
+        report("No vibe given.")
+        return
+    target = VIBE_TRACK_COUNT
+    report(f"\nVibe: {vibe}  (target {target} tracks)")
+
+    seed_info = {"Artist": "Vibe", "Name": vibe, "Album": ""}
+    session_id = session_start("vibe", seed_info, "AI")
+
+    # --- Step 1: AI wings it -------------------------------------------------
+    report("  Step 1: asking AI for tracks...")
+    pairs = ai_vibe_tracks(vibe, count=target)
+    if not pairs:
+        report("  AI returned nothing usable.")
+        session_finish(session_id, 0, report=report)
+        return
+
+    keys, hit_artists, misses = [], [], 0
+    for artist, track in pairs:
+        key = find_jriver_key_by_track(artist, track)
+        if key:
+            report(f"    Found: {artist} - {track}")
+            if key not in keys:
+                keys.append(key)
+            if artist_key(artist) not in {artist_key(a) for a in hit_artists}:
+                hit_artists.append(artist)
+            session_log(session_id, artist, track, "AI", found=True)
+        else:
+            report(f"    Not in library: {artist} - {track}")
+            misses += 1
+            session_log(session_id, artist, track, "AI", found=False)
+
+    miss_rate = misses / len(pairs)
+    report(f"  Step 1 done: {len(keys)} found, {misses} missing ({miss_rate:.0%} miss rate).")
+
+    # --- Step 2: backfill from similar artists, only if needed --------------------
+    if len(keys) < target and miss_rate >= VIBE_BACKFILL_THRESHOLD:
+        if not hit_artists:
+            report("  Nothing matched, so no seeds for a backfill. Try a different vibe.")
+        else:
+            report(f"  Step 2: filling from artists similar to your {len(hit_artists)} hit(s) "
+                   f"via Last.fm + Deezer...")
+            backfill_providers = [PROVIDERS["lastfm"], PROVIDERS["deezer"]]
+            seen_artists = {artist_key(a) for a in hit_artists}
+            for seed in hit_artists:
+                if len(keys) >= target:
+                    break
+                results = []
+                for service_name, similar_fn, _ in backfill_providers:
+                    names = cached_call(service_name, "similar", f"{artist_key(seed)}|20",
+                                        lambda: similar_fn(seed, limit=20))
+                    if names:
+                        results.append((service_name, names))
+                for artist, suggested_by in blend_lists(results, artist_key):
+                    if len(keys) >= target:
+                        break
+                    if artist_key(artist) in seen_artists:
+                        continue
+                    seen_artists.add(artist_key(artist))
+                    picks = get_verified_keys_for_artist(artist)
+                    if picks:
+                        added = [k for k in picks if k not in keys]
+                        keys.extend(added)
+                        report(f"    + {artist} ({', '.join(suggested_by)}): {len(added)} track(s)")
+                        session_log(session_id, artist, "", suggested_by, found=True)
+                    else:
+                        top, _ = blended_top_tracks(artist, limit=1)
+                        top_track = top[0][0] if top else "Unknown Track"
+                        session_log(session_id, artist, top_track, suggested_by, found=False)
+            report(f"  Step 2 done: {len(keys)} tracks total.")
+
+    if not keys:
+        report("No library matches found.")
+        session_finish(session_id, 0, report=report)
+        return
+
+    random.shuffle(keys)
+    keys = keys[:target]
+    clear_around_current()
+    report(f"Queuing {len(keys)} tracks (shuffled)...")
+    queue_tracks(keys)
+    report("Queue refreshed.")
+    session_finish(session_id, len(keys), report=report)
 
 
 # ---------------------------------------------------------------------------
