@@ -12,6 +12,7 @@ its log via a thread-safe queue so the window never freezes.
 
 import queue
 import threading
+import webbrowser
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 
@@ -22,6 +23,15 @@ from discover_gui import DiscoverTab
 
 REFRESH_MS = 3000
 POLL_MS = 100
+DONATE_URL = "https://paypal.me/24bit7"
+
+WELCOME_TEXT = (
+    "Welcome to 24bit7!\n\n"
+    "A starter settings file has been created. Playlists work out of the box "
+    "via Deezer; add free keys for Last.fm and ListenBrainz for better blends. "
+    "The ? buttons explain how to get each key.\n\n"
+    "JRiver needs Media Network enabled: Tools > Options > Media Network."
+)
 
 
 class PlayTab(tk.Frame):
@@ -80,6 +90,12 @@ class PlayTab(tk.Frame):
             b = tk.Button(frame, text=text, command=handler, width=16, height=2)
             b.pack(side="left", padx=(0, 8))
             self.buttons.append(b)
+
+        # Donate link. Not in self.buttons, so it stays clickable during a run.
+        link = tk.Label(frame, text="24bit7 is free and always will be.  Buy me a coffee \u2615",
+                        font=("Segoe UI", 9, "underline"), fg="#1f4e9c", cursor="hand2")
+        link.pack(side="left", padx=(16, 0))
+        link.bind("<Button-1>", lambda e: webbrowser.open(DONATE_URL))
 
     def _build_log(self):
         frame = tk.Frame(self, padx=16, pady=12)
@@ -264,7 +280,7 @@ def _enable_dpi_awareness():
 def main():
     _enable_dpi_awareness()
     root = tk.Tk()
-    root.title("24bit7")
+    root.title(f"24bit7  v{engine.VERSION}")
     # Open at 75% of the screen so it fits any monitor/DPI, then centre it.
     sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
     w, h = int(sw * 0.75), int(sh * 0.75)
@@ -287,14 +303,21 @@ def main():
 
     play = PlayTab(nb, root)
     discover = DiscoverTab(nb)
+    settings = SettingsTab(nb)
     nb.add(play, text="Play")
     nb.add(discover, text="Discover")
-    nb.add(SettingsTab(nb), text="Settings")
+    nb.add(settings, text="Settings")
 
     def on_tab_changed(event):
         if nb.select() == str(discover):
             discover.ensure_loaded()
     nb.bind("<<NotebookTabChanged>>", on_tab_changed)
+
+    # Fresh install: engine just created a starter .env, so open on Settings
+    # and say hello once. Never shown again after that.
+    if engine.FIRST_RUN:
+        nb.select(settings)
+        root.after(400, lambda: messagebox.showinfo("Welcome to 24bit7", WELCOME_TEXT, parent=root))
 
     root.mainloop()
 

@@ -26,6 +26,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
+VERSION = "1.0.0"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 TARGET_ZONE = "0"
 CSV_FILE = os.path.join(APP_DIR, "FutureDiscoveries.csv")      # legacy log, imported once into the database
@@ -99,6 +100,60 @@ def refresh_settings_if_changed():
         _env_mtime = mtime
 
 
+FIRST_RUN = False   # True when this launch created a fresh .env (new install)
+
+DEFAULT_ENV = """# 24bit7 settings. Edit through the app's Settings tab (recommended) or here.
+
+# JRiver connection. Media Network must be enabled in JRiver
+# (Tools > Options > Media Network). User/pass only if you set authentication.
+JRIVER_HOST=127.0.0.1:52199
+JRIVER_USER=
+JRIVER_PASS=
+
+# Service keys. Deezer needs no key, so 24bit7 works out of the box.
+# The ? buttons in Settings > Keys explain how to get each of these (all free
+# except Anthropic, which is pay-as-you-go).
+LASTFM_API_KEY=
+LISTENBRAINZ_TOKEN=
+DISCOGS_TOKEN=
+ANTHROPIC_API_KEY=
+
+# Recommendation sources (comma-separated: lastfm, listenbrainz, deezer, ai)
+SIMILAR_SOURCES=lastfm,deezer
+TOP_TRACK_SOURCES=lastfm,deezer
+LISTENBRAINZ_ALGORITHM=alltime
+
+# Playlist sizes and order
+SIMILAR_ARTIST_LIMIT=20
+TRACKS_PER_ARTIST_POOL=5
+TRACKS_PER_ARTIST_PICK=3
+TOP_TRACKS_COUNT=10
+TOP_TRACKS_ORDER=popular
+VIBE_TRACK_COUNT=20
+
+# Other
+DIGITAL_STORE=bandcamp
+CACHE_DAYS=30
+TABLE_FONT_SIZE=9
+DEBUG=0
+"""
+
+
+def ensure_env_exists():
+    """Creates a commented starter .env on a fresh install and flags first run."""
+    global FIRST_RUN
+    if os.path.isfile(ENV_FILE):
+        return
+    FIRST_RUN = True
+    try:
+        with open(ENV_FILE, "w", encoding="utf-8") as f:
+            f.write(DEFAULT_ENV)
+        print(f"[Settings] Created starter settings file: {ENV_FILE}")
+    except OSError as e:
+        print(f"[Settings] Could not create {ENV_FILE}: {e}")
+
+
+ensure_env_exists()
 load_settings()
 try:
     _env_mtime = os.path.getmtime(ENV_FILE)
