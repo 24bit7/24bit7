@@ -312,6 +312,16 @@ def strip_accents(s):
     return ''.join(c for c in decomposed if not unicodedata.combining(c))
 
 
+def deinvert_the(name):
+    """
+    Turns a trailing ', The' into a leading 'The' so library-style names match
+    canonical databases. 'Isley Brothers, The' -> 'The Isley Brothers'.
+    Returns the name unchanged if there's no trailing ', The'.
+    """
+    m = re.match(r'^(.*),\s*(The|A|An)$', name.strip(), re.IGNORECASE)
+    return f"{m.group(2)} {m.group(1)}" if m else name.strip()
+
+
 def jriver_search_artist_items(artist_name):
     """
     Runs the JRiver library search for an artist and returns the matching
@@ -484,31 +494,48 @@ def deezer_top_tracks(artist_name, limit=10):
 _mbid_cache = {}
 
 
-def musicbrainz_artist_id(artist_name):
-    """Resolves an artist name to a MusicBrainz ID. MusicBrainz asks for 1 req/sec."""
-    if artist_name in _mbid_cache:
-        return _mbid_cache[artist_name]
-    mbid = None
+def _musicbrainz_query(name):
+    """Single MusicBrainz artist search for one name spelling. Returns an MBID or None."""
     for attempt in range(3):
         try:
             r = requests.get("https://musicbrainz.org/ws/2/artist/",
-                             params={"query": f'artist:"{artist_name}"', "fmt": "json", "limit": 1},
+                             params={"query": f'artist:"{name}"', "fmt": "json", "limit": 1},
                              headers={"User-Agent": USER_AGENT})
             if r.status_code == 503:
                 print(f"  [MusicBrainz] Busy, retrying ({attempt + 1}/3)...")
                 time.sleep(2.0)
                 continue
             if r.status_code != 200:
-                print(f"[Error] MusicBrainz returned {r.status_code} for {artist_name}: {r.text[:200]}")
-                break
+                print(f"[Error] MusicBrainz returned {r.status_code} for {name}: {r.text[:200]}")
+                return None
             artists = r.json().get("artists", [])
-            mbid = artists[0]["id"] if artists else None
-            break
+            return artists[0]["id"] if artists else None
         except Exception as e:
-            print(f"[Error] MusicBrainz lookup failed for {artist_name}: {e}")
+            print(f"[Error] MusicBrainz lookup failed for {name}: {e}")
+            return None
+    return None
+
+
+def musicbrainz_artist_id(artist_name):
+    """
+    Resolves an artist name to a MusicBrainz ID. Tries the name as given, then
+    the de-inverted form ('Isley Brothers, The' -> 'The Isley Brothers'), since
+    libraries often store the sort-name form that MusicBrainz doesn't match.
+    MusicBrainz asks for 1 req/sec.
+    """
+    if artist_name in _mbid_cache:
+        return _mbid_cache[artist_name]
+    candidates = [artist_name]
+    deinverted = deinvert_the(artist_name)
+    if deinverted != artist_name:
+        candidates.append(deinverted)
+    mbid = None
+    for name in candidates:
+        mbid = _musicbrainz_query(name)
+        time.sleep(1.0)
+        if mbid:
             break
     _mbid_cache[artist_name] = mbid
-    time.sleep(1.0)
     return mbid
 
 
