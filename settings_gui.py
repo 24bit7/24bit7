@@ -130,6 +130,7 @@ class SettingsTab(tk.Frame):
     def _build_sources(self, nb):
         tab = tk.Frame(nb, padx=12, pady=12)
         nb.add(tab, text="Sources")
+        ttk.Style(self).configure("Big.TCheckbutton", font=("Segoe UI", 11))
         r = 0
 
         tk.Label(tab, text="Similar-artist sources", font=("Segoe UI", 9, "bold")).grid(
@@ -140,8 +141,8 @@ class SettingsTab(tk.Frame):
         for i, (code, label) in enumerate(SOURCE_NAMES):
             v = tk.BooleanVar(value=code in chosen_sim)
             self.vars["SIMILAR_SOURCES"][code] = v
-            tk.Checkbutton(tab, text=label, variable=v, command=self._save).grid(
-                row=r, column=i, sticky="w")
+            ttk.Checkbutton(tab, text=label, variable=v, command=self._save,
+                            style="Big.TCheckbutton").grid(row=r, column=i, sticky="w", padx=(0, 12))
         r += 1
 
         tk.Label(tab, text="Top-track sources", font=("Segoe UI", 9, "bold")).grid(
@@ -152,13 +153,13 @@ class SettingsTab(tk.Frame):
         for i, (code, label) in enumerate(SOURCE_NAMES):
             v = tk.BooleanVar(value=code in chosen_top)
             self.vars["TOP_TRACK_SOURCES"][code] = v
-            tk.Checkbutton(tab, text=label, variable=v, command=self._save).grid(
-                row=r, column=i, sticky="w")
+            ttk.Checkbutton(tab, text=label, variable=v, command=self._save,
+                            style="Big.TCheckbutton").grid(row=r, column=i, sticky="w", padx=(0, 12))
         r += 1
 
-        tk.Label(tab, text="More services = richer, more varied playlists (slower).  "
+        tk.Label(tab, text="More services = richer, more varied playlists (slower).\n"
                           "Fewer = quicker.",
-                 fg="#666", font=("Segoe UI", 8), justify="left", wraplength=460).grid(
+                 fg="#666", font=("Segoe UI", 9), justify="left").grid(
             row=r, column=0, columnspan=4, sticky="w", pady=(10, 0))
         r += 1
 

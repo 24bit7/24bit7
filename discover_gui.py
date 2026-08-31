@@ -7,11 +7,12 @@ session. A per-row Search opens the chosen digital store's search page in the
 browser, so a discovery leads to buying it rather than pirating it.
 """
 
+import csv
 import os
 import urllib.parse
 import webbrowser
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, filedialog, messagebox
 
 import engine
 
@@ -42,10 +43,12 @@ class DiscoverTab(tk.Frame):
         bar = tk.Frame(self, padx=12, pady=8)
         bar.pack(fill="x")
 
+        ttk.Style(self).configure("Big.TRadiobutton", font=("Segoe UI", 11))
         self.filter_var = tk.StringVar(value="misses")
         for label, val in [("Misses", "misses"), ("Hits", "hits"), ("All", "all")]:
-            tk.Radiobutton(bar, text=label, variable=self.filter_var, value=val,
-                           command=self.refresh).pack(side="left")
+            ttk.Radiobutton(bar, text=label, variable=self.filter_var, value=val,
+                            command=self.refresh, style="Big.TRadiobutton").pack(
+                side="left", padx=(0, 10))
 
         tk.Label(bar, text="   Session:").pack(side="left")
         self.session_var = tk.StringVar(value="All sessions")
@@ -69,8 +72,14 @@ class DiscoverTab(tk.Frame):
         wrap = tk.Frame(self, padx=12, pady=8)
         wrap.pack(fill="both", expand=True)
 
+        style = ttk.Style(self)
+        # Rows must be tall enough for the DPI-scaled font, or text gets clipped.
+        style.configure("Treeview", font=("Segoe UI", 10), rowheight=32)
+        style.configure("Treeview.Heading", font=("Segoe UI", 10, "bold"))
+
         cols = ("seed", "artist", "track", "sources", "found", "date")
-        self.tree = ttk.Treeview(wrap, columns=cols, show="headings", selectmode="browse")
+        self.tree = ttk.Treeview(wrap, columns=cols, show="headings",
+                                 selectmode="browse")
         headings = {"seed": "Seed", "artist": "Artist", "track": "Track",
                     "sources": "Suggested by", "found": "In library", "date": "When"}
         widths = {"seed": 160, "artist": 140, "track": 150, "sources": 120,
@@ -90,6 +99,8 @@ class DiscoverTab(tk.Frame):
         self.store_label.pack(side="left")
         tk.Button(btnbar, text="Search selected in store",
                   command=self.search_selected).pack(side="right")
+        tk.Button(btnbar, text="Export to CSV",
+                  command=self.export_csv).pack(side="right", padx=(0, 8))
         tk.Button(btnbar, text="Refresh", command=self.refresh).pack(side="right", padx=(0, 8))
 
         self._rows = []           # parallel list of dicts backing the tree
@@ -134,7 +145,7 @@ class DiscoverTab(tk.Frame):
     def _populate(self):
         term = self.search_var.get().strip().lower() if hasattr(self, "search_var") else ""
         self.tree.delete(*self.tree.get_children())
-        shown = 0
+        self._visible = []
         for i, r in enumerate(self._rows):
             seed = self._seed_text(r)
             found = "yes" if r["found"] else "no"
@@ -144,8 +155,28 @@ class DiscoverTab(tk.Frame):
                 continue
             self.tree.insert("", "end", iid=str(i), values=(
                 seed, r["artist"], r["track"] or "", r["sources"] or "", found, r["date"]))
-            shown += 1
-        self.count_label.config(text=f"{shown} shown")
+            self._visible.append((seed, r["artist"] or "", r["track"] or "",
+                                  r["sources"] or "", found, r["date"] or ""))
+        self.count_label.config(text=f"{len(self._visible)} shown")
+
+    def export_csv(self):
+        if not getattr(self, "_visible", None):
+            messagebox.showinfo("Nothing to export", "No rows are shown.", parent=self)
+            return
+        path = filedialog.asksaveasfilename(
+            parent=self, defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv")], initialfile="24bit7_discoveries.csv")
+        if not path:
+            return
+        try:
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                w = csv.writer(f)
+                w.writerow(["Seed", "Artist", "Track", "Suggested by", "In library", "When"])
+                w.writerows(self._visible)
+        except Exception as e:
+            messagebox.showerror("Export failed", str(e), parent=self)
+            return
+        messagebox.showinfo("Exported", f"Saved {len(self._visible)} rows to\n{path}", parent=self)
 
     def _sort_by(self, col):
         if self._sort_col == col:

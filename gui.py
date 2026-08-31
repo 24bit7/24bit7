@@ -160,8 +160,8 @@ def main():
     _enable_dpi_awareness()
     root = tk.Tk()
     root.title("24bit7")
-    root.geometry("660x600")
-    root.minsize(560, 480)
+    root.geometry("900x620")
+    root.minsize(680, 480)
 
     style = ttk.Style(root)
     # Bigger, bolder notebook tab labels
