@@ -50,22 +50,31 @@ class DiscoverTab(tk.Frame):
         tk.Label(bar, text="   Session:").pack(side="left")
         self.session_var = tk.StringVar(value="All sessions")
         self.session_menu = ttk.Combobox(bar, textvariable=self.session_var,
-                                         state="readonly", width=34)
+                                         state="readonly", width=28)
         self.session_menu.pack(side="left", padx=(4, 0))
         self.session_menu.bind("<<ComboboxSelected>>", lambda e: self.refresh())
 
         self.count_label = tk.Label(bar, text="", fg="#777")
         self.count_label.pack(side="right")
 
+        search_bar = tk.Frame(self, padx=12)
+        search_bar.pack(fill="x")
+        tk.Label(search_bar, text="Search:").pack(side="left")
+        self.search_var = tk.StringVar()
+        self.search_var.trace_add("write", lambda *a: self._populate())
+        tk.Entry(search_bar, textvariable=self.search_var).pack(
+            side="left", fill="x", expand=True, padx=(4, 0))
+
     def _build_table(self):
         wrap = tk.Frame(self, padx=12, pady=8)
         wrap.pack(fill="both", expand=True)
 
-        cols = ("artist", "track", "sources", "found", "date")
+        cols = ("seed", "artist", "track", "sources", "found", "date")
         self.tree = ttk.Treeview(wrap, columns=cols, show="headings", selectmode="browse")
-        headings = {"artist": "Artist", "track": "Track", "sources": "Suggested by",
-                    "found": "In library", "date": "When"}
-        widths = {"artist": 150, "track": 170, "sources": 140, "found": 70, "date": 110}
+        headings = {"seed": "Seed", "artist": "Artist", "track": "Track",
+                    "sources": "Suggested by", "found": "In library", "date": "When"}
+        widths = {"seed": 160, "artist": 140, "track": 150, "sources": 120,
+                  "found": 65, "date": 100}
         for c in cols:
             self.tree.heading(c, text=headings[c], command=lambda cc=c: self._sort_by(cc))
             self.tree.column(c, width=widths[c], anchor="w")
@@ -116,23 +125,40 @@ class DiscoverTab(tk.Frame):
         self._rows = engine.list_discoveries(found=found, session_id=session_id)
         self._populate()
 
+    def _seed_text(self, r):
+        seed = r.get("seed_artist") or "?"
+        if r.get("seed_track"):
+            seed += f" - {r['seed_track']}"
+        return seed
+
     def _populate(self):
+        term = self.search_var.get().strip().lower() if hasattr(self, "search_var") else ""
         self.tree.delete(*self.tree.get_children())
+        shown = 0
         for i, r in enumerate(self._rows):
+            seed = self._seed_text(r)
+            found = "yes" if r["found"] else "no"
+            haystack = " ".join([seed, r["artist"] or "", r["track"] or "",
+                                 r["sources"] or "", found, r["date"] or ""]).lower()
+            if term and term not in haystack:
+                continue
             self.tree.insert("", "end", iid=str(i), values=(
-                r["artist"], r["track"] or "", r["sources"] or "",
-                "yes" if r["found"] else "no", r["date"]))
-        self.count_label.config(text=f"{len(self._rows)} shown")
+                seed, r["artist"], r["track"] or "", r["sources"] or "", found, r["date"]))
+            shown += 1
+        self.count_label.config(text=f"{shown} shown")
 
     def _sort_by(self, col):
         if self._sort_col == col:
             self._sort_reverse = not self._sort_reverse
         else:
             self._sort_col, self._sort_reverse = col, False
-        keymap = {"artist": "artist", "track": "track", "sources": "sources",
-                  "found": "found", "date": "date"}
-        self._rows.sort(key=lambda r: (r[keymap[col]] is None, r[keymap[col]]),
-                        reverse=self._sort_reverse)
+        if col == "seed":
+            self._rows.sort(key=lambda r: self._seed_text(r).lower(), reverse=self._sort_reverse)
+        else:
+            keymap = {"artist": "artist", "track": "track", "sources": "sources",
+                      "found": "found", "date": "date"}
+            self._rows.sort(key=lambda r: (r[keymap[col]] is None, r[keymap[col]]),
+                            reverse=self._sort_reverse)
         self._populate()
 
     # --- actions -----------------------------------------------------------
@@ -148,4 +174,3 @@ class DiscoverTab(tk.Frame):
         query = urllib.parse.quote_plus(terms)
         builder = STORE_SEARCH.get(engine.DIGITAL_STORE, STORE_SEARCH["bandcamp"])
         webbrowser.open(builder(query))
-        

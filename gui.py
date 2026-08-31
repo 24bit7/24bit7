@@ -40,13 +40,13 @@ class PlayTab(tk.Frame):
         self.after(POLL_MS, self._drain_log_queue)
 
     def _build_now_playing(self):
-        header = tk.Frame(self, padx=16, pady=(14, 6))
+        header = tk.Frame(self, padx=16, pady=12)
         header.pack(fill="x")
         tk.Label(header, text="24bit7", font=("Segoe UI", 18, "bold")).pack(anchor="w")
         tk.Label(header, text="Smart Playlist Creator and Music Discovery tool",
                  font=("Segoe UI", 10), fg="#666").pack(anchor="w")
 
-        frame = tk.Frame(self, padx=16, pady=(10, 12))
+        frame = tk.Frame(self, padx=16, pady=8)
         frame.pack(fill="x")
         tk.Label(frame, text="NOW PLAYING", font=("Segoe UI", 8, "bold"), fg="#888").pack(anchor="w")
         self.np_track = tk.Label(frame, text="...", font=("Segoe UI", 14, "bold"),
