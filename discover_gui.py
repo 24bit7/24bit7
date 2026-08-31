@@ -42,16 +42,19 @@ class DiscoverTab(tk.Frame):
 
     def _apply_table_font(self):
         """
-        Sizes the table from the TABLE_FONT_SIZE setting. Row height is measured
-        from the actual rendered font (so it's right at any DPI), not guessed.
+        Sizes the table from the TABLE_FONT_SIZE setting. On Windows the ttk
+        Treeview ignores a font set on the style for cell text, so the cell font
+        is applied through a row tag (which is honoured). Row height is measured
+        from the real rendered font so it fits at any DPI.
         """
         size = getattr(engine, "TABLE_FONT_SIZE", 9)
-        font = tkfont.Font(family="Segoe UI", size=size)
-        line_px = font.metrics("linespace")          # real pixel height at this DPI
-        rowheight = line_px + 8                        # plus a little breathing room
+        self._cell_font = tkfont.Font(family="Segoe UI", size=size)
+        rowheight = self._cell_font.metrics("linespace") + 8
         style = ttk.Style(self)
-        style.configure("Treeview", font=font, rowheight=rowheight)
-        style.configure("Treeview.Heading", font=(font.cget("family"), size, "bold"))
+        style.configure("Treeview", rowheight=rowheight)
+        style.configure("Treeview.Heading", font=("Segoe UI", size, "bold"))
+        # Row tag carries the cell font; every inserted row gets this tag.
+        self.tree.tag_configure("cell", font=self._cell_font)
 
     def _on_font_change(self):
         """Applies a new table font size immediately and saves it to .env."""
@@ -63,6 +66,8 @@ class DiscoverTab(tk.Frame):
             return
         engine.TABLE_FONT_SIZE = size
         self._apply_table_font()
+        if getattr(self, "_rows", None) is not None:
+            self._populate()   # re-insert rows so the new tag font takes effect
         try:
             from settings_gui import write_env
             write_env({"TABLE_FONT_SIZE": str(size)})
@@ -110,11 +115,10 @@ class DiscoverTab(tk.Frame):
         wrap = tk.Frame(self, padx=12, pady=8)
         wrap.pack(fill="both", expand=True)
 
-        self._apply_table_font()
-
         cols = ("seed", "artist", "track", "sources", "found", "date")
         self.tree = ttk.Treeview(wrap, columns=cols, show="headings",
                                  selectmode="browse")
+        self._apply_table_font()
         headings = {"seed": "Seed", "artist": "Artist", "track": "Track",
                     "sources": "Suggested by", "found": "In library", "date": "When"}
         widths = {"seed": 160, "artist": 140, "track": 150, "sources": 120,
@@ -198,7 +202,8 @@ class DiscoverTab(tk.Frame):
             if term and term not in haystack:
                 continue
             self.tree.insert("", "end", iid=str(i), values=(
-                seed, r["artist"], r["track"] or "", r["sources"] or "", found, r["date"]))
+                seed, r["artist"], r["track"] or "", r["sources"] or "", found, r["date"]),
+                tags=("cell",))
             self._visible.append((seed, r["artist"] or "", r["track"] or "",
                                   r["sources"] or "", found, r["date"] or ""))
         self.count_label.config(text=f"{len(self._visible)} shown")
