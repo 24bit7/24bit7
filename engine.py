@@ -1,4 +1,5 @@
 import os
+import sys
 import requests
 import xml.etree.ElementTree as ET
 from dotenv import load_dotenv
@@ -11,10 +12,24 @@ import json
 import sqlite3
 from datetime import datetime
 
-ENV_FILE = ".env"
+
+def app_dir():
+    """
+    The folder the app lives in, whether running as plain Python or as a
+    frozen (PyInstaller) build. All data files (.env, database, legacy CSV)
+    are anchored here, so launching from a shortcut, the taskbar or another
+    working directory always finds the same files.
+    """
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+APP_DIR = app_dir()
+ENV_FILE = os.path.join(APP_DIR, ".env")
 TARGET_ZONE = "0"
-CSV_FILE = "FutureDiscoveries.csv"      # legacy log, imported once into the database
-DB_FILE = "24bit7.db"
+CSV_FILE = os.path.join(APP_DIR, "FutureDiscoveries.csv")      # legacy log, imported once into the database
+DB_FILE = os.path.join(APP_DIR, "24bit7.db")
 
 _env_mtime = None   # modification time of .env when settings were last loaded
 
@@ -1299,34 +1314,3 @@ def discogs_release_credits(release_id, seed_artist):
         return len(DISCOGS_ROLE_PRIORITY)
 
     return sorted(people.items(), key=rank)
-
-
-def explore_credits(report=print):
-    """
-    Mode 3. Shows the Discogs credits for the playing album: producer,
-    engineers, musicians and so on. Information only; the queue is untouched.
-    """
-    refresh_settings_if_changed()
-    seed_info = get_playing_info()
-    if not seed_info or seed_info["PlayingNowPosition"] == "-1":
-        report("Nothing playing. Seed from a track first!")
-        return
-
-    artist, album = seed_info["Artist"], seed_info["Album"]
-    report(f"\nLooking up credits for: {artist} - {album}")
-
-    found = discogs_find_release(artist, album)
-    if not found:
-        report("Could not find this release on Discogs.")
-        return
-    release_id, release_label = found
-    report(f"  Using release: {release_label}")
-
-    credits = discogs_release_credits(release_id, artist)
-    if not credits:
-        report("No credits listed on this release beyond the artist.")
-        return
-
-    report("\nCredited on this record:")
-    for name, roles in credits:
-        report(f"  {name} ({', '.join(sorted(roles))})")

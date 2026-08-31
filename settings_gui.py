@@ -13,7 +13,9 @@ import os
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-ENV_FILE = ".env"
+import engine
+
+ENV_FILE = engine.ENV_FILE   # single source of truth for where .env lives
 
 # Listed alphabetically by display name
 SOURCE_NAMES = [("ai", "AI"), ("deezer", "Deezer"),
@@ -107,8 +109,8 @@ class SettingsTab(tk.Frame):
             chosen = [code for code, v in self.vars[group].items() if v.get()]
             updates[group] = ",".join(chosen)
         for key in ["LISTENBRAINZ_ALGORITHM", "SIMILAR_ARTIST_LIMIT", "TRACKS_PER_ARTIST_POOL",
-                    "TRACKS_PER_ARTIST_PICK", "TOP_TRACKS_COUNT", "TOP_TRACKS_ORDER",
-                    "CACHE_DAYS", "DIGITAL_STORE", "JRIVER_HOST", "TABLE_FONT_SIZE"] + KEY_FIELDS:
+                    "TRACKS_PER_ARTIST_PICK", "TOP_TRACKS_COUNT", "VIBE_TRACK_COUNT", "TOP_TRACKS_ORDER",
+                    "CACHE_DAYS", "DIGITAL_STORE", "JRIVER_HOST"] + KEY_FIELDS:
             updates[key] = self.vars[key].get().strip()
         updates["DEBUG"] = "1" if self.vars["DEBUG"].get() else "0"
         return updates
@@ -187,6 +189,7 @@ class SettingsTab(tk.Frame):
             ("Library tracks per artist to consider", "TRACKS_PER_ARTIST_POOL", "5", 1, 20),
             ("Tracks per artist to queue", "TRACKS_PER_ARTIST_PICK", "3", 1, 20),
             ("Top tracks (count, 1-20)", "TOP_TRACKS_COUNT", "10", 1, 20),
+            ("Vibe playlist (track count)", "VIBE_TRACK_COUNT", "20", 5, 100),
         ]
         for r, (label, key, default, lo, hi) in enumerate(rows):
             tk.Label(tab, text=label, anchor="w").grid(row=r, column=0, sticky="w", pady=4)
@@ -260,17 +263,10 @@ class SettingsTab(tk.Frame):
         e.grid(row=2, column=1, sticky="w", padx=(12, 0))
         e.bind("<FocusOut>", self._save)
 
-        tk.Label(tab, text="Discover table font size", anchor="w").grid(row=3, column=0, sticky="w", pady=4)
-        self.vars["TABLE_FONT_SIZE"] = tk.StringVar(value=self.env.get("TABLE_FONT_SIZE", "9"))
-        sb = tk.Spinbox(tab, from_=6, to=16, textvariable=self.vars["TABLE_FONT_SIZE"], width=6,
-                        command=self._save)
-        sb.grid(row=3, column=1, sticky="w", padx=(12, 0))
-        self.vars["TABLE_FONT_SIZE"].trace_add("write", self._save)
-
         self.vars["DEBUG"] = tk.BooleanVar(value=self.env.get("DEBUG", "0") in ("1", "true", "yes"))
         tk.Checkbutton(tab, text="Debug (log raw source lists to console)",
                        variable=self.vars["DEBUG"], command=self._save).grid(
-            row=4, column=0, columnspan=2, sticky="w", pady=(12, 0))
+            row=3, column=0, columnspan=2, sticky="w", pady=(12, 0))
 
     # --- helpers -----------------------------------------------------------
 
