@@ -40,7 +40,13 @@ class PlayTab(tk.Frame):
         self.after(POLL_MS, self._drain_log_queue)
 
     def _build_now_playing(self):
-        frame = tk.Frame(self, padx=16, pady=12)
+        header = tk.Frame(self, padx=16, pady=(14, 6))
+        header.pack(fill="x")
+        tk.Label(header, text="24bit7", font=("Segoe UI", 18, "bold")).pack(anchor="w")
+        tk.Label(header, text="Smart Playlist Creator and Music Discovery tool",
+                 font=("Segoe UI", 10), fg="#666").pack(anchor="w")
+
+        frame = tk.Frame(self, padx=16, pady=(10, 12))
         frame.pack(fill="x")
         tk.Label(frame, text="NOW PLAYING", font=("Segoe UI", 8, "bold"), fg="#888").pack(anchor="w")
         self.np_track = tk.Label(frame, text="...", font=("Segoe UI", 14, "bold"),
@@ -141,11 +147,25 @@ class PlayTab(tk.Frame):
         self._run_job(lambda: engine.explore_credits(report=self.report))
 
 
+def _enable_dpi_awareness():
+    """Tell Windows this app is DPI-aware so text renders sharp, not upscaled."""
+    try:
+        from ctypes import windll
+        windll.shcore.SetProcessDpiAwareness(1)
+    except Exception:
+        pass
+
+
 def main():
+    _enable_dpi_awareness()
     root = tk.Tk()
     root.title("24bit7")
-    root.geometry("660x580")
-    root.minsize(560, 460)
+    root.geometry("660x600")
+    root.minsize(560, 480)
+
+    style = ttk.Style(root)
+    # Bigger, bolder notebook tab labels
+    style.configure("TNotebook.Tab", font=("Segoe UI", 11, "bold"), padding=(16, 8))
 
     nb = ttk.Notebook(root)
     nb.pack(fill="both", expand=True)

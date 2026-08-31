@@ -15,8 +15,9 @@ from tkinter import ttk, messagebox
 
 ENV_FILE = ".env"
 
-SOURCE_NAMES = [("lastfm", "Last.fm"), ("listenbrainz", "ListenBrainz"),
-                ("deezer", "Deezer"), ("ai", "AI")]
+# Listed alphabetically by display name
+SOURCE_NAMES = [("ai", "AI"), ("deezer", "Deezer"),
+                ("lastfm", "Last.fm"), ("listenbrainz", "ListenBrainz")]
 
 DIGITAL_STORES = ["bandcamp", "discogs", "qobuz", "amazon", "juno",
                   "hdtracks", "hiresaudio", "7digital"]
@@ -129,35 +130,53 @@ class SettingsTab(tk.Frame):
     def _build_sources(self, nb):
         tab = tk.Frame(nb, padx=12, pady=12)
         nb.add(tab, text="Sources")
+        r = 0
 
         tk.Label(tab, text="Similar-artist sources", font=("Segoe UI", 9, "bold")).grid(
-            row=0, column=0, columnspan=4, sticky="w", pady=(0, 4))
+            row=r, column=0, columnspan=4, sticky="w")
+        r += 1
         chosen_sim = self._csv_list("SIMILAR_SOURCES", "lastfm")
         self.vars["SIMILAR_SOURCES"] = {}
         for i, (code, label) in enumerate(SOURCE_NAMES):
             v = tk.BooleanVar(value=code in chosen_sim)
             self.vars["SIMILAR_SOURCES"][code] = v
             tk.Checkbutton(tab, text=label, variable=v, command=self._save).grid(
-                row=1, column=i, sticky="w")
+                row=r, column=i, sticky="w")
+        r += 1
 
         tk.Label(tab, text="Top-track sources", font=("Segoe UI", 9, "bold")).grid(
-            row=2, column=0, columnspan=4, sticky="w", pady=(16, 4))
+            row=r, column=0, columnspan=4, sticky="w", pady=(16, 0))
+        r += 1
         chosen_top = self._csv_list("TOP_TRACK_SOURCES", "lastfm")
         self.vars["TOP_TRACK_SOURCES"] = {}
         for i, (code, label) in enumerate(SOURCE_NAMES):
             v = tk.BooleanVar(value=code in chosen_top)
             self.vars["TOP_TRACK_SOURCES"][code] = v
             tk.Checkbutton(tab, text=label, variable=v, command=self._save).grid(
-                row=3, column=i, sticky="w")
+                row=r, column=i, sticky="w")
+        r += 1
+
+        tk.Label(tab, text="More services = richer, more varied playlists (slower).  "
+                          "Fewer = quicker.",
+                 fg="#666", font=("Segoe UI", 8), justify="left", wraplength=460).grid(
+            row=r, column=0, columnspan=4, sticky="w", pady=(10, 0))
+        r += 1
 
         tk.Label(tab, text="ListenBrainz algorithm", font=("Segoe UI", 9, "bold")).grid(
-            row=4, column=0, columnspan=4, sticky="w", pady=(16, 4))
+            row=r, column=0, columnspan=4, sticky="w", pady=(20, 0))
+        r += 1
         self.vars["LISTENBRAINZ_ALGORITHM"] = tk.StringVar(
             value=self.env.get("LISTENBRAINZ_ALGORITHM", "alltime"))
         cb = ttk.Combobox(tab, textvariable=self.vars["LISTENBRAINZ_ALGORITHM"],
                           values=["alltime", "recent"], state="readonly", width=18)
-        cb.grid(row=5, column=0, columnspan=2, sticky="w")
+        cb.grid(row=r, column=0, columnspan=2, sticky="w")
         cb.bind("<<ComboboxSelected>>", self._save)
+        r += 1
+        tk.Label(tab,
+                 text="alltime - from all listening history; leans toward well-known artists.\n"
+                      "recent - what people are playing alongside this artist right now.",
+                 fg="#666", font=("Segoe UI", 8), justify="left").grid(
+            row=r, column=0, columnspan=4, sticky="w", pady=(4, 0))
 
     def _build_playlist(self, nb):
         tab = tk.Frame(nb, padx=12, pady=12)
@@ -183,6 +202,14 @@ class SettingsTab(tk.Frame):
                           values=["popular", "reverse", "random"], state="readonly", width=12)
         cb.grid(row=r, column=1, sticky="w", padx=(12, 0))
         cb.bind("<<ComboboxSelected>>", self._save)
+        r += 1
+        bullet = "\u2022"
+        tk.Label(tab,
+                 text=f"{bullet}  popular - most played first\n"
+                      f"{bullet}  reverse - least played first\n"
+                      f"{bullet}  random - shuffled",
+                 fg="#666", font=("Segoe UI", 8), justify="left").grid(
+            row=r, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
     def _build_keys(self, nb):
         tab = tk.Frame(nb, padx=12, pady=12)
