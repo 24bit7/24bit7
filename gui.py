@@ -162,7 +162,10 @@ def main():
     _enable_dpi_awareness()
     root = tk.Tk()
     root.title("24bit7")
-    root.geometry("900x620")
+    # Open at 75% of the screen so it fits any monitor/DPI, then centre it.
+    sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
+    w, h = int(sw * 0.75), int(sh * 0.75)
+    root.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
     root.minsize(680, 480)
 
     style = ttk.Style(root)

@@ -108,7 +108,7 @@ class SettingsTab(tk.Frame):
             updates[group] = ",".join(chosen)
         for key in ["LISTENBRAINZ_ALGORITHM", "SIMILAR_ARTIST_LIMIT", "TRACKS_PER_ARTIST_POOL",
                     "TRACKS_PER_ARTIST_PICK", "TOP_TRACKS_COUNT", "TOP_TRACKS_ORDER",
-                    "CACHE_DAYS", "DIGITAL_STORE", "JRIVER_HOST"] + KEY_FIELDS:
+                    "CACHE_DAYS", "DIGITAL_STORE", "JRIVER_HOST", "TABLE_FONT_SIZE"] + KEY_FIELDS:
             updates[key] = self.vars[key].get().strip()
         updates["DEBUG"] = "1" if self.vars["DEBUG"].get() else "0"
         return updates
@@ -260,10 +260,17 @@ class SettingsTab(tk.Frame):
         e.grid(row=2, column=1, sticky="w", padx=(12, 0))
         e.bind("<FocusOut>", self._save)
 
+        tk.Label(tab, text="Discover table font size", anchor="w").grid(row=3, column=0, sticky="w", pady=4)
+        self.vars["TABLE_FONT_SIZE"] = tk.StringVar(value=self.env.get("TABLE_FONT_SIZE", "9"))
+        sb = tk.Spinbox(tab, from_=6, to=16, textvariable=self.vars["TABLE_FONT_SIZE"], width=6,
+                        command=self._save)
+        sb.grid(row=3, column=1, sticky="w", padx=(12, 0))
+        self.vars["TABLE_FONT_SIZE"].trace_add("write", self._save)
+
         self.vars["DEBUG"] = tk.BooleanVar(value=self.env.get("DEBUG", "0") in ("1", "true", "yes"))
         tk.Checkbutton(tab, text="Debug (log raw source lists to console)",
                        variable=self.vars["DEBUG"], command=self._save).grid(
-            row=3, column=0, columnspan=2, sticky="w", pady=(12, 0))
+            row=4, column=0, columnspan=2, sticky="w", pady=(12, 0))
 
     # --- helpers -----------------------------------------------------------
 

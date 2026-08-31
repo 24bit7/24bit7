@@ -41,6 +41,7 @@ def load_settings():
     global SIMILAR_SOURCES, TOP_TRACK_SOURCES, LISTENBRAINZ_ALGORITHM_SETTING
     global DIGITAL_STORE, DEBUG, SIMILAR_ARTIST_LIMIT, TRACKS_PER_ARTIST_POOL
     global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, CACHE_DAYS
+    global TABLE_FONT_SIZE
 
     load_dotenv(ENV_FILE, override=True)
 
@@ -67,6 +68,7 @@ def load_settings():
         print(f"[Settings] TOP_TRACKS_ORDER='{TOP_TRACKS_ORDER}' not recognised, using 'popular'.")
         TOP_TRACKS_ORDER = "popular"
     CACHE_DAYS = _int_setting("CACHE_DAYS", 30, 1, 365)
+    TABLE_FONT_SIZE = _int_setting("TABLE_FONT_SIZE", 9, 6, 16)   # Discover table font
 
 
 def refresh_settings_if_changed():

@@ -39,6 +39,13 @@ class DiscoverTab(tk.Frame):
         # Rows are loaded the first time the tab is shown (see ensure_loaded),
         # so app startup isn't slowed by inserting hundreds of table rows.
 
+    def _apply_table_font(self):
+        """Sizes the table from the TABLE_FONT_SIZE setting; row height tracks the font."""
+        size = getattr(engine, "TABLE_FONT_SIZE", 9)
+        style = ttk.Style(self)
+        style.configure("Treeview", font=("Segoe UI", size), rowheight=int(size * 3.2))
+        style.configure("Treeview.Heading", font=("Segoe UI", size, "bold"))
+
     def ensure_loaded(self):
         """Called by the main window when this tab becomes visible."""
         if not self._loaded:
@@ -80,10 +87,7 @@ class DiscoverTab(tk.Frame):
         wrap = tk.Frame(self, padx=12, pady=8)
         wrap.pack(fill="both", expand=True)
 
-        style = ttk.Style(self)
-        # Rows must be tall enough for the DPI-scaled font, or text gets clipped.
-        style.configure("Treeview", font=("Segoe UI", 10), rowheight=32)
-        style.configure("Treeview.Heading", font=("Segoe UI", 10, "bold"))
+        self._apply_table_font()
 
         cols = ("seed", "artist", "track", "sources", "found", "date")
         self.tree = ttk.Treeview(wrap, columns=cols, show="headings",
@@ -133,7 +137,8 @@ class DiscoverTab(tk.Frame):
 
     def refresh(self):
         self._reload_sessions()
-        engine.load_settings()   # pick up the current DIGITAL_STORE
+        engine.load_settings()   # pick up DIGITAL_STORE and TABLE_FONT_SIZE
+        self._apply_table_font()
         self.store_label.config(text=f"Store: {engine.DIGITAL_STORE}")
 
         f = self.filter_var.get()
