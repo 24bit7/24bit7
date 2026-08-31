@@ -555,6 +555,14 @@ AI_TOP_TRACKS_PROMPT = (
 )
 
 
+def _salvage_json_array(text):
+    """
+    Recovers a list from a truncated JSON array like ["A","B","C  (no closing bracket).
+    Returns the complete quoted strings found, or [] if none.
+    """
+    return re.findall(r'"([^"]+)"', text)
+
+
 def ai_ask_list(prompt):
     """Sends a prompt expecting a JSON array of strings; returns the list or []."""
     if not ANTHROPIC_API_KEY:
@@ -569,17 +577,20 @@ def ai_ask_list(prompt):
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         message = client.messages.create(
             model=AI_MODEL,
-            max_tokens=600,
+            max_tokens=1500,
             messages=[{"role": "user", "content": prompt}],
         )
         text = "".join(block.text for block in message.content if getattr(block, "type", "") == "text")
         text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
-        data = json.loads(text)
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            data = _salvage_json_array(text)
+            if data:
+                print(f"[AI] Response was truncated; recovered {len(data)} names.")
         if isinstance(data, list):
             return [str(x).strip() for x in data if str(x).strip()]
         print(f"[AI] Unexpected response shape: {text[:200]}")
-    except json.JSONDecodeError:
-        print(f"[AI] Response wasn't valid JSON: {text[:200]}")
     except Exception as e:
         print(f"[AI] Request failed: {e}")
     return []
@@ -1011,7 +1022,7 @@ def discogs_release_credits(release_id, seed_artist):
     return sorted(people.items(), key=rank)
 
 
-def explore_credits(report=print, ask_producer=None, chooser=None):
+def explore_credits(report=print):
     """
     Mode 3. Shows the Discogs credits for the playing album: producer,
     engineers, musicians and so on. Information only; the queue is untouched.
@@ -1039,291 +1050,3 @@ def explore_credits(report=print, ask_producer=None, chooser=None):
     report("\nCredited on this record:")
     for name, roles in credits:
         report(f"  {name} ({', '.join(sorted(roles))})")
-
-    if ask_producer and ask_producer():
-        create_producer_playlist(seed_info, report=report, chooser=chooser)
-
-
-# ---------------------------------------------------------------------------
-# Mode 1, option P: standout tracks from albums by this record's producer
-# ---------------------------------------------------------------------------
-
-PRODUCER_ALBUMS = 5          # how many of the producer's albums to draw from
-PRODUCER_MAX_PER_ARTIST = 1  # cap on albums per artist, so one act can't fill the queue
-PRODUCER_MAX_PER_ALBUM = 5   # ceiling on tracks per album
-PRODUCER_SHARE = 0.40        # keep tracks with at least this share of the album's top play count
-
-
-def is_producer_role(role):
-    """True for 'Producer', 'Producer [Additional]', 'Co-producer'; false for executive producers."""
-    r = role.strip().lower()
-    if "executive" in r:
-        return False
-    return r.startswith("producer") or r.startswith("co-producer")
-
-
-# Fallback roles when no Producer credit exists, in order of preference
-PRODUCER_FALLBACK_ROLES = ["Recorded By", "Engineer", "Mixed By"]
-
-
-def _credit_names(credits, seed_clean, role_test):
-    """Distinct names in a credit list whose roles pass role_test, seed artist excluded."""
-    names = []
-    for c in credits:
-        name = discogs_clean_name(c.get("name", ""))
-        if not name or strip_accents(name).lower() == seed_clean:
-            continue
-        if any(role_test(r) for r in c.get("role", "").split(",")) and name not in names:
-            names.append(name)
-    return names
-
-
-def _pick_one(names, what, report=print, chooser=None):
-    """Returns the single name, or asks via chooser(names, what) if there are several."""
-    if len(names) == 1:
-        return names[0]
-    if chooser is None:
-        return names[0]   # no chooser supplied: take the top-ranked
-    report(f"  This album has more than one {what}.")
-    idx = chooser(names, what)
-    return names[idx] if 0 <= idx < len(names) else names[0]
-
-
-def _producer_from_release(data, seed_clean, report=print, chooser=None):
-    """Producer from one release's credits: album-level first, then most-credited per track."""
-    album_level = _credit_names(data.get("extraartists", []), seed_clean, is_producer_role)
-    if album_level:
-        return _pick_one(album_level, "producer", report, chooser), "Producer"
-    tally = {}
-    for track in data.get("tracklist", []):
-        for name in _credit_names(track.get("extraartists", []), seed_clean, is_producer_role):
-            tally[name] = tally.get(name, 0) + 1
-    if tally:
-        best = max(tally.items(), key=lambda kv: kv[1])
-        report(f"  No album-level producer credit; using track credits "
-              f"({best[0]} produced {best[1]} of {len(data.get('tracklist', []))} tracks)")
-        return best[0], "Producer (track credits)"
-    return None, None
-
-
-def discogs_producer_of(artist, album, report=print, chooser=None):
-    """
-    Returns (producer name, release label, how it was found) for the playing album.
-    1. Producer credit on the main release (album-level, else per-track).
-    2. If none, the most-owned other versions of the same master.
-    3. If still none, fall back through Recorded By, Engineer, Mixed By.
-    Executive producers are ignored throughout.
-    """
-    found = discogs_find_release(artist, album)
-    if not found:
-        return None, None, None
-    release_id, label = found
-    seed_clean = strip_accents(artist).lower()
-
-    main = discogs_get(f"/releases/{release_id}")
-    if not main:
-        return None, label, None
-    name, how = _producer_from_release(main, seed_clean, report, chooser)
-    if name:
-        return name, label, how
-
-    # 2. Other versions of the same master, most-owned first
-    master_id = _release_master.get(release_id)
-    if master_id:
-        versions = discogs_get(f"/masters/{master_id}/versions", {"per_page": 50})
-        if versions and versions.get("versions"):
-            ranked = sorted(versions["versions"],
-                            key=lambda v: v.get("stats", {}).get("community", {}).get("in_collection", 0),
-                            reverse=True)
-            for v in ranked[:3]:
-                if v.get("id") == release_id:
-                    continue
-                other = discogs_get(f"/releases/{v['id']}")
-                if not other:
-                    continue
-                name, how = _producer_from_release(other, seed_clean, report, chooser)
-                if name:
-                    report(f"  Producer credit taken from another pressing: {v.get('title')} ({v.get('released', '?')})")
-                    return name, label, how
-                time.sleep(0.5)
-
-    # 3. Role ladder on the main release
-    for role in PRODUCER_FALLBACK_ROLES:
-        names = _credit_names(main.get("extraartists", []), seed_clean,
-                              lambda r, role=role: role.lower() in r.lower())
-        if names:
-            return _pick_one(names, role.lower(), report, chooser), f"via {role}"
-    return None, label, None
-
-
-def _is_album_format(formats):
-    """True for proper albums; excludes singles, EPs, compilations and the like."""
-    joined = " ".join(formats).lower()
-    if "album" not in joined:
-        return False
-    return not any(x in joined for x in ("single", "ep", "compilation", "maxi", "promo"))
-
-
-def _split_title(title):
-    if " - " not in title:
-        return None, None
-    artist, album = title.split(" - ", 1)
-    artist = canonicalise_conjunction(discogs_clean_name(artist))
-    if artist.lower() in ("various", "various artists", "unknown artist"):
-        return None, None
-    return artist, album
-
-
-def discogs_top_albums_by_credit(person, seed_artist, seed_album, limit=PRODUCER_ALBUMS):
-    """
-    Albums crediting this person, ranked by how many Discogs users own them,
-    summed across every pressing. Singles, EPs and compilations are excluded,
-    the seed album is excluded, and at most PRODUCER_MAX_PER_ARTIST albums
-    per artist are kept. Returns dicts: artist, album, master_id, release_id, have.
-    """
-    seed_key = (strip_accents(seed_artist).lower(), clean_name(seed_album))
-    albums = {}
-
-    def consider(key, artist, album, have, master_id=None, release_id=None):
-        if (strip_accents(artist).lower(), clean_name(album)) == seed_key:
-            return
-        entry = albums.setdefault(key, {"artist": artist, "album": album, "have": 0,
-                                        "master_id": master_id, "release_id": release_id})
-        entry["have"] += have
-        if master_id and not entry["master_id"]:
-            entry["master_id"] = master_id
-        if release_id and not entry["release_id"]:
-            entry["release_id"] = release_id
-
-    # Preferred: master search, where owner counts already span all pressings
-    for page in (1, 2):
-        data = discogs_get("/database/search",
-                           {"credit": person, "type": "master", "per_page": 100, "page": page})
-        if not data or not data.get("results"):
-            break
-        for r in data["results"]:
-            if not _is_album_format(r.get("format", [])):
-                continue
-            artist, album = _split_title(r.get("title", ""))
-            if not artist:
-                continue
-            consider(f"m{r['id']}", artist, album, r.get("community", {}).get("have", 0),
-                     master_id=r["id"])
-        if page >= data.get("pagination", {}).get("pages", 1):
-            break
-        time.sleep(1.0)
-
-    # Fallback: release search, summing owners across pressings of the same master
-    if not albums:
-        for page in (1, 2):
-            data = discogs_get("/database/search",
-                               {"credit": person, "type": "release", "per_page": 100, "page": page})
-            if not data or not data.get("results"):
-                break
-            for r in data["results"]:
-                if not _is_album_format(r.get("format", [])):
-                    continue
-                artist, album = _split_title(r.get("title", ""))
-                if not artist:
-                    continue
-                key = f"m{r['master_id']}" if r.get("master_id") else f"r{r['id']}"
-                consider(key, artist, album, r.get("community", {}).get("have", 0),
-                         master_id=r.get("master_id"), release_id=r.get("id"))
-            if page >= data.get("pagination", {}).get("pages", 1):
-                break
-            time.sleep(1.0)
-
-    ranked = sorted(albums.values(), key=lambda a: a["have"], reverse=True)
-    chosen, per_artist = [], {}
-    for a in ranked:
-        k = strip_accents(a["artist"]).lower()
-        if per_artist.get(k, 0) >= PRODUCER_MAX_PER_ARTIST:
-            continue
-        per_artist[k] = per_artist.get(k, 0) + 1
-        chosen.append(a)
-        if len(chosen) >= limit:
-            break
-    return chosen
-
-
-def discogs_album_tracklist(album):
-    """Tracklist from the master if we have one (spans all pressings), else the release."""
-    if album.get("master_id"):
-        data = discogs_get(f"/masters/{album['master_id']}")
-        if data and data.get("tracklist"):
-            return [t.get("title", "") for t in data["tracklist"] if t.get("title")]
-    if album.get("release_id"):
-        return discogs_tracklist(album["release_id"])
-    return []
-
-
-def discogs_tracklist(release_id):
-    data = discogs_get(f"/releases/{release_id}")
-    if not data:
-        return []
-    return [t.get("title", "") for t in data.get("tracklist", []) if t.get("title")]
-
-
-def standout_tracks(artist, album_tracks):
-    """
-    Ranks an album's tracks by Last.fm play count and keeps the standouts:
-    everything within PRODUCER_SHARE of the album's top track, at least one,
-    at most PRODUCER_MAX_PER_ALBUM. Falls back to album order if Last.fm has
-    nothing for the artist.
-    """
-    counts = lastfm_top_tracks_with_counts(artist, limit=100)
-    by_clean = {clean_name(name): count for name, count in counts}
-    scored = [(t, by_clean.get(clean_name(t), 0)) for t in album_tracks]
-    scored = [(t, c) for t, c in scored if c > 0]
-    if not scored:
-        return album_tracks[:1]
-    scored.sort(key=lambda x: x[1], reverse=True)
-    top = scored[0][1]
-    keep = [t for t, c in scored if c >= top * PRODUCER_SHARE]
-    return keep[:PRODUCER_MAX_PER_ALBUM] or [scored[0][0]]
-
-
-def create_producer_playlist(seed_info, report=print, chooser=None):
-    artist, album = seed_info["Artist"], seed_info["Album"]
-    report(f"\nSeeding from: {artist} - {album} (via Discogs producer)")
-
-    producer, release_label, how = discogs_producer_of(artist, album, report=report, chooser=chooser)
-    if release_label:
-        report(f"  Using release: {release_label}")
-    if not producer:
-        report("  No producer, engineer or mixer credit found for this album on Discogs.")
-        return
-    report(f"  Producer: {producer}" + (f" ({how})" if how and how != "Producer" else ""))
-
-    albums = discogs_top_albums_by_credit(producer, artist, album)
-    if not albums:
-        report(f"  No other albums found crediting {producer}.")
-        return
-    session_id = session_start("producer", seed_info, f"Producer: {producer}")
-
-    ordered_keys = []
-    for a in albums:
-        report(f"\n  {a['artist']} - {a['album']} ({a['have']} Discogs owners)")
-        tracks = discogs_album_tracklist(a)
-        if not tracks:
-            report("    No tracklist available.")
-            continue
-        for track in standout_tracks(a["artist"], tracks):
-            key = find_jriver_key_by_track(a["artist"], track)
-            if key:
-                report(f"    Added: {track}")
-                if key not in ordered_keys:
-                    ordered_keys.append(key)
-            else:
-                report(f"    Not in library: {track}")
-            session_log(session_id, a["artist"], track, f"Producer: {producer}", found=bool(key))
-        time.sleep(0.5)
-
-    if ordered_keys:
-        clear_around_current()
-        report(f"Queuing {len(ordered_keys)} tracks, most popular album first...")
-        queue_tracks(ordered_keys)
-        report("Queue refreshed.")
-    else:
-        report("No library matches found.")
-    session_finish(session_id, len(ordered_keys))
