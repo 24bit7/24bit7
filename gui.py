@@ -1,34 +1,32 @@
 """
-24bit7 - desktop GUI (Play window).
+24bit7 - main window.
 
-The first of three windows. Drives the same engine.py the CLI does, passing a
-progress reporter that streams into the on-screen log instead of the console.
-Each playlist run happens on a background thread so the window stays responsive,
-with log lines marshalled back to the UI through a thread-safe queue.
+Three tabs in one window:
+  Play      - now-playing, the three playlist actions, and a live log
+  Discover  - browse logged discoveries (built in the next step)
+  Settings  - auto-saving preferences and keys
 
-Settings and Discover windows come later; this is the Play window only.
+The Play tab drives engine.py on a background thread, streaming progress into
+its log via a thread-safe queue so the window never freezes.
 """
 
 import queue
 import threading
 import tkinter as tk
-from tkinter import scrolledtext, messagebox
+from tkinter import ttk, scrolledtext, messagebox
 
 import engine
-from settings_gui import SettingsWindow
+from settings_gui import SettingsTab
 
 
-REFRESH_MS = 3000          # how often to re-read Now Playing from JRiver
-POLL_MS = 100              # how often the UI drains the log queue
+REFRESH_MS = 3000
+POLL_MS = 100
 
 
-class App:
-    def __init__(self, root):
+class PlayTab(tk.Frame):
+    def __init__(self, master, root):
+        super().__init__(master)
         self.root = root
-        root.title("24bit7")
-        root.geometry("640x560")
-        root.minsize(520, 420)
-
         self.log_queue = queue.Queue()
         self.running = False
         self.last_playing = None
@@ -38,25 +36,21 @@ class App:
         self._build_log()
 
         self._refresh_now_playing()
-        self.root.after(POLL_MS, self._drain_log_queue)
-
-    # --- UI construction ---------------------------------------------------
+        self.after(POLL_MS, self._drain_log_queue)
 
     def _build_now_playing(self):
-        frame = tk.Frame(self.root, padx=16, pady=12)
+        frame = tk.Frame(self, padx=16, pady=12)
         frame.pack(fill="x")
-
-        tk.Label(frame, text="NOW PLAYING", font=("Segoe UI", 8, "bold"),
-                 fg="#888").pack(anchor="w")
+        tk.Label(frame, text="NOW PLAYING", font=("Segoe UI", 8, "bold"), fg="#888").pack(anchor="w")
         self.np_track = tk.Label(frame, text="...", font=("Segoe UI", 14, "bold"),
                                  anchor="w", justify="left", wraplength=580)
         self.np_track.pack(anchor="w", fill="x")
-        self.np_detail = tk.Label(frame, text="", font=("Segoe UI", 10),
-                                  fg="#555", anchor="w", justify="left", wraplength=580)
+        self.np_detail = tk.Label(frame, text="", font=("Segoe UI", 10), fg="#555",
+                                  anchor="w", justify="left", wraplength=580)
         self.np_detail.pack(anchor="w", fill="x")
 
     def _build_buttons(self):
-        frame = tk.Frame(self.root, padx=16, pady=4)
+        frame = tk.Frame(self, padx=16, pady=4)
         frame.pack(fill="x")
         self.buttons = []
         for text, handler in [
@@ -67,20 +61,15 @@ class App:
             b = tk.Button(frame, text=text, command=handler, width=16, height=2)
             b.pack(side="left", padx=(0, 8))
             self.buttons.append(b)
-        tk.Button(frame, text="Settings", command=self.on_settings,
-                  width=10, height=2).pack(side="right")
 
     def _build_log(self):
-        frame = tk.Frame(self.root, padx=16, pady=12)
+        frame = tk.Frame(self, padx=16, pady=12)
         frame.pack(fill="both", expand=True)
         self.log = scrolledtext.ScrolledText(frame, wrap="word", state="disabled",
                                              font=("Consolas", 9), bg="#1e1e1e", fg="#d4d4d4")
         self.log.pack(fill="both", expand=True)
 
-    # --- Now Playing refresh ----------------------------------------------
-
     def _refresh_now_playing(self):
-        # Only touch JRiver when idle, to avoid clashing with a running job.
         if not self.running:
             info = engine.get_playing_info()
             if info and info.get("PlayingNowPosition", "-1") != "-1":
@@ -92,12 +81,9 @@ class App:
                 self.np_track.config(text="Nothing playing")
                 self.np_detail.config(text="Start a track in JRiver to seed from it")
                 self.last_playing = None
-        self.root.after(REFRESH_MS, self._refresh_now_playing)
-
-    # --- Logging plumbing --------------------------------------------------
+        self.after(REFRESH_MS, self._refresh_now_playing)
 
     def report(self, message):
-        """Passed to the engine; safe to call from the worker thread."""
         self.log_queue.put(message)
 
     def _drain_log_queue(self):
@@ -110,14 +96,12 @@ class App:
                 self.log.config(state="disabled")
         except queue.Empty:
             pass
-        self.root.after(POLL_MS, self._drain_log_queue)
+        self.after(POLL_MS, self._drain_log_queue)
 
     def _clear_log(self):
         self.log.config(state="normal")
         self.log.delete("1.0", "end")
         self.log.config(state="disabled")
-
-    # --- Running a job -----------------------------------------------------
 
     def _run_job(self, target):
         if self.running:
@@ -146,8 +130,6 @@ class App:
         for b in self.buttons:
             b.config(state="normal")
 
-    # --- Button handlers ---------------------------------------------------
-
     def on_similar(self):
         self._run_job(lambda: engine.create_similar_playlist(report=self.report))
 
@@ -157,13 +139,29 @@ class App:
     def on_credits(self):
         self._run_job(lambda: engine.explore_credits(report=self.report))
 
-    def on_settings(self):
-        SettingsWindow(self.root)
+
+class DiscoverTab(tk.Frame):
+    """Placeholder; the discoveries browser is built in the next step."""
+    def __init__(self, master):
+        super().__init__(master)
+        tk.Label(self, text="Discover", font=("Segoe UI", 14, "bold")).pack(pady=(40, 8))
+        tk.Label(self, text="Your logged discoveries will appear here.",
+                 fg="#777").pack()
 
 
 def main():
     root = tk.Tk()
-    App(root)
+    root.title("24bit7")
+    root.geometry("660x580")
+    root.minsize(560, 460)
+
+    nb = ttk.Notebook(root)
+    nb.pack(fill="both", expand=True)
+
+    nb.add(PlayTab(nb, root), text="Play")
+    nb.add(DiscoverTab(nb), text="Discover")
+    nb.add(SettingsTab(nb), text="Settings")
+
     root.mainloop()
 
 

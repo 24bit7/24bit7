@@ -1,10 +1,12 @@
 """
-24bit7 - Settings window.
+24bit7 - Settings tab.
 
-Reads current values from .env, presents them as tabbed controls, and writes
-changes back safely: existing comments, blank lines and unmanaged keys are
-preserved; only the keys this window owns are updated or appended. The engine
-picks up the saved file automatically via its .env mod-time check.
+A frame (embedded in the main window's notebook) that reads current values from
+.env, presents them as sub-tabbed controls, and auto-saves changes back to .env
+whenever a control changes. Comments, blank lines and unmanaged keys are
+preserved; only managed keys are updated or appended. Text fields save when
+focus leaves them (so half-typed keys aren't written); checkboxes and dropdowns
+save immediately. The engine picks up the file via its .env mod-time check.
 """
 
 import os
@@ -19,7 +21,6 @@ SOURCE_NAMES = [("lastfm", "Last.fm"), ("listenbrainz", "ListenBrainz"),
 DIGITAL_STORES = ["bandcamp", "discogs", "qobuz", "amazon", "juno",
                   "hdtracks", "hiresaudio", "7digital"]
 
-# "where do I get this" help text per credential
 KEY_HELP = {
     "LASTFM_API_KEY": ("Last.fm API key",
         "Create an API account at last.fm/api (Get an API account).\n"
@@ -43,7 +44,6 @@ KEY_FIELDS = ["LASTFM_API_KEY", "LISTENBRAINZ_TOKEN", "DISCOGS_TOKEN",
 
 
 def read_env():
-    """Returns a dict of the current KEY=VALUE pairs in .env (comments ignored)."""
     values = {}
     if os.path.isfile(ENV_FILE):
         with open(ENV_FILE, encoding="utf-8") as f:
@@ -57,16 +57,11 @@ def read_env():
 
 
 def write_env(updates):
-    """
-    Writes updates back to .env, preserving comments, blank lines and any key
-    this window doesn't manage. Managed keys already present are updated in
-    place; managed keys not present are appended.
-    """
+    """Updates managed keys in place, preserving comments, blanks and unmanaged keys."""
     lines = []
     if os.path.isfile(ENV_FILE):
         with open(ENV_FILE, encoding="utf-8") as f:
             lines = f.read().splitlines()
-
     seen = set()
     out = []
     for line in lines:
@@ -78,46 +73,56 @@ def write_env(updates):
                 seen.add(key)
                 continue
         out.append(line)
-
     appended = [f"{k}={v}" for k, v in updates.items() if k not in seen]
     if appended:
         if out and out[-1].strip():
             out.append("")
         out.extend(appended)
-
     with open(ENV_FILE, "w", encoding="utf-8") as f:
         f.write("\n".join(out) + "\n")
 
 
-class SettingsWindow(tk.Toplevel):
-    def __init__(self, master=None):
+class SettingsTab(tk.Frame):
+    def __init__(self, master):
         super().__init__(master)
-        self.title("24bit7 - Settings")
-        self.geometry("520x520")
-        self.resizable(False, False)
         self.env = read_env()
+        self.vars = {}
+        self._loading = True   # suppress auto-save while building controls
 
         nb = ttk.Notebook(self)
-        nb.pack(fill="both", expand=True, padx=10, pady=10)
-
-        self.vars = {}
+        nb.pack(fill="both", expand=True, padx=8, pady=8)
         self._build_sources(nb)
         self._build_playlist(nb)
         self._build_keys(nb)
         self._build_other(nb)
 
-        bar = tk.Frame(self)
-        bar.pack(fill="x", padx=10, pady=(0, 10))
-        tk.Button(bar, text="Save", width=12, command=self.on_save).pack(side="right")
-        tk.Button(bar, text="Cancel", width=12, command=self.destroy).pack(side="right", padx=(0, 8))
+        self._loading = False
 
-    # --- helpers -----------------------------------------------------------
+    # --- persistence -------------------------------------------------------
 
-    def _csv_list(self, key, default):
-        return [x.strip().lower() for x in self.env.get(key, default).split(",") if x.strip()]
+    def _current_updates(self):
+        updates = {}
+        for group in ("SIMILAR_SOURCES", "TOP_TRACK_SOURCES"):
+            chosen = [code for code, v in self.vars[group].items() if v.get()]
+            updates[group] = ",".join(chosen)
+        for key in ["LISTENBRAINZ_ALGORITHM", "SIMILAR_ARTIST_LIMIT", "TRACKS_PER_ARTIST_POOL",
+                    "TRACKS_PER_ARTIST_PICK", "TOP_TRACKS_COUNT", "TOP_TRACKS_ORDER",
+                    "CACHE_DAYS", "DIGITAL_STORE", "JRIVER_HOST"] + KEY_FIELDS:
+            updates[key] = self.vars[key].get().strip()
+        updates["DEBUG"] = "1" if self.vars["DEBUG"].get() else "0"
+        return updates
 
-    def _labelled(self, parent, text, row):
-        tk.Label(parent, text=text, anchor="w").grid(row=row, column=0, sticky="w", pady=4)
+    def _save(self, *_):
+        """Auto-save. Skips writing empty source lists (keeps the last good file)."""
+        if self._loading:
+            return
+        updates = self._current_updates()
+        if not updates["SIMILAR_SOURCES"] or not updates["TOP_TRACK_SOURCES"]:
+            return   # don't persist a no-sources state; user is mid-change
+        try:
+            write_env(updates)
+        except Exception as e:
+            messagebox.showerror("Save failed", str(e), parent=self)
 
     # --- tabs --------------------------------------------------------------
 
@@ -126,62 +131,69 @@ class SettingsWindow(tk.Toplevel):
         nb.add(tab, text="Sources")
 
         tk.Label(tab, text="Similar-artist sources", font=("Segoe UI", 9, "bold")).grid(
-            row=0, column=0, sticky="w", pady=(0, 4))
+            row=0, column=0, columnspan=4, sticky="w", pady=(0, 4))
         chosen_sim = self._csv_list("SIMILAR_SOURCES", "lastfm")
         self.vars["SIMILAR_SOURCES"] = {}
         for i, (code, label) in enumerate(SOURCE_NAMES):
             v = tk.BooleanVar(value=code in chosen_sim)
             self.vars["SIMILAR_SOURCES"][code] = v
-            tk.Checkbutton(tab, text=label, variable=v).grid(row=1, column=i, sticky="w")
+            tk.Checkbutton(tab, text=label, variable=v, command=self._save).grid(
+                row=1, column=i, sticky="w")
 
         tk.Label(tab, text="Top-track sources", font=("Segoe UI", 9, "bold")).grid(
-            row=2, column=0, sticky="w", pady=(16, 4))
+            row=2, column=0, columnspan=4, sticky="w", pady=(16, 4))
         chosen_top = self._csv_list("TOP_TRACK_SOURCES", "lastfm")
         self.vars["TOP_TRACK_SOURCES"] = {}
         for i, (code, label) in enumerate(SOURCE_NAMES):
             v = tk.BooleanVar(value=code in chosen_top)
             self.vars["TOP_TRACK_SOURCES"][code] = v
-            tk.Checkbutton(tab, text=label, variable=v).grid(row=3, column=i, sticky="w")
+            tk.Checkbutton(tab, text=label, variable=v, command=self._save).grid(
+                row=3, column=i, sticky="w")
 
         tk.Label(tab, text="ListenBrainz algorithm", font=("Segoe UI", 9, "bold")).grid(
-            row=4, column=0, sticky="w", pady=(16, 4))
+            row=4, column=0, columnspan=4, sticky="w", pady=(16, 4))
         self.vars["LISTENBRAINZ_ALGORITHM"] = tk.StringVar(
             value=self.env.get("LISTENBRAINZ_ALGORITHM", "alltime"))
-        ttk.Combobox(tab, textvariable=self.vars["LISTENBRAINZ_ALGORITHM"],
-                     values=["alltime", "recent"], state="readonly", width=18).grid(
-            row=5, column=0, columnspan=2, sticky="w")
+        cb = ttk.Combobox(tab, textvariable=self.vars["LISTENBRAINZ_ALGORITHM"],
+                          values=["alltime", "recent"], state="readonly", width=18)
+        cb.grid(row=5, column=0, columnspan=2, sticky="w")
+        cb.bind("<<ComboboxSelected>>", self._save)
 
     def _build_playlist(self, nb):
         tab = tk.Frame(nb, padx=12, pady=12)
         nb.add(tab, text="Playlist")
         rows = [
-            ("Similar artists (count)", "SIMILAR_ARTIST_LIMIT", "20"),
-            ("Library tracks per artist to consider", "TRACKS_PER_ARTIST_POOL", "5"),
-            ("Tracks per artist to queue", "TRACKS_PER_ARTIST_PICK", "3"),
-            ("Top tracks (count, 1-20)", "TOP_TRACKS_COUNT", "10"),
+            ("Similar artists (count)", "SIMILAR_ARTIST_LIMIT", "20", 1, 50),
+            ("Library tracks per artist to consider", "TRACKS_PER_ARTIST_POOL", "5", 1, 20),
+            ("Tracks per artist to queue", "TRACKS_PER_ARTIST_PICK", "3", 1, 20),
+            ("Top tracks (count, 1-20)", "TOP_TRACKS_COUNT", "10", 1, 20),
         ]
-        for r, (label, key, default) in enumerate(rows):
-            self._labelled(tab, label, r)
+        for r, (label, key, default, lo, hi) in enumerate(rows):
+            tk.Label(tab, text=label, anchor="w").grid(row=r, column=0, sticky="w", pady=4)
             var = tk.StringVar(value=self.env.get(key, default))
             self.vars[key] = var
-            tk.Spinbox(tab, from_=1, to=50, textvariable=var, width=6).grid(
-                row=r, column=1, sticky="w", padx=(12, 0))
+            sb = tk.Spinbox(tab, from_=lo, to=hi, textvariable=var, width=6, command=self._save)
+            sb.grid(row=r, column=1, sticky="w", padx=(12, 0))
+            var.trace_add("write", self._save)
 
-        self._labelled(tab, "Top-tracks order", len(rows))
+        r = len(rows)
+        tk.Label(tab, text="Top-tracks order", anchor="w").grid(row=r, column=0, sticky="w", pady=4)
         self.vars["TOP_TRACKS_ORDER"] = tk.StringVar(value=self.env.get("TOP_TRACKS_ORDER", "popular"))
-        ttk.Combobox(tab, textvariable=self.vars["TOP_TRACKS_ORDER"],
-                     values=["popular", "reverse", "random"], state="readonly", width=12).grid(
-            row=len(rows), column=1, sticky="w", padx=(12, 0))
+        cb = ttk.Combobox(tab, textvariable=self.vars["TOP_TRACKS_ORDER"],
+                          values=["popular", "reverse", "random"], state="readonly", width=12)
+        cb.grid(row=r, column=1, sticky="w", padx=(12, 0))
+        cb.bind("<<ComboboxSelected>>", self._save)
 
     def _build_keys(self, nb):
         tab = tk.Frame(nb, padx=12, pady=12)
         nb.add(tab, text="Keys")
         for r, key in enumerate(KEY_FIELDS):
-            self._labelled(tab, key, r)
+            tk.Label(tab, text=key, anchor="w").grid(row=r, column=0, sticky="w", pady=4)
             var = tk.StringVar(value=self.env.get(key, ""))
             self.vars[key] = var
-            entry = tk.Entry(tab, textvariable=var, show="\u2022", width=34)
+            entry = tk.Entry(tab, textvariable=var, show="\u2022", width=32)
             entry.grid(row=r, column=1, padx=(8, 4))
+            entry.bind("<FocusOut>", self._save)   # save when leaving the field
             self._add_show_toggle(tab, entry, r)
             if key in KEY_HELP:
                 tk.Button(tab, text="?", width=2,
@@ -198,61 +210,38 @@ class SettingsWindow(tk.Toplevel):
         tab = tk.Frame(nb, padx=12, pady=12)
         nb.add(tab, text="Other")
 
-        self._labelled(tab, "Cache days (reuse answers for)", 0)
+        tk.Label(tab, text="Cache days (reuse answers for)", anchor="w").grid(
+            row=0, column=0, sticky="w", pady=4)
         self.vars["CACHE_DAYS"] = tk.StringVar(value=self.env.get("CACHE_DAYS", "30"))
-        tk.Spinbox(tab, from_=1, to=365, textvariable=self.vars["CACHE_DAYS"], width=6).grid(
-            row=0, column=1, sticky="w", padx=(12, 0))
+        sb = tk.Spinbox(tab, from_=1, to=365, textvariable=self.vars["CACHE_DAYS"], width=6,
+                        command=self._save)
+        sb.grid(row=0, column=1, sticky="w", padx=(12, 0))
+        self.vars["CACHE_DAYS"].trace_add("write", self._save)
 
-        self._labelled(tab, "Digital store (for Discover search)", 1)
+        tk.Label(tab, text="Digital store (for Discover search)", anchor="w").grid(
+            row=1, column=0, sticky="w", pady=4)
         self.vars["DIGITAL_STORE"] = tk.StringVar(value=self.env.get("DIGITAL_STORE", "bandcamp"))
-        ttk.Combobox(tab, textvariable=self.vars["DIGITAL_STORE"], values=DIGITAL_STORES,
-                     state="readonly", width=14).grid(row=1, column=1, sticky="w", padx=(12, 0))
+        cb = ttk.Combobox(tab, textvariable=self.vars["DIGITAL_STORE"], values=DIGITAL_STORES,
+                          state="readonly", width=14)
+        cb.grid(row=1, column=1, sticky="w", padx=(12, 0))
+        cb.bind("<<ComboboxSelected>>", self._save)
 
-        self._labelled(tab, "JRiver host", 2)
+        tk.Label(tab, text="JRiver host", anchor="w").grid(row=2, column=0, sticky="w", pady=4)
         self.vars["JRIVER_HOST"] = tk.StringVar(value=self.env.get("JRIVER_HOST", "127.0.0.1:52199"))
-        tk.Entry(tab, textvariable=self.vars["JRIVER_HOST"], width=22).grid(
-            row=2, column=1, sticky="w", padx=(12, 0))
+        e = tk.Entry(tab, textvariable=self.vars["JRIVER_HOST"], width=22)
+        e.grid(row=2, column=1, sticky="w", padx=(12, 0))
+        e.bind("<FocusOut>", self._save)
 
         self.vars["DEBUG"] = tk.BooleanVar(value=self.env.get("DEBUG", "0") in ("1", "true", "yes"))
-        tk.Checkbutton(tab, text="Debug (log raw source lists)",
-                       variable=self.vars["DEBUG"]).grid(row=3, column=0, sticky="w", pady=(12, 0))
+        tk.Checkbutton(tab, text="Debug (log raw source lists to console)",
+                       variable=self.vars["DEBUG"], command=self._save).grid(
+            row=3, column=0, columnspan=2, sticky="w", pady=(12, 0))
 
-    # --- help + save -------------------------------------------------------
+    # --- helpers -----------------------------------------------------------
+
+    def _csv_list(self, key, default):
+        return [x.strip().lower() for x in self.env.get(key, default).split(",") if x.strip()]
 
     def _show_help(self, key):
         title, body = KEY_HELP[key]
         messagebox.showinfo(title, body, parent=self)
-
-    def on_save(self):
-        updates = {}
-
-        for group in ("SIMILAR_SOURCES", "TOP_TRACK_SOURCES"):
-            chosen = [code for code, v in self.vars[group].items() if v.get()]
-            if not chosen:
-                messagebox.showwarning("No sources",
-                                       f"Pick at least one {group.replace('_', ' ').lower()}.",
-                                       parent=self)
-                return
-            updates[group] = ",".join(chosen)
-
-        for key in ["LISTENBRAINZ_ALGORITHM", "SIMILAR_ARTIST_LIMIT", "TRACKS_PER_ARTIST_POOL",
-                    "TRACKS_PER_ARTIST_PICK", "TOP_TRACKS_COUNT", "TOP_TRACKS_ORDER",
-                    "CACHE_DAYS", "DIGITAL_STORE", "JRIVER_HOST"] + KEY_FIELDS:
-            updates[key] = self.vars[key].get().strip()
-
-        updates["DEBUG"] = "1" if self.vars["DEBUG"].get() else "0"
-
-        try:
-            write_env(updates)
-        except Exception as e:
-            messagebox.showerror("Save failed", str(e), parent=self)
-            return
-        messagebox.showinfo("Saved", "Settings saved. They apply on your next run.", parent=self)
-        self.destroy()
-
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    root.withdraw()
-    SettingsWindow(root)
-    root.mainloop()
