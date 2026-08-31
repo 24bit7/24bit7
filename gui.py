@@ -44,7 +44,12 @@ class PlayTab(tk.Frame):
     def _build_now_playing(self):
         header = tk.Frame(self, padx=16, pady=12)
         header.pack(fill="x")
-        tk.Label(header, text="24bit7", font=("Segoe UI", 18, "bold")).pack(anchor="w")
+        title = tk.Frame(header)
+        title.pack(anchor="w")
+        BLUE, ORANGE = "#1f4e9c", "#f28c28"
+        for part, colour in (("24", BLUE), ("bit", ORANGE), ("7", BLUE)):
+            tk.Label(title, text=part, font=("Segoe UI", 18, "bold"),
+                     fg=colour).pack(side="left", padx=0)
         tk.Label(header, text="Smart Playlist Creator and Music Discovery Tool",
                  font=("Segoe UI", 10), fg="#666").pack(anchor="w")
 
@@ -52,11 +57,15 @@ class PlayTab(tk.Frame):
         frame.pack(fill="x")
         tk.Label(frame, text="NOW PLAYING", font=("Segoe UI", 8, "bold"), fg="#888").pack(anchor="w")
         self.np_track = tk.Label(frame, text="...", font=("Segoe UI", 14, "bold"),
-                                 anchor="w", justify="left", wraplength=580)
+                                 anchor="w", justify="left")
         self.np_track.pack(anchor="w", fill="x")
         self.np_detail = tk.Label(frame, text="", font=("Segoe UI", 10), fg="#555",
-                                  anchor="w", justify="left", wraplength=580)
+                                  anchor="w", justify="left")
         self.np_detail.pack(anchor="w", fill="x")
+        # Wrap only when text genuinely exceeds the available width.
+        frame.bind("<Configure>", lambda e: (
+            self.np_track.config(wraplength=max(200, e.width - 32)),
+            self.np_detail.config(wraplength=max(200, e.width - 32))))
 
     def _build_buttons(self):
         frame = tk.Frame(self, padx=16, pady=4)
@@ -64,9 +73,9 @@ class PlayTab(tk.Frame):
         self.buttons = []
         for text, handler in [
             ("Similar Artists", self.on_similar),
-            ("Top Tracks", self.on_top_tracks),
-            ("Show Credits", self.on_credits),
+            ("Artist's Top Tracks", self.on_top_tracks),
             ("Vibe Playlist", self.on_vibe),
+            ("Show Credits", self.on_credits),
         ]:
             b = tk.Button(frame, text=text, command=handler, width=16, height=2)
             b.pack(side="left", padx=(0, 8))
@@ -76,8 +85,11 @@ class PlayTab(tk.Frame):
         frame = tk.Frame(self, padx=16, pady=12)
         frame.pack(fill="both", expand=True)
         self.log = scrolledtext.ScrolledText(frame, wrap="word", state="disabled",
-                                             font=("Consolas", 9), bg="#1e1e1e", fg="#d4d4d4")
+                                             font=("Consolas", 9), bg="#000000", fg="#00ff41",
+                                             insertbackground="#00ff41")
         self.log.pack(fill="both", expand=True)
+        self._greeting_active = True
+        self._type_greeting("Follow the white rabbit.", 0)
 
     def _refresh_now_playing(self):
         if not self.running:
@@ -93,6 +105,29 @@ class PlayTab(tk.Frame):
                 self.last_playing = None
         self.after(REFRESH_MS, self._refresh_now_playing)
 
+    def _type_greeting(self, text, i):
+        """Types the greeting one character at a time, then clears it after 10 seconds."""
+        if not self._greeting_active:
+            return
+        if i < len(text):
+            self.log.config(state="normal")
+            self.log.insert("end", text[i])
+            self.log.config(state="disabled")
+            self.after(60, lambda: self._type_greeting(text, i + 1))
+        else:
+            self.after(10000, self._clear_greeting)
+
+    def _clear_greeting(self):
+        if self._greeting_active:
+            self._greeting_active = False
+            self._clear_log()
+
+    def _append_log(self, line):
+        self.log.config(state="normal")
+        self.log.insert("end", line + "\n")
+        self.log.see("end")
+        self.log.config(state="disabled")
+
     def report(self, message):
         self.log_queue.put(message)
 
@@ -100,10 +135,7 @@ class PlayTab(tk.Frame):
         try:
             while True:
                 line = self.log_queue.get_nowait()
-                self.log.config(state="normal")
-                self.log.insert("end", line + "\n")
-                self.log.see("end")
-                self.log.config(state="disabled")
+                self._append_log(line)
         except queue.Empty:
             pass
         self.after(POLL_MS, self._drain_log_queue)
@@ -121,6 +153,7 @@ class PlayTab(tk.Frame):
                                 "Start a track in JRiver first, then try again.")
             return
         self.running = True
+        self._greeting_active = False
         for b in self.buttons:
             b.config(state="disabled")
         self._clear_log()
@@ -239,8 +272,15 @@ def main():
     root.minsize(680, 480)
 
     style = ttk.Style(root)
-    # Bigger, bolder notebook tab labels
-    style.configure("TNotebook.Tab", font=("Segoe UI", 11, "bold"), padding=(16, 8))
+    # Bigger, bolder tabs that clearly read as tabs: the selected one is white
+    # and raised, the others sit grey and slightly lower.
+    style.configure("TNotebook", tabmargins=(8, 6, 0, 0))
+    style.configure("TNotebook.Tab", font=("Segoe UI", 11, "bold"),
+                    padding=(18, 8), background="#d9d9d9", foreground="#555")
+    style.map("TNotebook.Tab",
+              background=[("selected", "#ffffff")],
+              foreground=[("selected", "#000000")],
+              padding=[("selected", (18, 10))])
 
     nb = ttk.Notebook(root)
     nb.pack(fill="both", expand=True)
