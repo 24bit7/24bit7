@@ -75,7 +75,7 @@ def db():
     """Opens the database on first use and creates tables if needed."""
     global _db
     if _db is None:
-        _db = sqlite3.connect(DB_FILE)
+        _db = sqlite3.connect(DB_FILE, check_same_thread=False)
         _db.execute("""CREATE TABLE IF NOT EXISTS cache (
             source TEXT, kind TEXT, key TEXT, payload TEXT, fetched_at REAL,
             PRIMARY KEY (source, kind, key))""")
@@ -136,14 +136,14 @@ def session_log(session_id, artist, track, sources, found):
                   1 if found else 0))
 
 
-def session_finish(session_id, queued, sources=None):
+def session_finish(session_id, queued, sources=None, report=print):
     if sources is not None:
         db().execute("UPDATE sessions SET sources=? WHERE id=?", (sources, session_id))
     db().execute("UPDATE sessions SET queued=? WHERE id=?", (queued, session_id))
     db().commit()
     misses = db().execute("SELECT COUNT(*) FROM discoveries WHERE session_id=? AND found=0",
                           (session_id,)).fetchone()[0]
-    print(f"Session {session_id} saved ({queued} tracks queued, {misses} discoveries not in library).")
+    report(f"Session {session_id} saved ({queued} tracks queued, {misses} discoveries not in library).")
 
 
 def import_legacy_csv():
@@ -855,7 +855,7 @@ def create_similar_playlist(report=print):
         report("Queue refreshed.")
     else:
         report("No library matches found.")
-    session_finish(session_id, queued, sources=source_label)
+    session_finish(session_id, queued, sources=source_label, report=report)
 
 
 # ---------------------------------------------------------------------------
@@ -899,7 +899,7 @@ def play_top_n(report=print):
 
     if not ordered_keys:
         report("None of the top tracks were found in your library.")
-        session_finish(session_id, 0)
+        session_finish(session_id, 0, report=report)
         return
 
     if order == "random":
@@ -912,7 +912,7 @@ def play_top_n(report=print):
     report(f"\nQueuing {len(ordered_keys)} tracks, {labels[order]}...")
     queue_tracks(ordered_keys)
     report("Done!")
-    session_finish(session_id, len(ordered_keys))
+    session_finish(session_id, len(ordered_keys), report=report)
 
 
 # ---------------------------------------------------------------------------
