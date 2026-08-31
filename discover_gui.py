@@ -58,7 +58,7 @@ class DiscoverTab(tk.Frame):
         self.count_label.pack(side="right")
 
     def _build_table(self):
-        wrap = tk.Frame(self, padx=12, pady=(0, 8))
+        wrap = tk.Frame(self, padx=12, pady=8)
         wrap.pack(fill="both", expand=True)
 
         cols = ("artist", "track", "sources", "found", "date")
@@ -75,7 +75,7 @@ class DiscoverTab(tk.Frame):
         vsb.pack(side="right", fill="y")
         self.tree.bind("<Double-1>", lambda e: self.search_selected())
 
-        btnbar = tk.Frame(self, padx=12, pady=(0, 10))
+        btnbar = tk.Frame(self, padx=12, pady=8)
         btnbar.pack(fill="x")
         self.store_label = tk.Label(btnbar, text="", fg="#777")
         self.store_label.pack(side="left")
@@ -148,3 +148,4 @@ class DiscoverTab(tk.Frame):
         query = urllib.parse.quote_plus(terms)
         builder = STORE_SEARCH.get(engine.DIGITAL_STORE, STORE_SEARCH["bandcamp"])
         webbrowser.open(builder(query))
+        
