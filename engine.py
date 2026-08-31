@@ -218,7 +218,8 @@ def list_discoveries(found=None, session_id=None):
     found: None for all, True for hits, False for misses.
     session_id: restrict to one session, or None for all.
     """
-    q = ("SELECT d.artist, d.track, d.sources, d.found, s.started_at, d.session_id "
+    q = ("SELECT d.artist, d.track, d.sources, d.found, s.started_at, d.session_id, "
+         "s.seed_artist, s.seed_track "
          "FROM discoveries d JOIN sessions s ON s.id = d.session_id")
     conds, args = [], []
     if found is not None:
@@ -231,8 +232,9 @@ def list_discoveries(found=None, session_id=None):
         q += " WHERE " + " AND ".join(conds)
     q += " ORDER BY d.session_id DESC, d.id ASC"
     rows = db().execute(q, args).fetchall()
-    return [{"artist": r[0], "track": r[1], "sources": r[2],
-             "found": bool(r[3]), "date": r[4], "session_id": r[5]} for r in rows]
+    return [{"artist": r[0], "track": r[1], "sources": r[2], "found": bool(r[3]),
+             "date": r[4], "session_id": r[5], "seed_artist": r[6], "seed_track": r[7]}
+            for r in rows]
 
 
 def get_playing_info():

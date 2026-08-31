@@ -33,9 +33,17 @@ class DiscoverTab(tk.Frame):
     def __init__(self, master):
         super().__init__(master)
         self.sessions = []
+        self._loaded = False
         self._build_controls()
         self._build_table()
-        self.refresh()
+        # Rows are loaded the first time the tab is shown (see ensure_loaded),
+        # so app startup isn't slowed by inserting hundreds of table rows.
+
+    def ensure_loaded(self):
+        """Called by the main window when this tab becomes visible."""
+        if not self._loaded:
+            self._loaded = True
+            self.refresh()
 
     # --- layout ------------------------------------------------------------
 

@@ -36,7 +36,9 @@ class PlayTab(tk.Frame):
         self._build_buttons()
         self._build_log()
 
-        self._refresh_now_playing()
+        # First Now Playing read happens just after the window appears, not
+        # during construction, so a slow JRiver never delays startup.
+        self.after(200, self._refresh_now_playing)
         self.after(POLL_MS, self._drain_log_queue)
 
     def _build_now_playing(self):
@@ -170,9 +172,16 @@ def main():
     nb = ttk.Notebook(root)
     nb.pack(fill="both", expand=True)
 
-    nb.add(PlayTab(nb, root), text="Play")
-    nb.add(DiscoverTab(nb), text="Discover")
+    play = PlayTab(nb, root)
+    discover = DiscoverTab(nb)
+    nb.add(play, text="Play")
+    nb.add(discover, text="Discover")
     nb.add(SettingsTab(nb), text="Settings")
+
+    def on_tab_changed(event):
+        if nb.select() == str(discover):
+            discover.ensure_loaded()
+    nb.bind("<<NotebookTabChanged>>", on_tab_changed)
 
     root.mainloop()
 
