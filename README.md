@@ -102,8 +102,8 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ## Licence
 
-*(placeholder: to be decided before public release)*
+Released under the MIT Licence. See LICENSE.
 
 ## Support the project
 
-*(placeholder: donate link)*
+24bit7 is free and always will be. If it has found you music you'd have missed, you can buy me a coffee (or a Beer!): https://paypal.me/24bit7
