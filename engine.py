@@ -11,28 +11,12 @@ import json
 import sqlite3
 from datetime import datetime
 
-load_dotenv()
+ENV_FILE = ".env"
+TARGET_ZONE = "0"
+CSV_FILE = "FutureDiscoveries.csv"      # legacy log, imported once into the database
+DB_FILE = "24bit7.db"
 
-AUTH = (os.getenv("JRIVER_USER"), os.getenv("JRIVER_PASS"))
-JRIVER_HOST = os.getenv("JRIVER_HOST", "127.0.0.1:52199")
-JRIVER_BASE = f"http://{JRIVER_HOST}/MCWS/v1"
-LASTFM_KEY = os.getenv("LASTFM_API_KEY")
-LISTENBRAINZ_TOKEN = os.getenv("LISTENBRAINZ_TOKEN")
-DISCOGS_TOKEN = os.getenv("DISCOGS_TOKEN")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-
-# --- User preferences (also from .env; all optional, defaults shown) ---------
-# Comma-separated source lists. Valid names: lastfm, listenbrainz, deezer, ai
-SIMILAR_SOURCES = [x.strip().lower() for x in os.getenv("SIMILAR_SOURCES", "lastfm").split(",") if x.strip()]
-TOP_TRACK_SOURCES = [x.strip().lower() for x in os.getenv("TOP_TRACK_SOURCES", "lastfm").split(",") if x.strip()]
-LISTENBRAINZ_ALGORITHM_SETTING = os.getenv("LISTENBRAINZ_ALGORITHM", "alltime").strip().lower()   # alltime | recent
-DIGITAL_STORE = os.getenv("DIGITAL_STORE", "bandcamp").strip().lower()
-DEBUG = os.getenv("DEBUG", "0").strip().lower() in ("1", "true", "yes")   # print raw source lists before blending
-
-
-def debug(msg):
-    if DEBUG:
-        print(f"    [debug] {msg}")
+_env_mtime = None   # modification time of .env when settings were last loaded
 
 
 def _int_setting(name, default, lo, hi):
@@ -46,18 +30,67 @@ def _int_setting(name, default, lo, hi):
     return max(lo, min(hi, value))
 
 
-SIMILAR_ARTIST_LIMIT = _int_setting("SIMILAR_ARTIST_LIMIT", 20, 1, 50)   # similar artists per source
-TRACKS_PER_ARTIST_POOL = _int_setting("TRACKS_PER_ARTIST_POOL", 5, 1, 20)   # library tracks per artist to draw from
-TRACKS_PER_ARTIST_PICK = _int_setting("TRACKS_PER_ARTIST_PICK", 3, 1, 20)   # how many of those to queue
-TOP_TRACKS_COUNT = _int_setting("TOP_TRACKS_COUNT", 10, 1, 20)             # mode 2 track count
-TOP_TRACKS_ORDER = os.getenv("TOP_TRACKS_ORDER", "popular").strip().lower()  # popular | reverse | random
-if TOP_TRACKS_ORDER not in ("popular", "reverse", "random"):
-    print(f"[Settings] TOP_TRACKS_ORDER='{TOP_TRACKS_ORDER}' not recognised, using 'popular'.")
-    TOP_TRACKS_ORDER = "popular"
-CACHE_DAYS = _int_setting("CACHE_DAYS", 30, 1, 365)   # how long provider answers are reused before refetching
-TARGET_ZONE = "0"
-CSV_FILE = "FutureDiscoveries.csv"      # legacy log, imported once into the database
-DB_FILE = "24bit7.db"
+def load_settings():
+    """
+    (Re)reads every setting from .env into module-level globals. Called once at
+    import and again by refresh_settings_if_changed() whenever .env is edited,
+    so both the GUI and the CLI pick up changes without a restart.
+    """
+    global AUTH, JRIVER_HOST, JRIVER_BASE, LASTFM_KEY, LISTENBRAINZ_TOKEN
+    global DISCOGS_TOKEN, ANTHROPIC_API_KEY
+    global SIMILAR_SOURCES, TOP_TRACK_SOURCES, LISTENBRAINZ_ALGORITHM_SETTING
+    global DIGITAL_STORE, DEBUG, SIMILAR_ARTIST_LIMIT, TRACKS_PER_ARTIST_POOL
+    global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, CACHE_DAYS
+
+    load_dotenv(ENV_FILE, override=True)
+
+    AUTH = (os.getenv("JRIVER_USER"), os.getenv("JRIVER_PASS"))
+    JRIVER_HOST = os.getenv("JRIVER_HOST", "127.0.0.1:52199")
+    JRIVER_BASE = f"http://{JRIVER_HOST}/MCWS/v1"
+    LASTFM_KEY = os.getenv("LASTFM_API_KEY")
+    LISTENBRAINZ_TOKEN = os.getenv("LISTENBRAINZ_TOKEN")
+    DISCOGS_TOKEN = os.getenv("DISCOGS_TOKEN")
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+
+    SIMILAR_SOURCES = [x.strip().lower() for x in os.getenv("SIMILAR_SOURCES", "lastfm").split(",") if x.strip()]
+    TOP_TRACK_SOURCES = [x.strip().lower() for x in os.getenv("TOP_TRACK_SOURCES", "lastfm").split(",") if x.strip()]
+    LISTENBRAINZ_ALGORITHM_SETTING = os.getenv("LISTENBRAINZ_ALGORITHM", "alltime").strip().lower()
+    DIGITAL_STORE = os.getenv("DIGITAL_STORE", "bandcamp").strip().lower()
+    DEBUG = os.getenv("DEBUG", "0").strip().lower() in ("1", "true", "yes")
+
+    SIMILAR_ARTIST_LIMIT = _int_setting("SIMILAR_ARTIST_LIMIT", 20, 1, 50)
+    TRACKS_PER_ARTIST_POOL = _int_setting("TRACKS_PER_ARTIST_POOL", 5, 1, 20)
+    TRACKS_PER_ARTIST_PICK = _int_setting("TRACKS_PER_ARTIST_PICK", 3, 1, 20)
+    TOP_TRACKS_COUNT = _int_setting("TOP_TRACKS_COUNT", 10, 1, 20)
+    TOP_TRACKS_ORDER = os.getenv("TOP_TRACKS_ORDER", "popular").strip().lower()
+    if TOP_TRACKS_ORDER not in ("popular", "reverse", "random"):
+        print(f"[Settings] TOP_TRACKS_ORDER='{TOP_TRACKS_ORDER}' not recognised, using 'popular'.")
+        TOP_TRACKS_ORDER = "popular"
+    CACHE_DAYS = _int_setting("CACHE_DAYS", 30, 1, 365)
+
+
+def refresh_settings_if_changed():
+    """Reloads settings if .env has been edited since we last read it. Cheap timestamp check."""
+    global _env_mtime
+    try:
+        mtime = os.path.getmtime(ENV_FILE)
+    except OSError:
+        return
+    if mtime != _env_mtime:
+        load_settings()
+        _env_mtime = mtime
+
+
+load_settings()
+try:
+    _env_mtime = os.path.getmtime(ENV_FILE)
+except OSError:
+    _env_mtime = None
+
+
+def debug(msg):
+    if DEBUG:
+        print(f"    [debug] {msg}")
 
 
 # ---------------------------------------------------------------------------
@@ -792,6 +825,7 @@ def create_similar_playlist(report=print):
     Can be run mid-album: Playing Now is stripped to the current track
     before the new tracks are added, without interrupting playback.
     """
+    refresh_settings_if_changed()
     seed_info = get_playing_info()
     if not seed_info or seed_info["PlayingNowPosition"] == "-1":
         report("Nothing playing. Seed from a track first!")
@@ -870,6 +904,7 @@ def play_top_n(report=print):
     Can be run mid-album: Playing Now is stripped to the current track
     before the new tracks are added, without interrupting playback.
     """
+    refresh_settings_if_changed()
     seed_info = get_playing_info()
     if not seed_info or seed_info["PlayingNowPosition"] == "-1":
         report("Nothing playing. Seed from a track first!")
@@ -1027,6 +1062,7 @@ def explore_credits(report=print):
     Mode 3. Shows the Discogs credits for the playing album: producer,
     engineers, musicians and so on. Information only; the queue is untouched.
     """
+    refresh_settings_if_changed()
     seed_info = get_playing_info()
     if not seed_info or seed_info["PlayingNowPosition"] == "-1":
         report("Nothing playing. Seed from a track first!")
