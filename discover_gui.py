@@ -13,6 +13,7 @@ import urllib.parse
 import webbrowser
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+from tkinter import font as tkfont
 
 import engine
 
@@ -40,11 +41,33 @@ class DiscoverTab(tk.Frame):
         # so app startup isn't slowed by inserting hundreds of table rows.
 
     def _apply_table_font(self):
-        """Sizes the table from the TABLE_FONT_SIZE setting; row height tracks the font."""
+        """
+        Sizes the table from the TABLE_FONT_SIZE setting. Row height is measured
+        from the actual rendered font (so it's right at any DPI), not guessed.
+        """
         size = getattr(engine, "TABLE_FONT_SIZE", 9)
+        font = tkfont.Font(family="Segoe UI", size=size)
+        line_px = font.metrics("linespace")          # real pixel height at this DPI
+        rowheight = line_px + 8                        # plus a little breathing room
         style = ttk.Style(self)
-        style.configure("Treeview", font=("Segoe UI", size), rowheight=int(size * 3.2))
-        style.configure("Treeview.Heading", font=("Segoe UI", size, "bold"))
+        style.configure("Treeview", font=font, rowheight=rowheight)
+        style.configure("Treeview.Heading", font=(font.cget("family"), size, "bold"))
+
+    def _on_font_change(self):
+        """Applies a new table font size immediately and saves it to .env."""
+        try:
+            size = int(self.font_var.get())
+        except ValueError:
+            return
+        if not 6 <= size <= 16:
+            return
+        engine.TABLE_FONT_SIZE = size
+        self._apply_table_font()
+        try:
+            from settings_gui import write_env
+            write_env({"TABLE_FONT_SIZE": str(size)})
+        except Exception:
+            pass
 
     def ensure_loaded(self):
         """Called by the main window when this tab becomes visible."""
@@ -109,6 +132,14 @@ class DiscoverTab(tk.Frame):
         btnbar.pack(fill="x")
         self.store_label = tk.Label(btnbar, text="", fg="#777")
         self.store_label.pack(side="left")
+
+        # Font size control lives here, where its effect is visible.
+        tk.Label(btnbar, text="   Font size:").pack(side="left")
+        self.font_var = tk.StringVar(value=str(getattr(engine, "TABLE_FONT_SIZE", 9)))
+        tk.Spinbox(btnbar, from_=6, to=16, textvariable=self.font_var, width=4,
+                   command=self._on_font_change).pack(side="left", padx=(4, 0))
+        self.font_var.trace_add("write", lambda *a: self._on_font_change())
+
         tk.Button(btnbar, text="Search selected in store",
                   command=self.search_selected).pack(side="right")
         tk.Button(btnbar, text="Export to CSV",
