@@ -4,3 +4,6 @@ __pycache__/
 24bit7.db
 *.lnk
 *.exe
+build/
+dist/
+*.spec
