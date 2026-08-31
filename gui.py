@@ -17,6 +17,7 @@ from tkinter import ttk, scrolledtext, messagebox
 
 import engine
 from settings_gui import SettingsTab
+from discover_gui import DiscoverTab
 
 
 REFRESH_MS = 3000
@@ -138,15 +139,6 @@ class PlayTab(tk.Frame):
 
     def on_credits(self):
         self._run_job(lambda: engine.explore_credits(report=self.report))
-
-
-class DiscoverTab(tk.Frame):
-    """Placeholder; the discoveries browser is built in the next step."""
-    def __init__(self, master):
-        super().__init__(master)
-        tk.Label(self, text="Discover", font=("Segoe UI", 14, "bold")).pack(pady=(40, 8))
-        tk.Label(self, text="Your logged discoveries will appear here.",
-                 fg="#777").pack()
 
 
 def main():

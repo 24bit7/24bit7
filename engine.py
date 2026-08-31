@@ -203,6 +203,38 @@ def import_legacy_csv():
     _db.commit()
 
 
+# --- Discover queries (read-only helpers for the Discover tab) --------------
+
+def list_sessions():
+    """Returns [(id, started_at, mode, seed_artist, seed_track)] newest first."""
+    return db().execute(
+        "SELECT id, started_at, mode, seed_artist, seed_track FROM sessions ORDER BY id DESC"
+    ).fetchall()
+
+
+def list_discoveries(found=None, session_id=None):
+    """
+    Returns discovery rows as dicts, newest session first.
+    found: None for all, True for hits, False for misses.
+    session_id: restrict to one session, or None for all.
+    """
+    q = ("SELECT d.artist, d.track, d.sources, d.found, s.started_at, d.session_id "
+         "FROM discoveries d JOIN sessions s ON s.id = d.session_id")
+    conds, args = [], []
+    if found is not None:
+        conds.append("d.found = ?")
+        args.append(1 if found else 0)
+    if session_id is not None:
+        conds.append("d.session_id = ?")
+        args.append(session_id)
+    if conds:
+        q += " WHERE " + " AND ".join(conds)
+    q += " ORDER BY d.session_id DESC, d.id ASC"
+    rows = db().execute(q, args).fetchall()
+    return [{"artist": r[0], "track": r[1], "sources": r[2],
+             "found": bool(r[3]), "date": r[4], "session_id": r[5]} for r in rows]
+
+
 def get_playing_info():
     """Gets the current artist, track name and Playing Now position from JRiver."""
     try:

@@ -1,0 +1,150 @@
+"""
+24bit7 - Discover tab.
+
+Browses the discoveries logged by every playlist run: artists (and tracks) that
+weren't in the library, plus the ones that were, filterable by hit/miss and by
+session. A per-row Search opens the chosen digital store's search page in the
+browser, so a discovery leads to buying it rather than pirating it.
+"""
+
+import os
+import urllib.parse
+import webbrowser
+import tkinter as tk
+from tkinter import ttk
+
+import engine
+
+# Search URL builders per store. Each takes an "artist track" query string.
+STORE_SEARCH = {
+    "bandcamp":   lambda q: f"https://bandcamp.com/search?q={q}",
+    "discogs":    lambda q: f"https://www.discogs.com/search/?q={q}&type=release",
+    "qobuz":      lambda q: f"https://www.qobuz.com/gb-en/search?q={q}",
+    "amazon":     lambda q: f"https://www.amazon.co.uk/s?k={q}&i=digital-music",
+    "juno":       lambda q: f"https://www.juno.co.uk/search/?q%5Ball%5D%5B%5D={q}",
+    "hdtracks":   lambda q: f"https://www.hdtracks.com/#/search?q={q}",
+    "hiresaudio": lambda q: f"https://www.highresaudio.com/en/search?q={q}",
+    "7digital":   lambda q: f"https://www.7digital.com/search?q={q}",
+}
+
+
+class DiscoverTab(tk.Frame):
+    def __init__(self, master):
+        super().__init__(master)
+        self.sessions = []
+        self._build_controls()
+        self._build_table()
+        self.refresh()
+
+    # --- layout ------------------------------------------------------------
+
+    def _build_controls(self):
+        bar = tk.Frame(self, padx=12, pady=8)
+        bar.pack(fill="x")
+
+        self.filter_var = tk.StringVar(value="misses")
+        for label, val in [("Misses", "misses"), ("Hits", "hits"), ("All", "all")]:
+            tk.Radiobutton(bar, text=label, variable=self.filter_var, value=val,
+                           command=self.refresh).pack(side="left")
+
+        tk.Label(bar, text="   Session:").pack(side="left")
+        self.session_var = tk.StringVar(value="All sessions")
+        self.session_menu = ttk.Combobox(bar, textvariable=self.session_var,
+                                         state="readonly", width=34)
+        self.session_menu.pack(side="left", padx=(4, 0))
+        self.session_menu.bind("<<ComboboxSelected>>", lambda e: self.refresh())
+
+        self.count_label = tk.Label(bar, text="", fg="#777")
+        self.count_label.pack(side="right")
+
+    def _build_table(self):
+        wrap = tk.Frame(self, padx=12, pady=(0, 8))
+        wrap.pack(fill="both", expand=True)
+
+        cols = ("artist", "track", "sources", "found", "date")
+        self.tree = ttk.Treeview(wrap, columns=cols, show="headings", selectmode="browse")
+        headings = {"artist": "Artist", "track": "Track", "sources": "Suggested by",
+                    "found": "In library", "date": "When"}
+        widths = {"artist": 150, "track": 170, "sources": 140, "found": 70, "date": 110}
+        for c in cols:
+            self.tree.heading(c, text=headings[c], command=lambda cc=c: self._sort_by(cc))
+            self.tree.column(c, width=widths[c], anchor="w")
+        vsb = ttk.Scrollbar(wrap, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=vsb.set)
+        self.tree.pack(side="left", fill="both", expand=True)
+        vsb.pack(side="right", fill="y")
+        self.tree.bind("<Double-1>", lambda e: self.search_selected())
+
+        btnbar = tk.Frame(self, padx=12, pady=(0, 10))
+        btnbar.pack(fill="x")
+        self.store_label = tk.Label(btnbar, text="", fg="#777")
+        self.store_label.pack(side="left")
+        tk.Button(btnbar, text="Search selected in store",
+                  command=self.search_selected).pack(side="right")
+        tk.Button(btnbar, text="Refresh", command=self.refresh).pack(side="right", padx=(0, 8))
+
+        self._rows = []           # parallel list of dicts backing the tree
+        self._sort_col = None
+        self._sort_reverse = False
+
+    # --- data --------------------------------------------------------------
+
+    def _reload_sessions(self):
+        self.sessions = engine.list_sessions()
+        labels = ["All sessions"]
+        self._session_ids = [None]
+        for sid, started, mode, artist, track in self.sessions:
+            seed = artist or "?"
+            if track:
+                seed += f" - {track}"
+            labels.append(f"{started}  {seed}")
+            self._session_ids.append(sid)
+        self.session_menu.config(values=labels)
+        if self.session_var.get() not in labels:
+            self.session_var.set("All sessions")
+
+    def refresh(self):
+        self._reload_sessions()
+        engine.load_settings()   # pick up the current DIGITAL_STORE
+        self.store_label.config(text=f"Store: {engine.DIGITAL_STORE}")
+
+        f = self.filter_var.get()
+        found = None if f == "all" else (f == "hits")
+        idx = self.session_menu.current()
+        session_id = self._session_ids[idx] if 0 <= idx < len(self._session_ids) else None
+
+        self._rows = engine.list_discoveries(found=found, session_id=session_id)
+        self._populate()
+
+    def _populate(self):
+        self.tree.delete(*self.tree.get_children())
+        for i, r in enumerate(self._rows):
+            self.tree.insert("", "end", iid=str(i), values=(
+                r["artist"], r["track"] or "", r["sources"] or "",
+                "yes" if r["found"] else "no", r["date"]))
+        self.count_label.config(text=f"{len(self._rows)} shown")
+
+    def _sort_by(self, col):
+        if self._sort_col == col:
+            self._sort_reverse = not self._sort_reverse
+        else:
+            self._sort_col, self._sort_reverse = col, False
+        keymap = {"artist": "artist", "track": "track", "sources": "sources",
+                  "found": "found", "date": "date"}
+        self._rows.sort(key=lambda r: (r[keymap[col]] is None, r[keymap[col]]),
+                        reverse=self._sort_reverse)
+        self._populate()
+
+    # --- actions -----------------------------------------------------------
+
+    def search_selected(self):
+        sel = self.tree.selection()
+        if not sel:
+            return
+        row = self._rows[int(sel[0])]
+        terms = row["artist"]
+        if row["track"]:
+            terms += f" {row['track']}"
+        query = urllib.parse.quote_plus(terms)
+        builder = STORE_SEARCH.get(engine.DIGITAL_STORE, STORE_SEARCH["bandcamp"])
+        webbrowser.open(builder(query))
