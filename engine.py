@@ -26,7 +26,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 TARGET_ZONE = "-1"
 CSV_FILE = os.path.join(APP_DIR, "FutureDiscoveries.csv")      # legacy log, imported once into the database
