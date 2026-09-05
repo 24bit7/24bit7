@@ -14,6 +14,7 @@ import webbrowser
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from tkinter import font as tkfont
+from datetime import datetime
 
 import engine
 
@@ -28,6 +29,20 @@ STORE_SEARCH = {
     "hiresaudio": lambda q: f"https://www.highresaudio.com/en/search?q={q}",
     "7digital":   lambda q: f"https://www.7digital.com/search?q={q}",
 }
+
+SESSION_MENU_WIDTH = 50   # characters; wide enough to show the seed artist and track
+
+
+def short_started(started):
+    """
+    Compact form of a session's start time for the dropdown:
+    '2026-09-04 22:02' -> '04 Sep 22:02'. Anything that doesn't parse
+    (e.g. legacy CSV dates) is shown as stored.
+    """
+    try:
+        return datetime.strptime(started, "%Y-%m-%d %H:%M").strftime("%d %b %H:%M")
+    except (TypeError, ValueError):
+        return started or "?"
 
 
 class DiscoverTab(tk.Frame):
@@ -96,7 +111,7 @@ class DiscoverTab(tk.Frame):
         tk.Label(bar, text="   Session:").pack(side="left")
         self.session_var = tk.StringVar(value="All sessions")
         self.session_menu = ttk.Combobox(bar, textvariable=self.session_var,
-                                         state="readonly", width=28)
+                                         state="readonly", width=SESSION_MENU_WIDTH)
         self.session_menu.pack(side="left", padx=(4, 0))
         self.session_menu.bind("<<ComboboxSelected>>", lambda e: self.refresh())
 
@@ -164,7 +179,7 @@ class DiscoverTab(tk.Frame):
             seed = artist or "?"
             if track:
                 seed += f" - {track}"
-            labels.append(f"{started}  {seed}")
+            labels.append(f"{short_started(started)}  {seed}")
             self._session_ids.append(sid)
         self.session_menu.config(values=labels)
         if self.session_var.get() not in labels:
