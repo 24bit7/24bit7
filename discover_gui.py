@@ -3,8 +3,9 @@
 
 Browses the discoveries logged by every playlist run: artists (and tracks) that
 weren't in the library, plus the ones that were, filterable by hit/miss and by
-session. A per-row Search opens the chosen digital store's search page in the
-browser, so a discovery leads to buying it rather than pirating it.
+session. A per-row Search opens the ticked stores' search pages (artist and
+track) and reference sites (artist only) in the browser, one tab each, so a
+discovery leads to buying it rather than pirating it.
 """
 
 import csv
@@ -28,6 +29,16 @@ STORE_SEARCH = {
     "hdtracks":   lambda q: f"https://www.hdtracks.com/#/search?q={q}",
     "hiresaudio": lambda q: f"https://www.highresaudio.com/en/search?q={q}",
     "7digital":   lambda q: f"https://www.7digital.com/search?q={q}",
+    "bleep":      lambda q: f"https://bleep.com/search?q={q}",
+    "beatport":   lambda q: f"https://www.beatport.com/search?q={q}",
+}
+
+# Reference sites take an artist-only query, for browsing the discography.
+REFERENCE_SEARCH = {
+    "wikipedia":   lambda q: f"https://en.wikipedia.org/w/index.php?search={q}",
+    "discogs_ref": lambda q: f"https://www.discogs.com/search/?q={q}&type=artist",
+    "allmusic":    lambda q: f"https://www.allmusic.com/search/artists/{q}",
+    "musicbrainz": lambda q: f"https://musicbrainz.org/search?query={q}&type=artist&method=indexed",
 }
 
 SESSION_MENU_WIDTH = 50   # minimum characters; the box also stretches with the window
@@ -161,7 +172,7 @@ class DiscoverTab(tk.Frame):
                    command=self._on_font_change).pack(side="left", padx=(4, 0))
         self.font_var.trace_add("write", lambda *a: self._on_font_change())
 
-        tk.Button(btnbar, text="Search selected in store",
+        tk.Button(btnbar, text="Search selected",
                   command=self.search_selected).pack(side="right")
         tk.Button(btnbar, text="Export to CSV",
                   command=self.export_csv).pack(side="right", padx=(0, 8))
@@ -189,9 +200,9 @@ class DiscoverTab(tk.Frame):
 
     def refresh(self):
         self._reload_sessions()
-        engine.load_settings()   # pick up DIGITAL_STORE and TABLE_FONT_SIZE
+        engine.load_settings()   # pick up DIGITAL_STORES, REFERENCE_SITES and TABLE_FONT_SIZE
         self._apply_table_font()
-        self.store_label.config(text=f"Store: {engine.DIGITAL_STORE}")
+        self.store_label.config(text=self._sites_text())
 
         f = self.filter_var.get()
         found = None if f == "all" else (f == "hits")
@@ -200,6 +211,15 @@ class DiscoverTab(tk.Frame):
 
         self._rows = engine.list_discoveries(found=found, session_id=session_id)
         self._populate()
+
+    def _sites_text(self):
+        labels = dict(engine.STORE_OPTIONS + engine.REFERENCE_OPTIONS)
+        stores = [labels.get(c, c) for c in engine.DIGITAL_STORES]
+        refs = [labels.get(c, c) for c in engine.REFERENCE_SITES]
+        text = "Search: " + ", ".join(stores)
+        if refs:
+            text += "  +  " + ", ".join(refs)
+        return text
 
     def _seed_text(self, r):
         seed = r.get("seed_artist") or "?"
@@ -268,6 +288,12 @@ class DiscoverTab(tk.Frame):
         terms = row["artist"]
         if row["track"]:
             terms += f" {row['track']}"
-        query = urllib.parse.quote_plus(terms)
-        builder = STORE_SEARCH.get(engine.DIGITAL_STORE, STORE_SEARCH["bandcamp"])
-        webbrowser.open(builder(query))
+        track_query = urllib.parse.quote_plus(terms)
+        artist_query = urllib.parse.quote_plus(row["artist"])
+        urls = [STORE_SEARCH[c](track_query) for c in engine.DIGITAL_STORES if c in STORE_SEARCH]
+        urls += [REFERENCE_SEARCH[c](artist_query) for c in engine.REFERENCE_SITES if c in REFERENCE_SEARCH]
+        if not urls:
+            urls = [STORE_SEARCH["bandcamp"](track_query)]
+        webbrowser.open(urls[0])
+        for url in urls[1:]:
+            webbrowser.open_new_tab(url)

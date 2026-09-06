@@ -21,8 +21,6 @@ ENV_FILE = engine.ENV_FILE   # single source of truth for where .env lives
 SOURCE_NAMES = [("ai", "AI"), ("deezer", "Deezer"),
                 ("lastfm", "Last.fm"), ("listenbrainz", "ListenBrainz")]
 
-DIGITAL_STORES = ["bandcamp", "discogs", "qobuz", "amazon", "juno",
-                  "hdtracks", "hiresaudio", "7digital"]
 
 KEY_HELP = {
     "LASTFM_API_KEY": ("Last.fm API key",
@@ -64,7 +62,12 @@ def read_env():
 
 
 def write_env(updates):
-    """Updates managed keys in place, preserving comments, blanks and unmanaged keys."""
+    """
+    Updates managed keys in place, preserving comments, blanks and unmanaged
+    keys. A key whose value is None is removed from the file.
+    """
+    removals = {k for k, v in updates.items() if v is None}
+    updates = {k: v for k, v in updates.items() if v is not None}
     lines = []
     if os.path.isfile(ENV_FILE):
         with open(ENV_FILE, encoding="utf-8") as f:
@@ -75,6 +78,8 @@ def write_env(updates):
         stripped = line.lstrip()
         if stripped and not stripped.startswith("#") and "=" in line:
             key = line.split("=", 1)[0].strip()
+            if key in removals:
+                continue
             if key in updates:
                 out.append(f"{key}={updates[key]}")
                 seen.add(key)
@@ -100,6 +105,7 @@ class SettingsTab(tk.Frame):
         nb.pack(fill="both", expand=True, padx=8, pady=8)
         self._build_sources(nb)
         self._build_playlist(nb)
+        self._build_search_sites(nb)
         self._build_keys(nb)
         self._build_other(nb)
 
@@ -114,8 +120,11 @@ class SettingsTab(tk.Frame):
             updates[group] = ",".join(chosen)
         for key in ["LISTENBRAINZ_ALGORITHM", "SIMILAR_ARTIST_LIMIT", "TRACKS_PER_ARTIST_POOL",
                     "TRACKS_PER_ARTIST_PICK", "TOP_TRACKS_COUNT", "VIBE_TRACK_COUNT", "TOP_TRACKS_ORDER",
-                    "CACHE_DAYS", "DIGITAL_STORE", "JRIVER_HOST"] + KEY_FIELDS:
+                    "CACHE_DAYS", "JRIVER_HOST"] + KEY_FIELDS:
             updates[key] = self.vars[key].get().strip()
+        for group in ("DIGITAL_STORES", "REFERENCE_SITES"):
+            updates[group] = ",".join(code for code, v in self.vars[group].items() if v.get())
+        updates["DIGITAL_STORE"] = None   # pre-1.1.0 single-store key, superseded
         updates["DEBUG"] = "1" if self.vars["DEBUG"].get() else "0"
         updates["SIMILAR_REQUIRE_AGREEMENT"] = "1" if self.vars["SIMILAR_REQUIRE_AGREEMENT"].get() else "0"
         return updates
@@ -125,8 +134,8 @@ class SettingsTab(tk.Frame):
         if self._loading:
             return
         updates = self._current_updates()
-        if not updates["SIMILAR_SOURCES"] or not updates["TOP_TRACK_SOURCES"]:
-            return   # don't persist a no-sources state; user is mid-change
+        if not updates["SIMILAR_SOURCES"] or not updates["TOP_TRACK_SOURCES"] or not updates["DIGITAL_STORES"]:
+            return   # don't persist a no-sources / no-stores state; user is mid-change
         try:
             write_env(updates)
         except Exception as e:
@@ -154,14 +163,15 @@ class SettingsTab(tk.Frame):
 
         self.vars["SIMILAR_REQUIRE_AGREEMENT"] = tk.BooleanVar(
             value=self.env.get("SIMILAR_REQUIRE_AGREEMENT", "1") in ("1", "true", "yes"))
-        tk.Checkbutton(tab, variable=self.vars["SIMILAR_REQUIRE_AGREEMENT"], command=self._save,
-                       text="When multiple sources are used for similar artist searches,\n"
-                            "only return artists returned across 2 or more services",
-                       justify="left").grid(row=r, column=0, columnspan=4, sticky="w", pady=(8, 0))
+        ttk.Checkbutton(tab, variable=self.vars["SIMILAR_REQUIRE_AGREEMENT"], command=self._save,
+                        text="Require 2+ sources to agree",
+                        style="Big.TCheckbutton").grid(row=r, column=0, columnspan=4, sticky="w", pady=(8, 0))
         r += 1
-        tk.Label(tab, text="Recommended, to ensure better quality playlists, but will return less results.",
+        tk.Label(tab, text="When more than one similar-artist source is ticked, an artist only makes the list\n"
+                           "if at least two sources suggested it. Recommended for better quality playlists,\n"
+                           "though it returns fewer results.",
                  fg="#666", font=("Segoe UI", 8), justify="left").grid(
-            row=r, column=0, columnspan=4, sticky="w", padx=(24, 0))
+            row=r, column=0, columnspan=4, sticky="w", pady=(2, 0))
         r += 1
 
         tk.Label(tab, text="Top-track sources", font=("Segoe UI", 9, "bold")).grid(
@@ -312,24 +322,58 @@ class SettingsTab(tk.Frame):
         sb.grid(row=0, column=1, sticky="w", padx=(12, 0))
         self.vars["CACHE_DAYS"].trace_add("write", self._save)
 
-        tk.Label(tab, text="Digital store (for Discover search)", anchor="w").grid(
-            row=1, column=0, sticky="w", pady=4)
-        self.vars["DIGITAL_STORE"] = tk.StringVar(value=self.env.get("DIGITAL_STORE", "bandcamp"))
-        cb = ttk.Combobox(tab, textvariable=self.vars["DIGITAL_STORE"], values=DIGITAL_STORES,
-                          state="readonly", width=14)
-        cb.grid(row=1, column=1, sticky="w", padx=(12, 0))
-        cb.bind("<<ComboboxSelected>>", self._save)
-
-        tk.Label(tab, text="JRiver host", anchor="w").grid(row=2, column=0, sticky="w", pady=4)
+        tk.Label(tab, text="JRiver host", anchor="w").grid(row=1, column=0, sticky="w", pady=4)
         self.vars["JRIVER_HOST"] = tk.StringVar(value=self.env.get("JRIVER_HOST", "127.0.0.1:52199"))
         e = tk.Entry(tab, textvariable=self.vars["JRIVER_HOST"], width=22)
-        e.grid(row=2, column=1, sticky="w", padx=(12, 0))
+        e.grid(row=1, column=1, sticky="w", padx=(12, 0))
         e.bind("<FocusOut>", self._save)
 
         self.vars["DEBUG"] = tk.BooleanVar(value=self.env.get("DEBUG", "0") in ("1", "true", "yes"))
         tk.Checkbutton(tab, text="Debug (log raw source lists to console)",
                        variable=self.vars["DEBUG"], command=self._save).grid(
-            row=3, column=0, columnspan=2, sticky="w", pady=(12, 0))
+            row=2, column=0, columnspan=2, sticky="w", pady=(12, 0))
+
+    def _build_search_sites(self, nb):
+        """Discover search sites: which stores and reference sites to open per row."""
+        tab = tk.Frame(nb, padx=12, pady=12)
+        nb.add(tab, text="Search")
+        ttk.Style(self).configure("Big.TCheckbutton", font=("Segoe UI", 11))
+        cols = 4
+        r = 0
+
+        tk.Label(tab, text="Stores (search by artist and track)", font=("Segoe UI", 9, "bold")).grid(
+            row=r, column=0, columnspan=cols, sticky="w")
+        r += 1
+        # Carry over a pre-1.1.0 single DIGITAL_STORE if the new key isn't there yet.
+        stores_raw = self.env.get("DIGITAL_STORES", self.env.get("DIGITAL_STORE", "bandcamp"))
+        chosen_stores = [x.strip().lower() for x in stores_raw.split(",") if x.strip()]
+        self.vars["DIGITAL_STORES"] = {}
+        for i, (code, label) in enumerate(engine.STORE_OPTIONS):
+            v = tk.BooleanVar(value=code in chosen_stores)
+            self.vars["DIGITAL_STORES"][code] = v
+            ttk.Checkbutton(tab, text=label, variable=v, command=self._save,
+                            style="Big.TCheckbutton").grid(
+                row=r + i // cols, column=i % cols, sticky="w", padx=(0, 16), pady=2)
+        r += (len(engine.STORE_OPTIONS) + cols - 1) // cols
+
+        tk.Label(tab, text="Reference (search the artist, for a discography)",
+                 font=("Segoe UI", 9, "bold")).grid(
+            row=r, column=0, columnspan=cols, sticky="w", pady=(16, 0))
+        r += 1
+        chosen_ref = self._csv_list("REFERENCE_SITES", "")
+        self.vars["REFERENCE_SITES"] = {}
+        for i, (code, label) in enumerate(engine.REFERENCE_OPTIONS):
+            v = tk.BooleanVar(value=code in chosen_ref)
+            self.vars["REFERENCE_SITES"][code] = v
+            ttk.Checkbutton(tab, text=label, variable=v, command=self._save,
+                            style="Big.TCheckbutton").grid(
+                row=r + i // cols, column=i % cols, sticky="w", padx=(0, 16), pady=2)
+        r += (len(engine.REFERENCE_OPTIONS) + cols - 1) // cols
+
+        tk.Label(tab, text="Searching a Discover row opens one browser tab per ticked site.\n"
+                           "At least one store must stay ticked.",
+                 fg="#666", font=("Segoe UI", 9), justify="left").grid(
+            row=r, column=0, columnspan=cols, sticky="w", pady=(12, 0))
 
     # --- helpers -----------------------------------------------------------
 

@@ -34,6 +34,29 @@ DB_FILE = os.path.join(APP_DIR, "24bit7.db")
 
 _env_mtime = None   # modification time of .env when settings were last loaded
 
+# Discover search sites. Stores are searched by artist + track; reference
+# sites by artist only (for a discography). Order here is the display order.
+STORE_OPTIONS = [
+    ("bandcamp",   "Bandcamp"),
+    ("discogs",    "Discogs marketplace"),
+    ("qobuz",      "Qobuz"),
+    ("amazon",     "Amazon"),
+    ("juno",       "Juno"),
+    ("hdtracks",   "HDtracks"),
+    ("hiresaudio", "HighResAudio"),
+    ("7digital",   "7digital"),
+    ("bleep",      "Bleep"),
+    ("beatport",   "Beatport"),
+]
+REFERENCE_OPTIONS = [
+    ("wikipedia",   "Wikipedia"),
+    ("discogs_ref", "Discogs"),
+    ("allmusic",    "AllMusic"),
+    ("musicbrainz", "MusicBrainz"),
+]
+STORE_CODES = [c for c, _ in STORE_OPTIONS]
+REFERENCE_CODES = [c for c, _ in REFERENCE_OPTIONS]
+
 
 def _int_setting(name, default, lo, hi):
     """Reads an integer setting from .env, clamped to a range, falling back to the default."""
@@ -55,7 +78,8 @@ def load_settings():
     global AUTH, JRIVER_HOST, JRIVER_BASE, LASTFM_KEY, LISTENBRAINZ_TOKEN
     global DISCOGS_TOKEN, ANTHROPIC_API_KEY
     global SIMILAR_SOURCES, TOP_TRACK_SOURCES, LISTENBRAINZ_ALGORITHM_SETTING
-    global DIGITAL_STORE, DEBUG, SIMILAR_ARTIST_LIMIT, TRACKS_PER_ARTIST_POOL, SIMILAR_REQUIRE_AGREEMENT
+    global DIGITAL_STORES, REFERENCE_SITES, DEBUG, SIMILAR_ARTIST_LIMIT, TRACKS_PER_ARTIST_POOL
+    global SIMILAR_REQUIRE_AGREEMENT
     global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, CACHE_DAYS
     global TABLE_FONT_SIZE, VIBE_TRACK_COUNT
 
@@ -72,7 +96,15 @@ def load_settings():
     SIMILAR_SOURCES = [x.strip().lower() for x in os.getenv("SIMILAR_SOURCES", "lastfm").split(",") if x.strip()]
     TOP_TRACK_SOURCES = [x.strip().lower() for x in os.getenv("TOP_TRACK_SOURCES", "lastfm").split(",") if x.strip()]
     LISTENBRAINZ_ALGORITHM_SETTING = os.getenv("LISTENBRAINZ_ALGORITHM", "alltime").strip().lower()
-    DIGITAL_STORE = os.getenv("DIGITAL_STORE", "bandcamp").strip().lower()
+    # Discover search sites. DIGITAL_STORES replaced the single DIGITAL_STORE in
+    # 1.1.0; an old .env with only DIGITAL_STORE is carried over.
+    stores_raw = os.getenv("DIGITAL_STORES")
+    if stores_raw is None:
+        stores_raw = os.getenv("DIGITAL_STORE", "bandcamp")
+    DIGITAL_STORES = [x.strip().lower() for x in stores_raw.split(",") if x.strip()]
+    DIGITAL_STORES = [x for x in DIGITAL_STORES if x in STORE_CODES] or ["bandcamp"]
+    REFERENCE_SITES = [x.strip().lower() for x in os.getenv("REFERENCE_SITES", "").split(",") if x.strip()]
+    REFERENCE_SITES = [x for x in REFERENCE_SITES if x in REFERENCE_CODES]
     DEBUG = os.getenv("DEBUG", "0").strip().lower() in ("1", "true", "yes")
     # With several similar-artist sources ticked, only keep artists that two or
     # more of them suggested. Filters out one source's oddball picks.
@@ -136,8 +168,14 @@ TOP_TRACKS_COUNT=10
 TOP_TRACKS_ORDER=popular
 VIBE_TRACK_COUNT=20
 
+# Discover search sites (comma-separated). Stores search artist + track, reference
+# sites search the artist. One browser tab opens per site.
+# Stores: bandcamp, discogs, qobuz, amazon, juno, hdtracks, hiresaudio, 7digital, bleep, beatport
+# Reference: wikipedia, discogs_ref, allmusic, musicbrainz
+DIGITAL_STORES=bandcamp
+REFERENCE_SITES=
+
 # Other
-DIGITAL_STORE=bandcamp
 CACHE_DAYS=30
 TABLE_FONT_SIZE=9
 DEBUG=0
