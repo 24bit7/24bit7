@@ -45,6 +45,10 @@ KEY_HELP = {
 KEY_FIELDS = ["LASTFM_API_KEY", "LISTENBRAINZ_TOKEN", "DISCOGS_TOKEN",
               "ANTHROPIC_API_KEY", "JRIVER_USER", "JRIVER_PASS"]
 
+HEADING_FONT = ("Segoe UI", 10, "bold")
+HELP_FONT = ("Segoe UI", 8)
+HELP_FG = "#666"
+
 
 def read_env():
     values = {}
@@ -182,38 +186,82 @@ class SettingsTab(tk.Frame):
             row=r, column=0, columnspan=4, sticky="w", pady=(4, 0))
 
     def _build_playlist(self, nb):
+        """
+        Playlist settings grouped under the Play-tab mode each one belongs to,
+        so the labels don't need to repeat the mode name.
+        """
         tab = tk.Frame(nb, padx=12, pady=12)
         nb.add(tab, text="Playlist")
-        rows = [
-            ("Similar artists (count)", "SIMILAR_ARTIST_LIMIT", "20", 1, 50),
-            ("Library tracks per artist to consider", "TRACKS_PER_ARTIST_POOL", "5", 1, 20),
-            ("Tracks per artist to queue", "TRACKS_PER_ARTIST_PICK", "3", 1, 20),
-            ("Top tracks (count, 1-20)", "TOP_TRACKS_COUNT", "10", 1, 20),
-            ("Vibe playlist (track count)", "VIBE_TRACK_COUNT", "20", 5, 100),
-        ]
-        for r, (label, key, default, lo, hi) in enumerate(rows):
-            tk.Label(tab, text=label, anchor="w").grid(row=r, column=0, sticky="w", pady=4)
+        self._row = 0
+
+        def heading(text, first=False):
+            tk.Label(tab, text=text, font=HEADING_FONT, anchor="w").grid(
+                row=self._row, column=0, columnspan=2, sticky="w", pady=(0 if first else 18, 4))
+            self._row += 1
+
+        def spin(label, key, default, lo, hi):
+            tk.Label(tab, text=label, anchor="w").grid(row=self._row, column=0, sticky="w", pady=4)
             var = tk.StringVar(value=self.env.get(key, default))
             self.vars[key] = var
             sb = tk.Spinbox(tab, from_=lo, to=hi, textvariable=var, width=6, command=self._save)
-            sb.grid(row=r, column=1, sticky="w", padx=(12, 0))
+            sb.grid(row=self._row, column=1, sticky="w", padx=(12, 0))
             var.trace_add("write", self._save)
+            self._row += 1
+            return var, sb
 
-        r = len(rows)
-        tk.Label(tab, text="Top-tracks order", anchor="w").grid(row=r, column=0, sticky="w", pady=4)
+        def note(text):
+            tk.Label(tab, text=text, fg=HELP_FG, font=HELP_FONT, justify="left").grid(
+                row=self._row, column=0, columnspan=2, sticky="w", pady=(0, 4))
+            self._row += 1
+
+        # --- Similar Artists ---
+        heading("Similar Artists", first=True)
+        spin("Number of artists", "SIMILAR_ARTIST_LIMIT", "20", 1, 50)
+        pool_var, _ = spin("Library tracks per artist to consider", "TRACKS_PER_ARTIST_POOL", "5", 1, 20)
+        pick_var, pick_sb = spin("Tracks per artist selection", "TRACKS_PER_ARTIST_PICK", "3", 1, 20)
+        note("Picking fewer than you consider (e.g. 3 of 5) varies which tracks get queued each run.")
+        self._pick_sb = pick_sb
+        pool_var.trace_add("write", lambda *a: self._sync_pick_limit())
+        self._sync_pick_limit()
+
+        # --- Artist's Top Tracks ---
+        heading("Artist's Top Tracks")
+        spin("Number of tracks (1-20)", "TOP_TRACKS_COUNT", "10", 1, 20)
+        tk.Label(tab, text="Order", anchor="w").grid(row=self._row, column=0, sticky="w", pady=4)
         self.vars["TOP_TRACKS_ORDER"] = tk.StringVar(value=self.env.get("TOP_TRACKS_ORDER", "popular"))
         cb = ttk.Combobox(tab, textvariable=self.vars["TOP_TRACKS_ORDER"],
                           values=["popular", "reverse", "random"], state="readonly", width=12)
-        cb.grid(row=r, column=1, sticky="w", padx=(12, 0))
+        cb.grid(row=self._row, column=1, sticky="w", padx=(12, 0))
         cb.bind("<<ComboboxSelected>>", self._save)
-        r += 1
+        self._row += 1
         bullet = "\u2022"
-        tk.Label(tab,
-                 text=f"{bullet}  popular - most played first\n"
-                      f"{bullet}  reverse - least played first\n"
-                      f"{bullet}  random - shuffled",
-                 fg="#666", font=("Segoe UI", 8), justify="left").grid(
-            row=r, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        note(f"{bullet}  popular - most played first\n"
+             f"{bullet}  reverse - least played first\n"
+             f"{bullet}  random - shuffled")
+
+        # --- Vibe Playlist ---
+        heading("Vibe Playlist")
+        spin("Number of tracks", "VIBE_TRACK_COUNT", "20", 5, 100)
+
+    def _sync_pick_limit(self):
+        """
+        Keeps 'tracks per artist selection' from exceeding 'library tracks per
+        artist to consider': the selection spinner's ceiling follows the
+        consider value, and the selection is clamped down if consider drops
+        below it. Ignores half-typed (non-numeric) values.
+        """
+        try:
+            pool = int(self.vars["TRACKS_PER_ARTIST_POOL"].get())
+        except (ValueError, KeyError):
+            return
+        pool = max(1, pool)
+        self._pick_sb.config(to=pool)
+        try:
+            pick = int(self.vars["TRACKS_PER_ARTIST_PICK"].get())
+        except ValueError:
+            return
+        if pick > pool:
+            self.vars["TRACKS_PER_ARTIST_PICK"].set(str(pool))   # trace on this var saves
 
     def _build_keys(self, nb):
         tab = tk.Frame(nb, padx=12, pady=12)
