@@ -117,6 +117,7 @@ class SettingsTab(tk.Frame):
                     "CACHE_DAYS", "DIGITAL_STORE", "JRIVER_HOST"] + KEY_FIELDS:
             updates[key] = self.vars[key].get().strip()
         updates["DEBUG"] = "1" if self.vars["DEBUG"].get() else "0"
+        updates["SIMILAR_REQUIRE_AGREEMENT"] = "1" if self.vars["SIMILAR_REQUIRE_AGREEMENT"].get() else "0"
         return updates
 
     def _save(self, *_):
@@ -149,6 +150,18 @@ class SettingsTab(tk.Frame):
             self.vars["SIMILAR_SOURCES"][code] = v
             ttk.Checkbutton(tab, text=label, variable=v, command=self._save,
                             style="Big.TCheckbutton").grid(row=r, column=i, sticky="w", padx=(0, 12))
+        r += 1
+
+        self.vars["SIMILAR_REQUIRE_AGREEMENT"] = tk.BooleanVar(
+            value=self.env.get("SIMILAR_REQUIRE_AGREEMENT", "1") in ("1", "true", "yes"))
+        tk.Checkbutton(tab, variable=self.vars["SIMILAR_REQUIRE_AGREEMENT"], command=self._save,
+                       text="When multiple sources are used for similar artist searches,\n"
+                            "only return artists returned across 2 or more services",
+                       justify="left").grid(row=r, column=0, columnspan=4, sticky="w", pady=(8, 0))
+        r += 1
+        tk.Label(tab, text="Recommended, to ensure better quality playlists, but will return less results.",
+                 fg="#666", font=("Segoe UI", 8), justify="left").grid(
+            row=r, column=0, columnspan=4, sticky="w", padx=(24, 0))
         r += 1
 
         tk.Label(tab, text="Top-track sources", font=("Segoe UI", 9, "bold")).grid(
@@ -217,9 +230,11 @@ class SettingsTab(tk.Frame):
         # --- Similar Artists ---
         heading("Similar Artists", first=True)
         spin("Number of artists", "SIMILAR_ARTIST_LIMIT", "20", 1, 50)
-        pool_var, _ = spin("Library tracks per artist to consider", "TRACKS_PER_ARTIST_POOL", "5", 1, 20)
+        pool_var, _ = spin("Number of artist's top tracks", "TRACKS_PER_ARTIST_POOL", "5", 1, 20)
         pick_var, pick_sb = spin("Tracks per artist selection", "TRACKS_PER_ARTIST_PICK", "3", 1, 20)
-        note("Picking fewer than you consider (e.g. 3 of 5) varies which tracks get queued each run.")
+        note("Top tracks come from your Top-track sources (Last.fm, Deezer etc.), for the seed\n"
+             "artist and each similar artist. Selecting fewer than the top tracks (e.g. 3 of 5)\n"
+             "means the same seed gives a different playlist each run, as the selection is random.")
         self._pick_sb = pick_sb
         pool_var.trace_add("write", lambda *a: self._sync_pick_limit())
         self._sync_pick_limit()

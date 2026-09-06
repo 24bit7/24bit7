@@ -26,7 +26,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.0.1"
+VERSION = "1.1.0"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 TARGET_ZONE = "-1"
 CSV_FILE = os.path.join(APP_DIR, "FutureDiscoveries.csv")      # legacy log, imported once into the database
@@ -55,7 +55,7 @@ def load_settings():
     global AUTH, JRIVER_HOST, JRIVER_BASE, LASTFM_KEY, LISTENBRAINZ_TOKEN
     global DISCOGS_TOKEN, ANTHROPIC_API_KEY
     global SIMILAR_SOURCES, TOP_TRACK_SOURCES, LISTENBRAINZ_ALGORITHM_SETTING
-    global DIGITAL_STORE, DEBUG, SIMILAR_ARTIST_LIMIT, TRACKS_PER_ARTIST_POOL
+    global DIGITAL_STORE, DEBUG, SIMILAR_ARTIST_LIMIT, TRACKS_PER_ARTIST_POOL, SIMILAR_REQUIRE_AGREEMENT
     global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, CACHE_DAYS
     global TABLE_FONT_SIZE, VIBE_TRACK_COUNT
 
@@ -74,6 +74,9 @@ def load_settings():
     LISTENBRAINZ_ALGORITHM_SETTING = os.getenv("LISTENBRAINZ_ALGORITHM", "alltime").strip().lower()
     DIGITAL_STORE = os.getenv("DIGITAL_STORE", "bandcamp").strip().lower()
     DEBUG = os.getenv("DEBUG", "0").strip().lower() in ("1", "true", "yes")
+    # With several similar-artist sources ticked, only keep artists that two or
+    # more of them suggested. Filters out one source's oddball picks.
+    SIMILAR_REQUIRE_AGREEMENT = os.getenv("SIMILAR_REQUIRE_AGREEMENT", "1").strip().lower() in ("1", "true", "yes")
 
     SIMILAR_ARTIST_LIMIT = _int_setting("SIMILAR_ARTIST_LIMIT", 20, 1, 50)
     TRACKS_PER_ARTIST_POOL = _int_setting("TRACKS_PER_ARTIST_POOL", 5, 1, 20)
@@ -122,6 +125,8 @@ ANTHROPIC_API_KEY=
 SIMILAR_SOURCES=lastfm,deezer
 TOP_TRACK_SOURCES=lastfm,deezer
 LISTENBRAINZ_ALGORITHM=alltime
+# With several similar-artist sources, only keep artists suggested by 2 or more (1 = on)
+SIMILAR_REQUIRE_AGREEMENT=1
 
 # Playlist sizes and order
 SIMILAR_ARTIST_LIMIT=20
@@ -169,6 +174,26 @@ def debug(msg):
 # ---------------------------------------------------------------------------
 # Utility Functions
 # ---------------------------------------------------------------------------
+
+MULTI_VALUE_SEP = ";"   # JRiver's separator for multi-value fields (Artist, Genre etc.)
+
+
+def split_values(field):
+    """
+    Splits a JRiver multi-value field into its parts. JRiver stores several
+    values in one field separated by ';' ('Angus Stone;Dope Lemon'), and each
+    shows up as its own entry in the column. Returns a list of the non-empty,
+    stripped parts, so a plain single value comes back as a one-item list.
+    """
+    if not field:
+        return []
+    return [p.strip() for p in str(field).split(MULTI_VALUE_SEP) if p.strip()]
+
+
+def seed_artists(seed_info):
+    """The playing track's artist(s) as a list, one entry per multi-value part."""
+    return split_values(seed_info.get("Artist")) or ["Unknown"]
+
 
 # ---------------------------------------------------------------------------
 # Database: provider cache, sessions and discoveries (SQLite, no install needed)
@@ -477,9 +502,15 @@ def jriver_search_artist_items(artist_name):
 
 
 def artist_matches(pattern, fields):
-    """Applies the artist regex to the normalised (accent-free, dot-collapsed) artist field."""
+    """
+    Applies the artist regex to the normalised (accent-free, dot-collapsed)
+    artist field. A multi-value field ('Angus Stone;Dope Lemon') is split and
+    each part checked on its own, so the track matches if ANY of its artists
+    matches, and a search for 'Angus Stone' can't accidentally match across
+    the ';' boundary.
+    """
     actual_artist = fields.get("Artist", "") or fields.get("Album Artist", "")
-    return bool(pattern.search(norm_artist_text(actual_artist)))
+    return any(pattern.search(norm_artist_text(part)) for part in split_values(actual_artist))
 
 
 # ---------------------------------------------------------------------------
@@ -929,25 +960,43 @@ BLEND_DEPTH = 2   # ask each source for this many times the wanted count, so ove
 
 
 def blended_similar_artists(seed_artist, limit=20):
-    """Similar artists from every source in SIMILAR_SOURCES, blended. Returns ([(artist, sources)], label)."""
+    """
+    Similar artists from every source in SIMILAR_SOURCES, blended.
+    seed_artist may be a single name or a list of names (a multi-value
+    Artist field split by split_values): each name is looked up on each
+    source and the lists are merged, so the result is artists similar to
+    ANY of the seeds. The seeds themselves are dropped from the result, since
+    an alias like Dope Lemon is often 'similar' to Angus Stone.
+    Returns ([(artist, sources)], label).
+    """
+    seeds = seed_artist if isinstance(seed_artist, list) else [seed_artist]
+    seed_keys = {artist_key(s) for s in seeds}
     providers = sources_from_settings(SIMILAR_SOURCES, "SIMILAR_SOURCES")
-    fetch = min(limit * BLEND_DEPTH, 50) if len(providers) > 1 else limit
+    fetch = min(limit * BLEND_DEPTH, 50) if len(providers) > 1 or len(seeds) > 1 else limit
     results, labels = [], []
-    for service_name, similar_fn, _ in providers:
-        kwargs, label = {}, service_name
-        if similar_fn is listenbrainz_similar:
-            algo_label, algo_string = listenbrainz_algorithm_from_settings()
-            kwargs["algorithm"] = algo_string
-            label = f"{service_name} ({algo_label.split(' - ')[0]})"
-        names = cached_call(label, "similar", f"{artist_key(seed_artist)}|{fetch}",
-                            lambda: similar_fn(seed_artist, limit=fetch, **kwargs))
-        debug(f"{service_name} similar artists: {names}")
-        if names:
-            results.append((service_name, names))
-            labels.append(label)
-        else:
-            print(f"  [{service_name}] returned no similar artists, skipping.")
-    return blend_lists(results, artist_key)[:limit], " + ".join(labels) if labels else "none"
+    for seed in seeds:
+        for service_name, similar_fn, _ in providers:
+            kwargs, label = {}, service_name
+            if similar_fn is listenbrainz_similar:
+                algo_label, algo_string = listenbrainz_algorithm_from_settings()
+                kwargs["algorithm"] = algo_string
+                label = f"{service_name} ({algo_label.split(' - ')[0]})"
+            names = cached_call(label, "similar", f"{artist_key(seed)}|{fetch}",
+                                lambda: similar_fn(seed, limit=fetch, **kwargs))
+            debug(f"{service_name} similar artists for {seed}: {names}")
+            if names:
+                results.append((service_name, names))
+                if label not in labels:
+                    labels.append(label)
+            else:
+                print(f"  [{service_name}] returned no similar artists for {seed}, skipping.")
+    blended = [(a, s) for a, s in blend_lists(results, artist_key) if artist_key(a) not in seed_keys]
+    responding = {service_name for service_name, _ in results}
+    if SIMILAR_REQUIRE_AGREEMENT and len(responding) > 1:
+        before = len(blended)
+        blended = [(a, s) for a, s in blended if len(s) >= 2]
+        debug(f"agreement filter: {before} -> {len(blended)} artists suggested by 2+ sources")
+    return blended[:limit], " + ".join(labels) if labels else "none"
 
 
 def blended_top_tracks(artist, limit=10):
@@ -973,6 +1022,8 @@ def blended_top_tracks(artist, limit=10):
 
 def get_verified_keys_for_artist(artist_name, pool=None, pick=None):
     """
+    Library-order fallback, no longer used by the playlist modes (they use
+    pick_top_tracks_for_artist, which ranks via the Top-track sources).
     Searches the JRiver library for tracks by the given artist and returns
     `pick` keys chosen at random from the first `pool` matches. Both default
     to the TRACKS_PER_ARTIST_* settings. Pass pick=None with a pool to get
@@ -1021,18 +1072,62 @@ def find_jriver_key_by_track(artist_name, track_name):
     return None
 
 
+def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
+                               exclude_track=None, consider=None, pick=None):
+    """
+    The per-artist step shared by Similar Artists and the Vibe backfill:
+    ask the Top-track sources for the artist's top `consider` tracks, randomly
+    pick `pick` of those, then look each one up in the library. Hits are
+    returned as file keys; every pick, hit or miss, is logged to the session
+    so Discover shows exactly which tracks were chosen and which are missing.
+    exclude_track: a track name to leave out (the one that's playing).
+    Returns (keys found, number of misses).
+    """
+    consider = consider or TRACKS_PER_ARTIST_POOL
+    pick = pick or TRACKS_PER_ARTIST_PICK
+    fetch = consider + 1 if exclude_track else consider
+    top, _ = blended_top_tracks(artist, limit=fetch)
+    names = [t for t, _ in top]
+    if exclude_track:
+        skip = clean_name(exclude_track)
+        names = [t for t in names if clean_name(t) != skip]
+    names = names[:consider]
+    if not names:
+        report(f"    No top tracks returned for {artist}.")
+        return [], 0
+    chosen = random.sample(names, min(pick, len(names)))
+    keys, misses = [], 0
+    for track_name in chosen:
+        key = find_jriver_key_by_track(artist, track_name)
+        if key:
+            report(f"    Found: {track_name}")
+            keys.append(key)
+        else:
+            report(f"    Not in library: {track_name}")
+            misses += 1
+        session_log(session_id, artist, track_name, suggested_by, found=bool(key))
+    return keys, misses
+
+
 # ---------------------------------------------------------------------------
 # Mode 1: Similar Artist Playlist
 # ---------------------------------------------------------------------------
 
+
 def create_similar_playlist(report=print):
     """
-    Finds similar artists via Last.fm, queues library tracks,
-    and logs missing artists to CSV for future discovery.
-    Also seeds the queue with the seed artist's own top 5 Last.fm tracks
-    (excluding the track that's currently playing).
-    Can be run mid-album: Playing Now is stripped to the current track
-    before the new tracks are added, without interrupting playback.
+    Builds a playlist around the playing artist:
+      1. The seed artist's own top tracks (from the Top-track sources), minus
+         the one that's playing: randomly pick TRACKS_PER_ARTIST_PICK of the
+         top TRACKS_PER_ARTIST_POOL, queue the ones in the library.
+      2. SIMILAR_ARTIST_LIMIT similar artists from the Similar-artist sources,
+         each given the same treatment.
+      3. Clear Playing Now around the current track, shuffle the hits, queue.
+    Every picked track is logged to the session, hit or miss, so Discover
+    shows the gaps to buy.
+    A multi-value Artist field ('Angus Stone;Dope Lemon') is treated as
+    'either of these': each name is seeded and similar-artist lists are
+    merged, with duplicate tracks removed.
     """
     refresh_settings_if_changed()
     seed_info = get_playing_info()
@@ -1040,53 +1135,40 @@ def create_similar_playlist(report=print):
         report("Nothing playing. Seed from a track first!")
         return
 
+    seeds = seed_artists(seed_info)
     report(f"\nSeeding from: {seed_info['Artist']} - {seed_info['Name']}")
+    if len(seeds) > 1:
+        report(f"  Multi-value artist, treating as any of: {', '.join(seeds)}")
+    report(f"  Per artist: top {TRACKS_PER_ARTIST_POOL} from sources, {TRACKS_PER_ARTIST_PICK} picked at random.")
     session_id = session_start("similar", seed_info)
 
-    # Use a set to avoid duplicate track keys
-    collected_keys = set()
+    collected_keys = []   # ordered, deduped as we go
 
-    # --- Seed artist's own top tracks (excluding the currently playing track) ---
-    report(f"  Adding top tracks for seed artist: {seed_info['Artist']}...")
-    seed_clean = clean_name(seed_info['Name'])
-    # Fetch a few extra in case the seed track itself is among the top 5
-    seed_top_tracks, _ = blended_top_tracks(seed_info['Artist'], limit=10)
+    def add(keys):
+        for k in keys:
+            if k not in collected_keys:
+                collected_keys.append(k)
 
-    seed_keys_added = 0
-    for track_name, _ in seed_top_tracks:
-        if seed_keys_added >= 5:
-            break
-        if clean_name(track_name) == seed_clean:
-            continue  # don't re-add the seed track itself
-        key = find_jriver_key_by_track(seed_info['Artist'], track_name)
-        if key:
-            if key not in collected_keys:
-                collected_keys.add(key)
-                seed_keys_added += 1
-            report(f"    Added: {track_name}")
-        else:
-            report(f"    Not in library: {track_name}")
+    # --- Seed artist(s): own top tracks, excluding the playing track ---
+    for seed in seeds:
+        report(f"  Seed artist: {seed}...")
+        keys, _ = pick_top_tracks_for_artist(seed, session_id, ["seed"], report=report,
+                                             exclude_track=seed_info['Name'])
+        add(keys)
 
-    similar, source_label = blended_similar_artists(seed_info['Artist'], limit=SIMILAR_ARTIST_LIMIT)
+    # --- Similar artists ---
+    similar, source_label = blended_similar_artists(seeds, limit=SIMILAR_ARTIST_LIMIT)
     report(f"  Similar artists via {source_label}: {len(similar)} candidates")
 
     for artist, suggested_by in similar:
-        tag = f"  Checking: {artist} ({', '.join(suggested_by)})..."
-        keys = get_verified_keys_for_artist(artist)
-        if keys:
-            report(f"{tag} Found in library.")
-            collected_keys.update(keys)
-            session_log(session_id, artist, "", suggested_by, found=True)
-        else:
-            if suggested_by == ["AI"] and not deezer_artist_exists(artist):
-                report(f"{tag} Not in library, and not a verifiable artist name. Skipping.")
-                continue
-            report(f"{tag} Not in library. Logging...")
-            top, _ = blended_top_tracks(artist, limit=1)
-            top_track = top[0][0] if top else "Unknown Track"
-            session_log(session_id, artist, top_track, suggested_by, found=False)
+        if suggested_by == ["AI"] and not deezer_artist_exists(artist):
+            report(f"  {artist} (AI): not a verifiable artist name, skipping.")
+            continue
+        report(f"  {artist} ({', '.join(suggested_by)})...")
+        keys, _ = pick_top_tracks_for_artist(artist, session_id, suggested_by, report=report)
+        add(keys)
 
-    # Update JRiver queue
+    # --- Update JRiver queue ---
     queued = 0
     if collected_keys:
         keys_list = list(collected_keys)
@@ -1180,16 +1262,10 @@ def create_vibe_playlist(vibe, report=print):
                     if artist_key(artist) in seen_artists:
                         continue
                     seen_artists.add(artist_key(artist))
-                    picks = get_verified_keys_for_artist(artist)
-                    if picks:
-                        added = [k for k in picks if k not in keys]
-                        keys.extend(added)
-                        report(f"    + {artist} ({', '.join(suggested_by)}): {len(added)} track(s)")
-                        session_log(session_id, artist, "", suggested_by, found=True)
-                    else:
-                        top, _ = blended_top_tracks(artist, limit=1)
-                        top_track = top[0][0] if top else "Unknown Track"
-                        session_log(session_id, artist, top_track, suggested_by, found=False)
+                    report(f"    + {artist} ({', '.join(suggested_by)})...")
+                    picks, _ = pick_top_tracks_for_artist(artist, session_id, suggested_by,
+                                                          report=report)
+                    keys.extend(k for k in picks if k not in keys)
             report(f"  Step 2 done: {len(keys)} tracks total.")
 
     if not keys:
@@ -1215,6 +1291,8 @@ def play_top_n(report=print):
     Plays the top N tracks for the current artist, ranked across the
     configured TOP_TRACK_SOURCES. N and the play order (most popular first,
     least popular first, or random) come from the TOP_TRACKS_* settings.
+    A multi-value Artist field ('Angus Stone;Dope Lemon') gets the top N for
+    each name, queued one artist after the other, duplicates removed.
     Can be run mid-album: Playing Now is stripped to the current track
     before the new tracks are added, without interrupting playback.
     """
@@ -1224,28 +1302,38 @@ def play_top_n(report=print):
         report("Nothing playing. Seed from a track first!")
         return
 
-    artist = seed_info['Artist']
+    seeds = seed_artists(seed_info)
     n = TOP_TRACKS_COUNT
     order = TOP_TRACKS_ORDER
 
-    report(f"\nFetching top {n} tracks for: {artist} ({order} order)")
+    report(f"\nFetching top {n} tracks for: {seed_info['Artist']} ({order} order)")
+    if len(seeds) > 1:
+        report(f"  Multi-value artist, fetching top {n} for each of: {', '.join(seeds)}")
 
-    top_tracks, source_label = blended_top_tracks(artist, limit=n)
-    if not top_tracks:
+    session_id = None
+    ordered_keys, labels_used = [], []
+    for artist in seeds:
+        top_tracks, source_label = blended_top_tracks(artist, limit=n)
+        if not top_tracks:
+            report(f"  Could not retrieve top tracks for {artist} from any configured source.")
+            continue
+        report(f"  {artist}: ranked via {source_label}")
+        if source_label not in labels_used:
+            labels_used.append(source_label)
+        if session_id is None:
+            session_id = session_start("top_tracks", seed_info, source_label)
+
+        for track_name, suggested_by in top_tracks[:n]:
+            tag = f"  Looking up: {track_name} ({', '.join(suggested_by)})..."
+            key = find_jriver_key_by_track(artist, track_name)
+            report(f"{tag} {'Found.' if key else 'Not in library.'}")
+            if key and key not in ordered_keys:
+                ordered_keys.append(key)
+            session_log(session_id, artist, track_name, suggested_by, found=bool(key))
+
+    if session_id is None:
         report("Could not retrieve top tracks from any configured source.")
         return
-    report(f"  Ranked via {source_label}")
-    session_id = session_start("top_tracks", seed_info, source_label)
-
-    ordered_keys = []
-    for track_name, suggested_by in top_tracks[:n]:
-        tag = f"  Looking up: {track_name} ({', '.join(suggested_by)})..."
-        key = find_jriver_key_by_track(artist, track_name)
-        report(f"{tag} {'Found.' if key else 'Not in library.'}")
-        if key:
-            ordered_keys.append(key)
-        session_log(session_id, artist, track_name, suggested_by, found=bool(key))
-
     if not ordered_keys:
         report("None of the top tracks were found in your library.")
         session_finish(session_id, 0, report=report)
@@ -1261,7 +1349,7 @@ def play_top_n(report=print):
     report(f"\nQueuing {len(ordered_keys)} tracks, {labels[order]}...")
     queue_tracks(ordered_keys)
     report("Done!")
-    session_finish(session_id, len(ordered_keys), report=report)
+    session_finish(session_id, len(ordered_keys), sources=" + ".join(labels_used), report=report)
 
 
 # ---------------------------------------------------------------------------
@@ -1310,7 +1398,18 @@ def discogs_find_release(artist, album):
     pressing), picks the most-owned match, and uses its main release, which is
     the canonical pressing with the fullest credits. Falls back to a plain
     release search ranked by owners if no master exists.
+    A multi-value artist ('Angus Stone;Dope Lemon') is tried one name at a
+    time, first name first, until something matches.
     """
+    names = split_values(artist) or [artist]
+    for name in names:
+        found = _discogs_find_release_for(name, album)
+        if found:
+            return found
+    return None
+
+
+def _discogs_find_release_for(artist, album):
     def most_owned(results):
         return max(results, key=lambda r: r.get("community", {}).get("have", 0))
 
@@ -1339,8 +1438,8 @@ def discogs_find_release(artist, album):
 def discogs_release_credits(release_id, seed_artist):
     """
     Collects credited people from a release (release-level and per-track),
-    excluding the seed artist. Returns a list of (name, roles) sorted so
-    the most useful roles come first.
+    excluding the seed artist (every name in a multi-value field). Returns
+    a list of (name, roles) sorted so the most useful roles come first.
     """
     data = discogs_get(f"/releases/{release_id}")
     if not data:
@@ -1349,10 +1448,10 @@ def discogs_release_credits(release_id, seed_artist):
     sources = list(data.get("extraartists", []))
     for track in data.get("tracklist", []):
         sources.extend(track.get("extraartists", []))
-    seed_clean = strip_accents(seed_artist).lower()
+    seed_cleans = {strip_accents(s).lower() for s in (split_values(seed_artist) or [seed_artist])}
     for credit in sources:
         name = discogs_clean_name(credit.get("name", ""))
-        if not name or strip_accents(name).lower() == seed_clean:
+        if not name or strip_accents(name).lower() in seed_cleans:
             continue
         roles = people.setdefault(name, set())
         for role in credit.get("role", "").split(","):
