@@ -407,9 +407,27 @@ def queue_tracks(keys):
 VERSION_WORDS = r'(remaster|remastered|mix|master|edit|version|live|mono|stereo|demo|single|radio|acoustic|instrumental)'
 
 
+# Typographic characters that sources (MusicBrainz especially) use where a
+# library is tagged with plain ASCII. 'alt‐J' with a Unicode hyphen looks
+# identical to 'alt-J' but won't match it, so everything is folded to ASCII.
+PUNCTUATION_MAP = str.maketrans({
+    "\u2010": "-", "\u2011": "-", "\u2012": "-", "\u2013": "-", "\u2014": "-",
+    "\u2015": "-", "\u2212": "-",                       # hyphens, dashes, minus
+    "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u2032": "'",   # single quotes
+    "\u201c": '"', "\u201d": '"', "\u201e": '"', "\u2033": '"',   # double quotes
+    "\u2026": "...",                                                # ellipsis
+    "\u00a0": " ",                                                  # non-breaking space
+})
+
+
+def normalise_punctuation(s):
+    """Folds typographic dashes, quotes and ellipses to their ASCII equivalents."""
+    return s.translate(PUNCTUATION_MAP) if s else s
+
+
 def clean_name(s):
     """Strips common variations from track names for fuzzy matching."""
-    s = s.lower().strip()
+    s = normalise_punctuation(s).lower().strip()
     s = re.sub(r'\(.*?\)|\[.*?\]', '', s)                       # (Live), [Remaster 2011] etc.
     s = re.sub(rf'\s+-\s+[^-]*\b{VERSION_WORDS}\b[^-]*$', '', s)  # " - 2012 Mix/Master", " - Live at..."
     s = re.sub(r'\s*(feat\.|featuring|ft\.)\s.*', '', s)         # feat. credits
@@ -460,8 +478,8 @@ def strip_initial_dots(s):
 
 
 def norm_artist_text(s):
-    """Accent-free, dot-collapsed form used wherever two artist names are compared."""
-    return strip_accents(strip_initial_dots(s))
+    """Accent-free, dot-collapsed, ASCII-punctuation form used wherever two artist names are compared."""
+    return strip_accents(strip_initial_dots(normalise_punctuation(s)))
 
 
 def deinvert_the(name):
@@ -482,7 +500,7 @@ def jriver_search_artist_items(artist_name):
     name had accents, queries again with the original spelling so libraries
     that keep accents still match.
     """
-    term_original = normalise_artist(artist_name)
+    term_original = normalise_artist(normalise_punctuation(artist_name))
     term_ascii = norm_artist_text(term_original)
     # Try the normalised form first (no accents, no dotted initials), then the
     # original spelling, so libraries tagged either way still match.
@@ -550,7 +568,8 @@ def canonicalise_conjunction(artist_name):
     'Florence and the Machine' -> 'Florence & the Machine') before the
     name is ever used as a JRiver search term.
     """
-    name = re.sub(r'\s*\+\s*', ' & ', artist_name)
+    name = normalise_punctuation(artist_name)
+    name = re.sub(r'\s*\+\s*', ' & ', name)
     name = re.sub(r'\s+and\s+', ' & ', name, flags=re.IGNORECASE)
     return name
 
@@ -751,7 +770,7 @@ def listenbrainz_top_tracks(artist_name, limit=10):
         if isinstance(data, dict):
             data = data.get("payload") or data.get("recordings") or []
         names = [t.get("recording_name") or t.get("name") for t in data]
-        names = [n for n in names if n]
+        names = [normalise_punctuation(n) for n in names if n]
         if not names and data:
             print(f"[ListenBrainz] Unrecognised top-tracks shape, first item: {data[0]}")
         return names[:limit]
@@ -1067,6 +1086,13 @@ def find_jriver_key_by_track(artist_name, track_name):
 
             if artist_matches(artist_pattern, fields) and clean_name(actual_track) == clean_track:
                 return fields.get("Key")
+        if DEBUG:
+            sample = []
+            for item in items[:5]:
+                fields = {f.get("Name"): f.text for f in item.findall("Field") if f.text}
+                sample.append(f"{fields.get('Artist')!r} / {fields.get('Name')!r}")
+            debug(f"no match for {artist_name!r} / {track_name!r} (term {search_term!r}, "
+                  f"{len(items)} items; first: {'; '.join(sample) or 'none'})")
     except Exception as e:
         print(f"  [Error] Track search failed for {track_name}: {e}")
     return None
