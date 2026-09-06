@@ -30,7 +30,7 @@ STORE_SEARCH = {
     "7digital":   lambda q: f"https://www.7digital.com/search?q={q}",
 }
 
-SESSION_MENU_WIDTH = 50   # characters; wide enough to show the seed artist and track
+SESSION_MENU_WIDTH = 50   # minimum characters; the box also stretches with the window
 
 
 def short_started(started):
@@ -108,15 +108,17 @@ class DiscoverTab(tk.Frame):
                             command=self.refresh, style="Big.TRadiobutton").pack(
                 side="left", padx=(0, 10))
 
+        # Count label is packed first so it keeps its spot on the right; the
+        # session dropdown then stretches to fill whatever width is left.
+        self.count_label = tk.Label(bar, text="", fg="#777")
+        self.count_label.pack(side="right")
+
         tk.Label(bar, text="   Session:").pack(side="left")
         self.session_var = tk.StringVar(value="All sessions")
         self.session_menu = ttk.Combobox(bar, textvariable=self.session_var,
                                          state="readonly", width=SESSION_MENU_WIDTH)
-        self.session_menu.pack(side="left", padx=(4, 0))
+        self.session_menu.pack(side="left", padx=(4, 12), fill="x", expand=True)
         self.session_menu.bind("<<ComboboxSelected>>", lambda e: self.refresh())
-
-        self.count_label = tk.Label(bar, text="", fg="#777")
-        self.count_label.pack(side="right")
 
         search_bar = tk.Frame(self, padx=12)
         search_bar.pack(fill="x")
