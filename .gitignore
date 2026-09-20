@@ -7,3 +7,8 @@ __pycache__/
 build/
 dist/
 *.spec
+# installer leftovers and dev helpers
+*.bak_*
+apply_*.py
+check_24bit7.py
+Curated.py
