@@ -35,24 +35,24 @@ DB_FILE = os.path.join(APP_DIR, "24bit7.db")
 _env_mtime = None   # modification time of .env when settings were last loaded
 
 # Discover search sites. Stores are searched by artist + track; reference
-# sites by artist only (for a discography). Order here is the display order.
+# sites by artist only (for a discography). Listed alphabetically by label.
 STORE_OPTIONS = [
-    ("bandcamp",   "Bandcamp"),
-    ("discogs",    "Discogs marketplace"),
-    ("qobuz",      "Qobuz"),
+    ("7digital",   "7digital"),
     ("amazon",     "Amazon"),
-    ("juno",       "Juno"),
+    ("bandcamp",   "Bandcamp"),
+    ("beatport",   "Beatport"),
+    ("bleep",      "Bleep"),
+    ("discogs",    "Discogs marketplace"),
     ("hdtracks",   "HDtracks"),
     ("hiresaudio", "HighResAudio"),
-    ("7digital",   "7digital"),
-    ("bleep",      "Bleep"),
-    ("beatport",   "Beatport"),
+    ("juno",       "Juno"),
+    ("qobuz",      "Qobuz"),
 ]
 REFERENCE_OPTIONS = [
-    ("wikipedia",   "Wikipedia"),
-    ("discogs_ref", "Discogs"),
     ("allmusic",    "AllMusic"),
+    ("discogs_ref", "Discogs"),
     ("musicbrainz", "MusicBrainz"),
+    ("wikipedia",   "Wikipedia"),
 ]
 STORE_CODES = [c for c, _ in STORE_OPTIONS]
 REFERENCE_CODES = [c for c, _ in REFERENCE_OPTIONS]
@@ -153,7 +153,8 @@ LISTENBRAINZ_TOKEN=
 DISCOGS_TOKEN=
 ANTHROPIC_API_KEY=
 
-# Recommendation sources (comma-separated: lastfm, listenbrainz, deezer, ai)
+# Recommendation sources (comma-separated: lastfm, listenbrainz, deezer, ai, youtube)
+# youtube is for SIMILAR_SOURCES only and needs no key.
 SIMILAR_SOURCES=lastfm,deezer
 TOP_TRACK_SOURCES=lastfm,deezer
 LISTENBRAINZ_ALGORITHM=alltime
@@ -952,6 +953,129 @@ def deezer_artist_exists(artist_name):
         return False
 
 
+# --- YouTube Music (up next queue, via the unofficial ytmusicapi; no key) ----
+# Unlike the other sources this one is seeded by the playing TRACK, not just
+# the artist: it asks YouTube Music what it would play next. The queue is
+# boiled down to a ranked artist list (a vote in the blend), and YouTube's own
+# track pick for each artist is remembered as a hint for that artist's pool.
+
+YOUTUBE_FETCH = 50               # up next tracks to ask for
+YOUTUBE_HINTS_PER_ARTIST = 2     # at most this many YouTube picks join an artist's pool
+YOUTUBE_SKIP_ARTISTS = {"various artists", "unknown artist", ""}
+
+_youtube_client = None
+_youtube_hints = {}              # artist_key -> [track names] from the latest run
+
+
+def youtube_client():
+    """Lazily creates the ytmusicapi client (no sign-in). Returns None if unavailable."""
+    global _youtube_client
+    if _youtube_client is None:
+        try:
+            from ytmusicapi import YTMusic
+        except ImportError:
+            print("[YouTube] The ytmusicapi package isn't installed. Run: py -m pip install ytmusicapi")
+            return None
+        try:
+            _youtube_client = YTMusic()
+        except Exception as e:
+            print(f"[YouTube] Could not start the YouTube Music client: {e}")
+            return None
+    return _youtube_client
+
+
+def _youtube_artist_names(item):
+    return [(a.get("name") or "").strip() for a in (item.get("artists") or []) if (a.get("name") or "").strip()]
+
+
+def _youtube_same_artist(a, b):
+    return artist_key(normalise_artist(a)) == artist_key(normalise_artist(b))
+
+
+def _youtube_fetch_up_next(artist, track):
+    """Finds the track on YouTube Music and returns its up next queue as [[artist, title], ...]."""
+    yt = youtube_client()
+    if yt is None:
+        return []
+    try:
+        results = yt.search(f"{artist} {track}", filter="songs", limit=5)
+    except Exception as e:
+        print(f"[YouTube] Search failed for {artist} - {track}: {e}")
+        return []
+
+    best, best_score = None, 0
+    for r in results or []:
+        if not r.get("videoId"):
+            continue
+        score = 0
+        if any(_youtube_same_artist(n, artist) for n in _youtube_artist_names(r)):
+            score += 2
+        if clean_name(r.get("title") or "") == clean_name(track):
+            score += 1
+        if score > best_score:
+            best, best_score = r, score
+    if best is None:
+        print(f"  [YouTube] Couldn't find '{artist} - {track}' on YouTube Music, skipping.")
+        return []
+    debug(f"YouTube seed: {', '.join(_youtube_artist_names(best))} - {best.get('title')} [{best['videoId']}]")
+
+    try:
+        watch = yt.get_watch_playlist(videoId=best["videoId"], limit=YOUTUBE_FETCH, radio=True)
+    except Exception as e:
+        print(f"[YouTube] Up next fetch failed: {e}")
+        return []
+
+    pairs = []
+    for t in watch.get("tracks", []) or []:
+        if t.get("videoId") == best["videoId"]:
+            continue
+        names = _youtube_artist_names(t)
+        title = normalise_punctuation((t.get("title") or "").strip())
+        if names and title:
+            pairs.append([names[0], title])
+    return pairs
+
+
+def youtube_similar(artist_name, limit=20, track=None):
+    """
+    Similar artists from YouTube Music's up next queue for the playing track,
+    in order of first appearance. Also fills _youtube_hints with YouTube's
+    track picks per artist. Keeps its own cache, keyed on artist + track.
+    """
+    if not track or track == "Unknown":
+        print("  [YouTube] Needs the playing track to seed from, skipping.")
+        return []
+    pairs = cached_call("YouTube", "up_next", f"{artist_key(artist_name)}|{clean_name(track)}",
+                        lambda: _youtube_fetch_up_next(artist_name, track))
+    names, seen = [], set()
+    for pair in pairs or []:
+        if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+            continue
+        raw_artist, title = pair
+        if raw_artist.strip().lower() in YOUTUBE_SKIP_ARTISTS:
+            continue
+        if _youtube_same_artist(raw_artist, artist_name):
+            continue
+        name = canonicalise_conjunction(raw_artist)
+        k = artist_key(name)
+        hints = _youtube_hints.setdefault(k, [])
+        if clean_name(title) not in {clean_name(h) for h in hints}:
+            hints.append(title)
+        if k not in seen:
+            seen.add(k)
+            names.append(name)
+    return names[:limit]
+
+
+def youtube_hints_for(artist, exclude_track=None):
+    """YouTube's own track picks for an artist from the latest run (may be empty)."""
+    hints = list(_youtube_hints.get(artist_key(artist), []))
+    if exclude_track:
+        skip = clean_name(exclude_track)
+        hints = [h for h in hints if clean_name(h) != skip]
+    return hints[:YOUTUBE_HINTS_PER_ARTIST]
+
+
 # --- Registry and chooser --------------------------------------------------
 
 PROVIDERS = {
@@ -959,6 +1083,7 @@ PROVIDERS = {
     "listenbrainz": ("ListenBrainz", listenbrainz_similar, listenbrainz_top_tracks),
     "deezer":       ("Deezer",       deezer_similar,       deezer_top_tracks),
     "ai":           ("AI",           ai_similar,           ai_top_tracks),
+    "youtube":      ("YouTube",      youtube_similar,      None),
 }
 
 
@@ -1016,7 +1141,7 @@ def artist_key(name):
 BLEND_DEPTH = 2   # ask each source for this many times the wanted count, so overlaps deeper down still merge
 
 
-def blended_similar_artists(seed_artist, limit=20):
+def blended_similar_artists(seed_artist, limit=20, seed_track=None):
     """
     Similar artists from every source in SIMILAR_SOURCES, blended.
     seed_artist may be a single name or a list of names (a multi-value
@@ -1028,6 +1153,7 @@ def blended_similar_artists(seed_artist, limit=20):
     """
     seeds = seed_artist if isinstance(seed_artist, list) else [seed_artist]
     seed_keys = {artist_key(s) for s in seeds}
+    _youtube_hints.clear()
     providers = sources_from_settings(SIMILAR_SOURCES, "SIMILAR_SOURCES")
     fetch = min(limit * BLEND_DEPTH, 50) if len(providers) > 1 or len(seeds) > 1 else limit
     results, labels = [], []
@@ -1038,8 +1164,13 @@ def blended_similar_artists(seed_artist, limit=20):
                 algo_label, algo_string = listenbrainz_algorithm_from_settings()
                 kwargs["algorithm"] = algo_string
                 label = f"{service_name} ({algo_label.split(' - ')[0]})"
-            names = cached_call(label, "similar", f"{artist_key(seed)}|{fetch}",
-                                lambda: similar_fn(seed, limit=fetch, **kwargs))
+            if similar_fn is youtube_similar:
+                # Seeded by the playing track; caches on artist + track itself so
+                # its per-artist track picks are rebuilt on every run.
+                names = youtube_similar(seed, limit=fetch, track=seed_track)
+            else:
+                names = cached_call(label, "similar", f"{artist_key(seed)}|{fetch}",
+                                    lambda: similar_fn(seed, limit=fetch, **kwargs))
             debug(f"{service_name} similar artists for {seed}: {names}")
             if names:
                 results.append((service_name, names))
@@ -1058,7 +1189,10 @@ def blended_similar_artists(seed_artist, limit=20):
 
 def blended_top_tracks(artist, limit=10):
     """Top tracks from every source in TOP_TRACK_SOURCES, blended. Returns ([(track, sources)], label)."""
-    providers = sources_from_settings(TOP_TRACK_SOURCES, "TOP_TRACK_SOURCES")
+    # YouTube has no top-tracks list, so it sits out here even if .env names it
+    providers = [p for p in sources_from_settings(TOP_TRACK_SOURCES, "TOP_TRACK_SOURCES") if p[2]]
+    if not providers:
+        providers = [PROVIDERS["lastfm"]]
     fetch = min(limit * BLEND_DEPTH, 50) if len(providers) > 1 else limit
     results, labels = [], []
     for service_name, _, top_tracks_fn in providers:
@@ -1156,6 +1290,13 @@ def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
         skip = clean_name(exclude_track)
         names = [t for t in names if clean_name(t) != skip]
     names = names[:consider]
+    # YouTube's own picks for this artist (from up next) join the pool on top
+    if "YouTube" in (suggested_by or []):
+        have = {clean_name(n) for n in names}
+        added = [h for h in youtube_hints_for(artist, exclude_track) if clean_name(h) not in have]
+        if added:
+            names.extend(added)
+            report(f"    YouTube pick in the pool: {', '.join(added)}")
     if not names:
         report(f"    No top tracks returned for {artist}.")
         return [], 0
@@ -1221,7 +1362,8 @@ def create_similar_playlist(report=print):
         add(keys)
 
     # --- Similar artists ---
-    similar, source_label = blended_similar_artists(seeds, limit=SIMILAR_ARTIST_LIMIT)
+    similar, source_label = blended_similar_artists(seeds, limit=SIMILAR_ARTIST_LIMIT,
+                                                    seed_track=seed_info['Name'])
     report(f"  Similar artists via {source_label}: {len(similar)} candidates")
 
     for artist, suggested_by in similar:

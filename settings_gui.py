@@ -19,7 +19,10 @@ ENV_FILE = engine.ENV_FILE   # single source of truth for where .env lives
 
 # Listed alphabetically by display name
 SOURCE_NAMES = [("ai", "AI"), ("deezer", "Deezer"),
-                ("lastfm", "Last.fm"), ("listenbrainz", "ListenBrainz")]
+                ("lastfm", "Last.fm"), ("listenbrainz", "ListenBrainz"),
+                ("youtube", "YouTube")]
+# YouTube suggests artists only, so it isn't offered as a top-track source
+TOP_SOURCE_NAMES = [s for s in SOURCE_NAMES if s[0] != "youtube"]
 
 
 KEY_HELP = {
@@ -161,6 +164,12 @@ class SettingsTab(tk.Frame):
                             style="Big.TCheckbutton").grid(row=r, column=i, sticky="w", padx=(0, 12))
         r += 1
 
+        tk.Label(tab, text="YouTube suggests from the playing track, using YouTube Music's up next queue.\n"
+                           "No key needed. It's an unofficial route, so it may break now and then.",
+                 fg="#666", font=("Segoe UI", 8), justify="left").grid(
+            row=r, column=0, columnspan=5, sticky="w", pady=(2, 0))
+        r += 1
+
         self.vars["SIMILAR_REQUIRE_AGREEMENT"] = tk.BooleanVar(
             value=self.env.get("SIMILAR_REQUIRE_AGREEMENT", "1") in ("1", "true", "yes"))
         ttk.Checkbutton(tab, variable=self.vars["SIMILAR_REQUIRE_AGREEMENT"], command=self._save,
@@ -179,7 +188,7 @@ class SettingsTab(tk.Frame):
         r += 1
         chosen_top = self._csv_list("TOP_TRACK_SOURCES", "lastfm")
         self.vars["TOP_TRACK_SOURCES"] = {}
-        for i, (code, label) in enumerate(SOURCE_NAMES):
+        for i, (code, label) in enumerate(TOP_SOURCE_NAMES):
             v = tk.BooleanVar(value=code in chosen_top)
             self.vars["TOP_TRACK_SOURCES"][code] = v
             ttk.Checkbutton(tab, text=label, variable=v, command=self._save,
@@ -339,6 +348,8 @@ class SettingsTab(tk.Frame):
         nb.add(tab, text="Search")
         ttk.Style(self).configure("Big.TCheckbutton", font=("Segoe UI", 11))
         cols = 4
+        for c in range(cols):
+            tab.grid_columnconfigure(c, weight=1, uniform="sites")   # equal-width columns
         r = 0
 
         tk.Label(tab, text="Stores (search by artist and track)", font=("Segoe UI", 9, "bold")).grid(
