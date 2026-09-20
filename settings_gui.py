@@ -129,7 +129,9 @@ class SettingsTab(tk.Frame):
             updates[group] = ",".join(code for code, v in self.vars[group].items() if v.get())
         updates["DIGITAL_STORE"] = None   # pre-1.1.0 single-store key, superseded
         updates["DEBUG"] = "1" if self.vars["DEBUG"].get() else "0"
-        updates["SIMILAR_REQUIRE_AGREEMENT"] = "1" if self.vars["SIMILAR_REQUIRE_AGREEMENT"].get() else "0"
+        agree = self.vars["SIMILAR_MIN_AGREEMENT"].get()
+        updates["SIMILAR_MIN_AGREEMENT"] = "1" if agree == "Off" else agree
+        updates["SIMILAR_REQUIRE_AGREEMENT"] = None   # old on/off key, superseded
         return updates
 
     def _save(self, *_):
@@ -160,7 +162,7 @@ class SettingsTab(tk.Frame):
         for i, (code, label) in enumerate(SOURCE_NAMES):
             v = tk.BooleanVar(value=code in chosen_sim)
             self.vars["SIMILAR_SOURCES"][code] = v
-            ttk.Checkbutton(tab, text=label, variable=v, command=self._save,
+            ttk.Checkbutton(tab, text=label, variable=v, command=self._similar_sources_changed,
                             style="Big.TCheckbutton").grid(row=r, column=i, sticky="w", padx=(0, 12))
         r += 1
 
@@ -170,17 +172,26 @@ class SettingsTab(tk.Frame):
             row=r, column=0, columnspan=5, sticky="w", pady=(2, 0))
         r += 1
 
-        self.vars["SIMILAR_REQUIRE_AGREEMENT"] = tk.BooleanVar(
-            value=self.env.get("SIMILAR_REQUIRE_AGREEMENT", "1") in ("1", "true", "yes"))
-        ttk.Checkbutton(tab, variable=self.vars["SIMILAR_REQUIRE_AGREEMENT"], command=self._save,
-                        text="Require 2+ sources to agree",
-                        style="Big.TCheckbutton").grid(row=r, column=0, columnspan=4, sticky="w", pady=(8, 0))
+        # How many sources must agree. Replaced the old on/off tick box; an old
+        # on/off setting carries over (on -> 2, off -> Off).
+        legacy_on = self.env.get("SIMILAR_REQUIRE_AGREEMENT", "1") in ("1", "true", "yes")
+        start = self.env.get("SIMILAR_MIN_AGREEMENT", "").strip() or ("2" if legacy_on else "1")
+        self.vars["SIMILAR_MIN_AGREEMENT"] = tk.StringVar(value="Off" if start in ("0", "1") else start)
+        agree_row = tk.Frame(tab)
+        agree_row.grid(row=r, column=0, columnspan=5, sticky="w", pady=(10, 0))
+        tk.Label(agree_row, text="Sources that must agree", font=("Segoe UI", 9, "bold")).pack(side="left")
+        self._agree_cb = ttk.Combobox(agree_row, textvariable=self.vars["SIMILAR_MIN_AGREEMENT"],
+                                      state="readonly", width=6)
+        self._agree_cb.pack(side="left", padx=(10, 0))
+        self._agree_cb.bind("<<ComboboxSelected>>", self._save)
+        self._sync_agreement_options()
         r += 1
-        tk.Label(tab, text="When more than one similar-artist source is ticked, an artist only makes the list\n"
-                           "if at least two sources suggested it. Recommended for better quality playlists,\n"
-                           "though it returns fewer results.",
+        tk.Label(tab, text="How many sources must agree before an artist is picked.\n"
+                           "Higher means a smoother playlist with fewer wildcards, but less chance of\n"
+                           "discovering something new.\n"
+                           "Tip: try single sources on their own before blending.",
                  fg="#666", font=("Segoe UI", 8), justify="left").grid(
-            row=r, column=0, columnspan=4, sticky="w", pady=(2, 0))
+            row=r, column=0, columnspan=5, sticky="w", pady=(2, 0))
         r += 1
 
         tk.Label(tab, text="Top-track sources", font=("Segoe UI", 9, "bold")).grid(
@@ -216,6 +227,24 @@ class SettingsTab(tk.Frame):
                       "recent - what people are playing alongside this artist right now.",
                  fg="#666", font=("Segoe UI", 8), justify="left").grid(
             row=r, column=0, columnspan=4, sticky="w", pady=(4, 0))
+
+    def _similar_sources_changed(self):
+        self._sync_agreement_options()
+        self._save()
+
+    def _sync_agreement_options(self):
+        # The agreement dropdown offers Off, 2 ... N, where N is the number of
+        # ticked similar-artist sources, and a value above N is brought down to N.
+        # With fewer than two sources ticked the setting doesn't apply, so the
+        # dropdown is greyed out and the value is kept for when sources return.
+        ticked = sum(1 for v in self.vars["SIMILAR_SOURCES"].values() if v.get())
+        if ticked < 2:
+            self._agree_cb.config(state="disabled")
+            return
+        options = ["Off"] + [str(n) for n in range(2, min(ticked, 5) + 1)]
+        self._agree_cb.config(values=options, state="readonly")
+        if self.vars["SIMILAR_MIN_AGREEMENT"].get() not in options:
+            self.vars["SIMILAR_MIN_AGREEMENT"].set(options[-1])
 
     def _build_playlist(self, nb):
         """

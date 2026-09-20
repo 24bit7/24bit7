@@ -79,7 +79,7 @@ def load_settings():
     global DISCOGS_TOKEN, ANTHROPIC_API_KEY
     global SIMILAR_SOURCES, TOP_TRACK_SOURCES, LISTENBRAINZ_ALGORITHM_SETTING
     global DIGITAL_STORES, REFERENCE_SITES, DEBUG, SIMILAR_ARTIST_LIMIT, TRACKS_PER_ARTIST_POOL
-    global SIMILAR_REQUIRE_AGREEMENT
+    global SIMILAR_MIN_AGREEMENT
     global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, CACHE_DAYS
     global TABLE_FONT_SIZE, VIBE_TRACK_COUNT
 
@@ -106,9 +106,14 @@ def load_settings():
     REFERENCE_SITES = [x.strip().lower() for x in os.getenv("REFERENCE_SITES", "").split(",") if x.strip()]
     REFERENCE_SITES = [x for x in REFERENCE_SITES if x in REFERENCE_CODES]
     DEBUG = os.getenv("DEBUG", "0").strip().lower() in ("1", "true", "yes")
-    # With several similar-artist sources ticked, only keep artists that two or
-    # more of them suggested. Filters out one source's oddball picks.
-    SIMILAR_REQUIRE_AGREEMENT = os.getenv("SIMILAR_REQUIRE_AGREEMENT", "1").strip().lower() in ("1", "true", "yes")
+    # How many similar-artist sources must suggest an artist before it is used
+    # (1 = off). Replaced the on/off SIMILAR_REQUIRE_AGREEMENT; an old .env
+    # carries over as on -> 2, off -> 1.
+    if os.getenv("SIMILAR_MIN_AGREEMENT", "").strip():
+        SIMILAR_MIN_AGREEMENT = _int_setting("SIMILAR_MIN_AGREEMENT", 2, 1, 5)
+    else:
+        legacy_on = os.getenv("SIMILAR_REQUIRE_AGREEMENT", "1").strip().lower() in ("1", "true", "yes")
+        SIMILAR_MIN_AGREEMENT = 2 if legacy_on else 1
 
     SIMILAR_ARTIST_LIMIT = _int_setting("SIMILAR_ARTIST_LIMIT", 20, 1, 50)
     TRACKS_PER_ARTIST_POOL = _int_setting("TRACKS_PER_ARTIST_POOL", 5, 1, 20)
@@ -158,8 +163,8 @@ ANTHROPIC_API_KEY=
 SIMILAR_SOURCES=lastfm,deezer
 TOP_TRACK_SOURCES=lastfm,deezer
 LISTENBRAINZ_ALGORITHM=alltime
-# With several similar-artist sources, only keep artists suggested by 2 or more (1 = on)
-SIMILAR_REQUIRE_AGREEMENT=1
+# How many similar-artist sources must agree on an artist (1 = off, up to 5)
+SIMILAR_MIN_AGREEMENT=2
 
 # Playlist sizes and order
 SIMILAR_ARTIST_LIMIT=20
@@ -1144,7 +1149,10 @@ def artist_key(name):
 BLEND_DEPTH = 2   # ask each source for this many times the wanted count, so overlaps deeper down still merge
 
 
-def blended_similar_artists(seed_artist, limit=20, seed_track=None):
+AGREEMENT_MIN_ARTISTS = 5   # relax the agreement number (never below 2) until this many artists survive
+
+
+def blended_similar_artists(seed_artist, limit=20, seed_track=None, report=None):
     """
     Similar artists from every source in SIMILAR_SOURCES, blended.
     seed_artist may be a single name or a list of names (a multi-value
@@ -1183,10 +1191,19 @@ def blended_similar_artists(seed_artist, limit=20, seed_track=None):
                 print(f"  [{service_name}] returned no similar artists for {seed}, skipping.")
     blended = [(a, s) for a, s in blend_lists(results, artist_key) if artist_key(a) not in seed_keys]
     responding = {service_name for service_name, _ in results}
-    if SIMILAR_REQUIRE_AGREEMENT and len(responding) > 1:
-        before = len(blended)
-        blended = [(a, s) for a, s in blended if len(s) >= 2]
-        debug(f"agreement filter: {before} -> {len(blended)} artists suggested by 2+ sources")
+    # The number can't exceed the sources that actually answered this time
+    need = min(SIMILAR_MIN_AGREEMENT, len(responding))
+    if need > 1:
+        say = report or print
+        everyone = blended
+        want = min(limit, AGREEMENT_MIN_ARTISTS)
+        while True:
+            blended = [(a, s) for a, s in everyone if len(s) >= need]
+            if len(blended) >= want or need <= 2:
+                break
+            say(f"  Only {len(blended)} artists agreed at {need}, relaxed to {need - 1}.")
+            need -= 1
+        say(f"  Agreement: {len(blended)} of {len(everyone)} artists were suggested by {need} or more sources.")
     return blended[:limit], " + ".join(labels) if labels else "none"
 
 
@@ -1366,7 +1383,7 @@ def create_similar_playlist(report=print):
 
     # --- Similar artists ---
     similar, source_label = blended_similar_artists(seeds, limit=SIMILAR_ARTIST_LIMIT,
-                                                    seed_track=seed_info['Name'])
+                                                    seed_track=seed_info['Name'], report=report)
     report(f"  Similar artists via {source_label}: {len(similar)} candidates")
 
     for artist, suggested_by in similar:
