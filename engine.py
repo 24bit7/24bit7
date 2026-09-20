@@ -539,6 +539,16 @@ def deinvert_the(name):
     return f"{m.group(2)} {m.group(1)}" if m else name.strip()
 
 
+def dotted_initials(term):
+    """
+    'UNKLE' -> 'U.N.K.L.E.' for short one-word names, else None. Sources often
+    drop the dots a library keeps, and JRiver's search can't bridge the two.
+    """
+    if re.fullmatch(r"[A-Za-z]{2,8}", term or ""):
+        return ".".join(term.upper()) + "."
+    return None
+
+
 def jriver_search_artist_items(artist_name):
     """
     Runs the JRiver library search for an artist and returns the matching
@@ -552,6 +562,15 @@ def jriver_search_artist_items(artist_name):
     # Try the normalised form first (no accents, no dotted initials), then the
     # original spelling, so libraries tagged either way still match.
     queries = [term_ascii] if term_ascii == term_original else [term_ascii, term_original]
+    # A source may drop the dots a library keeps ('UNKLE' vs 'U.N.K.L.E.'), so short
+    # one-word names get a last try in dotted form.
+    dotted = dotted_initials(term_ascii)
+    if dotted and dotted not in queries:
+        queries.append(dotted)
+    # Every spelling is searched and the results merged (deduped by file key). No
+    # single search can be trusted to be complete: 'UNKLE' finds a U.N.K.L.E. track
+    # with the word in its title but not the rest of that artist's tracks.
+    merged, seen_keys = [], set()
     for query in queries:
         r = requests.get(
             f"{JRIVER_BASE}/Files/Search",
@@ -560,10 +579,13 @@ def jriver_search_artist_items(artist_name):
         )
         if r.status_code != 200 or not r.text:
             continue
-        items = ET.fromstring(r.text).findall(".//Item")
-        if items:
-            return items, term_ascii
-    return [], term_ascii
+        for item in ET.fromstring(r.text).findall(".//Item"):
+            key = next((f.text for f in item.findall("Field") if f.get("Name") == "Key"), None)
+            if key is not None and key in seen_keys:
+                continue
+            seen_keys.add(key)
+            merged.append(item)
+    return merged, term_ascii
 
 
 def artist_matches(pattern, fields):
@@ -1201,7 +1223,8 @@ def blended_similar_artists(seed_artist, limit=20, seed_track=None, report=None)
             blended = [(a, s) for a, s in everyone if len(s) >= need]
             if len(blended) >= want or need <= 2:
                 break
-            say(f"  Only {len(blended)} artists agreed at {need}, relaxed to {need - 1}.")
+            say(f"  Only {len(blended)} artist{'' if len(blended) == 1 else 's'} agreed at {need}, "
+                f"relaxed to {need - 1}.")
             need -= 1
         say(f"  Agreement: {len(blended)} of {len(everyone)} artists were suggested by {need} or more sources.")
     return blended[:limit], " + ".join(labels) if labels else "none"
