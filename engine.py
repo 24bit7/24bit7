@@ -1370,6 +1370,60 @@ def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
 # ---------------------------------------------------------------------------
 
 
+def typed_seed_info(artist, track=""):
+    """A seed typed into the Search tab, shaped like get_playing_info() so every mode can use it."""
+    return {"Artist": (artist or "").strip(), "Name": (track or "").strip(), "Album": "",
+            "PlayingNowPosition": "0", "PlayingNowTracks": "0", "Typed": True}
+
+
+def typed_seed_key(seed_info, seeds, session_id, report=print):
+    """
+    For a searched (typed) seed: the seed track's library key, so it can open
+    the playlist. Logged to the session either way, so a searched track you
+    don't own lands in Discover. Returns None for a now-playing seed.
+    """
+    name = seed_info.get("Name")
+    if not seed_info.get("Typed") or not name:
+        return None
+    for seed in seeds:
+        key = find_jriver_key_by_track(seed, name)
+        if key:
+            report("  Searched track is in your library, so it opens the playlist.")
+            session_log(session_id, seed, name, ["seed"], found=True)
+            return key
+    report("  Searched track isn't in your library, so the playlist starts without it.")
+    session_log(session_id, seeds[0], name, ["seed"], found=False)
+    return None
+
+
+def jriver_is_stopped():
+    """True only when JRiver clearly reports it is stopped. Any doubt counts as 'not stopped'."""
+    try:
+        r = requests.get(f"{JRIVER_BASE}/Playback/Info", params={"Zone": TARGET_ZONE}, auth=AUTH)
+        for item in ET.fromstring(r.text).findall("Item"):
+            if item.get("Name") == "State":
+                return (item.text or "").strip() == "0"
+    except Exception:
+        pass
+    return False
+
+
+def send_to_jriver(keys, typed=False):
+    """
+    Queues tracks after whatever is playing, never interrupting it. Only for a
+    searched seed with JRiver stopped (nothing to protect) does the new
+    playlist replace Playing Now and start by itself.
+    """
+    if not keys:
+        return
+    if typed and jriver_is_stopped():
+        requests.get(f"{JRIVER_BASE}/Playback/PlayByKey",
+                     params={"Key": ",".join(str(k) for k in keys), "Zone": TARGET_ZONE}, auth=AUTH)
+        return
+    clear_around_current()
+    queue_tracks(keys)
+
+
 def create_youtube_queue_playlist(seed_info, seeds, report=print):
     """
     YouTube ticked on its own: plays YouTube Music's up next queue as is.
@@ -1382,6 +1436,7 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
     track = seed_info.get("Name")
     report("  YouTube is the only source ticked: playing its up next queue as is.")
     session_id = session_start("youtube_queue", seed_info, "YouTube")
+    first_key = typed_seed_key(seed_info, seeds, session_id, report)
 
     pairs = []
     for seed in seeds:
@@ -1394,7 +1449,7 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
         return
 
     playing = clean_name(track or "")
-    keys, seen = [], set()
+    keys, seen = ([first_key] if first_key else []), set()
     for pair in pairs:
         if not isinstance(pair, (list, tuple)) or len(pair) != 2:
             continue
@@ -1416,9 +1471,8 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
 
     queued = 0
     if keys:
-        clear_around_current()
         report(f"Injecting {len(keys)} library tracks into queue, in YouTube's order...")
-        queue_tracks(keys)
+        send_to_jriver(keys, typed=bool(seed_info.get("Typed")))
         queued = len(keys)
         report("Queue refreshed.")
     else:
@@ -1426,7 +1480,7 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
     session_finish(session_id, queued, sources="YouTube (up next queue)", report=report)
 
 
-def create_similar_playlist(report=print):
+def create_similar_playlist(report=print, seed_info=None):
     """
     Builds a playlist around the playing artist:
       1. The seed artist's own top tracks (from the Top-track sources), minus
@@ -1442,7 +1496,8 @@ def create_similar_playlist(report=print):
     merged, with duplicate tracks removed.
     """
     refresh_settings_if_changed()
-    seed_info = get_playing_info()
+    if seed_info is None:   # no searched seed handed in, so read what JRiver is playing
+        seed_info = get_playing_info()
     if not seed_info or seed_info["PlayingNowPosition"] == "-1":
         report("Nothing playing. Seed from a track first!")
         return
@@ -1457,6 +1512,7 @@ def create_similar_playlist(report=print):
         report(f"  Multi-value artist, treating as any of: {', '.join(seeds)}")
     report(f"  Per artist: top {TRACKS_PER_ARTIST_POOL} from sources, {TRACKS_PER_ARTIST_PICK} picked at random.")
     session_id = session_start("similar", seed_info)
+    first_key = typed_seed_key(seed_info, seeds, session_id, report)
 
     collected_keys = []   # ordered, deduped as we go
 
@@ -1487,12 +1543,13 @@ def create_similar_playlist(report=print):
 
     # --- Update JRiver queue ---
     queued = 0
-    if collected_keys:
-        keys_list = list(collected_keys)
+    if collected_keys or first_key:
+        keys_list = [k for k in collected_keys if k != first_key]
         random.shuffle(keys_list)
-        clear_around_current()
+        if first_key:
+            keys_list.insert(0, first_key)   # a searched seed opens the playlist
         report(f"Injecting {len(keys_list)} library tracks into queue...")
-        queue_tracks(keys_list)
+        send_to_jriver(keys_list, typed=bool(seed_info.get("Typed")))
         queued = len(keys_list)
         report("Queue refreshed.")
     else:
@@ -1603,7 +1660,7 @@ def create_vibe_playlist(vibe, report=print):
 # Mode 2: Artist Top 10 by Popularity
 # ---------------------------------------------------------------------------
 
-def play_top_n(report=print):
+def play_top_n(report=print, seed_info=None):
     """
     Plays the top N tracks for the current artist, ranked across the
     configured TOP_TRACK_SOURCES. N and the play order (most popular first,
@@ -1614,7 +1671,8 @@ def play_top_n(report=print):
     before the new tracks are added, without interrupting playback.
     """
     refresh_settings_if_changed()
-    seed_info = get_playing_info()
+    if seed_info is None:   # no searched seed handed in, so read what JRiver is playing
+        seed_info = get_playing_info()
     if not seed_info or seed_info["PlayingNowPosition"] == "-1":
         report("Nothing playing. Seed from a track first!")
         return
@@ -1661,10 +1719,9 @@ def play_top_n(report=print):
     elif order == "reverse":
         ordered_keys.reverse()
 
-    clear_around_current()
     labels = {"popular": "most popular first", "reverse": "least popular first", "random": "random order"}
     report(f"\nQueuing {len(ordered_keys)} tracks, {labels[order]}...")
-    queue_tracks(ordered_keys)
+    send_to_jriver(ordered_keys, typed=bool(seed_info.get("Typed")))
     report("Done!")
     session_finish(session_id, len(ordered_keys), sources=" + ".join(labels_used), report=report)
 

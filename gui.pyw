@@ -63,9 +63,23 @@ class PlayTab(tk.Frame):
         tk.Label(header, text="Smart Playlist Creator and Music Discovery Tool",
                  font=("Segoe UI", 10), fg="#666").pack(anchor="w")
 
-        frame = tk.Frame(self, padx=16, pady=8)
-        frame.pack(fill="x")
-        tk.Label(frame, text="NOW PLAYING", font=("Segoe UI", 8, "bold"), fg="#888").pack(anchor="w")
+        # The seed area: two small tabs. Whichever is showing when a button is
+        # pressed is the seed - what JRiver is playing, or a typed artist and track.
+        outer = tk.Frame(self, padx=16, pady=8)
+        outer.pack(fill="x")
+        seed_style = ttk.Style(self)
+        seed_style.configure("Seed.TNotebook", tabmargins=(0, 2, 0, 0))
+        seed_style.configure("Seed.TNotebook.Tab", font=("Segoe UI", 9, "bold"), padding=(12, 4),
+                             background="#d9d9d9", foreground="#555")
+        seed_style.map("Seed.TNotebook.Tab",
+                       background=[("selected", "#ffffff")],
+                       foreground=[("selected", "#000000")],
+                       padding=[("selected", (12, 5))])
+        self.seed_nb = ttk.Notebook(outer, style="Seed.TNotebook")
+        self.seed_nb.pack(fill="x")
+
+        frame = tk.Frame(self.seed_nb, padx=10, pady=8)
+        self.seed_nb.add(frame, text="Now Playing")
         self.np_track = tk.Label(frame, text="...", font=("Segoe UI", 14, "bold"),
                                  anchor="w", justify="left")
         self.np_track.pack(anchor="w", fill="x")
@@ -76,6 +90,41 @@ class PlayTab(tk.Frame):
         frame.bind("<Configure>", lambda e: (
             self.np_track.config(wraplength=max(200, e.width - 32)),
             self.np_detail.config(wraplength=max(200, e.width - 32))))
+
+        self.search_tab = tk.Frame(self.seed_nb, padx=10, pady=8)
+        self.seed_nb.add(self.search_tab, text="Search")
+        tk.Label(self.search_tab, text="Artist", font=("Segoe UI", 10)).grid(row=0, column=0, sticky="w")
+        self.search_artist = tk.Entry(self.search_tab, width=34, font=("Segoe UI", 11))
+        self.search_artist.grid(row=0, column=1, sticky="w", padx=(8, 20))
+        tk.Label(self.search_tab, text="Track", font=("Segoe UI", 10)).grid(row=0, column=2, sticky="w")
+        self.search_track = tk.Entry(self.search_tab, width=34, font=("Segoe UI", 11))
+        self.search_track.grid(row=0, column=3, sticky="w", padx=(8, 0))
+        tk.Label(self.search_tab, text="Build a playlist from any track, even one you don't own. "
+                                       "Press Enter for Similar Artists.",
+                 font=("Segoe UI", 8), fg="#666").grid(row=1, column=0, columnspan=4, sticky="w", pady=(6, 0))
+        for entry in (self.search_artist, self.search_track):
+            entry.bind("<Return>", lambda e: self.on_similar())
+        self.seed_nb.bind("<<NotebookTabChanged>>", lambda e: self._sync_seed_buttons())
+
+    def _seed_is_search(self):
+        return self.seed_nb.select() == str(self.search_tab)
+
+    def _sync_seed_buttons(self):
+        """Show Credits needs an album, which a typed seed doesn't have, so it greys out on Search."""
+        button = getattr(self, "credits_button", None)
+        if button is None or self.running:
+            return
+        button.config(state="disabled" if self._seed_is_search() else "normal")
+
+    def _typed_seed(self, need_track):
+        """The Search tab's seed, or None (after a prompt) if the fields aren't filled in."""
+        artist = self.search_artist.get().strip()
+        track = self.search_track.get().strip()
+        if not artist or (need_track and not track):
+            messagebox.showinfo("Search", "Type an artist and a track first." if need_track
+                                else "Type an artist first.")
+            return None
+        return engine.typed_seed_info(artist, track)
 
     def _build_buttons(self):
         frame = tk.Frame(self, padx=16, pady=4)
@@ -90,6 +139,8 @@ class PlayTab(tk.Frame):
             b = tk.Button(frame, text=text, command=handler, width=16, height=2)
             b.pack(side="left", padx=(0, 8))
             self.buttons.append(b)
+
+        self.credits_button = self.buttons[-1]   # greyed out while the Search tab is showing
 
         # Donate link. Not in self.buttons, so it stays clickable during a run.
         link = tk.Label(frame, text="24bit7 is free and always will be.  Buy me a coffee \u2615",
@@ -188,11 +239,24 @@ class PlayTab(tk.Frame):
         self.running = False
         for b in self.buttons:
             b.config(state="normal")
+        self._sync_seed_buttons()
 
     def on_similar(self):
+        if self._seed_is_search():
+            seed = self._typed_seed(need_track=True)
+            if seed:
+                self._run_job(lambda: engine.create_similar_playlist(report=self.report, seed_info=seed),
+                              needs_playing=False)
+            return
         self._run_job(lambda: engine.create_similar_playlist(report=self.report))
 
     def on_top_tracks(self):
+        if self._seed_is_search():
+            seed = self._typed_seed(need_track=False)
+            if seed:
+                self._run_job(lambda: engine.play_top_n(report=self.report, seed_info=seed),
+                              needs_playing=False)
+            return
         self._run_job(lambda: engine.play_top_n(report=self.report))
 
     def on_credits(self):
