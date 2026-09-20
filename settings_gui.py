@@ -123,7 +123,7 @@ class SettingsTab(tk.Frame):
             updates[group] = ",".join(chosen)
         for key in ["LISTENBRAINZ_ALGORITHM", "SIMILAR_ARTIST_LIMIT", "TRACKS_PER_ARTIST_POOL",
                     "TRACKS_PER_ARTIST_PICK", "TOP_TRACKS_COUNT", "VIBE_TRACK_COUNT", "TOP_TRACKS_ORDER",
-                    "CACHE_DAYS", "JRIVER_HOST"] + KEY_FIELDS:
+                    "CACHE_DAYS", "JRIVER_HOST", "YOUTUBE_PLAYLIST_LENGTH"] + KEY_FIELDS:
             updates[key] = self.vars[key].get().strip()
         for group in ("DIGITAL_STORES", "REFERENCE_SITES"):
             updates[group] = ",".join(code for code, v in self.vars[group].items() if v.get())
@@ -209,7 +209,9 @@ class SettingsTab(tk.Frame):
         r += 1
 
         tk.Label(tab, text="More services = richer, more varied playlists (slower).\n"
-                          "Fewer = quicker.",
+                          "Fewer = quicker.\n"
+                          "ListenBrainz is the slowest source on a first run, because its lookups are limited\n"
+                          "to one a second. Repeat runs are quick.",
                  fg="#666", font=("Segoe UI", 9), justify="left").grid(
             row=r, column=0, columnspan=4, sticky="w", pady=(10, 0))
         r += 1
@@ -372,6 +374,16 @@ class SettingsTab(tk.Frame):
         tk.Checkbutton(tab, text="Debug (log raw source lists to console)",
                        variable=self.vars["DEBUG"], command=self._save).grid(
             row=2, column=0, columnspan=2, sticky="w", pady=(12, 0))
+
+        tk.Label(tab, text="YouTube playlist length", anchor="w").grid(row=3, column=0, sticky="w", pady=(12, 4))
+        self.vars["YOUTUBE_PLAYLIST_LENGTH"] = tk.StringVar(value=self.env.get("YOUTUBE_PLAYLIST_LENGTH", "50"))
+        yt_sb = tk.Spinbox(tab, from_=5, to=50, textvariable=self.vars["YOUTUBE_PLAYLIST_LENGTH"], width=6,
+                           command=self._save)
+        yt_sb.grid(row=3, column=1, sticky="w", padx=(12, 0), pady=(12, 4))
+        self.vars["YOUTUBE_PLAYLIST_LENGTH"].trace_add("write", self._save)
+        tk.Label(tab, text="How many videos a playlist holds when Output is set to YouTube (5 to 50).\n"
+                           "50 is the most YouTube allows in one playlist link.",
+                 fg=HELP_FG, font=HELP_FONT, justify="left").grid(row=4, column=0, columnspan=2, sticky="w")
 
     def _build_search_sites(self, nb):
         """Discover search sites: which stores and reference sites to open per row."""

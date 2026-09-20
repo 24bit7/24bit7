@@ -327,6 +327,7 @@ def session_log(session_id, artist, track, sources, found):
 
 
 def session_finish(session_id, queued, sources=None, report=print):
+    save_new_mbids()   # MusicBrainz IDs learnt during this run
     if sources is not None:
         db().execute("UPDATE sessions SET sources=? WHERE id=?", (sources, session_id))
     db().execute("UPDATE sessions SET queued=? WHERE id=?", (queued, session_id))
@@ -758,7 +759,56 @@ def deezer_top_tracks(artist_name, limit=10):
 
 # --- ListenBrainz (via MusicBrainz ID lookup, no key) ----------------------
 
-_mbid_cache = {}
+_mbid_cache = {}              # artist_key -> MusicBrainz ID (None = MusicBrainz doesn't know them)
+_mbid_pending = {}            # learnt this session, not yet written to the database
+_mbid_confirmed_misses = set()   # names MusicBrainz answered for and had nobody (as opposed to a failed lookup)
+_mbids_loaded = []            # becomes non-empty once the saved IDs have been read in
+
+
+def load_known_mbids():
+    """
+    Reads the MusicBrainz IDs saved by earlier sessions into memory, once per
+    app session. A found ID never expires (an artist's ID doesn't change). A
+    saved "MusicBrainz doesn't know them" is honoured for CACHE_DAYS and then
+    tried again, in case they've been added since.
+    """
+    if _mbids_loaded:
+        return
+    _mbids_loaded.append(True)
+    try:
+        rows = db().execute("SELECT key, payload, fetched_at FROM cache "
+                            "WHERE source='MusicBrainz' AND kind='mbid'").fetchall()
+    except Exception as e:
+        print(f"[MusicBrainz] Could not read saved artist IDs: {e}")
+        return
+    now = time.time()
+    for known, payload, fetched_at in rows:
+        try:
+            mbid = json.loads(payload)
+        except ValueError:
+            continue
+        if mbid:
+            _mbid_cache.setdefault(known, mbid)
+        elif now - fetched_at <= CACHE_DAYS * 86400:
+            _mbid_cache.setdefault(known, None)
+    debug(f"MusicBrainz: {len(_mbid_cache)} saved artist IDs loaded")
+
+
+def save_new_mbids():
+    """Writes IDs learnt this session to the database. Called from the main run, never from a lookup."""
+    if not _mbid_pending:
+        return
+    pending = dict(_mbid_pending)
+    _mbid_pending.clear()
+    try:
+        for known, mbid in pending.items():
+            db().execute("INSERT OR REPLACE INTO cache (source, kind, key, payload, fetched_at) "
+                         "VALUES (?,?,?,?,?)",
+                         ("MusicBrainz", "mbid", known, json.dumps(mbid or ""), time.time()))
+        db().commit()
+        debug(f"MusicBrainz: {len(pending)} artist IDs saved")
+    except Exception as e:
+        print(f"[MusicBrainz] Could not save artist IDs: {e}")
 
 
 def _musicbrainz_query(name):
@@ -776,6 +826,8 @@ def _musicbrainz_query(name):
                 print(f"[Error] MusicBrainz returned {r.status_code} for {name}: {r.text[:200]}")
                 return None
             artists = r.json().get("artists", [])
+            if not artists:
+                _mbid_confirmed_misses.add(name)   # MusicBrainz answered, and has nobody by this name
             return artists[0]["id"] if artists else None
         except Exception as e:
             print(f"[Error] MusicBrainz lookup failed for {name}: {e}")
@@ -790,8 +842,10 @@ def musicbrainz_artist_id(artist_name):
     libraries often store the sort-name form that MusicBrainz doesn't match.
     MusicBrainz asks for 1 req/sec.
     """
-    if artist_name in _mbid_cache:
-        return _mbid_cache[artist_name]
+    load_known_mbids()   # IDs saved by earlier sessions, read once
+    known = artist_key(artist_name)   # so "The xx" and "The XX" share one saved ID
+    if known in _mbid_cache:
+        return _mbid_cache[known]
     candidates = [artist_name]
     deinverted = deinvert_the(artist_name)
     if deinverted != artist_name:
@@ -802,7 +856,9 @@ def musicbrainz_artist_id(artist_name):
         time.sleep(1.0)
         if mbid:
             break
-    _mbid_cache[artist_name] = mbid
+    _mbid_cache[known] = mbid
+    if mbid or all(c in _mbid_confirmed_misses for c in candidates):
+        _mbid_pending[known] = mbid   # a failed lookup (MusicBrainz busy, no internet) is never saved
     return mbid
 
 
@@ -1343,7 +1399,7 @@ def find_jriver_key_by_track(artist_name, track_name):
 
 
 def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
-                               exclude_track=None, consider=None, pick=None):
+                               exclude_track=None, consider=None, pick=None, defer=None):
     """
     The per-artist step shared by Similar Artists and the Vibe backfill:
     ask the Top-track sources for the artist's top `consider` tracks, randomly
@@ -1382,6 +1438,10 @@ def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
         report(f"    YouTube's pick takes a slot: {guaranteed}")
     else:
         chosen = random.sample(names, min(pick, len(names)))
+    if defer is not None:
+        # YouTube output: the caller looks every pick up together at the end (much faster)
+        defer.extend((artist, t, suggested_by, session_id) for t in chosen)
+        return [], 0
     prefetch_youtube_ids([(artist, t) for t in chosen])
     keys, misses = [], 0
     for track_name in chosen:
@@ -1567,6 +1627,24 @@ def cap_seed_artist(keys, seed_artist_keys, first_key=None):
     return [k for k in keys if k not in drop], len(drop)
 
 
+def resolve_deferred_picks(deferred, report=print):
+    """
+    YouTube output: looks up every pick collected during a Similar Artists run
+    in one parallel burst, then reports and logs them in the order they were
+    picked. deferred is [(artist, track, suggested_by, session_id)].
+    Returns the video IDs found.
+    """
+    prefetch_youtube_ids([(artist, track) for artist, track, _, _ in deferred])
+    keys = []
+    for artist, track, suggested_by, session_id in deferred:
+        key = find_jriver_key_by_track(artist, track)   # a cache hit after the prefetch
+        report(f"    {'Found' if key else 'Not on YouTube'}: {artist} - {track}")
+        session_log(session_id, artist, track, suggested_by, found=bool(key))
+        if key and key not in keys:
+            keys.append(key)
+    return keys
+
+
 def create_youtube_queue_playlist(seed_info, seeds, report=print):
     """
     YouTube ticked on its own: plays YouTube Music's up next queue as is.
@@ -1666,6 +1744,7 @@ def create_similar_playlist(report=print, seed_info=None):
     first_key = typed_seed_key(seed_info, seeds, session_id, report)
 
     collected_keys = []   # ordered, deduped as we go
+    deferred = [] if output_is_youtube() else None   # YouTube output: picks wait here, looked up together later
 
     def add(keys):
         for k in keys:
@@ -1676,7 +1755,7 @@ def create_similar_playlist(report=print, seed_info=None):
     for seed in seeds:
         report(f"  Seed artist: {seed}...")
         keys, _ = pick_top_tracks_for_artist(seed, session_id, ["seed"], report=report,
-                                             exclude_track=seed_info['Name'])
+                                             exclude_track=seed_info['Name'], defer=deferred)
         add(keys)
 
     # --- Similar artists ---
@@ -1689,10 +1768,14 @@ def create_similar_playlist(report=print, seed_info=None):
             report(f"  {artist} (AI): not a verifiable artist name, skipping.")
             continue
         report(f"  {artist} ({', '.join(suggested_by)})...")
-        keys, _ = pick_top_tracks_for_artist(artist, session_id, suggested_by, report=report)
+        keys, _ = pick_top_tracks_for_artist(artist, session_id, suggested_by, report=report,
+                                             defer=deferred)
         add(keys)
 
     # --- Update JRiver queue ---
+    if deferred:
+        report(f"  Looking up {len(deferred)} tracks on YouTube, several at a time...")
+        add(resolve_deferred_picks(deferred, report))
     queued = 0
     if collected_keys or first_key:
         keys_list = [k for k in collected_keys if k != first_key]

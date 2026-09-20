@@ -17,7 +17,7 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 
 import engine
-from settings_gui import SettingsTab
+from settings_gui import SettingsTab, write_env
 from discover_gui import DiscoverTab
 
 
@@ -140,6 +140,15 @@ class PlayTab(tk.Frame):
             b.pack(side="left", padx=(0, 8))
             self.buttons.append(b)
 
+        # Output: where the finished playlist goes. Saved straight to .env; the engine
+        # reads it at the start of each run, so changing it mid-run affects the next one.
+        tk.Label(frame, text="Output", font=("Segoe UI", 9, "bold"), fg="#555").pack(side="left", padx=(8, 6))
+        self.output_var = tk.StringVar(value="YouTube" if engine.OUTPUT_TARGET == "youtube" else "JRiver")
+        self.output_cb = ttk.Combobox(frame, textvariable=self.output_var, values=["JRiver", "YouTube"],
+                                      state="readonly", width=9)
+        self.output_cb.pack(side="left")
+        self.output_cb.bind("<<ComboboxSelected>>", self._on_output_changed)
+
         self.credits_button = self.buttons[-1]   # greyed out while the Search tab is showing
 
         # Donate link. Not in self.buttons, so it stays clickable during a run.
@@ -147,6 +156,13 @@ class PlayTab(tk.Frame):
                         font=("Segoe UI", 9, "underline"), fg="#1f4e9c", cursor="hand2")
         link.pack(side="left", padx=(16, 0))
         link.bind("<Button-1>", lambda e: webbrowser.open(DONATE_URL))
+
+    def _on_output_changed(self, *_):
+        try:
+            write_env({"OUTPUT_TARGET": "youtube" if self.output_var.get() == "YouTube" else "jriver"})
+        except Exception as e:
+            messagebox.showerror("Save failed", str(e), parent=self)
+        self.output_cb.selection_clear()
 
     def _build_log(self):
         frame = tk.Frame(self, padx=16, pady=12)
