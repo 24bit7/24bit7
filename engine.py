@@ -1097,6 +1097,14 @@ def youtube_similar(artist_name, limit=20, track=None):
     return names[:limit]
 
 
+def youtube_up_next(artist_name, track):
+    """The cached up next queue for a track, as [[artist, title], ...]. Shares its cache with youtube_similar."""
+    if not track or track == "Unknown":
+        return []
+    return cached_call("YouTube", "up_next", f"{artist_key(artist_name)}|{clean_name(track)}",
+                       lambda: _youtube_fetch_up_next(artist_name, track)) or []
+
+
 def youtube_hints_for(artist, exclude_track=None):
     """YouTube's own track picks for an artist from the latest run (may be empty)."""
     hints = list(_youtube_hints.get(artist_key(artist), []))
@@ -1362,6 +1370,62 @@ def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
 # ---------------------------------------------------------------------------
 
 
+def create_youtube_queue_playlist(seed_info, seeds, report=print):
+    """
+    YouTube ticked on its own: plays YouTube Music's up next queue as is.
+    Each track is looked up in the library and the hits are queued in
+    YouTube's order, with no artist blend, top tracks, shuffle or trimming.
+    The seed artist's other songs stay in (YouTube weaves them through on
+    purpose); only the playing track is skipped. Hits and misses are logged
+    to Discover under their own session type.
+    """
+    track = seed_info.get("Name")
+    report("  YouTube is the only source ticked: playing its up next queue as is.")
+    session_id = session_start("youtube_queue", seed_info, "YouTube")
+
+    pairs = []
+    for seed in seeds:
+        pairs = youtube_up_next(seed, track)
+        if pairs:
+            break
+    if not pairs:
+        report("  YouTube returned no up next queue for this track.")
+        session_finish(session_id, 0, report=report)
+        return
+
+    playing = clean_name(track or "")
+    keys, seen = [], set()
+    for pair in pairs:
+        if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+            continue
+        raw_artist, title = pair
+        if raw_artist.strip().lower() in YOUTUBE_SKIP_ARTISTS:
+            continue
+        artist = canonicalise_conjunction(raw_artist)
+        ident = (artist_key(artist), clean_name(title))
+        if ident in seen:
+            continue
+        seen.add(ident)
+        if clean_name(title) == playing and any(_youtube_same_artist(raw_artist, s) for s in seeds):
+            continue   # another version of the track that's playing
+        key = find_jriver_key_by_track(artist, title)
+        if key and key not in keys:
+            keys.append(key)
+        report(f"    {'Found' if key else 'Not in library'}: {artist} - {title}")
+        session_log(session_id, artist, title, ["YouTube"], found=bool(key))
+
+    queued = 0
+    if keys:
+        clear_around_current()
+        report(f"Injecting {len(keys)} library tracks into queue, in YouTube's order...")
+        queue_tracks(keys)
+        queued = len(keys)
+        report("Queue refreshed.")
+    else:
+        report("No library matches found.")
+    session_finish(session_id, queued, sources="YouTube (up next queue)", report=report)
+
+
 def create_similar_playlist(report=print):
     """
     Builds a playlist around the playing artist:
@@ -1385,6 +1449,10 @@ def create_similar_playlist(report=print):
 
     seeds = seed_artists(seed_info)
     report(f"\nSeeding from: {seed_info['Artist']} - {seed_info['Name']}")
+    # YouTube ticked on its own: play its up next queue as is, no artist blend
+    if [s for s in SIMILAR_SOURCES if s in PROVIDERS] == ["youtube"]:
+        create_youtube_queue_playlist(seed_info, seeds, report=report)
+        return
     if len(seeds) > 1:
         report(f"  Multi-value artist, treating as any of: {', '.join(seeds)}")
     report(f"  Per artist: top {TRACKS_PER_ARTIST_POOL} from sources, {TRACKS_PER_ARTIST_PICK} picked at random.")

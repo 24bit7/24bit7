@@ -166,8 +166,10 @@ class SettingsTab(tk.Frame):
                             style="Big.TCheckbutton").grid(row=r, column=i, sticky="w", padx=(0, 12))
         r += 1
 
-        tk.Label(tab, text="YouTube suggests from the playing track, using YouTube Music's up next queue.\n"
-                           "No key needed. It's an unofficial route, so it may break now and then.",
+        tk.Label(tab, text="YouTube suggests from the playing track, using YouTube Music's up next queue. No key needed.\n"
+                           "Ticked on its own, it plays YouTube's queue as is, matched against your library.\n"
+                           "Ticked with other sources, its artists join the blend.\n"
+                           "It's an unofficial route, so it may break now and then.",
                  fg="#666", font=("Segoe UI", 8), justify="left").grid(
             row=r, column=0, columnspan=5, sticky="w", pady=(2, 0))
         r += 1
