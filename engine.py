@@ -56,6 +56,12 @@ REFERENCE_OPTIONS = [
 ]
 STORE_CODES = [c for c, _ in STORE_OPTIONS]
 REFERENCE_CODES = [c for c, _ in REFERENCE_OPTIONS]
+# "Listen" sites are searched by artist + track, like the stores, but aren't shops.
+LISTEN_OPTIONS = [
+    ("youtube", "YouTube"),
+]
+LISTEN_CODES = [c for c, _ in LISTEN_OPTIONS]
+CUSTOM_SITE_SLOTS = 3   # rows offered under Settings > Search > Custom sites
 
 
 def _int_setting(name, default, lo, hi):
@@ -67,6 +73,28 @@ def _int_setting(name, default, lo, hi):
         print(f"[Settings] {name}='{raw}' isn't a number, using {default}.")
         value = default
     return max(lo, min(hi, value))
+
+
+def read_custom_sites():
+    """
+    The user's own Discover search sites, from CUSTOM_SITE_<n>_NAME / _URL / _MODE
+    in .env. Read straight from the file (not the environment) so a row that has
+    been cleared in Settings disappears without a restart. Only web links count.
+    Returns [{"name", "url", "mode"}], mode being "track" or "artist".
+    """
+    try:
+        from dotenv import dotenv_values
+        values = dotenv_values(ENV_FILE)
+    except Exception:
+        values = {}
+    sites = []
+    for n in range(1, CUSTOM_SITE_SLOTS + 1):
+        name = (values.get(f"CUSTOM_SITE_{n}_NAME") or "").strip()
+        url = (values.get(f"CUSTOM_SITE_{n}_URL") or "").strip()
+        mode = (values.get(f"CUSTOM_SITE_{n}_MODE") or "track").strip().lower()
+        if name and url.lower().startswith(("http://", "https://")):
+            sites.append({"name": name, "url": url, "mode": "artist" if mode == "artist" else "track"})
+    return sites
 
 
 def load_settings():
@@ -83,6 +111,7 @@ def load_settings():
     global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, CACHE_DAYS
     global TABLE_FONT_SIZE, VIBE_TRACK_COUNT
     global OUTPUT_TARGET, YOUTUBE_PLAYLIST_LENGTH
+    global LISTEN_SITES, CUSTOM_SITES
 
     load_dotenv(ENV_FILE, override=True)
 
@@ -106,6 +135,12 @@ def load_settings():
     DIGITAL_STORES = [x for x in DIGITAL_STORES if x in STORE_CODES] or ["bandcamp"]
     REFERENCE_SITES = [x.strip().lower() for x in os.getenv("REFERENCE_SITES", "").split(",") if x.strip()]
     REFERENCE_SITES = [x for x in REFERENCE_SITES if x in REFERENCE_CODES]
+    # Listen sites: YouTube is on unless it has been unticked (it needs no account)
+    listen_raw = os.getenv("LISTEN_SITES")
+    if listen_raw is None:
+        listen_raw = "youtube"
+    LISTEN_SITES = [x.strip().lower() for x in listen_raw.split(",") if x.strip().lower() in LISTEN_CODES]
+    CUSTOM_SITES = read_custom_sites()
     DEBUG = os.getenv("DEBUG", "0").strip().lower() in ("1", "true", "yes")
     # How many similar-artist sources must suggest an artist before it is used
     # (1 = off). Replaced the on/off SIMILAR_REQUIRE_AGREEMENT; an old .env
@@ -186,6 +221,8 @@ VIBE_TRACK_COUNT=20
 # Reference: wikipedia, discogs_ref, allmusic, musicbrainz
 DIGITAL_STORES=bandcamp
 REFERENCE_SITES=
+# Listen: youtube (searches artist + track). Custom sites are added in Settings > Search.
+LISTEN_SITES=youtube
 
 # Output: jriver (default) or youtube (opens an instant playlist in the browser, 5-50 videos)
 OUTPUT_TARGET=jriver

@@ -128,6 +128,15 @@ class SettingsTab(tk.Frame):
         for group in ("DIGITAL_STORES", "REFERENCE_SITES"):
             updates[group] = ",".join(code for code, v in self.vars[group].items() if v.get())
         updates["DIGITAL_STORE"] = None   # pre-1.1.0 single-store key, superseded
+        updates["LISTEN_SITES"] = ",".join(code for code, v in self.vars["LISTEN_SITES"].items() if v.get())
+        for n in range(1, engine.CUSTOM_SITE_SLOTS + 1):
+            name = self.vars[f"CUSTOM_SITE_{n}_NAME"].get().strip()
+            url = self.vars[f"CUSTOM_SITE_{n}_URL"].get().strip()
+            artist_only = self.vars[f"CUSTOM_SITE_{n}_MODE"].get() == "Artist only"
+            # An empty row is removed from .env altogether, which keeps the file tidy
+            updates[f"CUSTOM_SITE_{n}_NAME"] = name or None
+            updates[f"CUSTOM_SITE_{n}_URL"] = url or None
+            updates[f"CUSTOM_SITE_{n}_MODE"] = ("artist" if artist_only else "track") if (name or url) else None
         updates["DEBUG"] = "1" if self.vars["DEBUG"].get() else "0"
         agree = self.vars["SIMILAR_MIN_AGREEMENT"].get()
         updates["SIMILAR_MIN_AGREEMENT"] = "1" if agree == "Off" else agree
@@ -424,7 +433,55 @@ class SettingsTab(tk.Frame):
                 row=r + i // cols, column=i % cols, sticky="w", padx=(0, 16), pady=2)
         r += (len(engine.REFERENCE_OPTIONS) + cols - 1) // cols
 
-        tk.Label(tab, text="Searching a Discover row opens one browser tab per ticked site.\n"
+        tk.Label(tab, text="Listen (search by artist and track)", font=("Segoe UI", 9, "bold")).grid(
+            row=r, column=0, columnspan=cols, sticky="w", pady=(16, 0))
+        r += 1
+        chosen_listen = self._csv_list("LISTEN_SITES", "youtube")
+        self.vars["LISTEN_SITES"] = {}
+        for i, (code, label) in enumerate(engine.LISTEN_OPTIONS):
+            v = tk.BooleanVar(value=code in chosen_listen)
+            self.vars["LISTEN_SITES"][code] = v
+            ttk.Checkbutton(tab, text=label, variable=v, command=self._save,
+                            style="Big.TCheckbutton").grid(
+                row=r + i // cols, column=i % cols, sticky="w", padx=(0, 16), pady=2)
+        r += (len(engine.LISTEN_OPTIONS) + cols - 1) // cols
+
+        tk.Label(tab, text="Custom sites", font=("Segoe UI", 9, "bold")).grid(
+            row=r, column=0, columnspan=cols, sticky="w", pady=(16, 0))
+        r += 1
+        custom = tk.Frame(tab)
+        custom.grid(row=r, column=0, columnspan=cols, sticky="ew")
+        custom.grid_columnconfigure(1, weight=1)   # the link field takes whatever width is left
+        for c, heading in enumerate(("Button name", "Search link", "Search by")):
+            tk.Label(custom, text=heading, fg="#666", font=("Segoe UI", 8)).grid(
+                row=0, column=c, sticky="w", padx=(0, 8))
+        for n in range(1, engine.CUSTOM_SITE_SLOTS + 1):
+            name_var = tk.StringVar(value=self.env.get(f"CUSTOM_SITE_{n}_NAME", ""))
+            url_var = tk.StringVar(value=self.env.get(f"CUSTOM_SITE_{n}_URL", ""))
+            artist_only = self.env.get(f"CUSTOM_SITE_{n}_MODE", "track").strip().lower() == "artist"
+            mode_var = tk.StringVar(value="Artist only" if artist_only else "Artist and track")
+            self.vars[f"CUSTOM_SITE_{n}_NAME"] = name_var
+            self.vars[f"CUSTOM_SITE_{n}_URL"] = url_var
+            self.vars[f"CUSTOM_SITE_{n}_MODE"] = mode_var
+            name_entry = tk.Entry(custom, textvariable=name_var, width=18)
+            name_entry.grid(row=n, column=0, sticky="w", padx=(0, 8), pady=2)
+            url_entry = tk.Entry(custom, textvariable=url_var, width=20)
+            url_entry.grid(row=n, column=1, sticky="ew", padx=(0, 8), pady=2)
+            for entry in (name_entry, url_entry):
+                entry.bind("<FocusOut>", self._save)   # save when leaving the field
+            mode_cb = ttk.Combobox(custom, textvariable=mode_var, state="readonly", width=16,
+                                   values=["Artist and track", "Artist only"])
+            mode_cb.grid(row=n, column=2, sticky="w", pady=2)
+            mode_cb.bind("<<ComboboxSelected>>", self._save)
+        r += 1
+        tk.Label(tab, text="To add a site: search for anything on it, copy the address from your browser, then replace\n"
+                           "your search words with {query}. Example: https://www.prestomusic.com/search?q={query}\n"
+                           "Clear the button name to remove a site. Only links starting with http:// or https:// are used.",
+                 fg="#666", font=("Segoe UI", 8), justify="left").grid(
+            row=r, column=0, columnspan=cols, sticky="w", pady=(4, 0))
+        r += 1
+
+        tk.Label(tab, text="Each ticked site gets its own button on the Discover tab.\n"
                            "At least one store must stay ticked.",
                  fg="#666", font=("Segoe UI", 9), justify="left").grid(
             row=r, column=0, columnspan=cols, sticky="w", pady=(12, 0))
