@@ -811,6 +811,22 @@ def save_new_mbids():
         print(f"[MusicBrainz] Could not save artist IDs: {e}")
 
 
+import threading
+
+MUSICBRAINZ_INTERVAL = 1.1     # seconds between the START of MusicBrainz requests (their rule: one a second)
+_mb_next_slot = [0.0]
+_mb_lock = threading.Lock()
+
+
+def _musicbrainz_wait_turn():
+    """Blocks until it is this caller's turn to ask MusicBrainz. Safe to call from any thread."""
+    with _mb_lock:
+        wait = _mb_next_slot[0] - time.time()
+        if wait > 0:
+            time.sleep(wait)
+        _mb_next_slot[0] = time.time() + MUSICBRAINZ_INTERVAL
+
+
 def _musicbrainz_query(name):
     """Single MusicBrainz artist search for one name spelling. Returns an MBID or None."""
     for attempt in range(3):
@@ -852,8 +868,8 @@ def musicbrainz_artist_id(artist_name):
         candidates.append(deinverted)
     mbid = None
     for name in candidates:
+        _musicbrainz_wait_turn()   # MusicBrainz allows one request a second
         mbid = _musicbrainz_query(name)
-        time.sleep(1.0)
         if mbid:
             break
     _mbid_cache[known] = mbid
@@ -1313,16 +1329,110 @@ def blended_similar_artists(seed_artist, limit=20, seed_track=None, report=None)
     return blended[:limit], " + ".join(labels) if labels else "none"
 
 
-def blended_top_tracks(artist, limit=10):
-    """Top tracks from every source in TOP_TRACK_SOURCES, blended. Returns ([(track, sources)], label)."""
+TOP_TRACK_WORKERS = {"Deezer": 2}   # artists fetched at once, per source (Deezer allows 50 requests per 5 s)
+TOP_TRACK_WORKERS_DEFAULT = 4
+
+
+def top_track_plan(limit):
+    """
+    Which sources supply top tracks, and how deep to ask each one. Used by BOTH
+    blended_top_tracks and prefetch_top_tracks, so the prefetch always stores its
+    answers under the labels the main run looks them up by.
+    """
     # YouTube has no top-tracks list, so it sits out here even if .env names it
     providers = [p for p in sources_from_settings(TOP_TRACK_SOURCES, "TOP_TRACK_SOURCES") if p[2]]
     if not providers:
         providers = [PROVIDERS["lastfm"]]
     fetch = min(limit * BLEND_DEPTH, 50) if len(providers) > 1 else limit
+    return providers, fetch
+
+
+def top_track_cache_key(artist, fetch):
+    return f"{artist_key(artist)}|{fetch}"
+
+
+def _safe_top_tracks(top_tracks_fn, artist, fetch):
+    try:
+        return top_tracks_fn(artist, limit=fetch) or []
+    except Exception as e:
+        print(f"[Prefetch] Top tracks failed for {artist}: {e}")
+        return []
+
+
+def prefetch_top_tracks(artists, limit, report=None):
+    """
+    Warms the top-tracks cache for many artists at once, so the one-artist-at-a-
+    time loop that follows is served from the cache. Worker threads only make
+    internet calls; every database read and write happens here, on the calling
+    thread. Anything already cached is skipped, so a repeat run starts no threads.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    providers, fetch = top_track_plan(limit)
+    artists = list(dict.fromkeys(artists))
+    work = {}   # service name -> (top_tracks_fn, [(artist, cache key)])
+    for service_name, _, top_tracks_fn in providers:
+        jobs = [(a, top_track_cache_key(a, fetch)) for a in artists]
+        jobs = [(a, k) for a, k in jobs if cache_get(service_name, "top_tracks", k) is None]
+        if jobs:
+            work[service_name] = (top_tracks_fn, jobs)
+    if not work:
+        return
+    if report:
+        count = len({a for _, jobs in work.values() for a, _ in jobs})
+        report(f"  Fetching top tracks for {count} artists from {', '.join(work)}, several at a time...")
+    load_known_mbids()   # read the saved MusicBrainz IDs here, so no worker thread touches the database
+    started = time.time()
+    pools, direct, staged = [], [], []
+
+    for service_name, (top_tracks_fn, jobs) in work.items():
+        workers = TOP_TRACK_WORKERS.get(service_name, TOP_TRACK_WORKERS_DEFAULT)
+        pool = ThreadPoolExecutor(max_workers=workers)
+        pools.append(pool)
+        if top_tracks_fn is listenbrainz_top_tracks:
+            # Stage 1: MusicBrainz IDs in ONE lane, paced. Stage 2: the ListenBrainz request
+            # for each artist is handed to the pool as soon as its ID is known.
+            lane = ThreadPoolExecutor(max_workers=1)
+            pools.append(lane)
+
+            def resolve_then_fetch(artist, pool=pool, fn=top_tracks_fn):
+                musicbrainz_artist_id(artist)
+                return pool.submit(_safe_top_tracks, fn, artist, fetch)
+
+            staged = [(service_name, key, lane.submit(resolve_then_fetch, artist)) for artist, key in jobs]
+        else:
+            direct += [(service_name, key, pool.submit(_safe_top_tracks, top_tracks_fn, artist, fetch))
+                       for artist, key in jobs]
+
+    remaining = {name: len(jobs) for name, (_, jobs) in work.items()}
+
+    def store(service_name, key, names):
+        if names:
+            cache_put(service_name, "top_tracks", key, names)
+        remaining[service_name] -= 1
+        if report and remaining[service_name] == 0:
+            report(f"    {service_name} done ({time.time() - started:.0f}s)")
+
+    by_future = {f: (s, k) for s, k, f in direct}
+    for future in as_completed(by_future):
+        service_name, key = by_future[future]
+        store(service_name, key, future.result())
+    for service_name, key, outer in staged:
+        try:
+            names = outer.result().result()
+        except Exception as e:
+            print(f"[Prefetch] {service_name} failed: {e}")
+            names = []
+        store(service_name, key, names)
+    for pool in pools:
+        pool.shutdown()
+
+
+def blended_top_tracks(artist, limit=10):
+    """Top tracks from every source in TOP_TRACK_SOURCES, blended. Returns ([(track, sources)], label)."""
+    providers, fetch = top_track_plan(limit)   # shared with prefetch_top_tracks
     results, labels = [], []
     for service_name, _, top_tracks_fn in providers:
-        names = cached_call(service_name, "top_tracks", f"{artist_key(artist)}|{fetch}",
+        names = cached_call(service_name, "top_tracks", top_track_cache_key(artist, fetch),
                             lambda: top_tracks_fn(artist, limit=fetch))
         debug(f"{service_name} top tracks: {names}")
         if names:
@@ -1752,6 +1862,7 @@ def create_similar_playlist(report=print, seed_info=None):
                 collected_keys.append(k)
 
     # --- Seed artist(s): own top tracks, excluding the playing track ---
+    prefetch_top_tracks(seeds, TRACKS_PER_ARTIST_POOL + 1)   # quietly; one more than the pool, as the playing track is left out
     for seed in seeds:
         report(f"  Seed artist: {seed}...")
         keys, _ = pick_top_tracks_for_artist(seed, session_id, ["seed"], report=report,
@@ -1762,6 +1873,7 @@ def create_similar_playlist(report=print, seed_info=None):
     similar, source_label = blended_similar_artists(seeds, limit=SIMILAR_ARTIST_LIMIT,
                                                     seed_track=seed_info['Name'], report=report)
     report(f"  Similar artists via {source_label}: {len(similar)} candidates")
+    prefetch_top_tracks([a for a, _ in similar], TRACKS_PER_ARTIST_POOL, report=report)
 
     for artist, suggested_by in similar:
         if suggested_by == ["AI"] and not deezer_artist_exists(artist):
