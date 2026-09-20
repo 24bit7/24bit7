@@ -29,8 +29,10 @@ DONATE_URL = "https://paypal.me/24bit7"
 WELCOME_TEXT = (
     "Welcome to 24bit7!\n\n"
     "A starter settings file has been created. Playlists work out of the box "
-    "via Deezer; add free keys for Last.fm and ListenBrainz for better blends. "
-    "The ? buttons explain how to get each key.\n\n"
+    "using Deezer and YouTube, which need no keys.\n\n"
+    "For richer blends, add free keys for Last.fm and ListenBrainz under "
+    "Settings > Keys (the ? buttons explain how), then tick them under "
+    "Settings > Sources.\n\n"
     "JRiver needs Media Network enabled: Tools > Options > Media Network."
 )
 
@@ -267,6 +269,10 @@ class PlayTab(tk.Frame):
         self._run_job(lambda: engine.explore_credits(report=self.report))
 
     def on_vibe(self):
+        problem = engine.vibe_blocker()
+        if problem:
+            self.report(problem)
+            return
         VibeDialog(self.root, on_submit=lambda vibe: self._run_job(
             lambda: engine.create_vibe_playlist(vibe, report=self.report), needs_playing=False))
 

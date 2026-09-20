@@ -114,6 +114,7 @@ class SettingsTab(tk.Frame):
         self._build_other(nb)
 
         self._loading = False
+        self._refresh_key_marks()
 
     # --- persistence -------------------------------------------------------
 
@@ -144,10 +145,24 @@ class SettingsTab(tk.Frame):
         updates["SIMILAR_REQUIRE_AGREEMENT"] = None   # old on/off key, superseded
         return updates
 
+    def _refresh_key_marks(self):
+        """Adds '(no key yet)' after a source whose key field is empty, and clears it once filled."""
+        for box, code, label, purpose in getattr(self, "_source_boxes", []):
+            key = {"lastfm": "LASTFM_API_KEY", "ai": "ANTHROPIC_API_KEY"}.get(code)
+            if code == "listenbrainz" and purpose == "top":
+                key = "LISTENBRAINZ_TOKEN"
+            var = self.vars.get(key) if key else None
+            missing = var is not None and not var.get().strip()
+            try:
+                box.config(text=label + ("  (no key yet)" if missing else ""))
+            except tk.TclError:
+                pass
+
     def _save(self, *_):
         """Auto-save. Skips writing empty source lists (keeps the last good file)."""
         if self._loading:
             return
+        self._refresh_key_marks()
         updates = self._current_updates()
         if not updates["SIMILAR_SOURCES"] or not updates["TOP_TRACK_SOURCES"] or not updates["DIGITAL_STORES"]:
             return   # don't persist a no-sources / no-stores state; user is mid-change
@@ -172,8 +187,10 @@ class SettingsTab(tk.Frame):
         for i, (code, label) in enumerate(SOURCE_NAMES):
             v = tk.BooleanVar(value=code in chosen_sim)
             self.vars["SIMILAR_SOURCES"][code] = v
-            ttk.Checkbutton(tab, text=label, variable=v, command=self._similar_sources_changed,
-                            style="Big.TCheckbutton").grid(row=r, column=i, sticky="w", padx=(0, 12))
+            box = ttk.Checkbutton(tab, text=label, variable=v, command=self._similar_sources_changed,
+                                  style="Big.TCheckbutton")
+            box.grid(row=r, column=i, sticky="w", padx=(0, 12))
+            self.__dict__.setdefault("_source_boxes", []).append((box, code, label, "similar"))
         r += 1
 
         tk.Label(tab, text="YouTube suggests from the playing track, using YouTube Music's up next queue. No key needed.\n"
@@ -214,8 +231,10 @@ class SettingsTab(tk.Frame):
         for i, (code, label) in enumerate(TOP_SOURCE_NAMES):
             v = tk.BooleanVar(value=code in chosen_top)
             self.vars["TOP_TRACK_SOURCES"][code] = v
-            ttk.Checkbutton(tab, text=label, variable=v, command=self._save,
-                            style="Big.TCheckbutton").grid(row=r, column=i, sticky="w", padx=(0, 12))
+            box = ttk.Checkbutton(tab, text=label, variable=v, command=self._save,
+                                  style="Big.TCheckbutton")
+            box.grid(row=r, column=i, sticky="w", padx=(0, 12))
+            self.__dict__.setdefault("_source_boxes", []).append((box, code, label, "top"))
         r += 1
 
         tk.Label(tab, text="More services = richer, more varied playlists (slower).\n"

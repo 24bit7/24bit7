@@ -26,7 +26,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 TARGET_ZONE = "-1"
 CSV_FILE = os.path.join(APP_DIR, "FutureDiscoveries.csv")      # legacy log, imported once into the database
@@ -191,7 +191,7 @@ JRIVER_HOST=127.0.0.1:52199
 JRIVER_USER=
 JRIVER_PASS=
 
-# Service keys. Deezer needs no key, so 24bit7 works out of the box.
+# Service keys. Deezer and YouTube need no keys, so 24bit7 works out of the box.
 # The ? buttons in Settings > Keys explain how to get each of these (all free
 # except Anthropic, which is pay-as-you-go).
 LASTFM_API_KEY=
@@ -201,11 +201,13 @@ ANTHROPIC_API_KEY=
 
 # Recommendation sources (comma-separated: lastfm, listenbrainz, deezer, ai, youtube)
 # youtube is for SIMILAR_SOURCES only and needs no key.
-SIMILAR_SOURCES=lastfm,deezer
-TOP_TRACK_SOURCES=lastfm,deezer
+# A fresh install starts on the two sources that need no key. Once you add a
+# Last.fm or ListenBrainz key, tick that source under Settings > Sources.
+SIMILAR_SOURCES=deezer,youtube
+TOP_TRACK_SOURCES=deezer
 LISTENBRAINZ_ALGORITHM=alltime
 # How many similar-artist sources must agree on an artist (1 = off, up to 5)
-SIMILAR_MIN_AGREEMENT=2
+SIMILAR_MIN_AGREEMENT=1
 
 # Playlist sizes and order
 SIMILAR_ARTIST_LIMIT=20
@@ -1253,6 +1255,55 @@ PROVIDERS = {
 }
 
 
+# --- Missing keys, said out loud ----------------------------------------------
+# These lines go through report(), so they show in the app's log. The packaged
+# app has no console, so a print() here would never be seen.
+
+KEY_HELP_LINE = "Add one under Settings > Keys. The ? button beside the field explains how to get it."
+
+
+def source_has_key(code, purpose="similar"):
+    """
+    Can this source be asked at all? Deezer and YouTube need no key.
+    ListenBrainz needs its token only for top tracks, not for similar artists.
+    """
+    if code == "lastfm":
+        return bool(LASTFM_KEY)
+    if code == "ai":
+        return bool(ANTHROPIC_API_KEY)
+    if code == "listenbrainz" and purpose == "top":
+        return bool(LISTENBRAINZ_TOKEN)
+    return True
+
+
+def missing_key_notes(similar=False, top_tracks=False):
+    """One plain line per ticked source that has no key, for the run about to start."""
+    ticked_similar = set(SIMILAR_SOURCES) if similar else set()
+    ticked_top = set(TOP_TRACK_SOURCES) if top_tracks else set()
+    notes = []
+    if "lastfm" in (ticked_similar | ticked_top) and not LASTFM_KEY:
+        notes.append("Last.fm is ticked but has no API key, so it is being skipped. " + KEY_HELP_LINE)
+    if "ai" in (ticked_similar | ticked_top) and not ANTHROPIC_API_KEY:
+        notes.append("AI is ticked but has no Anthropic API key, so it is being skipped. " + KEY_HELP_LINE)
+    if "listenbrainz" in ticked_top and not LISTENBRAINZ_TOKEN:
+        notes.append("ListenBrainz is ticked for top tracks but has no user token, "
+                     "so it is being skipped there. " + KEY_HELP_LINE)
+    return notes
+
+
+def report_missing_keys(report, similar=False, top_tracks=False):
+    for note in missing_key_notes(similar=similar, top_tracks=top_tracks):
+        report("  Note: " + note)
+
+
+def vibe_blocker():
+    """None if Vibe Playlist can run, otherwise the line to show the user."""
+    refresh_settings_if_changed()
+    if not ANTHROPIC_API_KEY:
+        return "Vibe Playlist needs an Anthropic API key. " + KEY_HELP_LINE
+    return None
+
+
 def sources_from_settings(names, setting_name):
     """
     Maps a list of source names from .env to provider tuples, dropping unknown
@@ -1261,13 +1312,16 @@ def sources_from_settings(names, setting_name):
     chosen = []
     for name in names:
         if name in PROVIDERS:
+            purpose = "top" if setting_name == "TOP_TRACK_SOURCES" else "similar"
+            if not source_has_key(name, purpose):
+                continue   # ticked but no key: skipped here, named by report_missing_keys
             chosen.append(PROVIDERS[name])
         else:
             print(f"[Settings] Unknown source '{name}' in {setting_name}, ignoring. "
                   f"Valid: {', '.join(PROVIDERS)}")
     if not chosen:
         print(f"[Settings] No valid sources in {setting_name}, using Last.fm.")
-        chosen.append(PROVIDERS["lastfm"])
+        chosen.append(PROVIDERS["lastfm" if source_has_key("lastfm") else "deezer"])
     return chosen
 
 
@@ -1886,6 +1940,7 @@ def create_similar_playlist(report=print, seed_info=None):
         return
     if len(seeds) > 1:
         report(f"  Multi-value artist, treating as any of: {', '.join(seeds)}")
+    report_missing_keys(report, similar=True, top_tracks=True)
     report(f"  Per artist: top {TRACKS_PER_ARTIST_POOL} from sources, {TRACKS_PER_ARTIST_PICK} picked at random.")
     session_id = session_start("similar", seed_info)
     first_key = typed_seed_key(seed_info, seeds, session_id, report)
@@ -1963,6 +2018,9 @@ def create_vibe_playlist(vibe, report=print):
     if not vibe:
         report("No vibe given.")
         return
+    if not ANTHROPIC_API_KEY:
+        report("Vibe Playlist needs an Anthropic API key. " + KEY_HELP_LINE)
+        return
     target = VIBE_TRACK_COUNT
     report(f"\nVibe: {vibe}  (target {target} tracks)")
 
@@ -2003,7 +2061,7 @@ def create_vibe_playlist(vibe, report=print):
         else:
             report(f"  Step 2: filling from artists similar to your {len(hit_artists)} hit(s) "
                    f"via Last.fm + Deezer...")
-            backfill_providers = [PROVIDERS["lastfm"], PROVIDERS["deezer"]]
+            backfill_providers = [PROVIDERS[c] for c in ("lastfm", "deezer") if source_has_key(c)]
             seen_artists = {artist_key(a) for a in hit_artists}
             for seed in hit_artists:
                 if len(keys) >= target:
@@ -2061,6 +2119,7 @@ def play_top_n(report=print, seed_info=None):
         return
 
     seeds = seed_artists(seed_info)
+    report_missing_keys(report, top_tracks=True)
     n = TOP_TRACKS_COUNT
     order = TOP_TRACKS_ORDER
 
@@ -2226,3 +2285,37 @@ def discogs_release_credits(release_id, seed_artist):
         return len(DISCOGS_ROLE_PRIORITY)
 
     return sorted(people.items(), key=rank)
+
+
+def explore_credits(report=print):
+    """
+    Mode 3. Shows the Discogs credits for the playing album: producer,
+    engineers, musicians and so on. Information only; the queue is untouched.
+    """
+    refresh_settings_if_changed()
+    seed_info = get_playing_info()
+    if not seed_info or seed_info["PlayingNowPosition"] == "-1":
+        report("Nothing playing. Seed from a track first!")
+        return
+
+    if not DISCOGS_TOKEN:
+        report("Show Credits needs a Discogs token. " + KEY_HELP_LINE)
+        return
+    artist, album = seed_info["Artist"], seed_info["Album"]
+    report(f"\nLooking up credits for: {artist} - {album}")
+
+    found = discogs_find_release(artist, album)
+    if not found:
+        report("Could not find this release on Discogs.")
+        return
+    release_id, release_label = found
+    report(f"  Using release: {release_label}")
+
+    credits = discogs_release_credits(release_id, artist)
+    if not credits:
+        report("No credits listed on this release beyond the artist.")
+        return
+
+    report("\nCredited on this record:")
+    for name, roles in credits:
+        report(f"  {name} ({', '.join(sorted(roles))})")
