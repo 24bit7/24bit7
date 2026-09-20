@@ -14,6 +14,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 import engine
+from tabs import TabbedPane
 
 ENV_FILE = engine.ENV_FILE   # single source of truth for where .env lives
 
@@ -104,7 +105,7 @@ class SettingsTab(tk.Frame):
         self.vars = {}
         self._loading = True   # suppress auto-save while building controls
 
-        nb = ttk.Notebook(self)
+        nb = TabbedPane(self, font=("Segoe UI", 10, "bold"), pad=(16, 6))
         nb.pack(fill="both", expand=True, padx=8, pady=8)
         self._build_sources(nb)
         self._build_playlist(nb)

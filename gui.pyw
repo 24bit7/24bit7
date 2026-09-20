@@ -19,6 +19,7 @@ from tkinter import ttk, scrolledtext, messagebox
 import engine
 from settings_gui import SettingsTab, write_env
 from discover_gui import DiscoverTab
+from tabs import TabbedPane, PALETTE
 
 
 REFRESH_MS = 3000
@@ -67,21 +68,13 @@ class PlayTab(tk.Frame):
         # pressed is the seed - what JRiver is playing, or a typed artist and track.
         outer = tk.Frame(self, padx=16, pady=8)
         outer.pack(fill="x")
-        seed_style = ttk.Style(self)
-        seed_style.configure("Seed.TNotebook", tabmargins=(0, 2, 0, 0))
-        seed_style.configure("Seed.TNotebook.Tab", font=("Segoe UI", 9, "bold"), padding=(12, 4),
-                             background="#d9d9d9", foreground="#555")
-        seed_style.map("Seed.TNotebook.Tab",
-                       background=[("selected", "#ffffff")],
-                       foreground=[("selected", "#000000")],
-                       padding=[("selected", (12, 5))])
-        self.seed_nb = ttk.Notebook(outer, style="Seed.TNotebook")
+        self.seed_nb = TabbedPane(outer, font=("Segoe UI", 9, "bold"), pad=(14, 4), box=True, indent=0)
         self.seed_nb.pack(fill="x")
 
         frame = tk.Frame(self.seed_nb, padx=10, pady=8)
         self.seed_nb.add(frame, text="Now Playing")
         self.np_track = tk.Label(frame, text="...", font=("Segoe UI", 14, "bold"),
-                                 anchor="w", justify="left")
+                                 fg=PALETTE["brand_blue"], anchor="w", justify="left")
         self.np_track.pack(anchor="w", fill="x")
         self.np_detail = tk.Label(frame, text="", font=("Segoe UI", 10), fg="#555",
                                   anchor="w", justify="left")
@@ -151,11 +144,6 @@ class PlayTab(tk.Frame):
 
         self.credits_button = self.buttons[-1]   # greyed out while the Search tab is showing
 
-        # Donate link. Not in self.buttons, so it stays clickable during a run.
-        link = tk.Label(frame, text="24bit7 is free and always will be.  Buy me a coffee \u2615",
-                        font=("Segoe UI", 9, "underline"), fg="#1f4e9c", cursor="hand2")
-        link.pack(side="left", padx=(16, 0))
-        link.bind("<Button-1>", lambda e: webbrowser.open(DONATE_URL))
 
     def _on_output_changed(self, *_):
         try:
@@ -367,19 +355,8 @@ def main():
     root.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
     root.minsize(680, 480)
 
-    style = ttk.Style(root)
-    # Bigger, bolder tabs that clearly read as tabs: the selected one is white
-    # and raised, the others sit grey and slightly lower.
-    style.configure("TNotebook", tabmargins=(8, 6, 0, 0))
-    style.configure("TNotebook.Tab", font=("Segoe UI", 11, "bold"),
-                    padding=(18, 8), background="#d9d9d9", foreground="#555")
-    style.map("TNotebook.Tab",
-              background=[("selected", "#ffffff")],
-              foreground=[("selected", "#000000")],
-              padding=[("selected", (18, 10))])
-
-    nb = ttk.Notebook(root)
-    nb.pack(fill="both", expand=True)
+    nb = TabbedPane(root, font=("Segoe UI", 11, "bold"), pad=(20, 8))
+    nb.pack(fill="both", expand=True, pady=(6, 0))
 
     play = PlayTab(nb, root)
     discover = DiscoverTab(nb)
@@ -387,6 +364,23 @@ def main():
     nb.add(play, text="Play")
     nb.add(discover, text="Discover")
     nb.add(settings, text="Settings")
+
+    # Donate link: top right of the tab row, so it shows from every tab. It is hidden
+    # if the window is too narrow for it to sit clear of the tab buttons.
+    donate = tk.Label(root, text="Buy me a coffee \u2615", font=("Segoe UI", 9, "underline"),
+                      fg=PALETTE["brand_blue"], cursor="hand2")
+    donate.bind("<Button-1>", lambda e: webbrowser.open(DONATE_URL))
+
+    def place_donate(event=None):
+        if event is not None and event.widget is not root:
+            return
+        room = root.winfo_width() - nb.tabs_width() - donate.winfo_reqwidth() - 40
+        if room > 0:
+            donate.place(relx=1.0, x=-16, y=nb.winfo_y() + nb.strip_height() // 2, anchor="e")
+        else:
+            donate.place_forget()
+    root.bind("<Configure>", place_donate, add="+")
+    root.after(100, place_donate)
 
     def on_tab_changed(event):
         if nb.select() == str(discover):
