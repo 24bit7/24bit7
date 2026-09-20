@@ -333,7 +333,9 @@ def session_finish(session_id, queued, sources=None, report=print):
     db().commit()
     misses = db().execute("SELECT COUNT(*) FROM discoveries WHERE session_id=? AND found=0",
                           (session_id,)).fetchone()[0]
-    report(f"Session {session_id} saved ({queued} tracks queued, {misses} discoveries not in library).")
+    track_word = "track" if queued == 1 else "tracks"
+    miss_word = "discovery" if misses == 1 else "discoveries"
+    report(f"Session {session_id} saved ({queued} {track_word} queued, {misses} {miss_word} not in library).")
 
 
 def import_legacy_csv():
@@ -1361,7 +1363,11 @@ def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
         names = [t for t in names if clean_name(t) != skip]
     names = names[:consider]
     # YouTube's own picks for this artist (from up next) join the pool on top
+    guaranteed = None   # YouTube's own pick for this artist always gets one of the slots
     if "YouTube" in (suggested_by or []):
+        hints = youtube_hints_for(artist, exclude_track)
+        if hints:
+            guaranteed = next((n for n in names if clean_name(n) == clean_name(hints[0])), hints[0])
         have = {clean_name(n) for n in names}
         added = [h for h in youtube_hints_for(artist, exclude_track) if clean_name(h) not in have]
         if added:
@@ -1370,7 +1376,12 @@ def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
     if not names:
         report(f"    No top tracks returned for {artist}.")
         return [], 0
-    chosen = random.sample(names, min(pick, len(names)))
+    if guaranteed:
+        rest = [n for n in names if clean_name(n) != clean_name(guaranteed)]
+        chosen = [guaranteed] + random.sample(rest, min(pick - 1, len(rest)))
+        report(f"    YouTube's pick takes a slot: {guaranteed}")
+    else:
+        chosen = random.sample(names, min(pick, len(names)))
     prefetch_youtube_ids([(artist, t) for t in chosen])
     keys, misses = [], 0
     for track_name in chosen:
@@ -1530,6 +1541,32 @@ def send_to_jriver(keys, typed=False):
     queue_tracks(keys)
 
 
+SEED_ARTIST_SHARE = 0.25   # the seed artist's share of a YouTube queue playlist
+SEED_ARTIST_FLOOR = 3      # but never fewer than this many of their tracks
+
+
+def cap_seed_artist(keys, seed_artist_keys, first_key=None):
+    """
+    Keeps the seed artist to about SEED_ARTIST_SHARE of a YouTube queue playlist.
+    YouTube weaves the seed artist through roughly every fourth track; a library
+    check strips out the other artists' tracks you don't own but keeps all of
+    the seed artist's, which tips the balance. The kept tracks are spread evenly
+    so they stay woven through. A searched seed track (first_key) counts towards
+    the share and is never dropped. Returns (keys, number dropped).
+    """
+    others = len(keys) - len(seed_artist_keys) - (1 if first_key else 0)
+    if others <= 0 or not seed_artist_keys:
+        return keys, 0
+    allowed = max(SEED_ARTIST_FLOOR, round(others * SEED_ARTIST_SHARE / (1 - SEED_ARTIST_SHARE)))
+    allowed = max(1, allowed - (1 if first_key else 0))
+    if len(seed_artist_keys) <= allowed:
+        return keys, 0
+    step = len(seed_artist_keys) / allowed
+    kept = {seed_artist_keys[int(i * step)] for i in range(allowed)}
+    drop = set(seed_artist_keys) - kept
+    return [k for k in keys if k not in drop], len(drop)
+
+
 def create_youtube_queue_playlist(seed_info, seeds, report=print):
     """
     YouTube ticked on its own: plays YouTube Music's up next queue as is.
@@ -1558,6 +1595,7 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
                           if isinstance(p, (list, tuple)) and len(p) == 2])
     playing = clean_name(track or "")
     keys, seen = ([first_key] if first_key else []), set()
+    seed_artist_keys = []   # the seed artist's hits, so they can be kept in proportion
     for pair in pairs:
         if not isinstance(pair, (list, tuple)) or len(pair) != 2:
             continue
@@ -1574,9 +1612,14 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
         key = find_jriver_key_by_track(artist, title)
         if key and key not in keys:
             keys.append(key)
+            if any(_youtube_same_artist(raw_artist, s) for s in seeds):
+                seed_artist_keys.append(key)
         report(f"    {'Found' if key else 'Not in library'}: {artist} - {title}")
         session_log(session_id, artist, title, ["YouTube"], found=bool(key))
 
+    keys, dropped = cap_seed_artist(keys, seed_artist_keys, first_key)
+    if dropped:
+        report(f"  Seed artist kept to about a quarter of the playlist ({dropped} of their tracks left out).")
     queued = 0
     if keys:
         report(sending_message(len(keys), ", in YouTube's order"))
