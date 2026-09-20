@@ -231,7 +231,10 @@ def split_values(field):
 
 def seed_artists(seed_info):
     """The playing track's artist(s) as a list, one entry per multi-value part."""
-    return split_values(seed_info.get("Artist")) or ["Unknown"]
+    # Library sort-names ("XX, The", "Tribe Called Quest, A") are flipped to their
+    # natural form so every source looks up the right act. Library matching is
+    # unaffected: normalise_artist() strips the article either way.
+    return [deinvert_the(a) for a in split_values(seed_info.get("Artist"))] or ["Unknown"]
 
 
 # ---------------------------------------------------------------------------
