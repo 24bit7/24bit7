@@ -26,7 +26,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 TARGET_ZONE = "-1"
 CSV_FILE = os.path.join(APP_DIR, "FutureDiscoveries.csv")      # legacy log, imported once into the database
@@ -82,6 +82,7 @@ def load_settings():
     global SIMILAR_MIN_AGREEMENT
     global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, CACHE_DAYS
     global TABLE_FONT_SIZE, VIBE_TRACK_COUNT
+    global OUTPUT_TARGET, YOUTUBE_PLAYLIST_LENGTH
 
     load_dotenv(ENV_FILE, override=True)
 
@@ -126,6 +127,11 @@ def load_settings():
     CACHE_DAYS = _int_setting("CACHE_DAYS", 30, 1, 365)
     TABLE_FONT_SIZE = _int_setting("TABLE_FONT_SIZE", 9, 6, 16)   # Discover table font
     VIBE_TRACK_COUNT = _int_setting("VIBE_TRACK_COUNT", 20, 5, 100)  # target size for vibe playlists
+    # Where finished playlists go: JRiver (default) or YouTube (opens in the browser)
+    OUTPUT_TARGET = os.getenv("OUTPUT_TARGET", "jriver").strip().lower()
+    if OUTPUT_TARGET not in ("jriver", "youtube"):
+        OUTPUT_TARGET = "jriver"
+    YOUTUBE_PLAYLIST_LENGTH = _int_setting("YOUTUBE_PLAYLIST_LENGTH", 50, 5, 50)   # YouTube caps a link at 50
 
 
 def refresh_settings_if_changed():
@@ -180,6 +186,10 @@ VIBE_TRACK_COUNT=20
 # Reference: wikipedia, discogs_ref, allmusic, musicbrainz
 DIGITAL_STORES=bandcamp
 REFERENCE_SITES=
+
+# Output: jriver (default) or youtube (opens an instant playlist in the browser, 5-50 videos)
+OUTPUT_TARGET=jriver
+YOUTUBE_PLAYLIST_LENGTH=50
 
 # Other
 CACHE_DAYS=30
@@ -309,6 +319,8 @@ def session_start(mode, seed_info, sources=""):
 
 
 def session_log(session_id, artist, track, sources, found):
+    if output_is_youtube() and not found:
+        return   # nothing was checked against the library, so there is no miss to record
     db().execute("INSERT INTO discoveries (session_id, artist, track, sources, found) VALUES (?,?,?,?,?)",
                  (session_id, artist, track, ", ".join(sources) if isinstance(sources, list) else sources,
                   1 if found else 0))
@@ -382,6 +394,9 @@ def list_discoveries(found=None, session_id=None):
             for r in rows]
 
 
+_jriver_unreachable = []   # becomes non-empty after the first failed read
+
+
 def get_playing_info():
     """Gets the current artist, track name and Playing Now position from JRiver."""
     try:
@@ -394,7 +409,9 @@ def get_playing_info():
                 info[item.get('Name')] = item.text
         return info
     except Exception as e:
-        print(f"[Error] Could not get playing info: {e}")
+        if not _jriver_unreachable:   # say it once; the GUI asks every few seconds
+            _jriver_unreachable.append(True)
+            print(f"[JRiver] Not reachable ({e}). Search with YouTube output works without it.")
         return None
 
 
@@ -1297,6 +1314,8 @@ def find_jriver_key_by_track(artist_name, track_name):
     Looks up a specific track in JRiver by artist and track name.
     Uses fuzzy matching to handle remaster tags, live versions, feat. credits etc.
     """
+    if output_is_youtube():   # no library check: the "key" is the YouTube video ID
+        return youtube_video_id(artist_name, track_name)
     clean_track = clean_name(track_name)
 
     try:
@@ -1352,6 +1371,7 @@ def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
         report(f"    No top tracks returned for {artist}.")
         return [], 0
     chosen = random.sample(names, min(pick, len(names)))
+    prefetch_youtube_ids([(artist, t) for t in chosen])
     keys, misses = [], 0
     for track_name in chosen:
         key = find_jriver_key_by_track(artist, track_name)
@@ -1368,6 +1388,87 @@ def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
 # ---------------------------------------------------------------------------
 # Mode 1: Similar Artist Playlist
 # ---------------------------------------------------------------------------
+
+
+# --- Output target: JRiver (default) or YouTube ------------------------------
+# With YouTube as the output, the modes run exactly as before, but a track's
+# "key" is its YouTube video ID instead of a JRiver file key, and sending the
+# playlist opens it in the browser instead of queueing it in JRiver.
+
+YOUTUBE_LOOKUP_WORKERS = 8      # video ID lookups run this many at a time
+
+
+def output_is_youtube():
+    return OUTPUT_TARGET == "youtube"
+
+
+def sending_message(count, detail=""):
+    """The log line announcing where a finished playlist is going."""
+    if output_is_youtube():
+        return f"Sending {min(count, YOUTUBE_PLAYLIST_LENGTH)} tracks to YouTube{detail}..."
+    return f"Injecting {count} library tracks into queue{detail}..."
+
+
+def _youtube_search_video_id(artist, track):
+    """One uncached YouTube Music search. Returns a video ID only when the artist matches."""
+    yt = youtube_client()
+    if yt is None:
+        return None
+    try:
+        results = yt.search(f"{artist} {track}", filter="songs", limit=5)
+    except Exception as e:
+        print(f"[YouTube] Search failed for {artist} - {track}: {e}")
+        return None
+    best, best_score = None, 0
+    for r in results or []:
+        if not r.get("videoId"):
+            continue
+        if not any(_youtube_same_artist(n, artist) for n in _youtube_artist_names(r)):
+            continue   # right song, wrong act: a cover is worse than a gap
+        score = 2 + (1 if clean_name(r.get("title") or "") == clean_name(track) else 0)
+        if score > best_score:
+            best, best_score = r, score
+    return best["videoId"] if best else None
+
+
+def _youtube_id_cache_key(artist, track):
+    return f"{artist_key(artist)}|{clean_name(track)}"
+
+
+def youtube_video_id(artist, track):
+    """The YouTube video ID for a track (cached), or None if YouTube has no match by that artist."""
+    hit = cached_call("YouTube", "video_id", _youtube_id_cache_key(artist, track),
+                      lambda: [vid] if (vid := _youtube_search_video_id(artist, track)) else [])
+    return hit[0] if hit else None
+
+
+def prefetch_youtube_ids(pairs):
+    """
+    Warms the video ID cache for [(artist, track)] several lookups at a time, so
+    the one-by-one lookups that follow are instant. Does nothing unless the
+    output is YouTube. The database is only touched from the calling thread.
+    """
+    if not output_is_youtube():
+        return
+    todo = [(a, t) for a, t in dict.fromkeys(pairs)
+            if cache_get("YouTube", "video_id", _youtube_id_cache_key(a, t)) is None]
+    if len(todo) < 2 or youtube_client() is None:
+        return
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=YOUTUBE_LOOKUP_WORKERS) as pool:
+        found = list(pool.map(lambda p: _youtube_search_video_id(*p), todo))
+    for (a, t), vid in zip(todo, found):
+        if vid:
+            cache_put("YouTube", "video_id", _youtube_id_cache_key(a, t), [vid])
+
+
+def open_youtube_playlist(video_ids):
+    """Opens the IDs as an instant YouTube playlist in the browser. Returns how many went."""
+    import webbrowser
+    ids = list(dict.fromkeys(v for v in video_ids if v))[:YOUTUBE_PLAYLIST_LENGTH]
+    if ids:
+        webbrowser.open("https://www.youtube.com/watch_videos?video_ids=" + ",".join(ids))
+    return len(ids)
 
 
 def typed_seed_info(artist, track=""):
@@ -1388,10 +1489,12 @@ def typed_seed_key(seed_info, seeds, session_id, report=print):
     for seed in seeds:
         key = find_jriver_key_by_track(seed, name)
         if key:
-            report("  Searched track is in your library, so it opens the playlist.")
+            report("  Searched track found on YouTube, so it opens the playlist." if output_is_youtube()
+                   else "  Searched track is in your library, so it opens the playlist.")
             session_log(session_id, seed, name, ["seed"], found=True)
             return key
-    report("  Searched track isn't in your library, so the playlist starts without it.")
+    report("  Searched track wasn't found on YouTube, so the playlist starts without it." if output_is_youtube()
+           else "  Searched track isn't in your library, so the playlist starts without it.")
     session_log(session_id, seeds[0], name, ["seed"], found=False)
     return None
 
@@ -1415,6 +1518,9 @@ def send_to_jriver(keys, typed=False):
     playlist replace Playing Now and start by itself.
     """
     if not keys:
+        return
+    if output_is_youtube():   # JRiver is left completely alone
+        open_youtube_playlist(keys)
         return
     if typed and jriver_is_stopped():
         requests.get(f"{JRIVER_BASE}/Playback/PlayByKey",
@@ -1448,6 +1554,8 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
         session_finish(session_id, 0, report=report)
         return
 
+    prefetch_youtube_ids([(canonicalise_conjunction(p[0]), p[1]) for p in pairs
+                          if isinstance(p, (list, tuple)) and len(p) == 2])
     playing = clean_name(track or "")
     keys, seen = ([first_key] if first_key else []), set()
     for pair in pairs:
@@ -1471,7 +1579,7 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
 
     queued = 0
     if keys:
-        report(f"Injecting {len(keys)} library tracks into queue, in YouTube's order...")
+        report(sending_message(len(keys), ", in YouTube's order"))
         send_to_jriver(keys, typed=bool(seed_info.get("Typed")))
         queued = len(keys)
         report("Queue refreshed.")
@@ -1548,7 +1656,7 @@ def create_similar_playlist(report=print, seed_info=None):
         random.shuffle(keys_list)
         if first_key:
             keys_list.insert(0, first_key)   # a searched seed opens the playlist
-        report(f"Injecting {len(keys_list)} library tracks into queue...")
+        report(sending_message(len(keys_list)))
         send_to_jriver(keys_list, typed=bool(seed_info.get("Typed")))
         queued = len(keys_list)
         report("Queue refreshed.")
@@ -1594,6 +1702,7 @@ def create_vibe_playlist(vibe, report=print):
         session_finish(session_id, 0, report=report)
         return
 
+    prefetch_youtube_ids(pairs)
     keys, hit_artists, misses = [], [], 0
     for artist, track in pairs:
         key = find_jriver_key_by_track(artist, track)
@@ -1649,9 +1758,8 @@ def create_vibe_playlist(vibe, report=print):
 
     random.shuffle(keys)
     keys = keys[:target]
-    clear_around_current()
-    report(f"Queuing {len(keys)} tracks (shuffled)...")
-    queue_tracks(keys)
+    report(sending_message(len(keys), " (shuffled)"))
+    send_to_jriver(keys)
     report("Queue refreshed.")
     session_finish(session_id, len(keys), report=report)
 
@@ -1698,6 +1806,7 @@ def play_top_n(report=print, seed_info=None):
         if session_id is None:
             session_id = session_start("top_tracks", seed_info, source_label)
 
+        prefetch_youtube_ids([(artist, t) for t, _ in top_tracks[:n]])
         for track_name, suggested_by in top_tracks[:n]:
             tag = f"  Looking up: {track_name} ({', '.join(suggested_by)})..."
             key = find_jriver_key_by_track(artist, track_name)
