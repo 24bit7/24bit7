@@ -110,31 +110,38 @@ def _job(intent, value, zone):
 
 
 def handle_command(body, busy=False):
-    """Works out what to say, and queues the build. Returns the speech text."""
+    """
+    Works out the reply and queues the build. Returns (status, speech):
+      started  the build begins now (the skill plays two chimes)
+      pending  it waits for the build already running (the skill says so)
+      problem  nothing was queued; speech says why
+    """
     intent = (body.get("intent") or "").strip().lower()
     value = (body.get("value") or "").strip()
     device = (body.get("device") or "").strip()
     if intent not in INTENTS:
-        return "Say songs by, music like, or genre, followed by what you'd like."
+        return "problem", "Say songs by, music like, or genre, followed by what you'd like."
     if not value:
-        return "I didn't catch the artist." if intent != "genre" else "I didn't catch the genre."
+        return "problem", ("I didn't catch the artist." if intent != "genre" else "I didn't catch the genre.")
 
     name, zone = _hear_device(device or "unknown device")
     zone = (body.get("zone") or "").strip() or zone
     if not zone:
-        return "This speaker isn't set up yet. Assign it to a zone in 24bit7, under Settings, Voice."
+        return "problem", "This speaker isn't set up yet. Assign it to a zone in 24bit7, under Settings, Voice."
     if engine.zone_id(zone) is None:
-        return f"I can't find the {zone} zone in JRiver."
+        return "problem", f"I can't find the {zone} zone in JRiver."
     if intent == "genre" and engine.vibe_blocker():
-        return "Genre playlists need an Anthropic key in 24bit7."
+        return "problem", "Genre playlists need an Anthropic key in 24bit7."
     if _submit is None:
-        return "24bit7 isn't ready yet. Try again in a moment."
+        return "problem", "24bit7 isn't ready yet. Try again in a moment."
 
     words = {"songs_by": f"Songs by {value}", "music_like": f"Music like {value}",
              "genre": f"A {value} playlist"}[intent]
     phrase = {"songs_by": "songs by", "music_like": "music like", "genre": "genre"}[intent]
     _submit(_job(intent, value, zone), f"Voice, {name}: {phrase} {value}, to {zone}")
-    return f"{words}, coming up on {zone}" + (", after the one that's building now." if busy else ".")
+    if busy:
+        return "pending", "Please wait, request pending."
+    return "started", f"{words}, coming up on {zone}."
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -172,7 +179,8 @@ class _Handler(BaseHTTPRequestHandler):
                 raise ValueError
         except ValueError:
             return self._reply(400, {"error": "body must be a JSON object"})
-        self._reply(200, {"speech": handle_command(body, busy=_is_busy())})
+        status, speech = handle_command(body, busy=_is_busy())
+        self._reply(200, {"status": status, "speech": speech})
 
 
 _is_busy = lambda: False   # replaced by the GUI
@@ -235,6 +243,9 @@ def send_test(artist, zone):
         method="POST")
     try:
         with urllib.request.urlopen(req, timeout=10) as r:
-            return json.loads(r.read()).get("speech", "(no reply)")
+            reply = json.loads(r.read())
     except Exception as e:
-        return f"No reply from the listener ({e})."
+        return f"get no reply from the listener ({e})."
+    if reply.get("status") == "started":
+        return f"chime twice. ({reply.get('speech', '')})"
+    return f'say "{reply.get("speech", "")}"'

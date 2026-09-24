@@ -12,3 +12,4 @@ dist/
 apply_*.py
 check_24bit7.py
 Curated.py
+*.zip

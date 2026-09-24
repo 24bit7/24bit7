@@ -1,0 +1,30 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "bit seven",
+      "intents": [
+        {
+          "name": "SongsByIntent",
+          "slots": [{"name": "query", "type": "AMAZON.SearchQuery"}],
+          "samples": ["songs by {query}", "play songs by {query}"]
+        },
+        {
+          "name": "MusicLikeIntent",
+          "slots": [{"name": "query", "type": "AMAZON.SearchQuery"}],
+          "samples": ["music like {query}", "play music like {query}", "something like {query}"]
+        },
+        {
+          "name": "GenreIntent",
+          "slots": [{"name": "query", "type": "AMAZON.SearchQuery"}],
+          "samples": ["genre {query}", "play genre {query}", "a genre of {query}"]
+        },
+        {"name": "AMAZON.CancelIntent", "samples": []},
+        {"name": "AMAZON.HelpIntent", "samples": []},
+        {"name": "AMAZON.StopIntent", "samples": ["close", "finish", "never mind"]},
+        {"name": "AMAZON.NavigateHomeIntent", "samples": []},
+        {"name": "AMAZON.FallbackIntent", "samples": []}
+      ],
+      "types": []
+    }
+  }
+}

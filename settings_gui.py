@@ -618,7 +618,7 @@ class SettingsTab(tk.Frame):
 
         def show():
             if result:
-                self.voice_test_result.config(text="Alexa would say: " + result[0] +
+                self.voice_test_result.config(text="Alexa would " + result[0] +
                                               "\nThe build itself shows in the Play tab log.")
             else:
                 self.after(200, show)
