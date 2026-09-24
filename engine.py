@@ -30,6 +30,7 @@ VERSION = "1.2.1"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
+OUTPUT_OVERRIDE = None  # a zone name that beats the Output setting for one run (voice commands)
 CSV_FILE = os.path.join(APP_DIR, "FutureDiscoveries.csv")      # legacy log, imported once into the database
 DB_FILE = os.path.join(APP_DIR, "24bit7.db")
 
@@ -112,6 +113,7 @@ def load_settings():
     global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, CACHE_DAYS
     global TABLE_FONT_SIZE, VIBE_TRACK_COUNT
     global OUTPUT_TARGET, YOUTUBE_PLAYLIST_LENGTH, HIDDEN_ZONES, DEFAULT_ZONE, FOLLOW_ACTIVE_ZONE
+    global VOICE_ENABLED, VOICE_KEY, VOICE_PORT
     global LISTEN_SITES, CUSTOM_SITES
 
     load_dotenv(ENV_FILE, override=True)
@@ -179,6 +181,10 @@ def load_settings():
     # FOLLOW_ACTIVE_ZONE=1 makes Now Playing track JRiver's active zone instead.
     DEFAULT_ZONE = os.getenv("DEFAULT_ZONE", "").strip()
     FOLLOW_ACTIVE_ZONE = os.getenv("FOLLOW_ACTIVE_ZONE", "0").strip().lower() in ("1", "true", "yes")
+    # Voice commands (Settings > Voice): the listener only ever binds to 127.0.0.1
+    VOICE_ENABLED = os.getenv("VOICE_ENABLED", "0").strip().lower() in ("1", "true", "yes")
+    VOICE_KEY = os.getenv("VOICE_KEY", "").strip()
+    VOICE_PORT = _int_setting("VOICE_PORT", 52180, 1024, 65535)
     YOUTUBE_PLAYLIST_LENGTH = _int_setting("YOUTUBE_PLAYLIST_LENGTH", 50, 5, 50)   # YouTube caps a link at 50
 
 
@@ -249,6 +255,11 @@ HIDDEN_ZONES=
 # JRiver's active zone instead (0 or 1). Both set in Settings > Other.
 DEFAULT_ZONE=
 FOLLOW_ACTIVE_ZONE=0
+
+# Voice commands (Settings > Voice). The key is made when you switch it on.
+VOICE_ENABLED=0
+VOICE_KEY=
+VOICE_PORT=52180
 
 # Other
 CACHE_DAYS=30
@@ -1735,7 +1746,7 @@ YOUTUBE_LOOKUP_WORKERS = 8      # video ID lookups run this many at a time
 
 
 def output_is_youtube():
-    return OUTPUT_TARGET == "youtube"
+    return OUTPUT_TARGET == "youtube" and not OUTPUT_OVERRIDE
 
 
 def sending_message(count, detail=""):
@@ -1855,7 +1866,7 @@ def output_zone(seed_info=None, zone_name=None, report=print):
     and the Now Playing tab's zone for a run with no seed (Vibe). Returns None,
     after a log line, when a named zone can't be found.
     """
-    name = zone_name or (OUTPUT_TARGET[5:] if OUTPUT_TARGET.startswith("zone:") else None)
+    name = zone_name or OUTPUT_OVERRIDE or (OUTPUT_TARGET[5:] if OUTPUT_TARGET.startswith("zone:") else None)
     if name:
         zid = zone_id(name)
         if zid is None:

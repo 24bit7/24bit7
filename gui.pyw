@@ -17,6 +17,7 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 
 import engine
+import voice
 from settings_gui import SettingsTab, write_env
 from discover_gui import DiscoverTab
 from tabs import TabbedPane, PALETTE
@@ -45,6 +46,7 @@ class PlayTab(tk.Frame):
         self.log_queue = queue.Queue()
         self.running = False
         self.last_playing = None
+        self.voice_jobs = queue.Queue()   # (job, heading) from voice commands, run one at a time
 
         self._build_now_playing()
         self._build_buttons()
@@ -288,7 +290,22 @@ class PlayTab(tk.Frame):
                 self._append_log(line)
         except queue.Empty:
             pass
+        self._next_voice_job()
         self.after(POLL_MS, self._drain_log_queue)
+
+    def _next_voice_job(self):
+        """Starts the next voice build once nothing else is running."""
+        if self.running:
+            return
+        try:
+            job, heading = self.voice_jobs.get_nowait()
+        except queue.Empty:
+            return
+
+        def target():
+            self.report(heading)
+            job(self.report)
+        self._run_job(target, needs_playing=False)
 
     def _clear_log(self):
         self.log.config(state="normal")
@@ -475,6 +492,10 @@ def main():
     if engine.FIRST_RUN:
         nb.select(settings)
         root.after(400, lambda: messagebox.showinfo("Welcome to 24bit7", WELCOME_TEXT, parent=root))
+
+    voice.attach(lambda job, heading: play.voice_jobs.put((job, heading)),
+                 lambda: play.running or not play.voice_jobs.empty())
+    voice.restart()
 
     root.mainloop()
 

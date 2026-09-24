@@ -10,10 +10,12 @@ save immediately. The engine picks up the file via its .env mod-time check.
 """
 
 import os
+import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 
 import engine
+import voice
 from tabs import TabbedPane
 
 ENV_FILE = engine.ENV_FILE   # single source of truth for where .env lives
@@ -112,6 +114,7 @@ class SettingsTab(tk.Frame):
         self._build_search_sites(nb)
         self._build_keys(nb)
         self._build_other(nb)
+        self._build_voice(nb)
 
         self._loading = False
         self._refresh_key_marks()
@@ -492,6 +495,134 @@ class SettingsTab(tk.Frame):
                        "FOLLOW_ACTIVE_ZONE": "1" if self.follow_var.get() else "0"})
         except Exception as e:
             messagebox.showerror("Save failed", str(e), parent=self)
+
+    def _build_voice(self, nb):
+        """Voice commands: the listener switch, its key, the speakers heard, and a test."""
+        tab = tk.Frame(nb, padx=12, pady=12)
+        nb.add(tab, text="Voice")
+        self.voice_on = tk.BooleanVar(value=engine.VOICE_ENABLED)
+        ttk.Checkbutton(tab, text="Voice control (listen for commands from the Alexa skill)",
+                        variable=self.voice_on, command=self._voice_toggled).grid(
+            row=0, column=0, columnspan=4, sticky="w")
+        self.voice_status = tk.Label(tab, text=voice.status(), fg=HELP_FG, font=HELP_FONT)
+        self.voice_status.grid(row=1, column=0, columnspan=4, sticky="w")
+
+        tk.Label(tab, text="Key", anchor="w").grid(row=2, column=0, sticky="w", pady=(14, 2))
+        self.voice_key_var = tk.StringVar(value=engine.VOICE_KEY)
+        tk.Entry(tab, textvariable=self.voice_key_var, width=40, state="readonly").grid(
+            row=2, column=1, sticky="w", padx=(12, 8), pady=(14, 2))
+        tk.Button(tab, text="Copy", width=8, command=self._voice_copy_key).grid(row=2, column=2, sticky="w", pady=(14, 2))
+        tk.Button(tab, text="New key", width=8, command=self._voice_new_key).grid(
+            row=2, column=3, sticky="w", padx=(8, 0), pady=(14, 2))
+        tk.Label(tab, text="The Alexa skill sends this key with every command; anything without it is refused.\n"
+                           "24bit7 only listens on this PC. The tunnel set up for the skill connects it to Amazon.",
+                 fg=HELP_FG, font=HELP_FONT, justify="left").grid(row=3, column=0, columnspan=4, sticky="w")
+
+        tk.Label(tab, text="Speakers", font=("Segoe UI", 10, "bold")).grid(row=4, column=0, sticky="w", pady=(18, 2))
+        tk.Button(tab, text="Refresh", width=10, command=self._fill_voice_devices).grid(
+            row=4, column=1, sticky="w", padx=(12, 0), pady=(18, 2))
+        self.voice_dev_frame = tk.Frame(tab)
+        self.voice_dev_frame.grid(row=5, column=0, columnspan=4, sticky="w")
+        tk.Label(tab, text="Say a command on a speaker that isn't set up and it appears here. Pick the zone it plays to.",
+                 fg=HELP_FG, font=HELP_FONT, justify="left").grid(row=6, column=0, columnspan=4, sticky="w", pady=(4, 0))
+
+        tk.Label(tab, text="Test", font=("Segoe UI", 10, "bold")).grid(row=7, column=0, sticky="w", pady=(18, 2))
+        test = tk.Frame(tab)
+        test.grid(row=8, column=0, columnspan=4, sticky="w")
+        tk.Label(test, text="Music like").pack(side="left")
+        self.voice_test_artist = tk.Entry(test, width=24)
+        self.voice_test_artist.insert(0, "Agnes Obel")
+        self.voice_test_artist.pack(side="left", padx=(6, 12))
+        tk.Label(test, text="on").pack(side="left")
+        self.voice_test_zone = ttk.Combobox(test, state="readonly", width=22,
+                                            postcommand=lambda: self.voice_test_zone.config(values=engine.zone_names()))
+        self.voice_test_zone.pack(side="left", padx=(6, 12))
+        tk.Button(test, text="Send test", width=10, command=self._voice_test).pack(side="left")
+        self.voice_test_result = tk.Label(tab, text="", fg=HELP_FG, font=HELP_FONT, justify="left")
+        self.voice_test_result.grid(row=9, column=0, columnspan=4, sticky="w", pady=(6, 0))
+
+        tab.bind("<Map>", lambda e: (self.voice_status.config(text=voice.status()), self._fill_voice_devices()))
+
+    def _voice_toggled(self):
+        updates = {"VOICE_ENABLED": "1" if self.voice_on.get() else "0"}
+        if self.voice_on.get() and not engine.VOICE_KEY:
+            updates["VOICE_KEY"] = voice.new_key()
+        try:
+            write_env(updates)
+        except Exception as e:
+            messagebox.showerror("Save failed", str(e), parent=self)
+        self._voice_restart()
+
+    def _voice_restart(self):
+        self.voice_status.config(text=voice.restart())
+        self.voice_key_var.set(engine.VOICE_KEY or "")
+
+    def _voice_copy_key(self):
+        self.clipboard_clear()
+        self.clipboard_append(self.voice_key_var.get())
+
+    def _voice_new_key(self):
+        if engine.VOICE_KEY and not messagebox.askyesno(
+                "New key", "The Alexa skill will need the new key as well. Make a new one?", parent=self):
+            return
+        try:
+            write_env({"VOICE_KEY": voice.new_key()})
+        except Exception as e:
+            messagebox.showerror("Save failed", str(e), parent=self)
+        self._voice_restart()
+
+    def _fill_voice_devices(self):
+        """One row per Alexa device heard: its name, the zone it plays to, when it was last heard."""
+        for child in self.voice_dev_frame.winfo_children():
+            child.destroy()
+        rows = voice.devices()
+        if not rows:
+            tk.Label(self.voice_dev_frame, text="No speakers heard yet.", fg=HELP_FG, font=HELP_FONT).grid(
+                row=0, column=0, sticky="w")
+            return
+        zones = engine.zone_names()
+        for c, heading in enumerate(("Name", "Zone", "Last heard")):
+            tk.Label(self.voice_dev_frame, text=heading, fg=HELP_FG, font=HELP_FONT).grid(
+                row=0, column=c, sticky="w", padx=(0, 12))
+        for r, (device_id, name, zone, heard) in enumerate(rows, start=1):
+            name_var = tk.StringVar(value=name)
+            entry = tk.Entry(self.voice_dev_frame, textvariable=name_var, width=22)
+            entry.grid(row=r, column=0, sticky="w", padx=(0, 12), pady=2)
+            save_name = lambda e, d=device_id, v=name_var: voice.update_device(d, name=v.get().strip() or "Speaker")
+            entry.bind("<FocusOut>", save_name)
+            entry.bind("<Return>", save_name)
+            zone_var = tk.StringVar(value=zone or "Not set")
+            cb = ttk.Combobox(self.voice_dev_frame, textvariable=zone_var, state="readonly", width=22,
+                              values=["Not set"] + zones + ([zone] if zone and zone not in zones else []))
+            cb.grid(row=r, column=1, sticky="w", padx=(0, 12), pady=2)
+            cb.bind("<<ComboboxSelected>>", lambda e, d=device_id, v=zone_var: voice.update_device(
+                d, zone="" if v.get() == "Not set" else v.get()))
+            tk.Label(self.voice_dev_frame, text=heard or "").grid(row=r, column=2, sticky="w", padx=(0, 12))
+            tk.Button(self.voice_dev_frame, text="Remove", width=8,
+                      command=lambda d=device_id: (voice.remove_device(d), self._fill_voice_devices())).grid(
+                row=r, column=3, sticky="w", pady=2)
+
+    def _voice_test(self):
+        if not voice.status().startswith("Listening"):
+            self.voice_test_result.config(text="Switch Voice control on first.")
+            return
+        zone = self.voice_test_zone.get()
+        artist = self.voice_test_artist.get().strip()
+        if not zone or not artist:
+            self.voice_test_result.config(text="Type an artist and pick a zone to test with.")
+            return
+        self.voice_test_result.config(text="Sending...")
+        result = []
+        # sent from a background thread, so the window never waits on the listener
+        threading.Thread(target=lambda: result.append(voice.send_test(artist, zone)), daemon=True).start()
+
+        def show():
+            if result:
+                self.voice_test_result.config(text="Alexa would say: " + result[0] +
+                                              "\nThe build itself shows in the Play tab log.")
+            else:
+                self.after(200, show)
+        self.after(200, show)
 
     def _build_search_sites(self, nb):
         """Discover search sites: which stores and reference sites to open per row."""
