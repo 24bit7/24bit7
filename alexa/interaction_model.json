@@ -1,7 +1,7 @@
 {
   "interactionModel": {
     "languageModel": {
-      "invocationName": "bit seven",
+      "invocationName": "needle drop",
       "intents": [
         {
           "name": "SongsByIntent",

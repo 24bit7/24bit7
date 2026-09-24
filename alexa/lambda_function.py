@@ -1,11 +1,11 @@
 """
-bit seven - the Alexa skill for 24bit7.
+needle drop - the Alexa skill for 24bit7.
 
-"Alexa, open bit seven"  -> one chime, then it listens for one command:
+"Alexa, open needle drop"  -> one chime, then it listens for one command:
     "songs by <artist>"     Artist's Top Tracks
     "music like <artist>"   Similar Artists
     "genre <anything>"      Vibe Playlist
-Or in one go: "Alexa, ask bit seven for music like Agnes Obel".
+Or in one go: "Alexa, ask needle drop for music like Agnes Obel".
 
 The command goes to 24bit7 on your PC, with your key and the ID of the speaker
 that heard it, and 24bit7 plays the playlist on that speaker's zone.
