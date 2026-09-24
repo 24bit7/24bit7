@@ -28,7 +28,8 @@ def app_dir():
 APP_DIR = app_dir()
 VERSION = "1.2.1"
 ENV_FILE = os.path.join(APP_DIR, ".env")
-TARGET_ZONE = "-1"
+ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
+SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
 CSV_FILE = os.path.join(APP_DIR, "FutureDiscoveries.csv")      # legacy log, imported once into the database
 DB_FILE = os.path.join(APP_DIR, "24bit7.db")
 
@@ -110,7 +111,7 @@ def load_settings():
     global SIMILAR_MIN_AGREEMENT
     global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, CACHE_DAYS
     global TABLE_FONT_SIZE, VIBE_TRACK_COUNT
-    global OUTPUT_TARGET, YOUTUBE_PLAYLIST_LENGTH
+    global OUTPUT_TARGET, YOUTUBE_PLAYLIST_LENGTH, HIDDEN_ZONES, DEFAULT_ZONE, FOLLOW_ACTIVE_ZONE
     global LISTEN_SITES, CUSTOM_SITES
 
     load_dotenv(ENV_FILE, override=True)
@@ -162,10 +163,22 @@ def load_settings():
     CACHE_DAYS = _int_setting("CACHE_DAYS", 30, 1, 365)
     TABLE_FONT_SIZE = _int_setting("TABLE_FONT_SIZE", 9, 6, 16)   # Discover table font
     VIBE_TRACK_COUNT = _int_setting("VIBE_TRACK_COUNT", 20, 5, 100)  # target size for vibe playlists
-    # Where finished playlists go: JRiver (default) or YouTube (opens in the browser)
-    OUTPUT_TARGET = os.getenv("OUTPUT_TARGET", "jriver").strip().lower()
-    if OUTPUT_TARGET not in ("jriver", "youtube"):
-        OUTPUT_TARGET = "jriver"
+    # Where finished playlists go: "jriver" = Same zone (the default), "zone:<name>"
+    # = a named JRiver zone, or "youtube" (opens in the browser). Zone names keep
+    # their case, as JRiver's do.
+    raw_output = os.getenv("OUTPUT_TARGET", "jriver").strip()
+    if raw_output.lower().startswith("zone:") and raw_output[5:].strip():
+        OUTPUT_TARGET = "zone:" + raw_output[5:].strip()
+    else:
+        OUTPUT_TARGET = raw_output.lower()
+        if OUTPUT_TARGET not in ("jriver", "youtube"):
+            OUTPUT_TARGET = "jriver"
+    # Zones hidden from the Play tab's Zone and Output lists (names separated by |)
+    HIDDEN_ZONES = {x.strip() for x in os.getenv("HIDDEN_ZONES", "").split("|") if x.strip()}
+    # The zone Now Playing opens on at launch; blank means JRiver's active zone.
+    # FOLLOW_ACTIVE_ZONE=1 makes Now Playing track JRiver's active zone instead.
+    DEFAULT_ZONE = os.getenv("DEFAULT_ZONE", "").strip()
+    FOLLOW_ACTIVE_ZONE = os.getenv("FOLLOW_ACTIVE_ZONE", "0").strip().lower() in ("1", "true", "yes")
     YOUTUBE_PLAYLIST_LENGTH = _int_setting("YOUTUBE_PLAYLIST_LENGTH", 50, 5, 50)   # YouTube caps a link at 50
 
 
@@ -226,9 +239,16 @@ REFERENCE_SITES=
 # Listen: youtube (searches artist + track). Custom sites are added in Settings > Search.
 LISTEN_SITES=youtube
 
-# Output: jriver (default) or youtube (opens an instant playlist in the browser, 5-50 videos)
+# Output: jriver (Same zone, the default), zone:<JRiver zone name>, or youtube
+# (opens an instant playlist in the browser, 5-50 videos). Set from the Play tab.
 OUTPUT_TARGET=jriver
 YOUTUBE_PLAYLIST_LENGTH=50
+# JRiver zones hidden from the Play tab's lists, separated by | (Settings > Other)
+HIDDEN_ZONES=
+# Zone Now Playing opens on (blank = JRiver's active zone), and whether it follows
+# JRiver's active zone instead (0 or 1). Both set in Settings > Other.
+DEFAULT_ZONE=
+FOLLOW_ACTIVE_ZONE=0
 
 # Other
 CACHE_DAYS=30
@@ -439,13 +459,57 @@ def list_discoveries(found=None, session_id=None):
 _jriver_unreachable = []   # becomes non-empty after the first failed read
 
 
-def get_playing_info():
-    """Gets the current artist, track name and Playing Now position from JRiver."""
+def _read_zones():
+    """JRiver's zones as [(id, name)] in JRiver's order, plus the active zone's ID. ([], None) if unreachable."""
     try:
-        r = requests.get(f"{JRIVER_BASE}/Playback/Info", params={"Zone": TARGET_ZONE}, auth=AUTH)
+        r = requests.get(f"{JRIVER_BASE}/Playback/Zones", auth=AUTH, timeout=5)
+        items = {i.get("Name"): (i.text or "").strip() for i in ET.fromstring(r.text).findall("Item")}
+        count = int(items.get("NumberZones") or 0)
+    except Exception:
+        return [], None
+    zones = [(items.get(f"ZoneID{n}"), items.get(f"ZoneName{n}")) for n in range(count)]
+    return [(i, n) for i, n in zones if i and n], items.get("CurrentZoneID")
+
+
+def zone_names(include_hidden=False):
+    """The zone names for the Play tab's lists, hidden ones left out unless asked for."""
+    refresh_settings_if_changed()
+    zones, _ = _read_zones()
+    return [n for _, n in zones if include_hidden or n not in HIDDEN_ZONES]
+
+
+def zone_id(name=None):
+    """A zone's JRiver ID by name. No name means the active zone. None if a named zone can't be found."""
+    zones, current = _read_zones()
+    if not name:
+        return current or ACTIVE_ZONE
+    for zid, zname in zones:
+        if zname == name:
+            return zid
+    return None
+
+
+def zone_label(zid):
+    """A zone's name from its ID, for the log."""
+    zones, _ = _read_zones()
+    return next((n for i, n in zones if i == zid), f"zone {zid}")
+
+
+def seed_zone():
+    """The zone the Now Playing tab reads and seeds from. None if its chosen zone has gone."""
+    return zone_id(SEED_ZONE_NAME) if SEED_ZONE_NAME else ACTIVE_ZONE
+
+
+def get_playing_info(zone=None):
+    """Gets the current artist, track name and Playing Now position from JRiver (the seed zone by default)."""
+    try:
+        zone = zone or seed_zone()
+        if zone is None:
+            return None
+        r = requests.get(f"{JRIVER_BASE}/Playback/Info", params={"Zone": zone}, auth=AUTH)
         root = ET.fromstring(r.text)
         info = {"Artist": "Unknown", "Album": "Unknown", "Name": "Unknown",
-                "PlayingNowPosition": "-1", "PlayingNowTracks": "0"}
+                "PlayingNowPosition": "-1", "PlayingNowTracks": "0", "FileKey": "", "ZoneID": ""}
         for item in root.findall('Item'):
             if item.get('Name') in info:
                 info[item.get('Name')] = item.text
@@ -457,23 +521,23 @@ def get_playing_info():
         return None
 
 
-def remove_from_playing_now(index):
-    """Removes a single track from Playing Now by 0-based index."""
+def remove_from_playing_now(index, zone=ACTIVE_ZONE):
+    """Removes a single track from a zone's Playing Now by 0-based index."""
     requests.get(
         f"{JRIVER_BASE}/Playback/EditPlaylist",
-        params={"Zone": TARGET_ZONE, "Action": "Remove", "Source": str(index)},
+        params={"Zone": zone, "Action": "Remove", "Source": str(index)},
         auth=AUTH
     )
 
 
-def clear_around_current():
+def clear_around_current(zone=ACTIVE_ZONE):
     """
-    Strips Playing Now down to just the currently playing track, without
-    interrupting playback. Removes everything after the current track
+    Strips a zone's Playing Now down to just the currently playing track,
+    without interrupting playback. Removes everything after the current track
     (from the end backwards, so indices stay valid), then everything
     before it (index 0 repeatedly).
     """
-    info = get_playing_info()
+    info = get_playing_info(zone)
     if not info:
         return
     try:
@@ -491,21 +555,21 @@ def clear_around_current():
     print(f"Clearing Playing Now: {before} before, {after} after the current track...")
 
     for idx in range(count - 1, current_pos, -1):
-        remove_from_playing_now(idx)
+        remove_from_playing_now(idx, zone)
         time.sleep(0.05)
 
     for _ in range(before):
-        remove_from_playing_now(0)
+        remove_from_playing_now(0, zone)
         time.sleep(0.05)
 
 
-def queue_tracks(keys):
-    """Appends a list of file keys to the end of Playing Now in one call."""
+def queue_tracks(keys, zone=ACTIVE_ZONE):
+    """Appends a list of file keys to the end of a zone's Playing Now in one call."""
     if not keys:
         return
     requests.get(
         f"{JRIVER_BASE}/Playback/PlayByKey",
-        params={"Key": ",".join(str(k) for k in keys), "Location": "End", "Zone": TARGET_ZONE},
+        params={"Key": ",".join(str(k) for k in keys), "Location": "End", "Zone": zone},
         auth=AUTH
     )
 
@@ -1771,10 +1835,10 @@ def typed_seed_key(seed_info, seeds, session_id, report=print):
     return None
 
 
-def jriver_is_stopped():
-    """True only when JRiver clearly reports it is stopped. Any doubt counts as 'not stopped'."""
+def jriver_is_stopped(zone=ACTIVE_ZONE):
+    """True only when the zone clearly reports it is stopped. Any doubt counts as 'not stopped'."""
     try:
-        r = requests.get(f"{JRIVER_BASE}/Playback/Info", params={"Zone": TARGET_ZONE}, auth=AUTH)
+        r = requests.get(f"{JRIVER_BASE}/Playback/Info", params={"Zone": zone}, auth=AUTH)
         for item in ET.fromstring(r.text).findall("Item"):
             if item.get("Name") == "State":
                 return (item.text or "").strip() == "0"
@@ -1783,23 +1847,66 @@ def jriver_is_stopped():
     return False
 
 
-def send_to_jriver(keys, typed=False):
+def output_zone(seed_info=None, zone_name=None, report=print):
     """
-    Queues tracks after whatever is playing, never interrupting it. Only for a
-    searched seed with JRiver stopped (nothing to protect) does the new
-    playlist replace Playing Now and start by itself.
+    The JRiver zone a playlist goes to, as a zone ID. zone_name (for voice
+    commands) beats the Output setting. "Same zone" follows the seed: the
+    Now Playing zone for a now-playing seed, the active zone for a typed one,
+    and the Now Playing tab's zone for a run with no seed (Vibe). Returns None,
+    after a log line, when a named zone can't be found.
     """
+    name = zone_name or (OUTPUT_TARGET[5:] if OUTPUT_TARGET.startswith("zone:") else None)
+    if name:
+        zid = zone_id(name)
+        if zid is None:
+            report(f"Output zone '{name}' wasn't found in JRiver, so nothing was sent. "
+                   f"Pick another zone under Output.")
+        return zid
+    if seed_info and seed_info.get("Typed"):
+        return zone_id()
+    if seed_info and seed_info.get("ZoneID"):
+        return seed_info["ZoneID"]
+    zid = seed_zone()
+    if zid is None:
+        report("The Now Playing zone wasn't found in JRiver, so nothing was sent.")
+        return None
+    return zone_id() if zid == ACTIVE_ZONE else zid
+
+
+def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=None):
+    """
+    Sends a finished playlist to the output zone, or opens it on YouTube.
+      - A stopped zone gets the playlist as its new Playing Now, and it starts.
+      - A busy zone keeps its current track; the playlist is queued after it.
+      - A now-playing seed sent to a different zone: the seed track opens the
+        playlist there.
+    One function for the Play tab and, later, voice commands (zone_name).
+    """
+    if output_is_youtube() and not zone_name:   # JRiver is left completely alone
+        if keys:
+            open_youtube_playlist(keys)
+        return
+    if seed_info is not None:
+        typed = bool(seed_info.get("Typed"))
+    zone = output_zone(seed_info, zone_name, report)
+    if zone is None:
+        return
+    keys = [str(k) for k in keys]
+    seed_key = str((seed_info or {}).get("FileKey") or "")
+    seed_zone_id = (seed_info or {}).get("ZoneID")
+    if seed_info and not typed and seed_key and seed_zone_id and seed_zone_id != zone:
+        keys = [seed_key] + [k for k in keys if k != seed_key]
+        report("  Seed track opens the playlist, as it's going to a different zone.")
     if not keys:
         return
-    if output_is_youtube():   # JRiver is left completely alone
-        open_youtube_playlist(keys)
-        return
-    if typed and jriver_is_stopped():
+    if jriver_is_stopped(zone):
+        report(f"  {zone_label(zone)} was stopped, so the playlist starts there now.")
         requests.get(f"{JRIVER_BASE}/Playback/PlayByKey",
-                     params={"Key": ",".join(str(k) for k in keys), "Zone": TARGET_ZONE}, auth=AUTH)
+                     params={"Key": ",".join(keys), "Zone": zone}, auth=AUTH)
         return
-    clear_around_current()
-    queue_tracks(keys)
+    report(f"  Queued in {zone_label(zone)} after the current track.")
+    clear_around_current(zone)
+    queue_tracks(keys, zone)
 
 
 SEED_ARTIST_SHARE = 0.25   # the seed artist's share of a YouTube queue playlist
@@ -1902,7 +2009,7 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
     queued = 0
     if keys:
         report(sending_message(len(keys), ", in YouTube's order"))
-        send_to_jriver(keys, typed=bool(seed_info.get("Typed")))
+        send_to_jriver(keys, seed_info=seed_info, report=report)
         queued = len(keys)
         report("Queue refreshed.")
     else:
@@ -1987,7 +2094,7 @@ def create_similar_playlist(report=print, seed_info=None):
         if first_key:
             keys_list.insert(0, first_key)   # a searched seed opens the playlist
         report(sending_message(len(keys_list)))
-        send_to_jriver(keys_list, typed=bool(seed_info.get("Typed")))
+        send_to_jriver(keys_list, seed_info=seed_info, report=report)
         queued = len(keys_list)
         report("Queue refreshed.")
     else:
@@ -2092,7 +2199,7 @@ def create_vibe_playlist(vibe, report=print):
     random.shuffle(keys)
     keys = keys[:target]
     report(sending_message(len(keys), " (shuffled)"))
-    send_to_jriver(keys)
+    send_to_jriver(keys, report=report)
     report("Queue refreshed.")
     session_finish(session_id, len(keys), report=report)
 
@@ -2164,7 +2271,7 @@ def play_top_n(report=print, seed_info=None):
 
     labels = {"popular": "most popular first", "reverse": "least popular first", "random": "random order"}
     report(f"\nQueuing {len(ordered_keys)} tracks, {labels[order]}...")
-    send_to_jriver(ordered_keys, typed=bool(seed_info.get("Typed")))
+    send_to_jriver(ordered_keys, seed_info=seed_info, report=report)
     report("Done!")
     session_finish(session_id, len(ordered_keys), sources=" + ".join(labels_used), report=report)
 

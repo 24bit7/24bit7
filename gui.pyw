@@ -25,6 +25,7 @@ from tabs import TabbedPane, PALETTE
 REFRESH_MS = 3000
 POLL_MS = 100
 DONATE_URL = "https://paypal.me/24bit7"
+SAME_ZONE_LABEL = "Same zone"
 
 WELCOME_TEXT = (
     "Welcome to 24bit7!\n\n"
@@ -75,16 +76,31 @@ class PlayTab(tk.Frame):
 
         frame = tk.Frame(self.seed_nb, padx=10, pady=8)
         self.seed_nb.add(frame, text="Now Playing")
-        self.np_track = tk.Label(frame, text="...", font=("Segoe UI", 14, "bold"),
+        # Zone first: which JRiver zone Now Playing reads and seeds from. Not saved,
+        # so every launch starts on the active zone. The list rescans when opened.
+        zone_box = tk.Frame(frame)
+        zone_box.pack(side="left", padx=(0, 32))
+        tk.Label(zone_box, text="Zone", font=("Segoe UI", 9, "bold"), fg="#555").pack(side="left", padx=(0, 6))
+        self.zone_var = tk.StringVar(value="")
+        self._zone_picked = False    # picked by hand: stays put until the next launch
+        self._zone_settled = False   # launch zone chosen (default or active zone)
+        self.zone_cb = ttk.Combobox(zone_box, textvariable=self.zone_var, values=[],
+                                    state="readonly", width=24, postcommand=self._fill_zone_list)
+        self.zone_cb.pack(side="left")
+        self.zone_cb.bind("<<ComboboxSelected>>", self._on_zone_changed)
+
+        info = tk.Frame(frame)
+        info.pack(side="left", fill="x", expand=True)
+        self.np_track = tk.Label(info, text="...", font=("Segoe UI", 14, "bold"),
                                  fg=PALETTE["brand_blue"], anchor="w", justify="left")
         self.np_track.pack(anchor="w", fill="x")
-        self.np_detail = tk.Label(frame, text="", font=("Segoe UI", 10), fg="#555",
+        self.np_detail = tk.Label(info, text="", font=("Segoe UI", 10), fg="#555",
                                   anchor="w", justify="left")
         self.np_detail.pack(anchor="w", fill="x")
         # Wrap only when text genuinely exceeds the available width.
-        frame.bind("<Configure>", lambda e: (
-            self.np_track.config(wraplength=max(200, e.width - 32)),
-            self.np_detail.config(wraplength=max(200, e.width - 32))))
+        info.bind("<Configure>", lambda e: (
+            self.np_track.config(wraplength=max(200, e.width - 8)),
+            self.np_detail.config(wraplength=max(200, e.width - 8))))
 
         self.search_tab = tk.Frame(self.seed_nb, padx=10, pady=8)
         self.seed_nb.add(self.search_tab, text="Search")
@@ -100,6 +116,48 @@ class PlayTab(tk.Frame):
         for entry in (self.search_artist, self.search_track):
             entry.bind("<Return>", lambda e: self.on_similar())
         self.seed_nb.bind("<<NotebookTabChanged>>", lambda e: self._sync_seed_buttons())
+
+    def _fill_zone_list(self):
+        self.zone_cb.config(values=engine.zone_names())
+
+    def _on_zone_changed(self, *_):
+        self._zone_picked = True   # picked by hand, so it stays put until the next launch
+        engine.SEED_ZONE_NAME = self.zone_var.get() or None
+        self.zone_cb.selection_clear()
+        self._update_now_playing()
+
+    def _follow_active_zone(self):
+        """
+        Sets the Zone dropdown until you pick one by hand. At launch it opens on the
+        default zone (Settings > Other), or on JRiver's active zone when there's no
+        default, and stays there. With Follow ticked it keeps tracking JRiver's
+        active zone instead.
+        """
+        if self._zone_picked:
+            return
+        engine.refresh_settings_if_changed()
+        follow = engine.FOLLOW_ACTIVE_ZONE
+        if self._zone_settled and not follow:
+            return
+        zones, current = engine._read_zones()
+        if not zones:
+            return   # JRiver isn't answering yet; the next refresh tries again
+        names = [n for _, n in zones]
+        name = ""
+        if engine.DEFAULT_ZONE and not follow and not self._zone_settled:
+            if engine.DEFAULT_ZONE in names:
+                name = engine.DEFAULT_ZONE
+            else:
+                note = (f"Default zone '{engine.DEFAULT_ZONE}' wasn't found in JRiver, "
+                        f"so Now Playing opened on the active zone.")
+                # after the greeting has cleared the log, so the note isn't wiped with it
+                self.after(13000 if self._greeting_active else 0, lambda: self.report(note))
+        if not name:
+            name = next((n for i, n in zones if i == current), "")
+        self._zone_settled = True
+        engine.SEED_ZONE_NAME = name or None
+        if self.zone_var.get() != name:
+            self.zone_var.set(name)
 
     def _seed_is_search(self):
         return self.seed_nb.select() == str(self.search_tab)
@@ -138,18 +196,33 @@ class PlayTab(tk.Frame):
         # Output: where the finished playlist goes. Saved straight to .env; the engine
         # reads it at the start of each run, so changing it mid-run affects the next one.
         tk.Label(frame, text="Output", font=("Segoe UI", 9, "bold"), fg="#555").pack(side="left", padx=(8, 6))
-        self.output_var = tk.StringVar(value="YouTube" if engine.OUTPUT_TARGET == "youtube" else "JRiver")
-        self.output_cb = ttk.Combobox(frame, textvariable=self.output_var, values=["JRiver", "YouTube"],
-                                      state="readonly", width=9)
+        self.output_var = tk.StringVar(value=self._output_label(engine.OUTPUT_TARGET))
+        self.output_cb = ttk.Combobox(frame, textvariable=self.output_var,
+                                      values=[SAME_ZONE_LABEL, "YouTube"], state="readonly", width=24,
+                                      postcommand=self._fill_output_list)
         self.output_cb.pack(side="left")
         self.output_cb.bind("<<ComboboxSelected>>", self._on_output_changed)
 
         self.credits_button = self.buttons[-1]   # greyed out while the Search tab is showing
 
 
+    @staticmethod
+    def _output_label(target):
+        if target == "youtube":
+            return "YouTube"
+        if target.startswith("zone:"):
+            return target[5:]
+        return SAME_ZONE_LABEL
+
+    def _fill_output_list(self):
+        self.output_cb.config(values=[SAME_ZONE_LABEL] + engine.zone_names() + ["YouTube"])
+
     def _on_output_changed(self, *_):
+        choice = self.output_var.get()
+        target = ("youtube" if choice == "YouTube" else
+                  "jriver" if choice == SAME_ZONE_LABEL else "zone:" + choice)
         try:
-            write_env({"OUTPUT_TARGET": "youtube" if self.output_var.get() == "YouTube" else "jriver"})
+            write_env({"OUTPUT_TARGET": target})
         except Exception as e:
             messagebox.showerror("Save failed", str(e), parent=self)
         self.output_cb.selection_clear()
@@ -166,17 +239,21 @@ class PlayTab(tk.Frame):
 
     def _refresh_now_playing(self):
         if not self.running:
-            info = engine.get_playing_info()
-            if info and info.get("PlayingNowPosition", "-1") != "-1":
-                self.np_track.config(text=info.get("Name", "?"))
-                self.np_detail.config(
-                    text=f"{info.get('Artist', '?')}   \u00b7   {info.get('Album', '?')}")
-                self.last_playing = info
-            else:
-                self.np_track.config(text="Nothing playing")
-                self.np_detail.config(text="Start a track in JRiver to seed from it")
-                self.last_playing = None
+            self._update_now_playing()
         self.after(REFRESH_MS, self._refresh_now_playing)
+
+    def _update_now_playing(self):
+        self._follow_active_zone()
+        info = engine.get_playing_info()
+        if info and info.get("PlayingNowPosition", "-1") != "-1":
+            self.np_track.config(text=info.get("Name", "?"))
+            self.np_detail.config(
+                text=f"{info.get('Artist', '?')}   \u00b7   {info.get('Album', '?')}")
+            self.last_playing = info
+        else:
+            self.np_track.config(text="Nothing playing")
+            self.np_detail.config(text="Start a track in this zone to seed from it")
+            self.last_playing = None
 
     def _type_greeting(self, text, i):
         """Types the greeting one character at a time, then clears it after 10 seconds."""

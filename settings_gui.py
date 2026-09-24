@@ -414,6 +414,85 @@ class SettingsTab(tk.Frame):
                            "50 is the most YouTube allows in one playlist link.",
                  fg=HELP_FG, font=HELP_FONT, justify="left").grid(row=4, column=0, columnspan=2, sticky="w")
 
+        # Zones: which JRiver zones appear in the Play tab's Zone and Output lists.
+        # Filled when the tab is first shown, so a slow JRiver never delays startup.
+        tk.Label(tab, text="Zones", font=("Segoe UI", 10, "bold")).grid(row=5, column=0, sticky="w", pady=(18, 2))
+        tk.Button(tab, text="Rescan", width=10, command=self._fill_zone_boxes).grid(
+            row=5, column=1, sticky="w", padx=(12, 0), pady=(18, 2))
+        self.zone_frame = tk.Frame(tab)
+        self.zone_frame.grid(row=6, column=0, columnspan=2, sticky="w")
+        self.follow_var = tk.BooleanVar(value=engine.FOLLOW_ACTIVE_ZONE)
+        ttk.Checkbutton(tab, text="Follow JRiver's active zone", variable=self.follow_var,
+                        command=self._save_zone_settings).grid(row=7, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        tk.Label(tab, text="Show: untick a zone to hide it from the Zone and Output lists on the Play tab.\n"
+                           "Default: the zone Now Playing opens on when 24bit7 starts. Picking a zone by hand always wins.\n"
+                           "Follow: Now Playing tracks whichever zone JRiver has active, so Default is greyed out.\n"
+                           "A DLNA speaker such as a Sonos only appears once DLNA Controller is ticked in\n"
+                           "JRiver (Tools > Options > Media Network > Advanced). Press Rescan after ticking it.",
+                 fg=HELP_FG, font=HELP_FONT, justify="left").grid(row=8, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        self.zone_vars, self.zone_radios = {}, {}
+        self.default_zone_var = tk.StringVar(value=engine.DEFAULT_ZONE)
+        self._zones_filled = False
+        tab.bind("<Map>", lambda e: None if self._zones_filled else self._fill_zone_boxes())
+
+    def _fill_zone_boxes(self):
+        """Per zone: a Show tick (hidden zones drop off the Play tab) and a Default button."""
+        self._zones_filled = True
+        for child in self.zone_frame.winfo_children():
+            child.destroy()
+        engine.refresh_settings_if_changed()
+        names = engine.zone_names(include_hidden=True)
+        self.zone_vars, self.zone_radios = {}, {}
+        if not names:
+            tk.Label(self.zone_frame, text="No zones found. Is JRiver running, with Media Network on?",
+                     fg=HELP_FG, font=HELP_FONT).grid(row=0, column=0, sticky="w")
+            return
+        tk.Label(self.zone_frame, text="Show", fg=HELP_FG, font=HELP_FONT).grid(row=0, column=0, sticky="w")
+        tk.Label(self.zone_frame, text="Default", fg=HELP_FG, font=HELP_FONT).grid(
+            row=0, column=1, sticky="w", padx=(24, 0))
+        rb = ttk.Radiobutton(self.zone_frame, text="JRiver's active zone", value="",
+                             variable=self.default_zone_var, command=self._save_zone_settings)
+        rb.grid(row=1, column=1, sticky="w", padx=(24, 0))
+        self.zone_radios[""] = rb
+        # A default zone JRiver can't see right now (speaker unplugged) still gets a row
+        missing = [engine.DEFAULT_ZONE] if engine.DEFAULT_ZONE and engine.DEFAULT_ZONE not in names else []
+        for r, name in enumerate(names + missing, start=2):
+            if name in names:
+                v = tk.BooleanVar(value=name not in engine.HIDDEN_ZONES)
+                ttk.Checkbutton(self.zone_frame, text=name, variable=v,
+                                command=self._save_zone_settings).grid(row=r, column=0, sticky="w")
+                self.zone_vars[name] = v
+            else:
+                tk.Label(self.zone_frame, text=f"{name} (not found)", fg=HELP_FG).grid(row=r, column=0, sticky="w")
+            rb = ttk.Radiobutton(self.zone_frame, value=name, variable=self.default_zone_var,
+                                 command=self._save_zone_settings)
+            rb.grid(row=r, column=1, sticky="w", padx=(24, 0))
+            self.zone_radios[name] = rb
+        self._sync_zone_controls()
+
+    def _sync_zone_controls(self):
+        """Default greys out while Follow is ticked, and for any hidden zone."""
+        follow = self.follow_var.get()
+        for name, rb in self.zone_radios.items():
+            hidden = name in self.zone_vars and not self.zone_vars[name].get()
+            rb.state(["disabled"] if follow or hidden else ["!disabled"])
+
+    def _save_zone_settings(self):
+        # Hiding the default zone puts the default back to JRiver's active zone
+        default = self.default_zone_var.get()
+        if default in self.zone_vars and not self.zone_vars[default].get():
+            self.default_zone_var.set("")
+        self._sync_zone_controls()
+        # Zones hidden earlier but not in JRiver right now stay hidden
+        hidden = {n for n, v in self.zone_vars.items() if not v.get()}
+        hidden |= {n for n in engine.HIDDEN_ZONES if n not in self.zone_vars}
+        try:
+            write_env({"HIDDEN_ZONES": "|".join(sorted(hidden)),
+                       "DEFAULT_ZONE": self.default_zone_var.get(),
+                       "FOLLOW_ACTIVE_ZONE": "1" if self.follow_var.get() else "0"})
+        except Exception as e:
+            messagebox.showerror("Save failed", str(e), parent=self)
+
     def _build_search_sites(self, nb):
         """Discover search sites: which stores and reference sites to open per row."""
         tab = tk.Frame(nb, padx=12, pady=12)
