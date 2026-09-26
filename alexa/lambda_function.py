@@ -1,7 +1,7 @@
 """
 needle drop - the Alexa skill for 24bit7.
 
-"Alexa, open needle drop"  -> one chime, then it listens for one command:
+"Alexa, open needle drop"  -> "Ready", then it listens for one command:
     "songs by <artist>"     Artist's Top Tracks
     "music like <artist>"   Similar Artists
     "genre <anything>"      Vibe Playlist
@@ -15,13 +15,15 @@ No phrase starts with "play", so Alexa isn't tempted to hand it to a music servi
 
 The command goes to 24bit7 on your PC, with your key and the ID of the speaker
 that heard it, and 24bit7 plays the playlist on that speaker's zone.
-  started  -> two chimes
+  started  -> "You got it." (or two chimes, if CHIME is set)
   pending  -> "Please wait, request pending." (runs after the current build)
   ask      -> Alexa asks which album, and listens for "by <artist>"
   problem  -> Alexa says what's wrong
 
-Paste this into the Code tab of an Alexa-hosted (Python) skill, fill in the
-three settings below, then Save and Deploy.
+In the Code tab of an Alexa-hosted (Python) skill: create skill_settings.py next to
+this file and fill in your address and key there, then paste this file over
+lambda_function.py, Save and Deploy. Your address and key live only in
+skill_settings.py, so this file can be shown or shared safely.
 """
 
 import json
@@ -34,16 +36,7 @@ import ask_sdk_core.utils as ask_utils
 from ask_sdk_core.dispatch_components import AbstractExceptionHandler, AbstractRequestHandler
 from ask_sdk_core.skill_builder import SkillBuilder
 
-# ---- Your settings --------------------------------------------------------------
-# Your Tailscale Funnel address, e.g. https://desktop-abc123.tailxxxx.ts.net
-BIT7_URL = "https://YOUR-PC.YOUR-TAILNET.ts.net"
-# The key from 24bit7's Settings > Voice (Copy button). Keep it out of anything public.
-BIT7_KEY = "PASTE-YOUR-KEY-HERE"
-# A sound from the Alexa Skills Kit Sound Library: pick one on the library page and
-# paste just the address from its code, e.g. "soundbank://soundlibrary/....". Leave it
-# empty and Alexa says "Ready" and "OK" instead of chiming.
-CHIME = ""
-# ----------------------------------------------------------------------------------
+from skill_settings import BIT7_KEY, BIT7_URL, CHIME   # your address, key and chime
 
 TIMEOUT = 6   # seconds; Alexa gives the whole skill about eight
 HELP = ("Say songs by, music like, or shuffle songs by, then an artist. Genre, then any style you like. "

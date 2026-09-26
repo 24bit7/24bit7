@@ -509,8 +509,15 @@ class SettingsTab(tk.Frame):
 
         tk.Label(tab, text="Key", anchor="w").grid(row=2, column=0, sticky="w", pady=(14, 2))
         self.voice_key_var = tk.StringVar(value=engine.VOICE_KEY)
-        tk.Entry(tab, textvariable=self.voice_key_var, width=40, state="readonly").grid(
-            row=2, column=1, sticky="w", padx=(12, 8), pady=(14, 2))
+        key_box = tk.Frame(tab)   # hidden like the other keys; Show is unticked every time Settings opens
+        key_box.grid(row=2, column=1, sticky="w", padx=(12, 8), pady=(14, 2))
+        key_entry = tk.Entry(key_box, textvariable=self.voice_key_var, width=40, state="readonly",
+                             show="\u2022")
+        key_entry.pack(side="left")
+        show_key = tk.BooleanVar(value=False)
+        tk.Checkbutton(key_box, text="Show", variable=show_key,
+                       command=lambda: key_entry.config(show="" if show_key.get() else "\u2022")).pack(
+            side="left", padx=(6, 0))
         tk.Button(tab, text="Copy", width=8, command=self._voice_copy_key).grid(row=2, column=2, sticky="w", pady=(14, 2))
         tk.Button(tab, text="New key", width=8, command=self._voice_new_key).grid(
             row=2, column=3, sticky="w", padx=(8, 0), pady=(14, 2))
