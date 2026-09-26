@@ -5,7 +5,8 @@ A small listener for the Alexa skill (or anything else that knows the key).
 It only listens on this PC (127.0.0.1); a tunnel is what connects it to Amazon.
 
   POST /command   header X-24bit7-Key: <VOICE_KEY>
-                  body {"intent": "songs_by" | "music_like" | "genre",
+                  body {"intent": "songs_by" | "music_like" | "genre" |
+                                  "album" | "playlist" | "shuffle",
                         "value": "Agnes Obel", "device": "<Alexa device ID>",
                         "zone": "Sonos"}        # zone is optional and beats the device's zone
                   reply {"speech": "Music like Agnes Obel, coming up on Sonos."}
@@ -13,19 +14,27 @@ It only listens on this PC (127.0.0.1); a tunnel is what connects it to Amazon.
 
 Alexa gives a skill about eight seconds to answer, so the reply goes back at once
 and the playlist is built afterwards, one build at a time, through the Play tab.
+Albums, playlists and shuffles need no building: they replace what's playing on
+the zone straight away, matched against the library held in library.py.
 Each Alexa device is remembered in the database with the zone it plays to.
 """
 
 import hmac
 import json
+import random
 import secrets
 import threading
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-import engine
+import requests
 
-INTENTS = ("songs_by", "music_like", "genre")
+import engine
+import library
+
+INTENTS = ("songs_by", "music_like", "genre", "album", "playlist", "shuffle")
+INSTANT = ("album", "playlist", "shuffle")   # played straight away, nothing to build
+SHUFFLE_CAP = 400                            # most tracks a shuffle sends to JRiver
 TEST_DEVICE = "24bit7-settings-test"
 
 _server = None
@@ -109,39 +118,97 @@ def _job(intent, value, zone):
     return run
 
 
+def _play_keys(keys, zone_id):
+    r = requests.get(f"{engine.JRIVER_BASE}/Playback/PlayByKey",
+                     params={"Key": ",".join(str(k) for k in keys), "Zone": zone_id},
+                     auth=engine.AUTH, timeout=10)
+    return r.status_code == 200
+
+
+def _either(names):
+    names = [library.spoken(n) for n in names]
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " or " + names[-1]
+
+
+def _play_now(intent, value, zone):
+    """Albums, playlists and shuffles: replace what's playing on the zone at once."""
+    zid = engine.zone_id(zone)
+    if intent == "playlist":
+        found = library.find_playlist(value)
+        if not found:
+            return "problem", f"I couldn't find a playlist called {value}.", {}
+        r = requests.get(f"{engine.JRIVER_BASE}/Playback/PlayPlaylist",
+                         params={"Playlist": found.get("ID"), "PlaylistType": "ID", "Zone": zid},
+                         auth=engine.AUTH, timeout=10)
+        ok, what = r.status_code == 200, f"playlist {found.get('Name')}"
+    elif intent == "album":
+        found, matches = library.find_album(value)
+        if not matches:
+            return "problem", f"I couldn't find an album called {value.rsplit(' by ', 1)[0]}.", {}
+        if not found:
+            title = matches[0][0]
+            artists = [artist for _, artist, _ in matches]
+            if len(artists) <= 3:
+                speech = f"{title} by {_either(artists)}. Which one?"
+            else:
+                speech = f"You have {len(artists)} albums called {title}. Which artist?"
+            return "ask", speech, {"ask": "album", "title": title}
+        title, artist, keys = matches[0]
+        ok, what = _play_keys(keys, zid), f"album {title} by {library.spoken(artist)}"
+    else:
+        artist, keys = library.artist_tracks(value)
+        if not keys:
+            return "problem", f"I couldn't find any songs by {value}.", {}
+        random.shuffle(keys)
+        ok, what = _play_keys(keys[:SHUFFLE_CAP], zid), f"{min(len(keys), SHUFFLE_CAP)} songs by {library.spoken(artist)}, shuffled"
+    if not ok:
+        return "problem", "JRiver didn't start it. Is JRiver running on the media PC?", {}
+    print(f"[Voice] Playing {what} on {zone}")
+    return "started", f"Playing {what} on {zone}.", {}
+
+
 def handle_command(body, busy=False):
     """
-    Works out the reply and queues the build. Returns (status, speech):
-      started  the build begins now (the skill plays two chimes)
+    Works out the reply and queues the build, or plays an album, playlist or
+    shuffle at once. Returns (status, speech, extra):
+      started  the build begins now, or the music has started (the skill plays two chimes)
       pending  it waits for the build already running (the skill says so)
+      ask      several albums share the title; extra carries it, and the skill asks which
       problem  nothing was queued; speech says why
     """
     intent = (body.get("intent") or "").strip().lower()
     value = (body.get("value") or "").strip()
     device = (body.get("device") or "").strip()
     if intent not in INTENTS:
-        return "problem", "Say songs by, music like, or genre, followed by what you'd like."
+        return "problem", "Say songs by, music like, or genre, followed by what you'd like.", {}
     if not value:
-        return "problem", ("I didn't catch the artist." if intent != "genre" else "I didn't catch the genre.")
+        missing = {"genre": "the genre", "album": "the album", "playlist": "the playlist"}.get(intent, "the artist")
+        return "problem", f"I didn't catch {missing}.", {}
 
     name, zone = _hear_device(device or "unknown device")
     zone = (body.get("zone") or "").strip() or zone
     if not zone:
-        return "problem", "This speaker isn't set up yet. Assign it to a zone in 24bit7, under Settings, Voice."
+        return "problem", "This speaker isn't set up yet. Assign it to a zone in 24bit7, under Settings, Voice.", {}
     if engine.zone_id(zone) is None:
-        return "problem", f"I can't find the {zone} zone in JRiver."
+        return "problem", f"I can't find the {zone} zone in JRiver.", {}
+    if intent in INSTANT:
+        try:
+            return _play_now(intent, value, zone)
+        except Exception as e:
+            print(f"[Voice] {intent} '{value}' failed: {e}")
+            return "problem", "I couldn't reach the library in JRiver. Is JRiver running on the media PC?", {}
     if intent == "genre" and engine.vibe_blocker():
-        return "problem", "Genre playlists need an Anthropic key in 24bit7."
+        return "problem", "Genre playlists need an Anthropic key in 24bit7.", {}
     if _submit is None:
-        return "problem", "24bit7 isn't ready yet. Try again in a moment."
+        return "problem", "24bit7 isn't ready yet. Try again in a moment.", {}
 
     words = {"songs_by": f"Songs by {value}", "music_like": f"Music like {value}",
              "genre": f"A {value} playlist"}[intent]
     phrase = {"songs_by": "songs by", "music_like": "music like", "genre": "genre"}[intent]
     _submit(_job(intent, value, zone), f"Voice, {name}: {phrase} {value}, to {zone}")
     if busy:
-        return "pending", "Please wait, request pending."
-    return "started", f"{words}, coming up on {zone}."
+        return "pending", "Please wait, request pending.", {}
+    return "started", f"{words}, coming up on {zone}.", {}
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -179,8 +246,8 @@ class _Handler(BaseHTTPRequestHandler):
                 raise ValueError
         except ValueError:
             return self._reply(400, {"error": "body must be a JSON object"})
-        status, speech = handle_command(body, busy=_is_busy())
-        self._reply(200, {"status": status, "speech": speech})
+        status, speech, extra = handle_command(body, busy=_is_busy())
+        self._reply(200, {"status": status, "speech": speech, **extra})
 
 
 _is_busy = lambda: False   # replaced by the GUI
@@ -207,6 +274,7 @@ def stop():
     if _server is not None:
         _server.shutdown()
         _server.server_close()
+    library.stop()
     _server, _thread, _status = None, None, "Off"
 
 
@@ -228,6 +296,7 @@ def restart():
         return _status
     _thread = threading.Thread(target=_server.serve_forever, daemon=True)
     _thread.start()
+    library.start()   # albums and playlists held in memory, refreshed in the background
     _status = f"Listening on 127.0.0.1:{engine.VOICE_PORT}"
     return _status
 

@@ -5,12 +5,17 @@ needle drop - the Alexa skill for 24bit7.
     "songs by <artist>"     Artist's Top Tracks
     "music like <artist>"   Similar Artists
     "genre <anything>"      Vibe Playlist
+    "album <name>"          plays that album now ("album <name> by <artist>" if several share it)
+    "playlist <name>"       plays one of your JRiver playlists or smartlists now
+    "shuffle songs by <artist>"  every track by them, shuffled, now
 Or in one go: "Alexa, ask needle drop for music like Agnes Obel".
+If several albums share a title, Alexa asks which, and you answer "by <artist>".
 
 The command goes to 24bit7 on your PC, with your key and the ID of the speaker
 that heard it, and 24bit7 plays the playlist on that speaker's zone.
   started  -> two chimes
   pending  -> "Please wait, request pending." (runs after the current build)
+  ask      -> Alexa asks which album, and listens for "by <artist>"
   problem  -> Alexa says what's wrong
 
 Paste this into the Code tab of an Alexa-hosted (Python) skill, fill in the
@@ -39,8 +44,10 @@ CHIME = ""
 # ----------------------------------------------------------------------------------
 
 TIMEOUT = 6   # seconds; Alexa gives the whole skill about eight
-HELP = "Say songs by, then an artist. Music like, then an artist. Or genre, then any style you like."
-INTENTS = {"SongsByIntent": "songs_by", "MusicLikeIntent": "music_like", "GenreIntent": "genre"}
+HELP = ("Say songs by, music like, or shuffle songs by, then an artist. Genre, then any style you like. "
+        "Or album, or playlist, then its name.")
+INTENTS = {"SongsByIntent": "songs_by", "MusicLikeIntent": "music_like", "GenreIntent": "genre",
+           "AlbumIntent": "album", "PlaylistIntent": "playlist", "ShuffleIntent": "shuffle"}
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -53,22 +60,32 @@ def chimes(count, fallback):
 
 
 def send(intent, value, device):
-    """Sends one command to 24bit7. Returns (status, speech)."""
+    """Sends one command to 24bit7. Returns (status, speech, the whole reply)."""
     body = json.dumps({"intent": intent, "value": value, "device": device}).encode("utf-8")
     req = urllib.request.Request(BIT7_URL.rstrip("/") + "/command", data=body, method="POST",
                                  headers={"Content-Type": "application/json", "X-24bit7-Key": BIT7_KEY})
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
             reply = json.loads(r.read())
-        return reply.get("status", "problem"), reply.get("speech", "")
+        return reply.get("status", "problem"), reply.get("speech", ""), reply
     except urllib.error.HTTPError as e:
         log.info("24bit7 replied HTTP %s", e.code)
         if e.code == 401:
-            return "problem", "24bit7 didn't accept the key. Check the key in the skill matches the one in 24bit7."
-        return "problem", "24bit7 isn't answering. Is it running on the media PC?"
+            return "problem", "24bit7 didn't accept the key. Check the key in the skill matches the one in 24bit7.", {}
+        return "problem", "24bit7 isn't answering. Is it running on the media PC?", {}
     except Exception as e:
         log.info("24bit7 unreachable: %s", e)
-        return "problem", "24bit7 isn't answering. Is it running on the media PC?"
+        return "problem", "24bit7 isn't answering. Is it running on the media PC?", {}
+
+
+def respond(handler_input, status, speech, reply):
+    """Two chimes when it starts; a question that keeps listening; otherwise Alexa says what's wrong."""
+    builder = handler_input.response_builder
+    if status == "ask":
+        handler_input.attributes_manager.session_attributes["album"] = reply.get("title", "")
+        return builder.speak(escape(speech)).ask("Say by, then the artist.").response
+    speech = chimes(2, "OK.") if status == "started" else escape(speech)
+    return builder.speak(speech).set_should_end_session(True).response
 
 
 class LaunchHandler(AbstractRequestHandler):
@@ -90,12 +107,21 @@ class CommandHandler(AbstractRequestHandler):
         intent = INTENTS[ask_utils.get_intent_name(handler_input)]
         value = ask_utils.get_slot_value(handler_input, "query") or ""
         device = handler_input.request_envelope.context.system.device.device_id
-        status, speech = send(intent, value, device)
-        if status == "started":
-            speech = chimes(2, "OK.")
-        else:
-            speech = escape(speech)
-        return handler_input.response_builder.speak(speech).set_should_end_session(True).response
+        return respond(handler_input, *send(intent, value, device))
+
+
+class ByArtistHandler(AbstractRequestHandler):
+    """The answer to "Which artist?" after several albums shared a title."""
+    def can_handle(self, handler_input):
+        return ask_utils.is_intent_name("ByArtistIntent")(handler_input)
+
+    def handle(self, handler_input):
+        title = handler_input.attributes_manager.session_attributes.get("album")
+        artist = ask_utils.get_slot_value(handler_input, "query") or ""
+        if not title:
+            return handler_input.response_builder.speak(HELP).ask(HELP).response
+        device = handler_input.request_envelope.context.system.device.device_id
+        return respond(handler_input, *send("album", f"{title} by {artist}", device))
 
 
 class HelpHandler(AbstractRequestHandler):
@@ -137,7 +163,8 @@ class ErrorHandler(AbstractExceptionHandler):
 
 
 sb = SkillBuilder()
-for handler in (LaunchHandler(), CommandHandler(), HelpHandler(), StopHandler(), SessionEndedHandler()):
+for handler in (LaunchHandler(), CommandHandler(), ByArtistHandler(), HelpHandler(), StopHandler(),
+                SessionEndedHandler()):
     sb.add_request_handler(handler)
 sb.add_exception_handler(ErrorHandler())
 

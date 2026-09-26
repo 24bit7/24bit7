@@ -18,6 +18,26 @@
           "slots": [{"name": "query", "type": "AMAZON.SearchQuery"}],
           "samples": ["genre {query}", "play genre {query}", "a genre of {query}"]
         },
+        {
+          "name": "AlbumIntent",
+          "slots": [{"name": "query", "type": "AMAZON.SearchQuery"}],
+          "samples": ["album {query}", "play album {query}", "play the album {query}", "the album {query}"]
+        },
+        {
+          "name": "PlaylistIntent",
+          "slots": [{"name": "query", "type": "AMAZON.SearchQuery"}],
+          "samples": ["playlist {query}", "play playlist {query}", "play my playlist {query}", "play the playlist {query}"]
+        },
+        {
+          "name": "ShuffleIntent",
+          "slots": [{"name": "query", "type": "AMAZON.SearchQuery"}],
+          "samples": ["shuffle songs by {query}", "shuffle music by {query}", "shuffle everything by {query}", "shuffle {query}"]
+        },
+        {
+          "name": "ByArtistIntent",
+          "slots": [{"name": "query", "type": "AMAZON.SearchQuery"}],
+          "samples": ["by {query}", "the one by {query}", "it's by {query}"]
+        },
         {"name": "AMAZON.CancelIntent", "samples": []},
         {"name": "AMAZON.HelpIntent", "samples": []},
         {"name": "AMAZON.StopIntent", "samples": ["close", "finish", "never mind"]},
