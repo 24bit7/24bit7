@@ -6,27 +6,32 @@
         {
           "name": "SongsByIntent",
           "slots": [{"name": "query", "type": "AMAZON.SearchQuery"}],
-          "samples": ["songs by {query}", "play songs by {query}"]
+          "samples": ["songs by {query}"]
         },
         {
           "name": "MusicLikeIntent",
           "slots": [{"name": "query", "type": "AMAZON.SearchQuery"}],
-          "samples": ["music like {query}", "play music like {query}", "something like {query}"]
+          "samples": ["music like {query}", "something like {query}"]
         },
         {
           "name": "GenreIntent",
           "slots": [{"name": "query", "type": "AMAZON.SearchQuery"}],
-          "samples": ["genre {query}", "play genre {query}", "a genre of {query}"]
+          "samples": ["genre {query}", "a genre of {query}"]
         },
         {
           "name": "AlbumIntent",
           "slots": [{"name": "query", "type": "AMAZON.SearchQuery"}],
-          "samples": ["album {query}", "play album {query}", "play the album {query}", "the album {query}"]
+          "samples": ["album {query}", "the album {query}"]
+        },
+        {
+          "name": "SongIntent",
+          "slots": [{"name": "query", "type": "AMAZON.SearchQuery"}],
+          "samples": ["song {query}", "the song {query}"]
         },
         {
           "name": "PlaylistIntent",
           "slots": [{"name": "query", "type": "AMAZON.SearchQuery"}],
-          "samples": ["playlist {query}", "play playlist {query}", "play my playlist {query}", "play the playlist {query}"]
+          "samples": ["playlist {query}", "my playlist {query}", "the playlist {query}"]
         },
         {
           "name": "ShuffleIntent",

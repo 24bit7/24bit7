@@ -6,7 +6,7 @@ It only listens on this PC (127.0.0.1); a tunnel is what connects it to Amazon.
 
   POST /command   header X-24bit7-Key: <VOICE_KEY>
                   body {"intent": "songs_by" | "music_like" | "genre" |
-                                  "album" | "playlist" | "shuffle",
+                                  "album" | "song" | "playlist" | "shuffle",
                         "value": "Agnes Obel", "device": "<Alexa device ID>",
                         "zone": "Sonos"}        # zone is optional and beats the device's zone
                   reply {"speech": "Music like Agnes Obel, coming up on Sonos."}
@@ -14,8 +14,8 @@ It only listens on this PC (127.0.0.1); a tunnel is what connects it to Amazon.
 
 Alexa gives a skill about eight seconds to answer, so the reply goes back at once
 and the playlist is built afterwards, one build at a time, through the Play tab.
-Albums, playlists and shuffles need no building: they replace what's playing on
-the zone straight away, matched against the library held in library.py.
+Albums, songs, playlists and shuffles need no building: they replace what's playing
+on the zone straight away, matched against the library held in library.py.
 Each Alexa device is remembered in the database with the zone it plays to.
 """
 
@@ -32,8 +32,8 @@ import requests
 import engine
 import library
 
-INTENTS = ("songs_by", "music_like", "genre", "album", "playlist", "shuffle")
-INSTANT = ("album", "playlist", "shuffle")   # played straight away, nothing to build
+INTENTS = ("songs_by", "music_like", "genre", "album", "song", "playlist", "shuffle")
+INSTANT = ("album", "song", "playlist", "shuffle")   # played straight away, nothing to build
 SHUFFLE_CAP = 400                            # most tracks a shuffle sends to JRiver
 TEST_DEVICE = "24bit7-settings-test"
 
@@ -131,7 +131,7 @@ def _either(names):
 
 
 def _play_now(intent, value, zone):
-    """Albums, playlists and shuffles: replace what's playing on the zone at once."""
+    """Albums, songs, playlists and shuffles: replace what's playing on the zone at once."""
     zid = engine.zone_id(zone)
     if intent == "playlist":
         found = library.find_playlist(value)
@@ -141,20 +141,23 @@ def _play_now(intent, value, zone):
                          params={"Playlist": found.get("ID"), "PlaylistType": "ID", "Zone": zid},
                          auth=engine.AUTH, timeout=10)
         ok, what = r.status_code == 200, f"playlist {found.get('Name')}"
-    elif intent == "album":
-        found, matches = library.find_album(value)
+    elif intent in ("album", "song"):
+        finder = library.find_album if intent == "album" else library.find_song
+        found, matches = finder(value)
         if not matches:
-            return "problem", f"I couldn't find an album called {value.rsplit(' by ', 1)[0]}.", {}
+            what = "an album" if intent == "album" else "a song"
+            return "problem", f"I couldn't find {what} called {value.rsplit(' by ', 1)[0]}.", {}
         if not found:
             title = matches[0][0]
             artists = [artist for _, artist, _ in matches]
             if len(artists) <= 3:
                 speech = f"{title} by {_either(artists)}. Which one?"
             else:
-                speech = f"You have {len(artists)} albums called {title}. Which artist?"
-            return "ask", speech, {"ask": "album", "title": title}
+                speech = f"You have {len(artists)} {intent}s called {title}. Which artist?"
+            return "ask", speech, {"ask": intent, "title": title}
         title, artist, keys = matches[0]
-        ok, what = _play_keys(keys, zid), f"album {title} by {library.spoken(artist)}"
+        keys = keys if intent == "album" else [keys]
+        ok, what = _play_keys(keys, zid), f"{intent} {title} by {library.spoken(artist)}"
     else:
         artist, keys = library.artist_tracks(value)
         if not keys:
@@ -181,8 +184,11 @@ def handle_command(body, busy=False):
     device = (body.get("device") or "").strip()
     if intent not in INTENTS:
         return "problem", "Say songs by, music like, or genre, followed by what you'd like.", {}
+    if intent == "song" and value.lower().startswith("by "):   # Alexa heard "songs by" as "song by"
+        intent, value = "songs_by", value[3:].strip()
     if not value:
-        missing = {"genre": "the genre", "album": "the album", "playlist": "the playlist"}.get(intent, "the artist")
+        missing = {"genre": "the genre", "album": "the album", "song": "the song",
+                   "playlist": "the playlist"}.get(intent, "the artist")
         return "problem", f"I didn't catch {missing}.", {}
 
     name, zone = _hear_device(device or "unknown device")

@@ -6,10 +6,12 @@ needle drop - the Alexa skill for 24bit7.
     "music like <artist>"   Similar Artists
     "genre <anything>"      Vibe Playlist
     "album <name>"          plays that album now ("album <name> by <artist>" if several share it)
+    "song <title>"          plays that song now, then stops ("song <title> by <artist>" works too)
     "playlist <name>"       plays one of your JRiver playlists or smartlists now
     "shuffle songs by <artist>"  every track by them, shuffled, now
 Or in one go: "Alexa, ask needle drop for music like Agnes Obel".
-If several albums share a title, Alexa asks which, and you answer "by <artist>".
+If several albums or songs share a title, Alexa asks which, and you answer "by <artist>".
+No phrase starts with "play", so Alexa isn't tempted to hand it to a music service.
 
 The command goes to 24bit7 on your PC, with your key and the ID of the speaker
 that heard it, and 24bit7 plays the playlist on that speaker's zone.
@@ -45,9 +47,10 @@ CHIME = ""
 
 TIMEOUT = 6   # seconds; Alexa gives the whole skill about eight
 HELP = ("Say songs by, music like, or shuffle songs by, then an artist. Genre, then any style you like. "
-        "Or album, or playlist, then its name.")
+        "Or album, song, or playlist, then its name.")
 INTENTS = {"SongsByIntent": "songs_by", "MusicLikeIntent": "music_like", "GenreIntent": "genre",
-           "AlbumIntent": "album", "PlaylistIntent": "playlist", "ShuffleIntent": "shuffle"}
+           "AlbumIntent": "album", "SongIntent": "song", "PlaylistIntent": "playlist",
+           "ShuffleIntent": "shuffle"}
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -82,7 +85,8 @@ def respond(handler_input, status, speech, reply):
     """Two chimes when it starts; a question that keeps listening; otherwise Alexa says what's wrong."""
     builder = handler_input.response_builder
     if status == "ask":
-        handler_input.attributes_manager.session_attributes["album"] = reply.get("title", "")
+        session = handler_input.attributes_manager.session_attributes
+        session["ask"], session["title"] = reply.get("ask", "album"), reply.get("title", "")
         return builder.speak(escape(speech)).ask("Say by, then the artist.").response
     speech = chimes(2, "OK.") if status == "started" else escape(speech)
     return builder.speak(speech).set_should_end_session(True).response
@@ -111,17 +115,18 @@ class CommandHandler(AbstractRequestHandler):
 
 
 class ByArtistHandler(AbstractRequestHandler):
-    """The answer to "Which artist?" after several albums shared a title."""
+    """The answer to "Which artist?" after several albums or songs shared a title."""
     def can_handle(self, handler_input):
         return ask_utils.is_intent_name("ByArtistIntent")(handler_input)
 
     def handle(self, handler_input):
-        title = handler_input.attributes_manager.session_attributes.get("album")
+        session = handler_input.attributes_manager.session_attributes
+        kind, title = session.get("ask", "album"), session.get("title")
         artist = ask_utils.get_slot_value(handler_input, "query") or ""
         if not title:
             return handler_input.response_builder.speak(HELP).ask(HELP).response
         device = handler_input.request_envelope.context.system.device.device_id
-        return respond(handler_input, *send("album", f"{title} by {artist}", device))
+        return respond(handler_input, *send(kind, f"{title} by {artist}", device))
 
 
 class HelpHandler(AbstractRequestHandler):

@@ -5,8 +5,9 @@ Every audio file's key, name, artist, album and track number is read from JRiver
 once (about a second for a large library), then refreshed quietly in the
 background, so a voice command matches instantly and new albums still turn up.
 
-It answers three questions for voice.py:
+It answers four questions for voice.py:
   find_album("okay computer")            -> an album, or several that share the title
+  find_song("creep")                     -> a track, or several artists who share the title
   find_playlist("sunday morning")        -> a JRiver playlist or smartlist
   artist_tracks("radiohead")             -> every track by that artist, compilations too
 
@@ -35,6 +36,8 @@ _lock = threading.Lock()
 _albums = {}             # (album, album artist) -> [track rows]
 _artists = {}            # normalised artist -> artist as tagged
 _tracks = []
+_songs = {}              # normalised title -> [(title, artist, key, album, album artist, compilation)]
+_song_titles = []
 _playlists = []
 _loaded_at = 0.0
 _timer = None
@@ -147,13 +150,21 @@ def _read_playlists():
 
 def load():
     """Reads the whole library from JRiver. Returns a line for the log."""
-    global _albums, _artists, _tracks, _playlists, _loaded_at
+    global _albums, _artists, _tracks, _songs, _song_titles, _playlists, _loaded_at
     engine.refresh_settings_if_changed()
     started = time.time()
     tracks = _read_tracks()
     playlists = _read_playlists()
-    albums, artists = {}, {}
+    albums, artists, songs = {}, {}, {}
     for row in tracks:
+        title, artist = (row.get("Name") or "").strip(), (row.get("Artist") or "").strip()
+        album, album_artist = row.get("Album") or "", row.get("Album Artist (auto)") or ""
+        if title:
+            songs.setdefault(norm(title), []).append((title, artist, row["Key"], album, album_artist, False))
+        if " - " in title:   # a compilation track named 'Artist - Title'
+            by, just_title = (part.strip() for part in title.split(" - ", 1))
+            if by and just_title:
+                songs.setdefault(norm(just_title), []).append((just_title, by, row["Key"], album, album_artist, True))
         name = (row.get("Album") or "").strip()
         if name:
             albums.setdefault((name, row.get("Album Artist (auto)", "")), []).append(row)
@@ -163,6 +174,7 @@ def load():
                 artists.setdefault(norm(artist), artist)
     with _lock:
         _albums, _artists, _tracks, _playlists = albums, artists, tracks, playlists
+        _songs, _song_titles = songs, [t for t in songs if t]
         _loaded_at = time.time()
     return (f"Library read for voice: {len(albums)} albums, {len(playlists)} playlists "
             f"({time.time() - started:.1f} s)")
@@ -242,6 +254,57 @@ def find_album(heard):
         return False, [(name, artist, None) for _, name, artist, _ in ties]
     keys = [row["Key"] for row in sorted(best[3], key=track_order)]
     return True, [(best[1], best[2], keys)]
+
+
+def _artist_score(heard, artist):
+    return max((score(heard, part) for part in (artist or "").split(";")), default=0.0)
+
+
+def _album_version_first(entry, artist_norm):
+    """Sorts an artist's copies of a song: studio album, then own compilation, then others."""
+    _, artist, _, album, album_artist, compilation = entry
+    live = "live" in norm(album).split()
+    return compilation, norm(album_artist) != artist_norm, live
+
+
+def find_song(heard):
+    """
+    'creep' or 'creep by radiohead'. Returns (found, matches) like find_album:
+      (True, [(title, artist, key)])       one song (the album version if they have several)
+      (False, [(title, artist, None), ...])  different artists share the title; ask which
+      (False, [])                          nothing close enough
+    """
+    ensure_loaded()
+    by = None
+    if " by " in heard:
+        heard, by = heard.rsplit(" by ", 1)
+    want = norm(heard)
+    with _lock:
+        if want in _songs:
+            titles = [want]
+        else:
+            titles = difflib.get_close_matches(want, _song_titles, n=5, cutoff=GOOD)
+        entries = [(t, e) for t in titles for e in _songs[t]]
+    if not entries:
+        return False, []
+    if by:
+        ranked = sorted(((difflib.SequenceMatcher(None, want, t).ratio() + _artist_score(by, e[1])) / 2, e)
+                        for t, e in entries)
+        best_score = ranked[-1][0]
+        if best_score < GOOD:
+            return False, []
+        best = [e for s, e in ranked if s == best_score]
+        pick = sorted(best, key=lambda e: _album_version_first(e, norm(e[1])))[0]
+        return True, [(pick[0], pick[1], pick[2])]
+    copies = [e for t, e in entries if t == titles[0]]
+    artists = {}
+    for e in copies:
+        artists.setdefault(norm(e[1]), []).append(e)
+    if len(artists) > 1:
+        return False, [(group[0][0], group[0][1], None) for group in artists.values()]
+    artist_norm, group = next(iter(artists.items()))
+    pick = sorted(group, key=lambda e: _album_version_first(e, artist_norm))[0]
+    return True, [(pick[0], pick[1], pick[2])]
 
 
 def artist_tracks(heard):
