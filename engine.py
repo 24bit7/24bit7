@@ -117,6 +117,7 @@ def load_settings():
     global TABLE_FONT_SIZE, VIBE_TRACK_COUNT
     global OUTPUT_TARGET, YOUTUBE_PLAYLIST_LENGTH, HIDDEN_ZONES, DEFAULT_ZONE, FOLLOW_ACTIVE_ZONE
     global VOICE_ENABLED, VOICE_KEY, VOICE_PORT
+    global START_IN_TRAY, CLOSE_TO_TRAY
     global LISTEN_SITES, CUSTOM_SITES
 
     load_dotenv(ENV_FILE, override=True)
@@ -201,6 +202,9 @@ def load_settings():
     VOICE_ENABLED = os.getenv("VOICE_ENABLED", "0").strip().lower() in ("1", "true", "yes")
     VOICE_KEY = os.getenv("VOICE_KEY", "").strip()
     VOICE_PORT = _int_setting("VOICE_PORT", 52180, 1024, 65535)
+    # Tray (Settings > Other > Windows): start hidden when Windows launches it, and X hides rather than quits
+    START_IN_TRAY = os.getenv("START_IN_TRAY", "1").strip().lower() in ("1", "true", "yes")
+    CLOSE_TO_TRAY = os.getenv("CLOSE_TO_TRAY", "0").strip().lower() in ("1", "true", "yes")
     YOUTUBE_PLAYLIST_LENGTH = _int_setting("YOUTUBE_PLAYLIST_LENGTH", 50, 5, 50)   # YouTube caps a link at 50
 
 
@@ -284,6 +288,10 @@ FOLLOW_ACTIVE_ZONE=0
 VOICE_ENABLED=0
 VOICE_KEY=
 VOICE_PORT=52180
+
+# Tray (Settings > Other). Start with Windows itself is stored by Windows, not here.
+START_IN_TRAY=1
+CLOSE_TO_TRAY=0
 
 # Other
 CACHE_DAYS=30
@@ -1831,6 +1839,32 @@ def prefetch_youtube_ids(pairs):
     for (a, t), vid in zip(todo, found):
         if vid:
             cache_put("YouTube", "video_id", _youtube_id_cache_key(a, t), [vid])
+
+
+YOUTUBE_PLAYLIST_MAX = 50   # the most videos one watch_videos link will take
+
+
+def youtube_ids_for_pairs(pairs):
+    """
+    Video IDs for [(artist, track)], in the same order (None where YouTube has no
+    match by that artist). Cached answers are used first; the rest are looked up
+    several at a time, whatever the Output setting. For Discover's playlists.
+    """
+    ids, todo = {}, []
+    for pair in dict.fromkeys(pairs):
+        hit = cache_get("YouTube", "video_id", _youtube_id_cache_key(*pair))
+        if hit is None:
+            todo.append(pair)
+        else:
+            ids[pair] = hit[0] if hit else None
+    if todo and youtube_client() is not None:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=YOUTUBE_LOOKUP_WORKERS) as pool:
+            found = list(pool.map(lambda p: _youtube_search_video_id(*p), todo))
+        for pair, vid in zip(todo, found):
+            cache_put("YouTube", "video_id", _youtube_id_cache_key(*pair), [vid] if vid else [])
+            ids[pair] = vid
+    return [ids.get(pair) for pair in pairs]
 
 
 def open_youtube_playlist(video_ids):

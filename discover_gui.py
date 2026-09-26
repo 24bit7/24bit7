@@ -10,6 +10,7 @@ discovery leads to buying it rather than pirating it.
 
 import csv
 import os
+import threading
 import urllib.parse
 import webbrowser
 import tkinter as tk
@@ -157,15 +158,19 @@ class DiscoverTab(tk.Frame):
         wrap = tk.Frame(self, padx=12, pady=8)
         wrap.pack(fill="both", expand=True)
 
-        cols = ("seed", "artist", "track", "sources", "found", "date")
+        cols = ("tick", "seed", "artist", "track", "sources", "found", "date")
         self.tree = ttk.Treeview(wrap, columns=cols, show="headings",
                                  selectmode="browse")
         self._apply_table_font()
-        headings = {"seed": "Seed", "artist": "Artist", "track": "Track",
+        headings = {"tick": "", "seed": "Seed", "artist": "Artist", "track": "Track",
                     "sources": "Suggested by", "found": "In library", "date": "When"}
-        widths = {"seed": 160, "artist": 140, "track": 150, "sources": 120,
+        widths = {"tick": 34, "seed": 160, "artist": 140, "track": 150, "sources": 120,
                   "found": 65, "date": 100}
         for c in cols:
+            if c == "tick":   # the tick box column: click a box (or press Space) to tick a row
+                self.tree.heading(c, text=headings[c])
+                self.tree.column(c, width=widths[c], minwidth=widths[c], stretch=False, anchor="center")
+                continue
             self.tree.heading(c, text=headings[c], command=lambda cc=c: self._sort_by(cc))
             self.tree.column(c, width=widths[c], anchor="w")
         vsb = ttk.Scrollbar(wrap, orient="vertical", command=self.tree.yview)
@@ -173,6 +178,8 @@ class DiscoverTab(tk.Frame):
         self.tree.pack(side="left", fill="both", expand=True)
         vsb.pack(side="right", fill="y")
         self.tree.bind("<<TreeviewSelect>>", lambda e: self._sync_site_buttons())
+        self.tree.bind("<Button-1>", self._on_tree_click)
+        self.tree.bind("<space>", lambda e: self._toggle_selected())
 
         btnbar = tk.Frame(self, padx=12, pady=8)
         btnbar.pack(fill="x")
@@ -194,6 +201,13 @@ class DiscoverTab(tk.Frame):
         self._bar_right.pack(side="right")
         tk.Button(self._bar_right, text="CSV", command=self.export_csv).pack(side="right")
         tk.Button(self._bar_right, text="Refresh", command=self.refresh).pack(side="right", padx=(0, 8))
+        tk.Button(self._bar_right, text="Select none", command=self.select_none).pack(side="right", padx=(0, 8))
+        self._select_all_button = tk.Button(self._bar_right, text="Select all", command=self.select_all)
+        self._select_all_button.pack(side="right", padx=(0, 4))
+        # Appears once a row is ticked; the status line beside it says how the last playlist went
+        self._yt_button = tk.Button(self._bar_right, text="", command=self.create_youtube_playlist)
+        self._yt_note = ""   # how the last YouTube playlist went, shown after the row count
+        self._last_view = None
 
         self._sites_inline = tk.Frame(self._bar_top)   # the site buttons, when they fit on the row
         self._sites_inline.pack(side="left", padx=(16, 0))
@@ -235,7 +249,14 @@ class DiscoverTab(tk.Frame):
         idx = self.session_menu.current()
         session_id = self._session_ids[idx] if 0 <= idx < len(self._session_ids) else None
 
+        # Ticks survive Refresh; a different session or Misses/Hits/All starts clean
+        view = (f, session_id)
+        keep = ({self._row_key(r) for r in self._rows if r.get("_ticked")}
+                if view == self._last_view else set())
+        self._last_view = view
         self._rows = engine.list_discoveries(found=found, session_id=session_id)
+        for r in self._rows:
+            r["_ticked"] = self._row_key(r) in keep
         self._populate()
 
     def _sites_text(self):
@@ -265,12 +286,13 @@ class DiscoverTab(tk.Frame):
             if term and term not in haystack:
                 continue
             self.tree.insert("", "end", iid=str(i), values=(
-                seed, r["artist"], r["track"] or "", r["sources"] or "", found, r["date"]),
+                self._tick_mark(r), seed, r["artist"], r["track"] or "", r["sources"] or "", found, r["date"]),
                 tags=("cell",))
             self._visible.append((seed, r["artist"] or "", r["track"] or "",
                                   r["sources"] or "", found, r["date"] or ""))
-        self.count_label.config(text=f"{len(self._visible)} shown")
+        self._show_count()
         self._sync_site_buttons()
+        self._sync_ticks()
 
     def export_csv(self):
         if not getattr(self, "_visible", None):
@@ -304,6 +326,108 @@ class DiscoverTab(tk.Frame):
             self._rows.sort(key=lambda r: (r[keymap[col]] is None, r[keymap[col]]),
                             reverse=self._sort_reverse)
         self._populate()
+
+    # --- ticks and the YouTube playlist ---------------------------------------
+
+    @staticmethod
+    def _row_key(r):
+        return r.get("session_id"), r.get("artist"), r.get("track")
+
+    @staticmethod
+    def _tick_mark(r):
+        return "\u2611" if r.get("_ticked") else "\u2610"
+
+    def _on_tree_click(self, event):
+        if self.tree.identify_region(event.x, event.y) == "cell" and self.tree.identify_column(event.x) == "#1":
+            iid = self.tree.identify_row(event.y)
+            if iid:
+                self._toggle(iid)
+
+    def _toggle_selected(self):
+        for iid in self.tree.selection():
+            self._toggle(iid)
+        return "break"
+
+    def _toggle(self, iid):
+        row = self._rows[int(iid)]
+        row["_ticked"] = not row.get("_ticked")
+        self.tree.set(iid, "tick", self._tick_mark(row))
+        self._sync_ticks()
+
+    def select_all(self):
+        """Ticks the rows currently shown (after the Misses/Hits/All filter and the search box)."""
+        for iid in self.tree.get_children():
+            self._rows[int(iid)]["_ticked"] = True
+            self.tree.set(iid, "tick", self._tick_mark(self._rows[int(iid)]))
+        self._sync_ticks()
+
+    def select_none(self):
+        for r in self._rows:
+            r["_ticked"] = False
+        for iid in self.tree.get_children():
+            self.tree.set(iid, "tick", self._tick_mark(self._rows[int(iid)]))
+        self._sync_ticks()
+
+    def _sync_ticks(self):
+        """Shows "Create YouTube playlist (n)" while any row is ticked."""
+        count = sum(1 for r in getattr(self, "_rows", []) if r.get("_ticked"))
+        if count and not self._yt_button.winfo_ismapped():
+            self._yt_button.pack(side="right", padx=(0, 8), after=self._select_all_button)
+        elif not count:
+            self._yt_button.pack_forget()
+        if str(self._yt_button.cget("state")) != "disabled":
+            self._yt_button.config(text=f"Create YouTube playlist ({count})")
+        self._place_site_buttons()
+
+    def create_youtube_playlist(self):
+        """Looks the ticked tracks up on YouTube (in table order) and opens them as an instant playlist."""
+        ticked = [r for r in self._rows if r.get("_ticked")]
+        pairs = [(r["artist"], r["track"]) for r in ticked if r.get("artist") and r.get("track")]
+        if not pairs:
+            self._set_yt_status("None of the ticked rows has a track to look up.")
+            return
+        over = max(0, len(pairs) - engine.YOUTUBE_PLAYLIST_MAX)
+        pairs = pairs[:engine.YOUTUBE_PLAYLIST_MAX]
+        self._yt_button.config(state="disabled", text="Looking up on YouTube...")
+        self._set_yt_status("")
+
+        def work():
+            try:
+                ids = engine.youtube_ids_for_pairs(pairs)
+            except Exception as e:
+                ids, error = [], e
+            else:
+                error = None
+            self.after(0, lambda: self._youtube_done(pairs, ids, over, error))
+        threading.Thread(target=work, daemon=True).start()
+
+    def _youtube_done(self, pairs, ids, over, error):
+        self._yt_button.config(state="normal")
+        self._sync_ticks()
+        if error is not None:
+            self._set_yt_status(f"YouTube lookup failed: {error}")
+            return
+        found = list(dict.fromkeys(v for v in ids if v))
+        if not found:
+            self._set_yt_status("None of the ticked tracks were found on YouTube.")
+            return
+        webbrowser.open("https://www.youtube.com/watch_videos?video_ids=" + ",".join(found))
+        missing = len(pairs) - len(found)
+        text = f"Opened {len(found)} of {len(pairs)}"
+        if missing:
+            text += f", {missing} not found on YouTube"
+        if over:
+            text += f". YouTube takes {engine.YOUTUBE_PLAYLIST_MAX} at most, so {over} more were left out"
+        self._set_yt_status(text + ".")
+
+    def _set_yt_status(self, text):
+        self._yt_note = text
+        self._show_count()
+
+    def _show_count(self):
+        """The row count at the top right, followed by how the last YouTube playlist went."""
+        text = f"{len(getattr(self, '_visible', []))} shown"
+        self.count_label.config(text=f"{self._yt_note}    {text}" if self._yt_note else text)
 
     # --- actions -----------------------------------------------------------
 

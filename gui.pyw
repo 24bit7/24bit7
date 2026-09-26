@@ -11,6 +11,7 @@ its log via a thread-safe queue so the window never freezes.
 """
 
 import queue
+import sys
 import threading
 import webbrowser
 import tkinter as tk
@@ -18,6 +19,7 @@ from tkinter import ttk, scrolledtext, messagebox
 
 import engine
 import library
+import tray
 import voice
 from settings_gui import SettingsTab, write_env
 from discover_gui import DiscoverTab
@@ -508,6 +510,30 @@ def main():
     voice.attach(lambda job, heading: play.voice_jobs.put((job, heading)),
                  lambda: play.running or not play.voice_jobs.empty())
     voice.restart()
+
+    # --- tray: Start in the tray (when Windows launches it) and Close to tray ---
+    def show_window():
+        root.deiconify()
+        root.lift()
+        root.focus_force()
+
+    def quit_app():
+        tray.stop()
+        voice.stop()
+        library.stop()
+        root.destroy()
+
+    def on_close():
+        engine.refresh_settings_if_changed()
+        if engine.CLOSE_TO_TRAY and tray.start(root, show_window, quit_app):
+            root.withdraw()   # still running: voice keeps listening
+        else:
+            quit_app()
+
+    root.protocol("WM_DELETE_WINDOW", on_close)
+    if engine.CLOSE_TO_TRAY or (tray.started_by_windows() and engine.START_IN_TRAY):
+        if tray.start(root, show_window, quit_app) and tray.started_by_windows() and engine.START_IN_TRAY:
+            root.withdraw()
 
     root.mainloop()
 

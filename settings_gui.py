@@ -10,11 +10,13 @@ save immediately. The engine picks up the file via its .env mod-time check.
 """
 
 import os
+import sys
 import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 
 import engine
+import tray
 import voice
 from tabs import TabbedPane
 
@@ -152,6 +154,8 @@ class SettingsTab(tk.Frame):
         agree = self.vars["SIMILAR_TRACK_MIN_AGREEMENT"].get()
         updates["SIMILAR_TRACK_MIN_AGREEMENT"] = "1" if agree == "Off" else agree
         updates["SIMILAR_TRACK_TOPUP"] = "1" if self.vars["SIMILAR_TRACK_TOPUP"].get() else "0"
+        for key in ("START_IN_TRAY", "CLOSE_TO_TRAY"):
+            updates[key] = "1" if self.vars[key].get() else "0"
         return updates
 
     def _refresh_key_marks(self):
@@ -542,6 +546,44 @@ class SettingsTab(tk.Frame):
         self.default_zone_var = tk.StringVar(value=engine.DEFAULT_ZONE)
         self._zones_filled = False
         tab.bind("<<Shown>>", lambda e: None if self._zones_filled else self._fill_zone_boxes())
+
+        # Windows: start with Windows, start hidden in the tray, and close to the tray
+        tk.Label(tab, text="Windows", font=("Segoe UI", 10, "bold")).grid(row=9, column=0, sticky="w", pady=(18, 2))
+        self.startup_var = tk.BooleanVar(value=tray.startup_command() is not None)
+        startup_box = ttk.Checkbutton(tab, text="Start with Windows", variable=self.startup_var,
+                                      command=self._startup_toggled)
+        startup_box.grid(row=10, column=0, columnspan=2, sticky="w")
+        self.vars["START_IN_TRAY"] = tk.BooleanVar(value=self.env.get("START_IN_TRAY", "1") in ("1", "true", "yes"))
+        ttk.Checkbutton(tab, text="Start in the tray (hidden, when Windows starts it)",
+                        variable=self.vars["START_IN_TRAY"], command=self._save).grid(
+            row=11, column=0, columnspan=2, sticky="w")
+        self.vars["CLOSE_TO_TRAY"] = tk.BooleanVar(value=self.env.get("CLOSE_TO_TRAY", "0") in ("1", "true", "yes"))
+        ttk.Checkbutton(tab, text="Close to tray (the X hides 24bit7; Quit from the tray icon)",
+                        variable=self.vars["CLOSE_TO_TRAY"], command=self._save).grid(
+            row=12, column=0, columnspan=2, sticky="w")
+        self.startup_note = tk.Label(tab, text="", fg=HELP_FG, font=HELP_FONT, justify="left")
+        self.startup_note.grid(row=13, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        self._show_startup_note()
+        if not sys.platform.startswith("win"):
+            startup_box.state(["disabled"])
+
+    def _startup_toggled(self):
+        try:
+            tray.set_startup(self.startup_var.get())
+        except Exception as e:
+            self.startup_var.set(tray.startup_command() is not None)
+            messagebox.showerror("Start with Windows", f"Couldn't change the startup setting: {e}", parent=self)
+        self._show_startup_note()
+
+    def _show_startup_note(self):
+        lines = ["Voice needs 24bit7 running, so for voice after a restart, tick Start with Windows and\n"
+                 "set JRiver Media Center or Media Server to start with Windows as well."]
+        current = tray.startup_command()
+        if current and current != tray.launch_command():
+            lines.append("Windows starts a different copy of 24bit7. Untick and tick again to start this one.")
+        if not tray.available():
+            lines.append("The tray needs pystray and Pillow: run  pip install pystray Pillow  and restart.")
+        self.startup_note.config(text="\n".join(lines))
 
     def _fill_zone_boxes(self):
         """Per zone: a Show tick (hidden zones drop off the Play tab) and a Default button."""
