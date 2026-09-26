@@ -6,7 +6,9 @@ If you host your whole music library locally in JRiver, you get bit-perfect play
 
 **It works live.** Play any track in JRiver, press a button, and Playing Now is rebuilt around it while the music keeps going. There is nothing to export, no listening history to upload and no second app to keep in sync: whatever is playing right now is the seed. Run it mid-album, mid-track, whenever the mood shifts.
 
-**New in 1.2.0: you don't have to own it.** Type any artist and track into the Search tab and 24bit7 builds a playlist around it, from your library or, with Output set to YouTube, from YouTube. That second route needs no library, no keys and no JRiver. When someone asks "do you have this?", the answer can be "no, but I can build you a playlist from it".
+**New in 1.3.0: tracks, not just artists, and your voice.** Similar Tracks builds a playlist of songs like the one playing, not just songs by similar artists, so the mood of the seed carries through. Every playlist can go to any JRiver zone by name, and with an Alexa skill of your own you can ask for one out loud: "Alexa, ask needle drop for tracks like Big Yellow Taxi". 24bit7 can now start with Windows and wait in the tray, so it is there when you ask.
+
+You don't have to own the seed either. Type any artist and track into the Search tab and 24bit7 builds a playlist around it, from your library or, with Output set to YouTube, from YouTube. That second route needs no library, no keys and no JRiver.
 
 Everything it can't find in your library is logged, so the misses become a shopping list.
 
@@ -16,20 +18,21 @@ The name is a throwback to an old username. Read it as 24-bit and 24/7: audiophi
 
 ## What it does
 
-Four actions on the **Play** tab. The seed is whichever of the two small tabs is showing when you press a button: **Now Playing** (whatever JRiver is playing right now) or **Search** (any artist and track you type, owned or not).
+Five actions on the **Play** tab. The seed is whichever of the two small tabs is showing when you press a button: **Now Playing** (whatever JRiver is playing right now) or **Search** (any artist and track you type, owned or not).
 
 | Action | What you get |
 |---|---|
 | **Similar Artists** | A playlist built from artists similar to the seed, blended from whichever sources you have enabled. Each artist (the seed included) contributes a random pick from its top tracks, so the same seed gives a different playlist every run. |
+| **Similar Tracks** | A playlist of tracks like the seed track, suggested track by track by Last.fm, ListenBrainz and YouTube Music and blended, so a playlist follows the song rather than the artist's reputation. |
 | **Artist's Top Tracks** | The artist's most popular tracks that you actually own, in random or popularity order. From the Search tab it needs only the artist. |
 | **Vibe Playlist** | Type a mood or scene (or pick one of three AI suggestions) and get a playlist to match. |
 | **Show Credits** | Producer, engineer and other credits for the current album, from Discogs. Not offered from the Search tab, which has no album to look up. |
 
-**Output** sits beside the buttons and decides where the finished playlist goes. JRiver, the default, queues it after the current track. YouTube opens it in your browser as an instant playlist.
+**Output** sits beside the buttons and decides where the finished playlist goes: **Same zone** (the default: the zone you seeded from), any JRiver zone by name, or **YouTube**, which opens it in your browser as an instant playlist. The **Zone** dropdown on the Now Playing tab picks which zone you seed from.
 
 Two supporting tabs:
 
-- **Discover** lists every track a run looked for, whether it was found (hit) or not (miss), filterable by session and searchable across all fields. Select a row and every site you have ticked has its own button along the bottom: one click, one browser tab. Stores (Bandcamp, Qobuz, Bleep, Beatport and more) and YouTube search for the artist and track; reference sites (Wikipedia, Discogs, AllMusic, MusicBrainz) search for the artist, so you can browse the discography. If your favourite site is missing, add up to three of your own under Settings > Search. Misses are one click from purchase.
+- **Discover** lists every track a run looked for, whether it was found (hit) or not (miss), filterable by session and searchable across all fields. Select a row and every site you have ticked has its own button along the bottom: one click, one browser tab. Stores (Bandcamp, Qobuz, Bleep, Beatport and more) and YouTube search for the artist and track; reference sites (Wikipedia, Discogs, AllMusic, MusicBrainz) search for the artist, so you can browse the discography. If your favourite site is missing, add up to three of your own under Settings > Search. Misses are one click from purchase. Tick any rows (or Select all) and **Create YouTube playlist** opens them in your browser as one playlist, so you can hear the misses before you buy.
 - **Settings** holds all keys and preferences. Changes save immediately and the running app picks them up without a restart.
 
 ---
@@ -50,6 +53,14 @@ Each enabled source returns a ranked list of similar artists. 24bit7 merges them
 
 With more than one source enabled, **Sources that must agree** (Settings > Sources) sets how many of them have to suggest an artist before it is used: Off, 2, 3 and so on, up to the number of sources ticked. Higher means a smoother playlist with fewer wildcards, but less chance of discovering something new. If too few artists clear the bar, 24bit7 relaxes it one step at a time, never below 2, and says so in the log. Session-based recommenders in particular will offer whatever else their listeners had on that day, and this is what keeps that noise out of the playlist.
 
+### Similar Tracks
+
+Similar Artists asks "who sounds like this artist?". Similar Tracks asks "what sounds like this song?", which follows the mood of the seed far more closely: two songs by the same artist lead to different places.
+
+- **Three sources**, each ticked under Settings > Sources: Last.fm (track similarity from listening data), ListenBrainz (similar recordings, with a choice of all-time or roughly the last six months) and YouTube Music (its up next queue). ListenBrainz and YouTube Music need no key.
+- **Blended by track.** A track two or three sources agree on ranks above one only a single source suggests. **Sources that must agree** works as it does for artists, and if too few agreed tracks are in your library it is relaxed a step at a time, with a line in the log.
+- **Settings > Playlist** sets the length, the most tracks any one artist gets (the seed artist included), whether to **top up from Similar Artists** when the library falls short, and the order: shuffled, or most similar first.
+
 ### YouTube Music as a source
 
 The other sources answer "who is similar to this artist?". YouTube Music has no such question, so 24bit7 asks it a different one: "if someone is playing this track, what would you play next?" The answer is a queue of around fifty tracks chosen for the mood of the track, not the reputation of the artist, so two songs by the same artist can lead to different places.
@@ -59,7 +70,7 @@ The other sources answer "who is similar to this artist?". YouTube Music has no 
 
 It needs no key and no sign-in. It does rely on an unofficial library, ytmusicapi, which imitates the YouTube Music website. When YouTube changes something it can break until that library catches up.
 
-### Output: JRiver or YouTube
+### Output: a JRiver zone or YouTube
 
 With Output set to YouTube the playlist is built exactly as before. Then each track's video is looked up and the whole list opens in your browser as an instant playlist: no sign-in, nothing saved to an account, and up to 50 videos, which is the most YouTube allows in one playlist link (**YouTube playlist length** in Settings > Other sets the number). JRiver isn't touched. There is no library check, so nothing is a miss: every track found is logged to Discover as a hit. A video is only accepted if the artist matches, because a cover is worse than a gap.
 
@@ -68,6 +79,8 @@ Be clear about what this is for. YouTube audio is lossy, and 24bit7 exists becau
 ### Library matching
 
 Recommendations arrive as names. Names are messy. 24bit7 handles accents (Trüby Trio, with or without the umlaut), typographic punctuation (MusicBrainz spells alt-J with a Unicode hyphen that looks identical and matches nothing) and version suffixes on track titles before deciding whether you own something. It deliberately matches on names rather than MusicBrainz IDs, because most personal libraries aren't tagged with them.
+
+Since 1.3.0 the whole library is also held in memory when 24bit7 starts, about a second's work for a library of well over 100,000 tracks, and refreshed in the background. Similar Tracks and voice commands match against it instantly, and it finds compilation copies of a track, including libraries that tag compilations as "Artist - Title" under the series name.
 
 Two cases earned their own rules in 1.2.0:
 
@@ -82,7 +95,28 @@ New tracks are queued around the current one: everything else in Playing Now is 
 
 A playlist built from the Search tab follows the same rule: whatever is playing is never interrupted. Only if JRiver is stopped does the new playlist start by itself, opening with the track you searched for if you own it.
 
-If you use more than one JRiver zone, 24bit7 follows whichever zone is active.
+With more than one JRiver zone, the finished playlist goes to the zone Output names. A stopped zone starts playing it straight away. A busy zone keeps its current track and queues the playlist after it. If you seed from one zone and send to another, the seed track opens the playlist on the new zone. Settings > Other sets which zones appear, which zone Now Playing opens on, and whether it follows JRiver's active zone. A DLNA speaker such as a Sonos works as a zone once DLNA Controller is ticked in JRiver.
+
+### Voice control (optional, advanced)
+
+24bit7 can take commands from an Alexa skill you host yourself. This is not a one-click setup: you need your own Amazon developer account and Alexa-hosted skill, a Tailscale Funnel (or similar) to let Amazon reach 24bit7 on your PC, and 24bit7 left running, which Start with Windows and the tray take care of. The skill's code and interaction model are in the `alexa` folder of this repository, and a full step-by-step setup guide is on the roadmap. Settings > Voice holds the key the skill sends and assigns each Alexa speaker to a zone.
+
+Once it is set up, each speaker plays to its own zone:
+
+| Say | You get |
+|---|---|
+| "songs by *artist*" | Artist's Top Tracks |
+| "music like *artist*" | Similar Artists, seeded from the artist's most popular track |
+| "tracks like *song*" (or "*song* by *artist*") | Similar Tracks |
+| "genre *anything*" | Vibe Playlist |
+| "album *name*", "song *title*", "playlist *name*" | Plays it now, replacing what's playing |
+| "shuffle songs by *artist*" | Every track by the artist in your library, shuffled |
+
+When several albums or songs share a title, Alexa asks which artist, and you answer "by *artist*". No command starts with "play", because Alexa tends to hand anything starting "play" to a music service instead of the skill. The skill name is up to you; the one in this repository is "needle drop", chosen because Alexa kept mishearing the first one.
+
+### Start with Windows and the tray
+
+Settings > Other > Windows has three ticks. **Start with Windows** launches 24bit7 when you sign in (a per-user startup entry, so no admin rights). **Start in the tray** keeps the window hidden when Windows starts it. **Close to tray** makes the window's close button hide 24bit7 rather than quit, so voice keeps listening; quit from the tray icon instead. For voice after a restart, set JRiver Media Center or Media Server to start with Windows as well. Media Server on its own is enough for everything 24bit7 does.
 
 ### Speed
 
@@ -101,10 +135,10 @@ Every response from every source is cached in a local SQLite database with a con
 | Source | Used for | Key needed | Notes |
 |---|---|---|---|
 | JRiver MCWS | Now playing, library search, queueing | No (localhost by default) | Requires Media Network enabled in JRiver. Not needed for Search with YouTube output. |
-| Last.fm | Similar artists, top tracks, play counts | Yes (free) | Classic listener-based similarity. |
-| ListenBrainz / MusicBrainz | Similar artists, top recordings | Yes (free) | Open data. Choice of algorithm (all-time or recent 75-day). The slowest source on a first run. |
+| Last.fm | Similar artists, similar tracks, top tracks, play counts | Yes (free) | Classic listener-based similarity. |
+| ListenBrainz / MusicBrainz | Similar artists, similar tracks, top recordings | Only for top recordings (free) | Open data. Choice of algorithm for artists (all-time or recent 75-day) and for tracks (all-time or roughly six months). The slowest artist source on a first run. |
 | Deezer | Similar artists, top tracks, name verification | No | Also used to verify AI-suggested artists exist. |
-| YouTube Music | Similar artists from the up next queue, playlist output, Discover search | No | No sign-in. Uses the unofficial ytmusicapi library, so it may break now and then. |
+| YouTube Music | Similar artists and similar tracks from the up next queue, playlist output, Discover playlists | No | No sign-in. Uses the unofficial ytmusicapi library, so it may break now and then. |
 | Discogs | Album credits | Yes (free) | Credits display only. |
 | Anthropic (Claude) | AI-suggested similar artists, Vibe Playlist | Yes (paid, pennies per run) | Every suggestion is verified against Deezer before it is trusted. |
 
@@ -122,7 +156,7 @@ JRiver is only needed for the Now Playing seed and for JRiver output. The Search
 
 ### Path A: download and run (Windows)
 
-1. Download `24bit7-v1.2.1-windows.zip` from the [Releases](../../releases) page.
+1. Download `24bit7-v1.3.0-windows.zip` from the [Releases](../../releases) page.
 2. Unzip it anywhere you like and run `24bit7.exe`.
 3. Windows will most likely show a blue **"Windows protected your PC"** box the first time, because the exe isn't code-signed. Click **More info**, then **Run anyway**. It only asks once.
 4. On first run the app opens on Settings. Add keys for the sources you want; each field has a **?** button with instructions for getting that key. Deezer and YouTube Music work with no key at all, and they are the two sources a fresh install has ticked.
@@ -132,7 +166,7 @@ Your keys and history live in two files next to the exe: `.env` (settings and ke
 ### Path B: run from source
 
 1. Python 3.10 or newer.
-2. `pip install -r requirements.txt` (requests, python-dotenv, anthropic, ytmusicapi).
+2. `pip install -r requirements.txt` (requests, python-dotenv, anthropic, ytmusicapi, and pystray with Pillow for the tray icon).
 3. Run `gui.pyw`. First run behaves as in Path A.
 4. Optional: pin to the taskbar with a shortcut targeting `pythonw.exe` and `gui.pyw` as the argument. An icon is included.
 
@@ -140,7 +174,17 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.2.1
+## What's new in 1.3.0
+
+- **Similar Tracks.** A new Play button that builds a playlist of tracks like the seed track, from Last.fm, ListenBrainz and YouTube Music, with its own sources, agreement number and playlist settings.
+- **Zones.** Output lists every JRiver zone by name, Now Playing has its own Zone dropdown, and Settings > Other sets which zones show, the default zone and whether to follow JRiver's active zone.
+- **Voice control.** An optional, self-hosted Alexa skill for top tracks, similar artists, similar tracks, genres, albums, songs, playlists and shuffles, each speaker playing to its own zone. Advanced setup; see Voice control above.
+- **Discover to YouTube.** Tick rows, or Select all, and Create YouTube playlist opens them as one playlist.
+- **Start with Windows and the tray.** Start with Windows, start hidden in the tray, and close to the tray, so 24bit7 is always there for voice.
+- **Settings.** Every Settings page scrolls. Sources is split into Similar Artists, Similar Tracks and Artist's Top Tracks, each with its own ListenBrainz algorithm where it applies.
+- **Library in memory.** Matching for Similar Tracks and voice runs against the whole library held in memory, and finds compilation copies too.
+
+### Earlier: 1.2.1
 
 - **Show Credits works again.** Its function had gone missing from the engine before the first public release, so the button failed in 1.0.1, 1.1.0 and 1.2.0.
 - **Missing keys are named in the log.** A feature that needs a key now says which one and where to add it. Before, it failed quietly or blamed the service. A ticked source with no key is named once and then skipped, and Settings > Sources marks it "(no key yet)".
@@ -171,13 +215,14 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 **Solid**: Similar Artists, Artist's Top Tracks, Show Credits, Discover, Settings, cache, mid-album queueing, multi-value artists, the agreement number.
 
-**Newer**: the Search tab, YouTube Music as a source and YouTube output. All three are in daily use on the development PC. The YouTube parts rest on an unofficial library, so expect the occasional breakage. Vibe Playlist works well and is still learning its limits.
+**Newer**: Similar Tracks, zones, voice control, Discover's YouTube playlists, the tray, the Search tab, YouTube Music as a source and YouTube output. All are in daily use on the development PC. Voice control is the least plug-and-play part, as its setup says, and the YouTube parts rest on an unofficial library, so expect the occasional breakage. Vibe Playlist works well and is still learning its limits.
 
 **Removed**: a producer-based playlist mode built on Discogs credits. Discogs credit data is too patchy to be reliable, so it was dropped rather than shipped half-working.
 
 ### Roadmap
 
 - An optional AI sanity check that removes obvious misfits from a playlist before it is queued
+- A step-by-step setup guide for voice control
 - Remembering Deezer artist IDs, for quicker first runs
 - Dark theme (the tab colours now live in one palette, which is the first step)
 - More players and outputs beyond JRiver and YouTube (distant)
