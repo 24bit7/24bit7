@@ -5,6 +5,7 @@ needle drop - the Alexa skill for 24bit7.
     "songs by <artist>"     Artist's Top Tracks
     "music like <artist>"   Similar Artists
     "genre <anything>"      Vibe Playlist
+    "tracks like <song>"    Similar Tracks ("tracks like <song> by <artist>" works too)
     "album <name>"          plays that album now ("album <name> by <artist>" if several share it)
     "song <title>"          plays that song now, then stops ("song <title> by <artist>" works too)
     "playlist <name>"       plays one of your JRiver playlists or smartlists now
@@ -40,8 +41,9 @@ from skill_settings import BIT7_KEY, BIT7_URL, CHIME   # your address, key and c
 
 TIMEOUT = 6   # seconds; Alexa gives the whole skill about eight
 HELP = ("Say songs by, music like, or shuffle songs by, then an artist. Genre, then any style you like. "
-        "Or album, song, or playlist, then its name.")
+        "Tracks like, then a song. Or album, song, or playlist, then its name.")
 INTENTS = {"SongsByIntent": "songs_by", "MusicLikeIntent": "music_like", "GenreIntent": "genre",
+           "TracksLikeIntent": "tracks_like",
            "AlbumIntent": "album", "SongIntent": "song", "PlaylistIntent": "playlist",
            "ShuffleIntent": "shuffle"}
 

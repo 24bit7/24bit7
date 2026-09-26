@@ -19,6 +19,11 @@
           "samples": ["genre {query}", "a genre of {query}"]
         },
         {
+          "name": "TracksLikeIntent",
+          "slots": [{"name": "query", "type": "AMAZON.SearchQuery"}],
+          "samples": ["tracks like {query}", "songs like {query}"]
+        },
+        {
           "name": "AlbumIntent",
           "slots": [{"name": "query", "type": "AMAZON.SearchQuery"}],
           "samples": ["album {query}", "the album {query}"]

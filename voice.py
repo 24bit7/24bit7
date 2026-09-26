@@ -6,7 +6,7 @@ It only listens on this PC (127.0.0.1); a tunnel is what connects it to Amazon.
 
   POST /command   header X-24bit7-Key: <VOICE_KEY>
                   body {"intent": "songs_by" | "music_like" | "genre" |
-                                  "album" | "song" | "playlist" | "shuffle",
+                                  "tracks_like" | "album" | "song" | "playlist" | "shuffle",
                         "value": "Agnes Obel", "device": "<Alexa device ID>",
                         "zone": "Sonos"}        # zone is optional and beats the device's zone
                   reply {"speech": "Music like Agnes Obel, coming up on Sonos."}
@@ -32,7 +32,7 @@ import requests
 import engine
 import library
 
-INTENTS = ("songs_by", "music_like", "genre", "album", "song", "playlist", "shuffle")
+INTENTS = ("songs_by", "music_like", "genre", "tracks_like", "album", "song", "playlist", "shuffle")
 INSTANT = ("album", "song", "playlist", "shuffle")   # played straight away, nothing to build
 SHUFFLE_CAP = 400                            # most tracks a shuffle sends to JRiver
 TEST_DEVICE = "24bit7-settings-test"
@@ -111,6 +111,10 @@ def _job(intent, value, zone):
                     return
                 report(f"  Seed track: {tracks[0][0]} (the artist's most popular track)")
                 engine.create_similar_playlist(report=report, seed_info=engine.typed_seed_info(value, tracks[0][0]))
+            elif intent == "tracks_like":
+                artist, title = value
+                engine.create_similar_tracks_playlist(report=report,
+                                                      seed_info=engine.typed_seed_info(artist, title))
             else:
                 engine.create_vibe_playlist(value, report=report)
         finally:
@@ -170,6 +174,31 @@ def _play_now(intent, value, zone):
     return "started", f"Playing {what} on {zone}.", {}
 
 
+def _tracks_like_seed(value):
+    """
+    'creep' or 'creep by radiohead' -> ((artist, title), None) to seed Similar Tracks from,
+    or (None, reply) when Alexa should answer instead. Names come from the library
+    where the song is there; with 'by <artist>' it doesn't have to be.
+    """
+    found, matches = library.find_song(value)
+    if found:
+        title, artist, _ = matches[0]
+        return (artist, title), None
+    if " by " in value:
+        title, artist = (part.strip() for part in value.rsplit(" by ", 1))
+        return (artist, title), None
+    if not matches:
+        return None, ("problem", f"I couldn't find a song called {value}. "
+                                 f"Say tracks like, then the song, by the artist.", {})
+    title = matches[0][0]
+    artists = [artist for _, artist, _ in matches]
+    if len(artists) <= 3:
+        speech = f"{title} by {_either(artists)}. Which one?"
+    else:
+        speech = f"You have {len(artists)} songs called {title}. Which artist?"
+    return None, ("ask", speech, {"ask": "tracks_like", "title": title})
+
+
 def handle_command(body, busy=False):
     """
     Works out the reply and queues the build, or plays an album, playlist or
@@ -187,7 +216,7 @@ def handle_command(body, busy=False):
     if intent == "song" and value.lower().startswith("by "):   # Alexa heard "songs by" as "song by"
         intent, value = "songs_by", value[3:].strip()
     if not value:
-        missing = {"genre": "the genre", "album": "the album", "song": "the song",
+        missing = {"genre": "the genre", "album": "the album", "song": "the song", "tracks_like": "the song",
                    "playlist": "the playlist"}.get(intent, "the artist")
         return "problem", f"I didn't catch {missing}.", {}
 
@@ -207,11 +236,21 @@ def handle_command(body, busy=False):
         return "problem", "Genre playlists need an Anthropic key in 24bit7.", {}
     if _submit is None:
         return "problem", "24bit7 isn't ready yet. Try again in a moment.", {}
+    if intent == "tracks_like":
+        try:
+            value, reply = _tracks_like_seed(value)
+        except Exception as e:
+            print(f"[Voice] tracks like '{value}' failed: {e}")
+            return "problem", "I couldn't reach the library in JRiver. Is JRiver running on the media PC?", {}
+        if reply:
+            return reply
 
-    words = {"songs_by": f"Songs by {value}", "music_like": f"Music like {value}",
-             "genre": f"A {value} playlist"}[intent]
-    phrase = {"songs_by": "songs by", "music_like": "music like", "genre": "genre"}[intent]
-    _submit(_job(intent, value, zone), f"Voice, {name}: {phrase} {value}, to {zone}")
+    shown = f"{value[1]} by {library.spoken(value[0])}" if intent == "tracks_like" else value
+    words = {"songs_by": f"Songs by {shown}", "music_like": f"Music like {shown}",
+             "genre": f"A {shown} playlist", "tracks_like": f"Tracks like {shown}"}[intent]
+    phrase = {"songs_by": "songs by", "music_like": "music like", "genre": "genre",
+              "tracks_like": "tracks like"}[intent]
+    _submit(_job(intent, value, zone), f"Voice, {name}: {phrase} {shown}, to {zone}")
     if busy:
         return "pending", "Please wait, request pending.", {}
     return "started", f"{words}, coming up on {zone}.", {}
