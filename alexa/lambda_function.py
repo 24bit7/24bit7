@@ -88,7 +88,7 @@ def respond(handler_input, status, speech, reply):
         session = handler_input.attributes_manager.session_attributes
         session["ask"], session["title"] = reply.get("ask", "album"), reply.get("title", "")
         return builder.speak(escape(speech)).ask("Say by, then the artist.").response
-    speech = chimes(2, "OK.") if status == "started" else escape(speech)
+    speech = chimes(2, "You got it.") if status == "started" else escape(speech)
     return builder.speak(speech).set_should_end_session(True).response
 
 
