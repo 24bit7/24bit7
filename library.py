@@ -307,6 +307,28 @@ def find_song(heard):
     return True, [(pick[0], pick[1], pick[2])]
 
 
+def find_track_key(artist, title):
+    """
+    The library key for a track named by a similarity source, or None. Title
+    and artist both have to match (forgiving about case, version tags and
+    'Kooks, The'), and compilation copies named 'Artist - Title' count. Where
+    you own several copies, the studio album version wins.
+    """
+    ensure_loaded()
+    want = norm(title)
+    if not want:
+        return None
+    with _lock:
+        entries = list(_songs.get(want, []))
+        if not entries:
+            close = difflib.get_close_matches(want, _song_titles, n=3, cutoff=0.9)
+            entries = [e for t in close for e in _songs[t]]
+    matches = [e for e in entries if _artist_score(artist, e[1]) >= GOOD]
+    if not matches:
+        return None
+    return sorted(matches, key=lambda e: _album_version_first(e, norm(e[1])))[0][2]
+
+
 def artist_tracks(heard):
     """
     Every track by the closest artist: tagged as the artist (multi-artist tags

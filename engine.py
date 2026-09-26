@@ -110,6 +110,9 @@ def load_settings():
     global SIMILAR_SOURCES, TOP_TRACK_SOURCES, LISTENBRAINZ_ALGORITHM_SETTING
     global DIGITAL_STORES, REFERENCE_SITES, DEBUG, SIMILAR_ARTIST_LIMIT, TRACKS_PER_ARTIST_POOL
     global SIMILAR_MIN_AGREEMENT
+    global SIMILAR_TRACK_SOURCES, SIMILAR_TRACK_MIN_AGREEMENT, SIMILAR_TRACK_COUNT
+    global SIMILAR_TRACK_PER_ARTIST, SIMILAR_TRACK_TOPUP, SIMILAR_TRACK_ORDER
+    global LISTENBRAINZ_TRACK_ALGORITHM_SETTING
     global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, CACHE_DAYS
     global TABLE_FONT_SIZE, VIBE_TRACK_COUNT
     global OUTPUT_TARGET, YOUTUBE_PLAYLIST_LENGTH, HIDDEN_ZONES, DEFAULT_ZONE, FOLLOW_ACTIVE_ZONE
@@ -153,6 +156,19 @@ def load_settings():
     else:
         legacy_on = os.getenv("SIMILAR_REQUIRE_AGREEMENT", "1").strip().lower() in ("1", "true", "yes")
         SIMILAR_MIN_AGREEMENT = 2 if legacy_on else 1
+
+    # Similar Tracks: its own sources (lastfm, listenbrainz, youtube), agreement and playlist settings
+    SIMILAR_TRACK_SOURCES = [x.strip().lower() for x in
+                             os.getenv("SIMILAR_TRACK_SOURCES", "lastfm,listenbrainz,youtube").split(",")
+                             if x.strip().lower() in ("lastfm", "listenbrainz", "youtube")]
+    SIMILAR_TRACK_MIN_AGREEMENT = _int_setting("SIMILAR_TRACK_MIN_AGREEMENT", 2, 1, 3)
+    SIMILAR_TRACK_COUNT = _int_setting("SIMILAR_TRACK_COUNT", 30, 5, 100)
+    SIMILAR_TRACK_PER_ARTIST = _int_setting("SIMILAR_TRACK_PER_ARTIST", 3, 1, 20)
+    SIMILAR_TRACK_TOPUP = os.getenv("SIMILAR_TRACK_TOPUP", "1").strip().lower() in ("1", "true", "yes")
+    LISTENBRAINZ_TRACK_ALGORITHM_SETTING = os.getenv("LISTENBRAINZ_TRACK_ALGORITHM", "alltime").strip().lower()
+    SIMILAR_TRACK_ORDER = os.getenv("SIMILAR_TRACK_ORDER", "shuffled").strip().lower()
+    if SIMILAR_TRACK_ORDER not in ("shuffled", "similar first"):
+        SIMILAR_TRACK_ORDER = "shuffled"
 
     SIMILAR_ARTIST_LIMIT = _int_setting("SIMILAR_ARTIST_LIMIT", 20, 1, 50)
     TRACKS_PER_ARTIST_POOL = _int_setting("TRACKS_PER_ARTIST_POOL", 5, 1, 20)
@@ -227,6 +243,10 @@ TOP_TRACK_SOURCES=deezer
 LISTENBRAINZ_ALGORITHM=alltime
 # How many similar-artist sources must agree on an artist (1 = off, up to 5)
 SIMILAR_MIN_AGREEMENT=1
+# Similar Tracks sources (lastfm, listenbrainz, youtube) and how many must agree on a track
+SIMILAR_TRACK_SOURCES=listenbrainz,youtube
+SIMILAR_TRACK_MIN_AGREEMENT=2
+LISTENBRAINZ_TRACK_ALGORITHM=alltime
 
 # Playlist sizes and order
 SIMILAR_ARTIST_LIMIT=20
@@ -235,6 +255,10 @@ TRACKS_PER_ARTIST_PICK=3
 TOP_TRACKS_COUNT=10
 TOP_TRACKS_ORDER=popular
 VIBE_TRACK_COUNT=20
+SIMILAR_TRACK_COUNT=30
+SIMILAR_TRACK_PER_ARTIST=3
+SIMILAR_TRACK_TOPUP=1
+SIMILAR_TRACK_ORDER=shuffled
 
 # Discover search sites (comma-separated). Stores search artist + track, reference
 # sites search the artist. One browser tab opens per site.
@@ -2107,6 +2131,219 @@ def create_similar_playlist(report=print, seed_info=None):
         report(sending_message(len(keys_list)))
         send_to_jriver(keys_list, seed_info=seed_info, report=report)
         queued = len(keys_list)
+        report("Queue refreshed.")
+    else:
+        report("No library matches found.")
+    session_finish(session_id, queued, sources=source_label, report=report)
+
+
+# ---------------------------------------------------------------------------
+# Mode 2b: Similar Tracks (tracks like the seed track, blended across sources)
+# ---------------------------------------------------------------------------
+
+SIMILAR_TRACK_FETCH = 50   # tracks asked of each source
+LISTENBRAINZ_TRACK_ALGORITHMS = {   # Labs similar-recordings datasets, chosen under Settings > Sources
+    "alltime": "session_based_days_9000_session_300_contribution_5_threshold_15_limit_50_skip_30",
+    "recent":  "session_based_days_180_session_300_contribution_5_threshold_15_limit_50_skip_30",
+}
+LABS = "https://labs.api.listenbrainz.org"
+
+
+def lastfm_similar_tracks(artist, track, limit=SIMILAR_TRACK_FETCH):
+    """Last.fm track.getSimilar: [[artist, title], ...], most similar first."""
+    try:
+        r = requests.get("http://ws.audioscrobbler.com/2.0/", timeout=20, params={
+            "method": "track.getsimilar", "artist": artist, "track": track, "autocorrect": 1,
+            "api_key": LASTFM_KEY, "format": "json", "limit": limit})
+        return [[t["artist"]["name"], t["name"]] for t in r.json().get("similartracks", {}).get("track", [])]
+    except Exception as e:
+        print(f"[Error] Last.fm similar tracks failed: {e}")
+        return []
+
+
+def _labs_rows(data):
+    """The Labs data hoster has returned a few shapes over time; flattened to a list of dicts."""
+    if isinstance(data, dict):
+        data = data.get("data", data.get("payload", [data]))
+    rows = []
+    for item in data or []:
+        if isinstance(item, dict) and isinstance(item.get("data"), list):
+            rows.extend(i for i in item["data"] if isinstance(i, dict))
+        elif isinstance(item, dict):
+            rows.append(item)
+    return rows
+
+
+def listenbrainz_similar_tracks(artist, track, limit=SIMILAR_TRACK_FETCH):
+    """ListenBrainz similar recordings, via the track's MusicBrainz ID. No token needed."""
+    headers = {"User-Agent": USER_AGENT}
+    try:
+        r = requests.get(f"{LABS}/acr-lookup/json", headers=headers, timeout=20,
+                         params={"artist_credit_name": artist, "recording_name": track})
+        rows = _labs_rows(r.json()) if r.status_code == 200 else []
+        mbid = next((row["recording_mbid"] for row in rows if row.get("recording_mbid")), None)
+        if not mbid:
+            print(f"  [ListenBrainz] No MusicBrainz match for {artist} - {track}")
+            return []
+        r = requests.post(f"{LABS}/similar-recordings/json", headers=headers, timeout=30,
+                          json=[{"recording_mbids": [mbid],
+                                 "algorithm": LISTENBRAINZ_TRACK_ALGORITHMS.get(
+                                     LISTENBRAINZ_TRACK_ALGORITHM_SETTING, LISTENBRAINZ_TRACK_ALGORITHMS["alltime"])}])
+        similar = [row for row in (_labs_rows(r.json()) if r.status_code == 200 else [])
+                   if row.get("recording_mbid") and row["recording_mbid"] != mbid][:limit]
+        if similar and all(row.get("recording_name") for row in similar):
+            return [[row.get("artist_credit_name", ""), row["recording_name"]] for row in similar]
+        mbids = [row["recording_mbid"] for row in similar]
+        if not mbids:
+            return []
+        r = requests.post(f"{LABS}/recording-mbid-lookup/json", headers=headers, timeout=30,
+                          json=[{"[recording_mbid]": m} for m in mbids])
+        names = {row.get("recording_mbid"): [row.get("artist_credit_name", ""), row.get("recording_name", "")]
+                 for row in (_labs_rows(r.json()) if r.status_code == 200 else [])}
+        return [names[m] for m in mbids if m in names and names[m][1]]
+    except Exception as e:
+        print(f"[Error] ListenBrainz similar tracks failed: {e}")
+        return []
+
+
+def youtube_similar_tracks(artist, track, limit=SIMILAR_TRACK_FETCH):
+    """YouTube Music's up next queue for the track (cached with the up next it shares)."""
+    return youtube_up_next(artist, track)[:limit]
+
+
+TRACK_PROVIDERS = {
+    "lastfm":       ("Last.fm",      lastfm_similar_tracks),
+    "listenbrainz": ("ListenBrainz", listenbrainz_similar_tracks),
+    "youtube":      ("YouTube",      youtube_similar_tracks),
+}
+
+
+def similar_track_candidates(seeds, track, report=print):
+    """
+    Tracks similar to the seed track from every ticked Similar Tracks source,
+    blended so tracks several sources agree on come first.
+    Returns ([((artist, title), [sources])], [sources that answered]).
+    """
+    results = []
+    for code in SIMILAR_TRACK_SOURCES:
+        name, fetch = TRACK_PROVIDERS[code]
+        if not source_has_key(code):
+            report(f"  {name} is ticked for Similar Tracks but has no key, so it's skipped. {KEY_HELP_LINE}")
+            continue
+        pairs = []
+        for seed in seeds:   # a multi-value artist: the first name a source knows the track under
+            if code == "youtube":
+                pairs = youtube_similar_tracks(seed, track)
+            else:
+                label = f"{name} ({LISTENBRAINZ_TRACK_ALGORITHM_SETTING})" if code == "listenbrainz" else name
+                pairs = cached_call(label, "similar_tracks", f"{artist_key(seed)}|{clean_name(track)}",
+                                    lambda: fetch(seed, track))
+            if pairs:
+                break
+        pairs = [(canonicalise_conjunction(p[0]), normalise_punctuation(p[1])) for p in pairs or []
+                 if isinstance(p, (list, tuple)) and len(p) == 2 and p[0] and p[1]
+                 and p[0].strip().lower() not in YOUTUBE_SKIP_ARTISTS]
+        report(f"  {name}: {len(pairs)} similar tracks")
+        if pairs:
+            results.append((name, pairs))
+    blended = blend_lists(results, lambda p: (artist_key(p[0]), clean_name(p[1])))
+    return blended, [name for name, _ in results]
+
+
+def create_similar_tracks_playlist(report=print, seed_info=None):
+    """
+    Builds a playlist of tracks like the seed track, not just by similar artists:
+      1. Each ticked Similar Tracks source (Last.fm, ListenBrainz, YouTube Music)
+         suggests tracks like the seed; the lists are blended.
+      2. Tracks at least SIMILAR_TRACK_MIN_AGREEMENT sources agree on are matched
+         against the library first, best agreed first; if that leaves the playlist
+         short, the agreement is relaxed a step at a time down to one source.
+      3. No artist gets more than SIMILAR_TRACK_PER_ARTIST tracks, the seed artist included.
+      4. Still short and Top up is ticked: Similar Artists fills the gap.
+    Every track checked is logged to the session, hit or miss, for Discover.
+    """
+    import library   # here rather than at the top: library imports engine
+    refresh_settings_if_changed()
+    if seed_info is None:
+        seed_info = get_playing_info()
+    if not seed_info or seed_info["PlayingNowPosition"] == "-1":
+        report("Nothing playing. Seed from a track first!")
+        return
+    track = seed_info.get("Name") or ""
+    if not track or track == "Unknown":
+        report("Similar Tracks needs a track to seed from.")
+        return
+    seeds = seed_artists(seed_info)
+    target, per_artist = SIMILAR_TRACK_COUNT, SIMILAR_TRACK_PER_ARTIST
+    report(f"\nTracks like: {seed_info['Artist']} - {track}  (target {target}, at most {per_artist} per artist)")
+    session_id = session_start("similar_tracks", seed_info)
+    first_key = typed_seed_key(seed_info, seeds, session_id, report)
+
+    blended, responding = similar_track_candidates(seeds, track, report)
+    seed_keys, playing = {artist_key(s) for s in seeds}, clean_name(track)
+    candidates = [(p, s) for p, s in blended if not (artist_key(p[0]) in seed_keys and clean_name(p[1]) == playing)]
+    use_youtube = output_is_youtube()
+    if use_youtube:
+        prefetch_youtube_ids([p for p, _ in candidates[:target * 2]])
+
+    keys, per, checked = [], {}, set()
+    if first_key:
+        keys.append(first_key)
+        per[artist_key(seeds[0])] = 1
+    need = max(1, min(SIMILAR_TRACK_MIN_AGREEMENT, len(responding)))
+    while candidates:
+        for (artist, title), sources in candidates:
+            if len(keys) >= target:
+                break
+            ident = (artist_key(artist), clean_name(title))
+            if ident in checked or len(sources) < need or per.get(ident[0], 0) >= per_artist:
+                continue
+            checked.add(ident)
+            key = find_jriver_key_by_track(artist, title) if use_youtube else library.find_track_key(artist, title)
+            session_log(session_id, artist, title, sources, found=bool(key))
+            if key and key not in keys:
+                keys.append(key)
+                per[ident[0]] = per.get(ident[0], 0) + 1
+                report(f"    Found: {artist} - {title}  ({', '.join(sources)})")
+            elif not key:
+                report(f"    Not in library: {artist} - {title}")
+        if len(keys) >= target or need <= 1:
+            break
+        report(f"  {len(keys)} tracks with {need} or more sources agreeing, so relaxed to {need - 1}.")
+        need -= 1
+
+    source_label = " + ".join(responding) or "none"
+    if len(keys) < target and SIMILAR_TRACK_TOPUP:
+        if use_youtube:
+            report(f"  {len(keys)} of {target}. Top up is skipped with YouTube output.")
+        else:
+            report(f"  {len(keys)} of {target}, so topping up from Similar Artists...")
+            before = len(keys)
+            similar, _ = blended_similar_artists(seeds, limit=SIMILAR_ARTIST_LIMIT, seed_track=track,
+                                                 report=report)
+            prefetch_top_tracks([a for a, _ in similar], TRACKS_PER_ARTIST_POOL, report=report)
+            for artist, suggested_by in similar:
+                if len(keys) >= target:
+                    break
+                room = per_artist - per.get(artist_key(artist), 0)
+                if room <= 0:
+                    continue
+                picks, _ = pick_top_tracks_for_artist(artist, session_id, suggested_by, report=report)
+                for k in [k for k in picks if k not in keys][:min(room, target - len(keys))]:
+                    keys.append(k)
+                    per[artist_key(artist)] = per.get(artist_key(artist), 0) + 1
+            report(f"  Topped up {len(keys) - before} tracks from Similar Artists.")
+            source_label += " (topped up from Similar Artists)"
+
+    queued = 0
+    if keys:
+        body = [k for k in keys if k != first_key]
+        if SIMILAR_TRACK_ORDER == "shuffled":
+            random.shuffle(body)
+        keys = ([first_key] if first_key else []) + body
+        report(sending_message(len(keys), "" if SIMILAR_TRACK_ORDER == "shuffled" else ", most similar first"))
+        send_to_jriver(keys, seed_info=seed_info, report=report)
+        queued = len(keys)
         report("Queue refreshed.")
     else:
         report("No library matches found.")

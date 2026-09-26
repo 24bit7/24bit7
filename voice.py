@@ -280,7 +280,6 @@ def stop():
     if _server is not None:
         _server.shutdown()
         _server.server_close()
-    library.stop()
     _server, _thread, _status = None, None, "Off"
 
 
@@ -302,7 +301,6 @@ def restart():
         return _status
     _thread = threading.Thread(target=_server.serve_forever, daemon=True)
     _thread.start()
-    library.start()   # albums and playlists held in memory, refreshed in the background
     _status = f"Listening on 127.0.0.1:{engine.VOICE_PORT}"
     return _status
 

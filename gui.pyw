@@ -17,6 +17,7 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 
 import engine
+import library
 import voice
 from settings_gui import SettingsTab, write_env
 from discover_gui import DiscoverTab
@@ -187,6 +188,7 @@ class PlayTab(tk.Frame):
         self.buttons = []
         for text, handler in [
             ("Similar Artists", self.on_similar),
+            ("Similar Tracks", self.on_similar_tracks),
             ("Artist's Top Tracks", self.on_top_tracks),
             ("Vibe Playlist", self.on_vibe),
             ("Show Credits", self.on_credits),
@@ -350,6 +352,15 @@ class PlayTab(tk.Frame):
             return
         self._run_job(lambda: engine.create_similar_playlist(report=self.report))
 
+    def on_similar_tracks(self):
+        if self._seed_is_search():
+            seed = self._typed_seed(need_track=True)
+            if seed:
+                self._run_job(lambda: engine.create_similar_tracks_playlist(report=self.report, seed_info=seed),
+                              needs_playing=False)
+            return
+        self._run_job(lambda: engine.create_similar_tracks_playlist(report=self.report))
+
     def on_top_tracks(self):
         if self._seed_is_search():
             seed = self._typed_seed(need_track=False)
@@ -493,6 +504,7 @@ def main():
         nb.select(settings)
         root.after(400, lambda: messagebox.showinfo("Welcome to 24bit7", WELCOME_TEXT, parent=root))
 
+    library.start()   # the whole library in memory: Similar Tracks and voice match against it
     voice.attach(lambda job, heading: play.voice_jobs.put((job, heading)),
                  lambda: play.running or not play.voice_jobs.empty())
     voice.restart()
