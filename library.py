@@ -30,7 +30,7 @@ import engine
 GOOD = 0.80              # a match at least this close counts as found
 REFRESH_MINUTES = 30     # how often the library is re-read in the background
 AUDIO = "[Media Type]=[Audio]"
-FIELDS = "Key,Name,Artist,Album,Album Artist (auto),Disc #,Track #,Duration"
+FIELDS = "Key,Name,Artist,Album,Album Artist (auto),Disc #,Track #,Duration,Last Played"
 
 _lock = threading.Lock()
 _albums = {}             # (album, album artist) -> [track rows]
@@ -41,6 +41,8 @@ _song_titles = []
 _playlists = []
 _loaded_at = 0.0
 _closers = {}            # key -> (seconds, name, artist) for the last track of each album
+_played = {}             # key -> when JRiver last played it (Unix seconds), for tracks it has played
+_played_unread = False   # True when the library had Last Played values but none could be read
 _timer = None
 
 
@@ -152,6 +154,7 @@ def _read_playlists():
 def load():
     """Reads the whole library from JRiver. Returns a line for the log."""
     global _albums, _artists, _tracks, _songs, _song_titles, _playlists, _loaded_at, _closers
+    global _played, _played_unread
     engine.refresh_settings_if_changed()
     started = time.time()
     tracks = _read_tracks()
@@ -185,9 +188,18 @@ def load():
         except ValueError:
             continue
         closers[str(last["Key"])] = (seconds, last.get("Name") or "", last.get("Artist") or "")
+    played, seen = {}, 0
+    for row in tracks:
+        raw = (row.get("Last Played") or "").strip()
+        if raw and raw != "0":
+            seen += 1
+            when = played_time(raw)
+            if when:
+                played[str(row["Key"])] = when
     with _lock:
         _albums, _artists, _tracks, _playlists = albums, artists, tracks, playlists
         _closers = closers
+        _played, _played_unread = played, bool(seen and not played)
         _songs, _song_titles = songs, [t for t in songs if t]
         _loaded_at = time.time()
     return (f"Library read for voice: {len(albums)} albums, {len(playlists)} playlists "
@@ -222,6 +234,44 @@ def ensure_loaded():
     """A command that arrives before the first read waits for it (about a second)."""
     if not _loaded_at:
         load()
+
+
+def played_time(raw):
+    """
+    JRiver's Last Played as Unix seconds, or None. It can arrive as Unix seconds,
+    as JRiver's own day count (days since 30 December 1899, like a spreadsheet),
+    or as a formatted date, depending on the version and how it's asked for.
+    """
+    from datetime import datetime
+    try:
+        value = float(raw)
+    except ValueError:
+        value = None
+    if value is not None:
+        if value > 100000000:          # Unix seconds (after 1973)
+            return value
+        if 20000 < value < 100000:     # days since 30 December 1899
+            return (value - 25569) * 86400
+        return None
+    for fmt in ("%d/%m/%Y %H:%M", "%d/%m/%Y %H:%M:%S", "%m/%d/%Y %I:%M %p", "%m/%d/%Y %H:%M",
+                "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%d/%m/%Y", "%m/%d/%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(raw, fmt).timestamp()
+        except ValueError:
+            continue
+    return None
+
+
+def last_played(key):
+    """When JRiver last played this track (Unix seconds), or None if never (or unknown)."""
+    with _lock:
+        return _played.get(str(key))
+
+
+def played_dates_unreadable():
+    """True if the library has Last Played values that couldn't be read, so the filter can't work."""
+    with _lock:
+        return _played_unread
 
 
 def closer_info(key):

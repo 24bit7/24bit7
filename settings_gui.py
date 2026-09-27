@@ -756,7 +756,7 @@ class SettingsTab(tk.Frame):
             p.drift[group] = (on, using, rounds, (using_cb, rounds_cb))
 
         def recent(group):
-            """Skip tracks played in the last [n] days, with its ?."""
+            """Skip tracks played in the last [n] days (1 by default), with its ?."""
             name = f"SKIP_PLAYED_{group.upper()}"
             main_on, main_days = engine.SKIP_PLAYED[group]
             p.vars[name] = tk.BooleanVar(value=p.env.get(name, "1" if main_on else "0") in ("1", "true", "yes"))

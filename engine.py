@@ -230,7 +230,7 @@ def load_settings():
     for group in PLAYED_GROUPS:
         name = f"SKIP_PLAYED_{group.upper()}"
         SKIP_PLAYED[group] = (os.getenv(name, "0").strip().lower() in ("1", "true", "yes"),
-                              _int_setting(f"{name}_DAYS", 7, 1, 365))
+                              _int_setting(f"{name}_DAYS", 1, 1, 365))
     SKIP_LONG_CLOSERS = os.getenv("SKIP_LONG_CLOSERS", "1").strip().lower() in ("1", "true", "yes")
     LONG_CLOSER_MINUTES = _int_setting("LONG_CLOSER_MINUTES", 6, 3, 30)
     # Where finished playlists go: "jriver" = Same zone (the default), "zone:<name>"
@@ -346,13 +346,13 @@ DRIFT_VIBE_USING=artists
 DRIFT_VIBE_ROUNDS=3
 # Skip tracks JRiver has played in the last so many days, per Play mode (1 on, 0 off)
 SKIP_PLAYED_ARTISTS=0
-SKIP_PLAYED_ARTISTS_DAYS=7
+SKIP_PLAYED_ARTISTS_DAYS=1
 SKIP_PLAYED_TRACKS=0
-SKIP_PLAYED_TRACKS_DAYS=7
+SKIP_PLAYED_TRACKS_DAYS=1
 SKIP_PLAYED_TOP=0
-SKIP_PLAYED_TOP_DAYS=7
+SKIP_PLAYED_TOP_DAYS=1
 SKIP_PLAYED_VIBE=0
-SKIP_PLAYED_VIBE_DAYS=7
+SKIP_PLAYED_VIBE_DAYS=1
 # Every playlist: skip an album's last track when it's longer than this many
 # minutes, as those files often carry a hidden track after a long silence
 SKIP_LONG_CLOSERS=1
@@ -2325,7 +2325,7 @@ class PlayedFilter:
     """
 
     def __init__(self, group, keep=(), report=print, setting=None):
-        self.on, self.days = setting or SKIP_PLAYED.get(group, (False, 7))
+        self.on, self.days = setting or SKIP_PLAYED.get(group, (False, 1))
         self.keep = {str(k) for k in keep if k}
         self.report, self.skipped = report, 0
         if not self.on:
