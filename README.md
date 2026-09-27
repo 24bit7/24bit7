@@ -28,12 +28,12 @@ Five actions on the **Play** tab. The seed is whichever of the two small tabs is
 | **Vibe Playlist** | Type a mood or scene (or pick one of three AI suggestions) and get a playlist to match. |
 | **Show Credits** | Producer, engineer and other credits for the current album, from Discogs. Not offered from the Search tab, which has no album to look up. |
 
-**Output** sits beside the buttons and decides where the finished playlist goes: **Same zone** (the default: the zone you seeded from), any JRiver zone by name, or **YouTube**, which opens it in your browser as an instant playlist. **AI Moderator** beside it switches the AI check on or off (see below). The **Zone** dropdown on the Now Playing tab picks which zone you seed from.
+**Output** sits beside the buttons and decides where the finished playlist goes: **Same zone** (the default: the zone you seeded from), any JRiver zone by name, or **YouTube**, which opens it in your browser as an instant playlist. The **Zone** dropdown on the Now Playing tab picks which zone you seed from.
 
 Two supporting tabs:
 
 - **Discover** lists every track a run looked for, whether it was found (hit) or not (miss), filterable by session and searchable across all fields. Select a row and every site you have ticked has its own button along the bottom: one click, one browser tab. Stores (Bandcamp, Qobuz, Bleep, Beatport and more) and YouTube search for the artist and track; reference sites (Wikipedia, Discogs, AllMusic, MusicBrainz) search for the artist, so you can browse the discography. If your favourite site is missing, add up to three of your own under Settings > Search. Misses are one click from purchase. **Label** finds who released the selected track and opens the label on Bandcamp (see below). Tick any rows (or Select all) and **Create YouTube playlist** opens them in your browser as one playlist, so you can hear the misses before you buy.
-- **Settings** holds all keys and preferences. Changes save immediately and the running app picks them up without a restart.
+- **Settings** holds all keys and preferences, in boxed sections, with each setting's explanation behind a small **?** beside it. Changes save immediately and the running app picks them up without a restart.
 
 ---
 
@@ -73,11 +73,15 @@ Similar Artists, Similar Tracks and Vibe Playlist each have a target length, and
 
 Most playlists are right apart from one track: the stadium anthem in the middle of a run of acoustic songs. The AI Moderator is an optional check that catches it. When it's on, each playlist (and each Drift round) goes to Claude Haiku once, with the seed and the list of tracks, and it removes the ones that would jolt a listener out of the mood. It judges tone, energy and mood only, and genre is never a reason on its own: a folk song and an electronic track can sit together, and two songs in the same genre can clash. It keeps anything it's unsure about or doesn't know, removes at most a fifth of the tracks, and logs each removal with its reason. A few extra tracks are found up front, so the ones it removes are replaced. The fast start track is never checked, and Artist's Top Tracks isn't moderated, since it's one artist.
 
-It needs an Anthropic key and uses a little credit each time, a fraction of a penny per playlist; the first time you switch it on, 24bit7 says so. Without a key the option is greyed out. If the check fails or the credit runs out, the playlist builds as normal and the log says why. Switch it on for the Play tab next to Output, and for voice with a tick per speaker under Settings > Voice.
+It needs an Anthropic key and uses a little credit each time, a fraction of a penny per playlist; the first time you switch it on, 24bit7 says so. Without a key the option is greyed out. If the check fails or the credit runs out, the playlist builds as normal and the log says why. Switch it on under Settings > Sources, in the AI Moderator section. A voice device with settings of its own has its own switch (see Voice Commands below).
 
 ### Hidden tracks
 
 Some albums end on a track that runs on after a long silence into a hidden bonus track, which feels completely out of place in a playlist. The sources can't help, because they report the long album version too. So Settings > Playlist > Hidden Tracks skips the last track on an album when it runs longer than a set number of minutes, 6 by default. It applies to every playlist 24bit7 builds; albums, songs and playlists you ask for by name always play in full.
+
+### Skip tracks played recently
+
+Each Play mode on Settings > Playlist can leave out anything JRiver has played in the last so many days, 1 by default, so a favourite doesn't come round again the same evening. It reads JRiver's Last Played date from the library 24bit7 holds in memory, so it costs nothing. The seed track is never left out, and Drift, if it's on, fills the gaps. It's off by default.
 
 ### Label
 
@@ -119,11 +123,13 @@ A playlist built from the Search tab follows the same rule: whatever is playing 
 
 With more than one JRiver zone, the finished playlist goes to the zone Output names. A stopped zone starts playing it straight away. A busy zone keeps its current track and queues the playlist after it. If you seed from one zone and send to another, the seed track opens the playlist on the new zone. Settings > Other sets which zones appear, which zone Now Playing opens on, and whether it follows JRiver's active zone. A DLNA speaker such as a Sonos works as a zone once DLNA Controller is ticked in JRiver.
 
-### Voice control (optional, advanced)
+### Voice Commands (optional, advanced)
 
-24bit7 can take commands from an Alexa skill you host yourself. This is not a one-click setup: you need your own Amazon developer account and Alexa-hosted skill, a Tailscale Funnel (or similar) to let Amazon reach 24bit7 on your PC, and 24bit7 left running, which Start with Windows and the tray take care of. The skill's code and interaction model are in the `alexa` folder of this repository, and a full step-by-step setup guide is on the roadmap. Settings > Voice holds the key the skill sends, assigns each Alexa speaker to a zone, and has an AI Moderator tick for each speaker.
+24bit7 can take commands from an Alexa skill you host yourself. This is not a one-click setup: you need your own Amazon developer account and Alexa-hosted skill, a Tailscale Funnel (or similar) to let Amazon reach 24bit7 on your PC, and 24bit7 left running, which Start with Windows and the tray take care of. The skill's code and interaction model are in the `alexa` folder of this repository. **[How Voice Commands work](docs/VOICE_COMMANDS.md)** explains what it does, and **[Setting up the Alexa skill](docs/VOICE_SETUP.md)** takes you through every step. Both are linked from Settings > Voice Commands too.
 
-Once it is set up, each speaker plays to its own zone:
+Settings > Voice Commands holds the key the skill sends and assigns each Alexa device to a zone. Tick **Own settings** for a device and it gets its own tab under Settings > Sources and Settings > Playlist, copying the Windows app's settings until you untick Copy Windows (Main) and change them. Two speakers can then run two sets of settings side by side, for A/B testing or for different people.
+
+Once it is set up, each device plays to its own zone:
 
 | Say | You get |
 |---|---|
@@ -200,16 +206,19 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 - **Fast start.** With nothing playing, the first track starts within a second or two and the rest of the playlist follows it in. Voice "shuffle songs by" opens on one of the artist's top five.
 - **Drift.** Similar Artists, Similar Tracks and Vibe Playlist can search again from what they found when a playlist comes up short, using similar tracks or similar artists, for 1 to 6 rounds. Off by default.
-- **AI Moderator.** An optional Claude Haiku check that removes tracks clashing with the seed's tone, energy and mood, never on genre alone, with each removal and its reason in the log. On the Play tab, and per speaker for voice.
+- **AI Moderator.** An optional Claude Haiku check that removes tracks clashing with the seed's tone, energy and mood, never on genre alone, with each removal and its reason in the log. Switched on under Settings > Sources.
+- **Settings per device.** Tick Own settings for an Alexa device and it gets its own Sources and Playlist tabs, copying the Windows app's settings until you change them.
+- **Skip tracks played recently.** Each Play mode can leave out anything JRiver has played in the last so many days, 1 by default. Off by default.
 - **Hidden Tracks.** Long album closers, where a hidden bonus track follows a long silence, are skipped from built playlists.
 - **Label.** A Discover button that finds who released a track and opens the label on Bandcamp.
-- **Changed.** Similar Artists has a Number of tracks setting (30 by default). Similar Tracks' top-up and Vibe's automatic backfill are now their Drift settings. Voice acknowledges a command with a short tone instead of "You got it".
+- **Voice Commands guides.** [How Voice Commands work](docs/VOICE_COMMANDS.md) and [Setting up the Alexa skill](docs/VOICE_SETUP.md), linked from the app.
+- **Changed.** Settings is laid out in boxed sections, with each note behind a ? popup. Voice is now Voice Commands, and speakers are devices. Similar Artists has a Number of tracks setting (30 by default). Similar Tracks' top-up and Vibe's automatic backfill are now their Drift settings. Voice acknowledges a command with a short tone instead of "You got it".
 
 ### Earlier: 1.3.0
 
 - **Similar Tracks.** A new Play button that builds a playlist of tracks like the seed track, from Last.fm, ListenBrainz and YouTube Music, with its own sources, agreement number and playlist settings.
 - **Zones.** Output lists every JRiver zone by name, Now Playing has its own Zone dropdown, and Settings > Other sets which zones show, the default zone and whether to follow JRiver's active zone.
-- **Voice control.** An optional, self-hosted Alexa skill for top tracks, similar artists, similar tracks, genres, albums, songs, playlists and shuffles, each speaker playing to its own zone. Advanced setup; see Voice control above.
+- **Voice control.** An optional, self-hosted Alexa skill for top tracks, similar artists, similar tracks, genres, albums, songs, playlists and shuffles, each speaker playing to its own zone. Advanced setup; see Voice Commands above.
 - **Discover to YouTube.** Tick rows, or Select all, and Create YouTube playlist opens them as one playlist.
 - **Start with Windows and the tray.** Start with Windows, start hidden in the tray, and close to the tray, so 24bit7 is always there for voice.
 - **Settings.** Every Settings page scrolls. Sources is split into Similar Artists, Similar Tracks and Artist's Top Tracks, each with its own ListenBrainz algorithm where it applies.
@@ -246,13 +255,12 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 **Solid**: Similar Artists, Artist's Top Tracks, Show Credits, Discover, Settings, cache, mid-album queueing, multi-value artists, the agreement number.
 
-**Newer**: fast start, Drift, the AI Moderator, Hidden Tracks, the Label button, Similar Tracks, zones, voice control, Discover's YouTube playlists, the tray, the Search tab, YouTube Music as a source and YouTube output. All are in daily use on the development PC. Voice control is the least plug-and-play part, as its setup says, and the YouTube parts rest on an unofficial library, so expect the occasional breakage. Vibe Playlist works well and is still learning its limits.
+**Newer**: fast start, Drift, the AI Moderator, settings per device, skipping recent plays, Hidden Tracks, the Label button, Similar Tracks, zones, voice control, Discover's YouTube playlists, the tray, the Search tab, YouTube Music as a source and YouTube output. All are in daily use on the development PC. Voice Commands are the least plug-and-play part, as their setup guide says, and the YouTube parts rest on an unofficial library, so expect the occasional breakage. Vibe Playlist works well and is still learning its limits.
 
 **Removed**: a producer-based playlist mode built on Discogs credits. Discogs credit data is too patchy to be reliable, so it was dropped rather than shipped half-working.
 
 ### Roadmap
 
-- A step-by-step setup guide for voice control
 - Remembering Deezer artist IDs, for quicker first runs
 - Dark theme (the tab colours now live in one palette, which is the first step)
 - More players and outputs beyond JRiver and YouTube (distant)

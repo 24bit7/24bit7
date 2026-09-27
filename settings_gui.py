@@ -15,6 +15,7 @@ import os
 import sys
 import threading
 import tkinter as tk
+import webbrowser
 from tkinter import ttk, messagebox
 
 import engine
@@ -23,6 +24,13 @@ import voice
 from tabs import TabbedPane
 
 ENV_FILE = engine.ENV_FILE   # single source of truth for where .env lives
+
+# The Voice Commands guides, on GitHub (linked from the bottom of Settings > Voice Commands)
+DOCS_URL = "https://github.com/24bit7/24bit7/blob/main/docs/"
+VOICE_DOCS = [("How Voice Commands work", DOCS_URL + "VOICE_COMMANDS.md",
+               "What it does, what you can say, and settings per device."),
+              ("Setting up the Alexa skill", DOCS_URL + "VOICE_SETUP.md",
+               "Step by step, from an Amazon developer account to your first command.")]
 
 # Listed alphabetically by display name
 SOURCE_NAMES = [("ai", "AI"), ("deezer", "Deezer"),
@@ -1076,6 +1084,14 @@ class SettingsTab(tk.Frame):
         tk.Button(test, text="Send test", width=10, command=self._voice_test).pack(side="left")
         self.voice_test_result = tk.Label(box, text="", fg=HELP_FG, font=HELP_FONT, justify="left")
         self.voice_test_result.grid(row=1, column=0, sticky="w", pady=(6, 0))
+
+        # --- Guides: links to the two Voice Commands documents on GitHub ---
+        box = section(tab, "Guides")
+        for r, (title, url, blurb) in enumerate(VOICE_DOCS):
+            link = tk.Label(box, text=title, fg=SECTION_FG, cursor="hand2", font=("Segoe UI", 10, "underline"))
+            link.grid(row=r, column=0, sticky="w", pady=2)
+            link.bind("<Button-1>", lambda e, u=url: webbrowser.open_new_tab(u))
+            tk.Label(box, text=blurb, fg=HELP_FG, font=HELP_FONT).grid(row=r, column=1, sticky="w", padx=(12, 0))
 
         tab.bind("<<Shown>>", lambda e: (self.voice_status.config(text=voice.status()), self._fill_voice_devices()))
 

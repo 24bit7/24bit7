@@ -452,5 +452,5 @@ def send_test(artist, zone):
     except Exception as e:
         return f"get no reply from the listener ({e})."
     if reply.get("status") == "started":
-        return f"chime twice. ({reply.get('speech', '')})"
+        return f"play its tone. ({reply.get('speech', '')})"
     return f'say "{reply.get("speech", "")}"'

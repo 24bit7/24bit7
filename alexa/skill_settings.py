@@ -10,7 +10,7 @@ in the 24bit7 repo holds placeholders only.
 # Your Tailscale Funnel address, e.g. https://desktop-abc123.tailxxxx.ts.net
 BIT7_URL = "https://YOUR-PC.YOUR-TAILNET.ts.net"
 
-# The key from 24bit7's Settings > Voice (Show, or the Copy button).
+# The key from 24bit7's Settings > Voice Commands (Show, or the Copy button).
 BIT7_KEY = "PASTE-YOUR-KEY-HERE"
 
 # Optional: a sound from the Alexa Skills Kit Sound Library, e.g. "soundbank://soundlibrary/....",
