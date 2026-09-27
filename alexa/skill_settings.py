@@ -13,6 +13,10 @@ BIT7_URL = "https://YOUR-PC.YOUR-TAILNET.ts.net"
 # The key from 24bit7's Settings > Voice (Show, or the Copy button).
 BIT7_KEY = "PASTE-YOUR-KEY-HERE"
 
-# Optional: a sound from the Alexa Skills Kit Sound Library, e.g. "soundbank://soundlibrary/....".
-# Leave it empty and Alexa says "Ready" and "You got it" instead of chiming.
+# Optional: a sound from the Alexa Skills Kit Sound Library, e.g. "soundbank://soundlibrary/....",
+# played when the skill opens. Leave it empty and Alexa says "Ready" instead.
 CHIME = ""
+
+# Optional: the tone Alexa plays when a command is accepted. Leave this line out
+# (or delete it) to keep the default, a short electronic beep.
+# ACK_TONE = "soundbank://soundlibrary/musical/amzn_sfx_electronic_beep_02"

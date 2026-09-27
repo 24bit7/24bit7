@@ -134,6 +134,17 @@ def _either(names):
     return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " or " + names[-1]
 
 
+def _top_five_start(artist, keys):
+    """A random pick from the artist's top 5 that's in the shuffle, or None."""
+    try:
+        top, _ = engine.blended_top_tracks(artist, limit=5)
+    except Exception:
+        return None
+    owned = {str(k) for k in keys}
+    hits = [k for k in (library.find_track_key(artist, t) for t, _ in top) if k and str(k) in owned]
+    return random.choice(hits) if hits else None
+
+
 def _play_now(intent, value, zone):
     """Albums, songs, playlists and shuffles: replace what's playing on the zone at once."""
     zid = engine.zone_id(zone)
@@ -168,6 +179,9 @@ def _play_now(intent, value, zone):
             return "problem", f"I couldn't find any songs by {value}.", {}
         keys = engine.drop_long_closers(keys, report=print)
         random.shuffle(keys)
+        lead = _top_five_start(artist, keys)
+        if lead:   # a shuffle opens on one of their best known songs
+            keys = [lead] + [k for k in keys if str(k) != str(lead)]
         ok, what = _play_keys(keys[:SHUFFLE_CAP], zid), f"{min(len(keys), SHUFFLE_CAP)} songs by {library.spoken(artist)}, shuffled"
     if not ok:
         return "problem", "JRiver didn't start it. Is JRiver running on the media PC?", {}

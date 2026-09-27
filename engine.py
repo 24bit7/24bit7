@@ -111,7 +111,7 @@ def load_settings():
     global DIGITAL_STORES, REFERENCE_SITES, DEBUG, SIMILAR_ARTIST_LIMIT, TRACKS_PER_ARTIST_POOL
     global SIMILAR_MIN_AGREEMENT
     global SIMILAR_TRACK_SOURCES, SIMILAR_TRACK_MIN_AGREEMENT, SIMILAR_TRACK_COUNT
-    global SIMILAR_TRACK_PER_ARTIST, SIMILAR_TRACK_TOPUP, SIMILAR_TRACK_ORDER
+    global SIMILAR_TRACK_PER_ARTIST, SIMILAR_TRACK_ORDER
     global LISTENBRAINZ_TRACK_ALGORITHM_SETTING
     global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, CACHE_DAYS
     global TABLE_FONT_SIZE, VIBE_TRACK_COUNT
@@ -120,6 +120,7 @@ def load_settings():
     global START_IN_TRAY, CLOSE_TO_TRAY
     global LISTEN_SITES, CUSTOM_SITES
     global SKIP_LONG_CLOSERS, LONG_CLOSER_MINUTES
+    global SIMILAR_ARTIST_TRACK_COUNT, DRIFT
 
     load_dotenv(ENV_FILE, override=True)
 
@@ -166,13 +167,30 @@ def load_settings():
     SIMILAR_TRACK_MIN_AGREEMENT = _int_setting("SIMILAR_TRACK_MIN_AGREEMENT", 2, 1, 3)
     SIMILAR_TRACK_COUNT = _int_setting("SIMILAR_TRACK_COUNT", 30, 5, 100)
     SIMILAR_TRACK_PER_ARTIST = _int_setting("SIMILAR_TRACK_PER_ARTIST", 3, 1, 20)
-    SIMILAR_TRACK_TOPUP = os.getenv("SIMILAR_TRACK_TOPUP", "1").strip().lower() in ("1", "true", "yes")
     LISTENBRAINZ_TRACK_ALGORITHM_SETTING = os.getenv("LISTENBRAINZ_TRACK_ALGORITHM", "alltime").strip().lower()
     SIMILAR_TRACK_ORDER = os.getenv("SIMILAR_TRACK_ORDER", "shuffled").strip().lower()
     if SIMILAR_TRACK_ORDER not in ("shuffled", "similar first"):
         SIMILAR_TRACK_ORDER = "shuffled"
 
     SIMILAR_ARTIST_LIMIT = _int_setting("SIMILAR_ARTIST_LIMIT", 20, 1, 50)
+    SIMILAR_ARTIST_TRACK_COUNT = _int_setting("SIMILAR_ARTIST_TRACK_COUNT", 30, 5, 100)
+    # Drift, per Play mode group: on/off, what it drifts using, and how many rounds.
+    # An older .env with Similar Tracks' "Top up from Similar Artists" ticked carries
+    # over as Drift on for Similar Tracks, using similar artists, one round (the same thing).
+    DRIFT = {}
+    yes = ("1", "true", "yes")
+    for group, own in (("artists", "artists"), ("tracks", "tracks"), ("vibe", "artists")):
+        name = f"DRIFT_{group.upper()}"
+        raw = os.getenv(name, "").strip().lower()
+        using = os.getenv(f"{name}_USING", own).strip().lower()
+        rounds = _int_setting(f"{name}_ROUNDS", 3, 1, 6)
+        if raw:
+            on = raw in yes
+        elif group == "tracks" and os.getenv("SIMILAR_TRACK_TOPUP", "").strip().lower() in yes:
+            on, using, rounds = True, "artists", 1
+        else:
+            on = False
+        DRIFT[group] = {"on": on, "using": using if using in ("artists", "tracks") else own, "rounds": rounds}
     TRACKS_PER_ARTIST_POOL = _int_setting("TRACKS_PER_ARTIST_POOL", 5, 1, 20)
     TRACKS_PER_ARTIST_PICK = _int_setting("TRACKS_PER_ARTIST_PICK", 3, 1, 20)
     TOP_TRACKS_COUNT = _int_setting("TOP_TRACKS_COUNT", 10, 1, 20)
@@ -258,18 +276,29 @@ LISTENBRAINZ_TRACK_ALGORITHM=alltime
 
 # Playlist sizes and order
 SIMILAR_ARTIST_LIMIT=20
+SIMILAR_ARTIST_TRACK_COUNT=30
 TRACKS_PER_ARTIST_POOL=5
 TRACKS_PER_ARTIST_PICK=3
 TOP_TRACKS_COUNT=10
 TOP_TRACKS_ORDER=popular
 VIBE_TRACK_COUNT=20
+# Drift: when a playlist comes up short, search again from what was found.
+# Per group: on (1) or off (0), using artists or tracks, rounds (1-6)
+DRIFT_ARTISTS=0
+DRIFT_ARTISTS_USING=artists
+DRIFT_ARTISTS_ROUNDS=3
+DRIFT_TRACKS=0
+DRIFT_TRACKS_USING=tracks
+DRIFT_TRACKS_ROUNDS=3
+DRIFT_VIBE=0
+DRIFT_VIBE_USING=artists
+DRIFT_VIBE_ROUNDS=3
 # Every playlist: skip an album's last track when it's longer than this many
 # minutes, as those files often carry a hidden track after a long silence
 SKIP_LONG_CLOSERS=1
 LONG_CLOSER_MINUTES=6
 SIMILAR_TRACK_COUNT=30
 SIMILAR_TRACK_PER_ARTIST=3
-SIMILAR_TRACK_TOPUP=1
 SIMILAR_TRACK_ORDER=shuffled
 
 # Discover search sites (comma-separated). Stores search artist + track, reference
@@ -1715,7 +1744,7 @@ def find_jriver_key_by_track(artist_name, track_name):
 
 
 def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
-                               exclude_track=None, consider=None, pick=None, defer=None):
+                               exclude_track=None, consider=None, pick=None, defer=None, found=None):
     """
     The per-artist step shared by Similar Artists and the Vibe backfill:
     ask the Top-track sources for the artist's top `consider` tracks, randomly
@@ -1723,6 +1752,7 @@ def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
     returned as file keys; every pick, hit or miss, is logged to the session
     so Discover shows exactly which tracks were chosen and which are missing.
     exclude_track: a track name to leave out (the one that's playing).
+    found: a list to append (artist, track, key) to for every hit (Drift seeds from them).
     Returns (keys found, number of misses).
     """
     consider = consider or TRACKS_PER_ARTIST_POOL
@@ -1765,6 +1795,8 @@ def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
         if key:
             report(f"    Found: {track_name}")
             keys.append(key)
+            if found is not None:
+                found.append((artist, track_name, key))
         else:
             report(f"    Not in library: {track_name}")
             misses += 1
@@ -1980,17 +2012,19 @@ def drop_long_closers(keys, keep=(), report=print):
     return kept
 
 
-def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=None):
+def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=None, append=False):
     """
     Sends a finished playlist to the output zone, or opens it on YouTube.
       - A stopped zone gets the playlist as its new Playing Now, and it starts.
       - A busy zone keeps its current track; the playlist is queued after it.
       - A now-playing seed sent to a different zone: the seed track opens the
         playlist there.
+      - append=True (after a fast start, or a Drift round): the tracks go on the
+        end of Playing Now and nothing already there is touched.
     One function for the Play tab and, later, voice commands (zone_name).
     """
     if output_is_youtube() and not zone_name:   # JRiver is left completely alone
-        if keys:
+        if keys and not append:
             open_youtube_playlist(keys)
         return
     if seed_info is not None:
@@ -2001,6 +2035,11 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
     keys = [str(k) for k in keys]
     seed_key = str((seed_info or {}).get("FileKey") or "")
     keys = drop_long_closers(keys, keep=[seed_key], report=report)
+    if append:
+        if keys:
+            queue_tracks(keys, zone)
+            report(f"  Added {len(keys)} tracks to {zone_label(zone)}.")
+        return
     seed_zone_id = (seed_info or {}).get("ZoneID")
     if seed_info and not typed and seed_key and seed_zone_id and seed_zone_id != zone:
         keys = [seed_key] + [k for k in keys if k != seed_key]
@@ -2043,7 +2082,7 @@ def cap_seed_artist(keys, seed_artist_keys, first_key=None):
     return [k for k in keys if k not in drop], len(drop)
 
 
-def resolve_deferred_picks(deferred, report=print):
+def resolve_deferred_picks(deferred, report=print, found=None):
     """
     YouTube output: looks up every pick collected during a Similar Artists run
     in one parallel burst, then reports and logs them in the order they were
@@ -2058,6 +2097,8 @@ def resolve_deferred_picks(deferred, report=print):
         session_log(session_id, artist, track, suggested_by, found=bool(key))
         if key and key not in keys:
             keys.append(key)
+            if found is not None:
+                found.append((artist, track, key))
     return keys
 
 
@@ -2125,6 +2166,224 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
     session_finish(session_id, queued, sources="YouTube (up next queue)", report=report)
 
 
+# ---------------------------------------------------------------------------
+# Fast start and Drift (shared by the playlist modes)
+# ---------------------------------------------------------------------------
+
+class FastStart:
+    """
+    Fast start: when the output zone is stopped, the first track found plays
+    straight away and the rest of the playlist follows it into Playing Now.
+    Only with JRiver output and a seed that isn't playing: a search, a voice
+    command, a Vibe. The first track skips the Hidden Tracks check, for speed.
+    """
+
+    def __init__(self, seed_info=None, report=print, enabled=True):
+        self.report, self.key, self.zone = report, None, None
+        if not enabled or output_is_youtube() or (seed_info and not seed_info.get("Typed")):
+            return   # YouTube output, or a now-playing seed (music is already playing)
+        zone = output_zone(seed_info, None, lambda *_: None)
+        if zone is not None and jriver_is_stopped(zone):
+            self.zone = zone
+
+    @property
+    def started(self):
+        return self.key is not None
+
+    def play(self, key):
+        """Plays the first track found. Later calls do nothing."""
+        if self.zone is None or self.key or not key:
+            return
+        try:
+            requests.get(f"{JRIVER_BASE}/Playback/PlayByKey",
+                         params={"Key": str(key), "Zone": self.zone}, auth=AUTH, timeout=10)
+        except Exception as e:
+            self.report(f"  Fast start didn't go through ({e}), so the playlist starts when it's built.")
+            self.zone = None
+            return
+        self.key = str(key)
+        self.report(f"  Fast start: the first track is playing on {zone_label(self.zone)} while the rest is found.")
+
+    def lead(self, keys, first_key=None):
+        """Puts the playing (or searched) track at the front, once."""
+        lead = self.key or (str(first_key) if first_key else None)
+        if not lead:
+            return list(keys)
+        return [lead] + [k for k in keys if str(k) != lead]
+
+    def rest(self, keys):
+        """The playlist minus the track that's already playing."""
+        return [k for k in keys if str(k) != self.key]
+
+
+DRIFT_SEEDS_PER_ROUND = 3   # finds each Drift round seeds from
+
+
+class Drift:
+    """
+    Drift (Settings > Playlist): when a playlist comes up short of its target,
+    search again using what's already been found, for up to the set number of
+    rounds. Each round seeds from the DRIFT_SEEDS_PER_ROUND best finds not yet
+    used as seeds (most sources agreeing first), using either their similar
+    artists' top tracks or their similar tracks, whichever the group is set to.
+    Every track checked is logged to the session, hit or miss, like the first pass.
+    """
+
+    def __init__(self, group, target, session_id, report=print, per_artist=None, exclude_keys=()):
+        cfg = DRIFT.get(group, {})
+        self.on = cfg.get("on", False)
+        self.using = cfg.get("using", "artists")
+        self.rounds = cfg.get("rounds", 3)
+        self.target, self.session_id, self.report = target, session_id, report
+        self.per_artist = per_artist or SIMILAR_TRACK_PER_ARTIST
+        self.exclude = {str(k) for k in exclude_keys if k}
+        self.finds = []           # (artist, title, key, score) in the order found
+        self.per = {}             # artist key -> tracks of theirs in the playlist
+        self.seen_artists = set() # artists already asked for their top tracks
+        self.checked = set()      # (artist key, title) already looked up
+        self.used = set()         # seeds already drifted from
+
+    def saw_artist(self, artist):
+        self.seen_artists.add(artist_key(artist))
+
+    def mark_seed(self, artist, title=""):
+        """The playlist's own seed: never drifted from again, never re-added."""
+        self.saw_artist(artist)
+        self.used.add(artist_key(artist))
+        if title:
+            ident = (artist_key(artist), clean_name(title))
+            self.used.add(ident)
+            self.checked.add(ident)
+
+    def note(self, artist, title, key, score=1):
+        """A track that made the playlist, so a later round can seed from it."""
+        a = artist_key(artist)
+        self.finds.append((artist, title, str(key), score))
+        self.per[a] = self.per.get(a, 0) + 1
+        self.seen_artists.add(a)
+        self.checked.add((a, clean_name(title)))
+
+    def _room(self, artist):
+        return self.per_artist - self.per.get(artist_key(artist), 0)
+
+    def _seeds(self):
+        ranked = sorted(enumerate(self.finds), key=lambda x: (-x[1][3], x[0]))
+        out, idents = [], set()
+        for _, (artist, title, _, _) in ranked:
+            ident = artist_key(artist) if self.using == "artists" else (artist_key(artist), clean_name(title))
+            if ident in self.used or ident in idents:
+                continue
+            idents.add(ident)
+            out.append((artist, title))
+            if len(out) == DRIFT_SEEDS_PER_ROUND:
+                break
+        self.used |= idents
+        return out
+
+    def run(self, keys, on_round=None):
+        """
+        Tops keys up towards the target, in place. on_round(new_keys) is called
+        after each round that found something (JRiver output queues them there
+        and then). Returns every key added.
+        """
+        if not self.on or len(keys) >= self.target:
+            return []
+        added = []
+        for n in range(1, self.rounds + 1):
+            if len(keys) >= self.target:
+                break
+            seeds = self._seeds()
+            if not seeds:
+                self.report("  Drift: nothing left to seed from.")
+                break
+            names = ", ".join(a if self.using == "artists" else f"{a} - {t}" for a, t in seeds)
+            self.report(f"  Drift round {n} of {self.rounds}: {len(keys)} of {self.target}, "
+                        f"using {self.using} similar to {names}...")
+            before = len(keys)
+            if self.using == "artists":
+                self._round_artists(seeds, keys)
+            else:
+                self._round_tracks(seeds, keys)
+            new = keys[before:]
+            self.report(f"  Drift round {n}: {len(new)} added.")
+            added += new
+            if new and on_round:
+                on_round(list(new))
+        if len(keys) < self.target:
+            self.report(f"  Drift finished short: {len(keys)} of {self.target}.")
+        return added
+
+    def _take(self, keys, artist, title, key, score):
+        if not key or str(key) in self.exclude or key in keys or self._room(artist) <= 0:
+            return False
+        keys.append(key)
+        self.note(artist, title, key, score)
+        return True
+
+    def _round_artists(self, seeds, keys):
+        for seed, _ in seeds:
+            if len(keys) >= self.target:
+                return
+            similar, _ = blended_similar_artists(seed, limit=SIMILAR_ARTIST_LIMIT)
+            fresh = [(a, s) for a, s in similar if artist_key(a) not in self.seen_artists]
+            prefetch_top_tracks([a for a, _ in fresh], TRACKS_PER_ARTIST_POOL, report=self.report)
+            for artist, suggested_by in fresh:
+                if len(keys) >= self.target:
+                    return
+                if artist_key(artist) in self.seen_artists:
+                    continue
+                self.saw_artist(artist)
+                if suggested_by == ["AI"] and not deezer_artist_exists(artist):
+                    continue
+                self.report(f"  {artist} ({', '.join(suggested_by)})...")
+                found = []
+                pick_top_tracks_for_artist(artist, self.session_id, suggested_by, report=self.report, found=found)
+                for a, t, k in found:
+                    if len(keys) >= self.target:
+                        return
+                    self._take(keys, a, t, k, len(suggested_by))
+
+    def _round_tracks(self, seeds, keys):
+        import library   # here rather than at the top: library imports engine
+        use_youtube = output_is_youtube()
+        for artist, title in seeds:
+            if len(keys) >= self.target:
+                return
+            candidates, _ = similar_track_candidates([artist], title, self.report)
+            for (a, t), sources in candidates:
+                if len(keys) >= self.target:
+                    return
+                ident = (artist_key(a), clean_name(t))
+                if ident in self.checked or self._room(a) <= 0:
+                    continue
+                self.checked.add(ident)
+                key = find_jriver_key_by_track(a, t) if use_youtube else library.find_track_key(a, t)
+                session_log(self.session_id, a, t, sources, found=bool(key))
+                if self._take(keys, a, t, key, len(sources)):
+                    self.report(f"    Found: {a} - {t}  ({', '.join(sources)})")
+
+
+def finish_playlist(keys, drift, fast, seed_info, report, detail=""):
+    """
+    Sends a first pass, then lets Drift top it up. JRiver output: the first pass
+    is queued now and each Drift round is added to the end as it's found (after
+    a fast start, everything is added behind the playing track). YouTube output:
+    Drift runs first, as the link is made once. Returns how many were sent.
+    """
+    if output_is_youtube():
+        drift.run(keys)
+        if keys:
+            report(sending_message(len(keys), detail))
+            send_to_jriver(keys, seed_info=seed_info, report=report)
+        return len(keys)
+    rest = fast.rest(keys)
+    if rest:
+        report(sending_message(len(keys), detail))
+        send_to_jriver(rest, seed_info=seed_info, report=report, append=fast.started)
+    drift.run(keys, on_round=lambda new: send_to_jriver(new, seed_info=seed_info, report=report, append=True))
+    return len(keys)
+
+
 def create_similar_playlist(report=print, seed_info=None):
     """
     Builds a playlist around the playing artist:
@@ -2133,7 +2392,10 @@ def create_similar_playlist(report=print, seed_info=None):
          top TRACKS_PER_ARTIST_POOL, queue the ones in the library.
       2. SIMILAR_ARTIST_LIMIT similar artists from the Similar-artist sources,
          each given the same treatment.
-      3. Clear Playing Now around the current track, shuffle the hits, queue.
+      3. Shuffle the hits, keep SIMILAR_ARTIST_TRACK_COUNT, send them.
+      4. Still short and Drift is on: search again from what was found.
+    With nothing playing on the output zone (a search or a voice command), the
+    first track found starts playing straight away (fast start).
     Every picked track is logged to the session, hit or miss, so Discover
     shows the gaps to buy.
     A multi-value Artist field ('Angus Stone;Dope Lemon') is treated as
@@ -2156,25 +2418,36 @@ def create_similar_playlist(report=print, seed_info=None):
     if len(seeds) > 1:
         report(f"  Multi-value artist, treating as any of: {', '.join(seeds)}")
     report_missing_keys(report, similar=True, top_tracks=True)
-    report(f"  Per artist: top {TRACKS_PER_ARTIST_POOL} from sources, {TRACKS_PER_ARTIST_PICK} picked at random.")
+    target = SIMILAR_ARTIST_TRACK_COUNT
+    report(f"  Per artist: top {TRACKS_PER_ARTIST_POOL} from sources, {TRACKS_PER_ARTIST_PICK} picked at random "
+           f"(target {target} tracks).")
     session_id = session_start("similar", seed_info)
+    fast = FastStart(seed_info, report)
     first_key = typed_seed_key(seed_info, seeds, session_id, report)
+    fast.play(first_key)
+    drift = Drift("artists", target, session_id, report, per_artist=TRACKS_PER_ARTIST_PICK,
+                  exclude_keys=[seed_info.get("FileKey"), first_key])
+    for seed in seeds:
+        drift.mark_seed(seed, seed_info.get("Name") or "")
 
     collected_keys = []   # ordered, deduped as we go
     deferred = [] if output_is_youtube() else None   # YouTube output: picks wait here, looked up together later
 
-    def add(keys):
-        for k in keys:
-            if k not in collected_keys:
-                collected_keys.append(k)
+    def add(found, score):
+        for artist, title, key in found:
+            if key not in collected_keys and key != first_key:
+                collected_keys.append(key)
+                drift.note(artist, title, key, score)
+                fast.play(key)
 
     # --- Seed artist(s): own top tracks, excluding the playing track ---
     prefetch_top_tracks(seeds, TRACKS_PER_ARTIST_POOL + 1)   # quietly; one more than the pool, as the playing track is left out
     for seed in seeds:
         report(f"  Seed artist: {seed}...")
-        keys, _ = pick_top_tracks_for_artist(seed, session_id, ["seed"], report=report,
-                                             exclude_track=seed_info['Name'], defer=deferred)
-        add(keys)
+        found = []
+        pick_top_tracks_for_artist(seed, session_id, ["seed"], report=report,
+                                   exclude_track=seed_info['Name'], defer=deferred, found=found)
+        add(found, 1)
 
     # --- Similar artists ---
     similar, source_label = blended_similar_artists(seeds, limit=SIMILAR_ARTIST_LIMIT,
@@ -2183,27 +2456,28 @@ def create_similar_playlist(report=print, seed_info=None):
     prefetch_top_tracks([a for a, _ in similar], TRACKS_PER_ARTIST_POOL, report=report)
 
     for artist, suggested_by in similar:
+        drift.saw_artist(artist)
         if suggested_by == ["AI"] and not deezer_artist_exists(artist):
             report(f"  {artist} (AI): not a verifiable artist name, skipping.")
             continue
         report(f"  {artist} ({', '.join(suggested_by)})...")
-        keys, _ = pick_top_tracks_for_artist(artist, session_id, suggested_by, report=report,
-                                             defer=deferred)
-        add(keys)
+        found = []
+        pick_top_tracks_for_artist(artist, session_id, suggested_by, report=report,
+                                   defer=deferred, found=found)
+        add(found, len(suggested_by))
 
     # --- Update JRiver queue ---
     if deferred:
         report(f"  Looking up {len(deferred)} tracks on YouTube, several at a time...")
-        add(resolve_deferred_picks(deferred, report))
+        found = []
+        resolve_deferred_picks(deferred, report, found=found)
+        add(found, 1)
     queued = 0
     if collected_keys or first_key:
-        keys_list = [k for k in collected_keys if k != first_key]
-        random.shuffle(keys_list)
-        if first_key:
-            keys_list.insert(0, first_key)   # a searched seed opens the playlist
-        report(sending_message(len(keys_list)))
-        send_to_jriver(keys_list, seed_info=seed_info, report=report)
-        queued = len(keys_list)
+        body = [k for k in collected_keys if k != first_key]
+        random.shuffle(body)
+        keys_list = fast.lead(([first_key] if first_key else []) + body, first_key)[:target]
+        queued = finish_playlist(keys_list, drift, fast, seed_info, report)
         report("Queue refreshed.")
     else:
         report("No library matches found.")
@@ -2332,7 +2606,9 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
          against the library first, best agreed first; if that leaves the playlist
          short, the agreement is relaxed a step at a time down to one source.
       3. No artist gets more than SIMILAR_TRACK_PER_ARTIST tracks, the seed artist included.
-      4. Still short and Top up is ticked: Similar Artists fills the gap.
+      4. Still short and Drift is on: search again from what was found.
+    With nothing playing on the output zone (a search or a voice command), the
+    first track found starts playing straight away (fast start).
     Every track checked is logged to the session, hit or miss, for Discover.
     """
     import library   # here rather than at the top: library imports engine
@@ -2350,7 +2626,13 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
     target, per_artist = SIMILAR_TRACK_COUNT, SIMILAR_TRACK_PER_ARTIST
     report(f"\nTracks like: {seed_info['Artist']} - {track}  (target {target}, at most {per_artist} per artist)")
     session_id = session_start("similar_tracks", seed_info)
+    fast = FastStart(seed_info, report)
     first_key = typed_seed_key(seed_info, seeds, session_id, report)
+    fast.play(first_key)
+    drift = Drift("tracks", target, session_id, report, per_artist=per_artist,
+                  exclude_keys=[seed_info.get("FileKey"), first_key])
+    for seed in seeds:
+        drift.mark_seed(seed, track)
 
     blended, responding = similar_track_candidates(seeds, track, report)
     seed_keys, playing = {artist_key(s) for s in seeds}, clean_name(track)
@@ -2363,6 +2645,7 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
     if first_key:
         keys.append(first_key)
         per[artist_key(seeds[0])] = 1
+        drift.per[artist_key(seeds[0])] = 1
     need = max(1, min(SIMILAR_TRACK_MIN_AGREEMENT, len(responding)))
     while candidates:
         for (artist, title), sources in candidates:
@@ -2377,6 +2660,8 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
             if key and key not in keys:
                 keys.append(key)
                 per[ident[0]] = per.get(ident[0], 0) + 1
+                drift.note(artist, title, key, len(sources))
+                fast.play(key)
                 report(f"    Found: {artist} - {title}  ({', '.join(sources)})")
             elif not key:
                 report(f"    Not in library: {artist} - {title}")
@@ -2384,39 +2669,20 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
             break
         report(f"  {len(keys)} tracks with {need} or more sources agreeing, so relaxed to {need - 1}.")
         need -= 1
+    drift.checked |= checked
 
     source_label = " + ".join(responding) or "none"
-    if len(keys) < target and SIMILAR_TRACK_TOPUP:
-        if use_youtube:
-            report(f"  {len(keys)} of {target}. Top up is skipped with YouTube output.")
-        else:
-            report(f"  {len(keys)} of {target}, so topping up from Similar Artists...")
-            before = len(keys)
-            similar, _ = blended_similar_artists(seeds, limit=SIMILAR_ARTIST_LIMIT, seed_track=track,
-                                                 report=report)
-            prefetch_top_tracks([a for a, _ in similar], TRACKS_PER_ARTIST_POOL, report=report)
-            for artist, suggested_by in similar:
-                if len(keys) >= target:
-                    break
-                room = per_artist - per.get(artist_key(artist), 0)
-                if room <= 0:
-                    continue
-                picks, _ = pick_top_tracks_for_artist(artist, session_id, suggested_by, report=report)
-                for k in [k for k in picks if k not in keys][:min(room, target - len(keys))]:
-                    keys.append(k)
-                    per[artist_key(artist)] = per.get(artist_key(artist), 0) + 1
-            report(f"  Topped up {len(keys) - before} tracks from Similar Artists.")
-            source_label += " (topped up from Similar Artists)"
+    if len(keys) < target and drift.on:
+        source_label += f" (drift: similar {drift.using})"
 
     queued = 0
     if keys:
         body = [k for k in keys if k != first_key]
         if SIMILAR_TRACK_ORDER == "shuffled":
             random.shuffle(body)
-        keys = ([first_key] if first_key else []) + body
-        report(sending_message(len(keys), "" if SIMILAR_TRACK_ORDER == "shuffled" else ", most similar first"))
-        send_to_jriver(keys, seed_info=seed_info, report=report)
-        queued = len(keys)
+        keys = fast.lead(([first_key] if first_key else []) + body, first_key)
+        queued = finish_playlist(keys, drift, fast, seed_info, report,
+                                 "" if SIMILAR_TRACK_ORDER == "shuffled" else ", most similar first")
         report("Queue refreshed.")
     else:
         report("No library matches found.")
@@ -2424,22 +2690,18 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
 
 
 # ---------------------------------------------------------------------------
-# Mode 4: Vibe Playlist (AI-described mood, two-step)
+# Mode 4: Vibe Playlist (AI-described mood)
 # ---------------------------------------------------------------------------
-
-VIBE_BACKFILL_THRESHOLD = 0.50   # run step 2 when this share (or more) of step-1 picks are misses
-
 
 def create_vibe_playlist(vibe, report=print):
     """
     Builds a playlist from a text description of a mood.
-    Step 1: AI suggests artist/track pairs (always AI, regardless of source
-            settings, since no other source takes a description). Hits queue,
-            misses are logged as discoveries.
-    Step 2: only if the step-1 miss rate reaches VIBE_BACKFILL_THRESHOLD, the
-            step-1 HIT artists become seeds for Last.fm + Deezer similar artists
-            (no AI), and library tracks from those fill up to VIBE_TRACK_COUNT.
-    Everything is shuffled before queueing.
+    AI suggests artist/track pairs (always AI, regardless of source settings,
+    since no other source takes a description). Hits queue, misses are logged
+    as discoveries. Still short and Drift is on: search again from the hits,
+    using their similar artists or similar tracks (Settings > Playlist).
+    With nothing playing on the output zone, the first hit starts playing
+    straight away (fast start). Everything else is shuffled before queueing.
     """
     refresh_settings_if_changed()
     vibe = (vibe or "").strip()
@@ -2454,9 +2716,10 @@ def create_vibe_playlist(vibe, report=print):
 
     seed_info = {"Artist": "Vibe", "Name": vibe, "Album": ""}
     session_id = session_start("vibe", seed_info, "AI")
+    fast = FastStart(None, report)
+    drift = Drift("vibe", target, session_id, report, per_artist=TRACKS_PER_ARTIST_PICK)
 
-    # --- Step 1: AI wings it -------------------------------------------------
-    report("  Step 1: asking AI for tracks...")
+    report("  Asking AI for tracks...")
     pairs = ai_vibe_tracks(vibe, count=target)
     if not pairs:
         report("  AI returned nothing usable.")
@@ -2464,65 +2727,32 @@ def create_vibe_playlist(vibe, report=print):
         return
 
     prefetch_youtube_ids(pairs)
-    keys, hit_artists, misses = [], [], 0
+    keys, misses = [], 0
     for artist, track in pairs:
         key = find_jriver_key_by_track(artist, track)
         if key:
             report(f"    Found: {artist} - {track}")
             if key not in keys:
                 keys.append(key)
-            if artist_key(artist) not in {artist_key(a) for a in hit_artists}:
-                hit_artists.append(artist)
+                drift.note(artist, track, key, 1)
+                fast.play(key)
             session_log(session_id, artist, track, "AI", found=True)
         else:
             report(f"    Not in library: {artist} - {track}")
             misses += 1
             session_log(session_id, artist, track, "AI", found=False)
-
-    miss_rate = misses / len(pairs)
-    report(f"  Step 1 done: {len(keys)} found, {misses} missing ({miss_rate:.0%} miss rate).")
-
-    # --- Step 2: backfill from similar artists, only if needed --------------------
-    if len(keys) < target and miss_rate >= VIBE_BACKFILL_THRESHOLD:
-        if not hit_artists:
-            report("  Nothing matched, so no seeds for a backfill. Try a different vibe.")
-        else:
-            report(f"  Step 2: filling from artists similar to your {len(hit_artists)} hit(s) "
-                   f"via Last.fm + Deezer...")
-            backfill_providers = [PROVIDERS[c] for c in ("lastfm", "deezer") if source_has_key(c)]
-            seen_artists = {artist_key(a) for a in hit_artists}
-            for seed in hit_artists:
-                if len(keys) >= target:
-                    break
-                results = []
-                for service_name, similar_fn, _ in backfill_providers:
-                    names = cached_call(service_name, "similar", f"{artist_key(seed)}|20",
-                                        lambda: similar_fn(seed, limit=20))
-                    if names:
-                        results.append((service_name, names))
-                for artist, suggested_by in blend_lists(results, artist_key):
-                    if len(keys) >= target:
-                        break
-                    if artist_key(artist) in seen_artists:
-                        continue
-                    seen_artists.add(artist_key(artist))
-                    report(f"    + {artist} ({', '.join(suggested_by)})...")
-                    picks, _ = pick_top_tracks_for_artist(artist, session_id, suggested_by,
-                                                          report=report)
-                    keys.extend(k for k in picks if k not in keys)
-            report(f"  Step 2 done: {len(keys)} tracks total.")
+    report(f"  AI picks: {len(keys)} found, {misses} missing.")
 
     if not keys:
-        report("No library matches found.")
+        report("No library matches found. Try a different vibe.")
         session_finish(session_id, 0, report=report)
         return
 
     random.shuffle(keys)
-    keys = keys[:target]
-    report(sending_message(len(keys), " (shuffled)"))
-    send_to_jriver(keys, report=report)
+    keys = fast.lead(keys)[:target]
+    sent = finish_playlist(keys, drift, fast, None, report, " (shuffled)")
     report("Queue refreshed.")
-    session_finish(session_id, len(keys), report=report)
+    session_finish(session_id, sent, report=report)
 
 
 # ---------------------------------------------------------------------------
@@ -2538,6 +2768,8 @@ def play_top_n(report=print, seed_info=None):
     each name, queued one artist after the other, duplicates removed.
     Can be run mid-album: Playing Now is stripped to the current track
     before the new tracks are added, without interrupting playback.
+    In popular order with nothing playing on the output zone (a search or a
+    voice command), the most popular track found starts straight away.
     """
     refresh_settings_if_changed()
     if seed_info is None:   # no searched seed handed in, so read what JRiver is playing
@@ -2557,6 +2789,7 @@ def play_top_n(report=print, seed_info=None):
 
     session_id = None
     ordered_keys, labels_used = [], []
+    fast = FastStart(seed_info, report, enabled=(order == "popular"))
     for artist in seeds:
         top_tracks, source_label = blended_top_tracks(artist, limit=n)
         if not top_tracks:
@@ -2575,6 +2808,7 @@ def play_top_n(report=print, seed_info=None):
             report(f"{tag} {'Found.' if key else 'Not in library.'}")
             if key and key not in ordered_keys:
                 ordered_keys.append(key)
+                fast.play(key)
             session_log(session_id, artist, track_name, suggested_by, found=bool(key))
 
     if session_id is None:
@@ -2592,7 +2826,9 @@ def play_top_n(report=print, seed_info=None):
 
     labels = {"popular": "most popular first", "reverse": "least popular first", "random": "random order"}
     report(f"\nQueuing {len(ordered_keys)} tracks, {labels[order]}...")
-    send_to_jriver(ordered_keys, seed_info=seed_info, report=report)
+    rest = fast.rest(ordered_keys)
+    if rest:
+        send_to_jriver(rest, seed_info=seed_info, report=report, append=fast.started)
     report("Done!")
     session_finish(session_id, len(ordered_keys), sources=" + ".join(labels_used), report=report)
 

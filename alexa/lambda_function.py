@@ -16,7 +16,7 @@ No phrase starts with "play", so Alexa isn't tempted to hand it to a music servi
 
 The command goes to 24bit7 on your PC, with your key and the ID of the speaker
 that heard it, and 24bit7 plays the playlist on that speaker's zone.
-  started  -> "You got it." (or two chimes, if CHIME is set)
+  started  -> a short tone (ACK_TONE), then the music
   pending  -> "Please wait, request pending." (runs after the current build)
   ask      -> Alexa asks which album, and listens for "by <artist>"
   problem  -> Alexa says what's wrong
@@ -38,6 +38,11 @@ from ask_sdk_core.dispatch_components import AbstractExceptionHandler, AbstractR
 from ask_sdk_core.skill_builder import SkillBuilder
 
 from skill_settings import BIT7_KEY, BIT7_URL, CHIME   # your address, key and chime
+
+try:   # optional: a different acknowledgement tone, set in skill_settings.py
+    from skill_settings import ACK_TONE
+except ImportError:
+    ACK_TONE = "soundbank://soundlibrary/musical/amzn_sfx_electronic_beep_02"
 
 TIMEOUT = 6   # seconds; Alexa gives the whole skill about eight
 HELP = ("Say songs by, music like, or shuffle songs by, then an artist. Genre, then any style you like. "
@@ -77,13 +82,13 @@ def send(intent, value, device):
 
 
 def respond(handler_input, status, speech, reply):
-    """Two chimes when it starts; a question that keeps listening; otherwise Alexa says what's wrong."""
+    """A tone when it starts; a question that keeps listening; otherwise Alexa says what's wrong."""
     builder = handler_input.response_builder
     if status == "ask":
         session = handler_input.attributes_manager.session_attributes
         session["ask"], session["title"] = reply.get("ask", "album"), reply.get("title", "")
         return builder.speak(escape(speech)).ask("Say by, then the artist.").response
-    speech = chimes(2, "You got it.") if status == "started" else escape(speech)
+    speech = f'<audio src="{ACK_TONE}"/>' if status == "started" else escape(speech)
     return builder.speak(speech).set_should_end_session(True).response
 
 

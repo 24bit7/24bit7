@@ -134,7 +134,7 @@ class SettingsTab(tk.Frame):
                     "TRACKS_PER_ARTIST_PICK", "TOP_TRACKS_COUNT", "VIBE_TRACK_COUNT", "TOP_TRACKS_ORDER",
                     "CACHE_DAYS", "JRIVER_HOST", "YOUTUBE_PLAYLIST_LENGTH",
                     "SIMILAR_TRACK_COUNT", "SIMILAR_TRACK_PER_ARTIST", "SIMILAR_TRACK_ORDER",
-                    "LONG_CLOSER_MINUTES"] + KEY_FIELDS:
+                    "LONG_CLOSER_MINUTES", "SIMILAR_ARTIST_TRACK_COUNT"] + KEY_FIELDS:
             updates[key] = self.vars[key].get().strip()
         for group in ("DIGITAL_STORES", "REFERENCE_SITES"):
             updates[group] = ",".join(code for code, v in self.vars[group].items() if v.get())
@@ -154,7 +154,12 @@ class SettingsTab(tk.Frame):
         updates["SIMILAR_REQUIRE_AGREEMENT"] = None   # old on/off key, superseded
         agree = self.vars["SIMILAR_TRACK_MIN_AGREEMENT"].get()
         updates["SIMILAR_TRACK_MIN_AGREEMENT"] = "1" if agree == "Off" else agree
-        updates["SIMILAR_TRACK_TOPUP"] = "1" if self.vars["SIMILAR_TRACK_TOPUP"].get() else "0"
+        for group, (on, using, rounds, _) in self._drift.items():
+            name = f"DRIFT_{group.upper()}"
+            updates[name] = "1" if on.get() else "0"
+            updates[f"{name}_USING"] = "tracks" if using.get() == "Similar tracks" else "artists"
+            updates[f"{name}_ROUNDS"] = rounds.get()
+        updates["SIMILAR_TRACK_TOPUP"] = None   # replaced by Drift in 1.4.0
         updates["SKIP_LONG_CLOSERS"] = "1" if self.vars["SKIP_LONG_CLOSERS"].get() else "0"
         for key in ("START_IN_TRAY", "CLOSE_TO_TRAY"):
             updates[key] = "1" if self.vars[key].get() else "0"
@@ -385,6 +390,7 @@ class SettingsTab(tk.Frame):
         """
         tab = self._scroll_tab(nb, "Playlist")
         self._row = 0
+        self._drift = {}   # group -> (on, using, rounds, (dropdowns))
 
         def heading(text, first=False):
             tk.Label(tab, text=text, font=HEADING_FONT, anchor="w").grid(
@@ -406,8 +412,36 @@ class SettingsTab(tk.Frame):
                 row=self._row, column=0, columnspan=2, sticky="w", pady=(0, 4))
             self._row += 1
 
+        def drift(group):
+            """The Drift tick box, its explanation, then Drift using and Rounds."""
+            cfg = engine.DRIFT[group]
+            on = tk.BooleanVar(value=cfg["on"])
+            using = tk.StringVar(value="Similar tracks" if cfg["using"] == "tracks" else "Similar artists")
+            rounds = tk.StringVar(value=str(cfg["rounds"]))
+            ttk.Checkbutton(tab, text="Drift", variable=on, command=self._drift_toggled).grid(
+                row=self._row, column=0, columnspan=2, sticky="w", pady=(8, 0))
+            self._row += 1
+            note("If a playlist comes up short, search again using what's already been found, until the\n"
+                 "playlist reaches its length. More rounds fill more gaps but can wander further from\n"
+                 "where you started.")
+            row = tk.Frame(tab)
+            row.grid(row=self._row, column=0, columnspan=2, sticky="w", pady=(0, 4))
+            tk.Label(row, text="Drift using").pack(side="left")
+            using_cb = ttk.Combobox(row, textvariable=using, values=["Similar tracks", "Similar artists"],
+                                    state="readonly", width=14)
+            using_cb.pack(side="left", padx=(6, 18))
+            tk.Label(row, text="Rounds").pack(side="left")
+            rounds_cb = ttk.Combobox(row, textvariable=rounds, values=[str(n) for n in range(1, 7)],
+                                     state="readonly", width=3)
+            rounds_cb.pack(side="left", padx=(6, 0))
+            for cb in (using_cb, rounds_cb):
+                cb.bind("<<ComboboxSelected>>", self._save)
+            self._row += 1
+            self._drift[group] = (on, using, rounds, (using_cb, rounds_cb))
+
         # --- Similar Artists ---
         heading("Similar Artists", first=True)
+        spin("Number of tracks", "SIMILAR_ARTIST_TRACK_COUNT", "30", 5, 100)
         spin("Number of artists", "SIMILAR_ARTIST_LIMIT", "20", 1, 50)
         pool_var, _ = spin("Number of artist's top tracks", "TRACKS_PER_ARTIST_POOL", "5", 1, 20)
         pick_var, pick_sb = spin("Tracks per artist selection", "TRACKS_PER_ARTIST_PICK", "3", 1, 20)
@@ -417,15 +451,12 @@ class SettingsTab(tk.Frame):
         self._pick_sb = pick_sb
         pool_var.trace_add("write", lambda *a: self._sync_pick_limit())
         self._sync_pick_limit()
+        drift("artists")
 
         # --- Similar Tracks ---
         heading("Similar Tracks")
         spin("Number of tracks", "SIMILAR_TRACK_COUNT", "30", 5, 100)
         spin("Most tracks per artist", "SIMILAR_TRACK_PER_ARTIST", "3", 1, 20)
-        self.vars["SIMILAR_TRACK_TOPUP"] = tk.BooleanVar(value=self.env.get("SIMILAR_TRACK_TOPUP", "1") == "1")
-        ttk.Checkbutton(tab, text="Top up from Similar Artists when short", variable=self.vars["SIMILAR_TRACK_TOPUP"],
-                        command=self._save).grid(row=self._row, column=0, columnspan=2, sticky="w", pady=4)
-        self._row += 1
         tk.Label(tab, text="Order", anchor="w").grid(row=self._row, column=0, sticky="w", pady=4)
         self.vars["SIMILAR_TRACK_ORDER"] = tk.StringVar(value=self.env.get("SIMILAR_TRACK_ORDER", "shuffled"))
         order_cb = ttk.Combobox(tab, textvariable=self.vars["SIMILAR_TRACK_ORDER"],
@@ -435,6 +466,7 @@ class SettingsTab(tk.Frame):
         self._row += 1
         note("Most tracks per artist includes the seed artist. Similar first keeps the order the\n"
              "sources agreed on, strongest matches first; shuffled mixes them up.")
+        drift("tracks")
 
         # --- Artist's Top Tracks ---
         heading("Artist's Top Tracks")
@@ -454,6 +486,8 @@ class SettingsTab(tk.Frame):
         # --- Vibe Playlist ---
         heading("Vibe Playlist")
         spin("Number of tracks", "VIBE_TRACK_COUNT", "20", 5, 100)
+        drift("vibe")
+        self._sync_drift()
 
         # --- Hidden Tracks ---
         heading("Hidden Tracks")
@@ -474,6 +508,16 @@ class SettingsTab(tk.Frame):
              "to every playlist 24bit7 builds. Albums, songs and playlists you ask for by\n"
              "name always play in full.")
         self._sync_long_closers()
+
+    def _drift_toggled(self):
+        self._sync_drift()
+        self._save()
+
+    def _sync_drift(self):
+        """Drift using and Rounds grey out while their Drift tick is off."""
+        for on, _, _, boxes in self._drift.values():
+            for cb in boxes:
+                cb.config(state="readonly" if on.get() else "disabled")
 
     def _long_closers_toggled(self):
         self._sync_long_closers()
