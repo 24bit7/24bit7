@@ -31,6 +31,7 @@ ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
 OUTPUT_OVERRIDE = None  # a zone name that beats the Output setting for one run (voice commands)
+MODERATOR_OVERRIDE = None  # True/False beats the Play tab's AI Moderator for one run (voice: the speaker's tick)
 CSV_FILE = os.path.join(APP_DIR, "FutureDiscoveries.csv")      # legacy log, imported once into the database
 DB_FILE = os.path.join(APP_DIR, "24bit7.db")
 
@@ -121,6 +122,7 @@ def load_settings():
     global LISTEN_SITES, CUSTOM_SITES
     global SKIP_LONG_CLOSERS, LONG_CLOSER_MINUTES
     global SIMILAR_ARTIST_TRACK_COUNT, DRIFT
+    global AI_MODERATOR, MODERATOR_WARNED
 
     load_dotenv(ENV_FILE, override=True)
 
@@ -202,6 +204,9 @@ def load_settings():
     TABLE_FONT_SIZE = _int_setting("TABLE_FONT_SIZE", 9, 6, 16)   # Discover table font
     VIBE_TRACK_COUNT = _int_setting("VIBE_TRACK_COUNT", 20, 5, 100)  # target size for vibe playlists
     # Hidden-track check: leave out an album's last track when it runs longer than this
+    # AI Moderator (Play tab Yes/No) and whether its one-off credits warning has been shown
+    AI_MODERATOR = os.getenv("AI_MODERATOR", "0").strip().lower() in ("1", "true", "yes")
+    MODERATOR_WARNED = os.getenv("MODERATOR_WARNED", "0").strip().lower() in ("1", "true", "yes")
     SKIP_LONG_CLOSERS = os.getenv("SKIP_LONG_CLOSERS", "1").strip().lower() in ("1", "true", "yes")
     LONG_CLOSER_MINUTES = _int_setting("LONG_CLOSER_MINUTES", 6, 3, 30)
     # Where finished playlists go: "jriver" = Same zone (the default), "zone:<name>"
@@ -282,6 +287,10 @@ TRACKS_PER_ARTIST_PICK=3
 TOP_TRACKS_COUNT=10
 TOP_TRACKS_ORDER=popular
 VIBE_TRACK_COUNT=20
+# AI Moderator: an Anthropic check that drops tracks clashing with the seed's
+# tone, energy and mood (0 or 1, set on the Play tab). Needs ANTHROPIC_API_KEY.
+AI_MODERATOR=0
+MODERATOR_WARNED=0
 # Drift: when a playlist comes up short, search again from what was found.
 # Per group: on (1) or off (0), using artists or tracks, rounds (1-6)
 DRIFT_ARTISTS=0
@@ -2038,7 +2047,7 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
     if append:
         if keys:
             queue_tracks(keys, zone)
-            report(f"  Added {len(keys)} tracks to {zone_label(zone)}.")
+            report(f"  Added {len(keys)} track{'' if len(keys) == 1 else 's'} to {zone_label(zone)}.")
         return
     seed_zone_id = (seed_info or {}).get("ZoneID")
     if seed_info and not typed and seed_key and seed_zone_id and seed_zone_id != zone:
@@ -2167,6 +2176,95 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
 
 
 # ---------------------------------------------------------------------------
+# AI Moderator (Play tab Yes/No; a tick per speaker for voice)
+# ---------------------------------------------------------------------------
+
+MODERATOR_MODEL = "claude-haiku-4-5-20251001"   # quick and cheap: one call per playlist (and per Drift round)
+MODERATOR_SHARE = 0.2                           # at most this share of the tracks checked can go
+
+MODERATOR_PROMPT = """You are a playlist moderator for a personal music library. You will be given
+a seed and a list of candidate tracks for a playlist built from it. The seed is
+a track, or for a vibe playlist, a description of the mood wanted.
+
+Your job is to find tracks that would break the listening experience. Judge
+each track on three things only:
+- Tone: the emotional colour (warm, dark, melancholy, playful, defiant).
+- Energy: intensity and pace (a gentle acoustic song versus a pounding anthem).
+- Mood: the overall feeling a listener is in while it plays.
+
+The playlist should feel like one continuous listening session. Small shifts
+in energy are fine and give a playlist shape. A track is a problem only if it
+would jolt a listener out of the mood the seed set.
+
+Genre is not a reason to remove a track. A folk song and an electronic track
+can sit together if they share tone, energy and mood. Two tracks in the same
+genre can clash if they don't.
+
+Rules:
+- Only flag a track when you are confident it clashes. If unsure, keep it.
+- If you don't know an artist or track well enough to judge its sound, keep it.
+- Judge the specific track, not the artist's general reputation.
+- Flag no more than {max_removals} tracks.
+
+Reply with JSON only, no other text:
+{{"remove": [{{"index": <number>, "reason": "<one short sentence>"}}]}}
+If nothing clashes, reply {{"remove": []}}."""
+
+
+def moderator_on():
+    """The moderator runs when it's wanted (Play tab, or the speaker for voice) and there's a key."""
+    wanted = AI_MODERATOR if MODERATOR_OVERRIDE is None else MODERATOR_OVERRIDE
+    return bool(wanted and ANTHROPIC_API_KEY)
+
+
+def moderate(tracks, seed, report=print):
+    """
+    Asks the moderator which tracks clash with the seed. tracks: [(key, artist, title)];
+    seed: "Artist - Title", or "vibe: <description>". Returns the set of keys to
+    remove, each logged with its reason. Any failure removes nothing, so a
+    playlist is never lost to the moderator: it builds unmoderated, with a log line.
+    """
+    if not moderator_on() or len(tracks) < 2:
+        return set()
+    cap = max(1, int(len(tracks) * MODERATOR_SHARE))
+    seed_line = f"Seed vibe: {seed[5:].strip()}" if seed.startswith("vibe:") else f"Seed: {seed}"
+    listing = "\n".join(f"{n}. {artist} - {title}" for n, (_, artist, title) in enumerate(tracks, 1))
+    report(f"  AI Moderator: checking {len(tracks)} tracks against the seed...")
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        message = client.messages.create(
+            model=MODERATOR_MODEL, max_tokens=1000,
+            system=MODERATOR_PROMPT.format(max_removals=cap),
+            messages=[{"role": "user", "content": f"{seed_line}\n\nCandidates:\n{listing}"}])
+        text = "".join(b.text for b in message.content if getattr(b, "type", "") == "text")
+        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
+        flagged = json.loads(text).get("remove") or []
+    except ImportError:
+        report("  AI Moderator skipped: the anthropic package isn't installed.")
+        return set()
+    except Exception as e:
+        if "credit balance" in str(e).lower():
+            report("  AI Moderator skipped: your Anthropic credit balance is too low.")
+        else:
+            report(f"  AI Moderator skipped: the check didn't come back ({str(e)[:120]}).")
+        return set()
+    removed = set()
+    for item in flagged:
+        try:
+            n = int(item.get("index"))
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if 1 <= n <= len(tracks) and len(removed) < cap:
+            key, artist, title = tracks[n - 1]
+            if key not in removed:
+                removed.add(key)
+                report(f"    Removed {artist} - {title}: {str(item.get('reason') or '').strip()}")
+    report(f"  AI Moderator: {len(removed)} removed." if removed else "  AI Moderator: nothing clashed.")
+    return removed
+
+
+# ---------------------------------------------------------------------------
 # Fast start and Drift (shared by the playlist modes)
 # ---------------------------------------------------------------------------
 
@@ -2229,8 +2327,9 @@ class Drift:
     Every track checked is logged to the session, hit or miss, like the first pass.
     """
 
-    def __init__(self, group, target, session_id, report=print, per_artist=None, exclude_keys=()):
+    def __init__(self, group, target, session_id, report=print, per_artist=None, exclude_keys=(), seed=""):
         cfg = DRIFT.get(group, {})
+        self.seed = seed          # what the AI Moderator judges each round against
         self.on = cfg.get("on", False)
         self.using = cfg.get("using", "artists")
         self.rounds = cfg.get("rounds", 3)
@@ -2262,6 +2361,29 @@ class Drift:
         self.per[a] = self.per.get(a, 0) + 1
         self.seen_artists.add(a)
         self.checked.add((a, clean_name(title)))
+
+    def tracks(self, keys):
+        """[(key, artist, title)] for keys this Drift has noted, for the AI Moderator."""
+        info = {k: (a, t) for a, t, k, _ in self.finds}
+        return [(k, *info[str(k)]) for k in keys if str(k) in info]
+
+    def discard(self, keys):
+        """Tracks the moderator removed: out of the playlist's finds, never seeded from or re-added."""
+        keys = {str(k) for k in keys}
+        for artist, title, key, _ in self.finds:
+            if key in keys:
+                a = artist_key(artist)
+                self.per[a] = max(0, self.per.get(a, 0) - 1)
+        self.finds = [f for f in self.finds if f[2] not in keys]
+        self.exclude |= keys
+
+    def moderate(self, keys, candidates, report=None):
+        """Runs the AI Moderator over candidates (a slice of keys) and removes what it flags from keys."""
+        removed = moderate(self.tracks(candidates), self.seed, report or self.report)
+        if removed:
+            keys[:] = [k for k in keys if str(k) not in removed]
+            self.discard(removed)
+        return removed
 
     def _room(self, artist):
         return self.per_artist - self.per.get(artist_key(artist), 0)
@@ -2304,6 +2426,7 @@ class Drift:
                 self._round_artists(seeds, keys)
             else:
                 self._round_tracks(seeds, keys)
+            self.moderate(keys, keys[before:])
             new = keys[before:]
             self.report(f"  Drift round {n}: {len(new)} added.")
             added += new
@@ -2426,7 +2549,8 @@ def create_similar_playlist(report=print, seed_info=None):
     first_key = typed_seed_key(seed_info, seeds, session_id, report)
     fast.play(first_key)
     drift = Drift("artists", target, session_id, report, per_artist=TRACKS_PER_ARTIST_PICK,
-                  exclude_keys=[seed_info.get("FileKey"), first_key])
+                  exclude_keys=[seed_info.get("FileKey"), first_key],
+                  seed=f"{seed_info['Artist']} - {seed_info['Name']}")
     for seed in seeds:
         drift.mark_seed(seed, seed_info.get("Name") or "")
 
@@ -2472,6 +2596,8 @@ def create_similar_playlist(report=print, seed_info=None):
         found = []
         resolve_deferred_picks(deferred, report, found=found)
         add(found, 1)
+    if collected_keys:   # before trimming, so anything removed is replaced from the rest
+        drift.moderate(collected_keys, [k for k in collected_keys if str(k) != fast.key])
     queued = 0
     if collected_keys or first_key:
         body = [k for k in collected_keys if k != first_key]
@@ -2630,7 +2756,9 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
     first_key = typed_seed_key(seed_info, seeds, session_id, report)
     fast.play(first_key)
     drift = Drift("tracks", target, session_id, report, per_artist=per_artist,
-                  exclude_keys=[seed_info.get("FileKey"), first_key])
+                  exclude_keys=[seed_info.get("FileKey"), first_key], seed=f"{seed_info['Artist']} - {track}")
+    # With the AI Moderator on, find a few extra, so anything it removes is replaced
+    wanted = target + (max(1, int(target * MODERATOR_SHARE)) if moderator_on() else 0)
     for seed in seeds:
         drift.mark_seed(seed, track)
 
@@ -2649,7 +2777,7 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
     need = max(1, min(SIMILAR_TRACK_MIN_AGREEMENT, len(responding)))
     while candidates:
         for (artist, title), sources in candidates:
-            if len(keys) >= target:
+            if len(keys) >= wanted:
                 break
             ident = (artist_key(artist), clean_name(title))
             if ident in checked or len(sources) < need or per.get(ident[0], 0) >= per_artist:
@@ -2665,11 +2793,12 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
                 report(f"    Found: {artist} - {title}  ({', '.join(sources)})")
             elif not key:
                 report(f"    Not in library: {artist} - {title}")
-        if len(keys) >= target or need <= 1:
+        if len(keys) >= wanted or need <= 1:
             break
         report(f"  {len(keys)} tracks with {need} or more sources agreeing, so relaxed to {need - 1}.")
         need -= 1
     drift.checked |= checked
+    drift.moderate(keys, [k for k in keys if k != first_key and str(k) != fast.key])
 
     source_label = " + ".join(responding) or "none"
     if len(keys) < target and drift.on:
@@ -2680,7 +2809,7 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
         body = [k for k in keys if k != first_key]
         if SIMILAR_TRACK_ORDER == "shuffled":
             random.shuffle(body)
-        keys = fast.lead(([first_key] if first_key else []) + body, first_key)
+        keys = fast.lead(([first_key] if first_key else []) + body, first_key)[:target]
         queued = finish_playlist(keys, drift, fast, seed_info, report,
                                  "" if SIMILAR_TRACK_ORDER == "shuffled" else ", most similar first")
         report("Queue refreshed.")
@@ -2717,10 +2846,12 @@ def create_vibe_playlist(vibe, report=print):
     seed_info = {"Artist": "Vibe", "Name": vibe, "Album": ""}
     session_id = session_start("vibe", seed_info, "AI")
     fast = FastStart(None, report)
-    drift = Drift("vibe", target, session_id, report, per_artist=TRACKS_PER_ARTIST_PICK)
+    drift = Drift("vibe", target, session_id, report, per_artist=TRACKS_PER_ARTIST_PICK, seed=f"vibe: {vibe}")
+    # With the AI Moderator on, ask for a few extra, so anything it removes is replaced
+    wanted = target + (max(1, int(target * MODERATOR_SHARE)) if moderator_on() else 0)
 
     report("  Asking AI for tracks...")
-    pairs = ai_vibe_tracks(vibe, count=target)
+    pairs = ai_vibe_tracks(vibe, count=wanted)
     if not pairs:
         report("  AI returned nothing usable.")
         session_finish(session_id, 0, report=report)
@@ -2742,6 +2873,7 @@ def create_vibe_playlist(vibe, report=print):
             misses += 1
             session_log(session_id, artist, track, "AI", found=False)
     report(f"  AI picks: {len(keys)} found, {misses} missing.")
+    drift.moderate(keys, [k for k in keys if str(k) != fast.key])
 
     if not keys:
         report("No library matches found. Try a different vibe.")

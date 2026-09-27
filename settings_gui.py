@@ -53,6 +53,46 @@ KEY_HELP = {
 KEY_FIELDS = ["LASTFM_API_KEY", "LISTENBRAINZ_TOKEN", "DISCOGS_TOKEN",
               "ANTHROPIC_API_KEY", "JRIVER_USER", "JRIVER_PASS"]
 
+NO_KEY_TEXT = "You need to add an Anthropic key to use this function"
+MODERATOR_WARNING = ("AI Moderator checks each playlist using the Anthropic API, which uses credits "
+                     "from your Anthropic account. Each playlist costs a fraction of a penny.")
+
+
+class Tooltip:
+    """A small note shown while the pointer is over a widget, or on a click, when when() says so."""
+
+    def __init__(self, widget, text, when=lambda: True):
+        self.widget, self.text, self.when, self.tip = widget, text, when, None
+        widget.bind("<Enter>", lambda e: self.show(), add="+")
+        widget.bind("<Leave>", lambda e: self.hide(), add="+")
+        widget.bind("<Button-1>", lambda e: self.show(), add="+")
+
+    def show(self):
+        if self.tip or not self.when():
+            return
+        x = self.widget.winfo_rootx()
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
+        self.tip = tk.Toplevel(self.widget)
+        self.tip.wm_overrideredirect(True)
+        self.tip.wm_geometry(f"+{x}+{y}")
+        tk.Label(self.tip, text=self.text, bg="#ffffe0", relief="solid", borderwidth=1,
+                 font=("Segoe UI", 9), padx=6, pady=3).pack()
+
+    def hide(self):
+        if self.tip:
+            self.tip.destroy()
+            self.tip = None
+
+
+def warn_moderator_once(parent):
+    """The one-off credits warning, the first time AI Moderator is switched on anywhere."""
+    if engine.MODERATOR_WARNED:
+        return
+    messagebox.showinfo("AI Moderator", MODERATOR_WARNING, parent=parent)
+    write_env({"MODERATOR_WARNED": "1"})
+    engine.MODERATOR_WARNED = True
+
+
 HEADING_FONT = ("Segoe UI", 10, "bold")
 HELP_FONT = ("Segoe UI", 8)
 HELP_FG = "#666"
@@ -808,10 +848,11 @@ class SettingsTab(tk.Frame):
                 row=0, column=0, sticky="w")
             return
         zones = engine.zone_names()
-        for c, heading in enumerate(("Name", "Zone", "Last heard")):
+        has_key = bool(engine.ANTHROPIC_API_KEY)
+        for c, heading in enumerate(("Name", "Zone", "AI Moderator", "Last heard")):
             tk.Label(self.voice_dev_frame, text=heading, fg=HELP_FG, font=HELP_FONT).grid(
                 row=0, column=c, sticky="w", padx=(0, 12))
-        for r, (device_id, name, zone, heard) in enumerate(rows, start=1):
+        for r, (device_id, name, zone, heard, moderator) in enumerate(rows, start=1):
             name_var = tk.StringVar(value=name)
             entry = tk.Entry(self.voice_dev_frame, textvariable=name_var, width=22)
             entry.grid(row=r, column=0, sticky="w", padx=(0, 12), pady=2)
@@ -824,10 +865,21 @@ class SettingsTab(tk.Frame):
             cb.grid(row=r, column=1, sticky="w", padx=(0, 12), pady=2)
             cb.bind("<<ComboboxSelected>>", lambda e, d=device_id, v=zone_var: voice.update_device(
                 d, zone="" if v.get() == "Not set" else v.get()))
-            tk.Label(self.voice_dev_frame, text=heard or "").grid(row=r, column=2, sticky="w", padx=(0, 12))
+            mod_var = tk.BooleanVar(value=bool(moderator) and has_key)
+            mod_box = ttk.Checkbutton(self.voice_dev_frame, variable=mod_var,
+                                      state="normal" if has_key else "disabled",
+                                      command=lambda d=device_id, v=mod_var: self._voice_moderator(d, v))
+            mod_box.grid(row=r, column=2, sticky="w", padx=(0, 12))
+            Tooltip(mod_box, NO_KEY_TEXT, when=lambda: not engine.ANTHROPIC_API_KEY)
+            tk.Label(self.voice_dev_frame, text=heard or "").grid(row=r, column=3, sticky="w", padx=(0, 12))
             tk.Button(self.voice_dev_frame, text="Remove", width=8,
                       command=lambda d=device_id: (voice.remove_device(d), self._fill_voice_devices())).grid(
-                row=r, column=3, sticky="w", pady=2)
+                row=r, column=4, sticky="w", pady=2)
+
+    def _voice_moderator(self, device_id, var):
+        if var.get():
+            warn_moderator_once(self)
+        voice.update_device(device_id, moderator=var.get())
 
     def _voice_test(self):
         if not voice.status().startswith("Listening"):

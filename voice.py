@@ -47,27 +47,42 @@ _lock = threading.Lock()
 # --- devices ------------------------------------------------------------------
 
 def _devices_table():
-    engine.db().execute("""CREATE TABLE IF NOT EXISTS voice_devices (
+    con = engine.db()
+    con.execute("""CREATE TABLE IF NOT EXISTS voice_devices (
         device_id TEXT PRIMARY KEY, name TEXT, zone TEXT, last_heard TEXT)""")
+    if "moderator" not in [row[1] for row in con.execute("PRAGMA table_info(voice_devices)")]:
+        con.execute("ALTER TABLE voice_devices ADD COLUMN moderator INTEGER DEFAULT 0")   # added in 1.4.0
+        con.commit()
 
 
 def devices():
-    """[(device_id, name, zone, last_heard)], most recently heard first."""
+    """[(device_id, name, zone, last_heard, moderator)], most recently heard first."""
     with _lock:
         _devices_table()
         return engine.db().execute(
-            "SELECT device_id, name, zone, last_heard FROM voice_devices "
+            "SELECT device_id, name, zone, last_heard, COALESCE(moderator, 0) FROM voice_devices "
             "WHERE device_id != ? ORDER BY last_heard DESC", (TEST_DEVICE,)).fetchall()
 
 
-def update_device(device_id, name=None, zone=None):
+def update_device(device_id, name=None, zone=None, moderator=None):
     with _lock:
         _devices_table()
         if name is not None:
             engine.db().execute("UPDATE voice_devices SET name=? WHERE device_id=?", (name, device_id))
         if zone is not None:
             engine.db().execute("UPDATE voice_devices SET zone=? WHERE device_id=?", (zone, device_id))
+        if moderator is not None:
+            engine.db().execute("UPDATE voice_devices SET moderator=? WHERE device_id=?",
+                                (1 if moderator else 0, device_id))
         engine.db().commit()
+
+
+def device_moderator(device_id):
+    """Whether this speaker's playlists go through the AI Moderator (its tick under Settings > Voice)."""
+    with _lock:
+        _devices_table()
+        row = engine.db().execute("SELECT moderator FROM voice_devices WHERE device_id=?", (device_id,)).fetchone()
+    return bool(row and row[0])
 
 
 def remove_device(device_id):
@@ -89,18 +104,20 @@ def _hear_device(device_id):
         else:
             count = con.execute("SELECT COUNT(*) FROM voice_devices").fetchone()[0]
             row = (f"New speaker {count + 1}", "")
-            con.execute("INSERT INTO voice_devices VALUES (?,?,?,?)", (device_id, row[0], "", now))
+            con.execute("INSERT INTO voice_devices (device_id, name, zone, last_heard, moderator) "
+                        "VALUES (?,?,?,?,0)", (device_id, row[0], "", now))
         con.commit()
     return row
 
 
 # --- commands -----------------------------------------------------------------
 
-def _job(intent, value, zone):
+def _job(intent, value, zone, moderator=False):
     """The build itself, run on the Play tab's worker thread."""
     def run(report):
         engine.refresh_settings_if_changed()
         engine.OUTPUT_OVERRIDE = zone
+        engine.MODERATOR_OVERRIDE = moderator   # the speaker's own tick, not the Play tab's
         try:
             if intent == "songs_by":
                 engine.play_top_n(report=report, seed_info=engine.typed_seed_info(value))
@@ -119,6 +136,7 @@ def _job(intent, value, zone):
                 engine.create_vibe_playlist(value, report=report)
         finally:
             engine.OUTPUT_OVERRIDE = None
+            engine.MODERATOR_OVERRIDE = None
     return run
 
 
@@ -265,7 +283,9 @@ def handle_command(body, busy=False):
              "genre": f"A {shown} playlist", "tracks_like": f"Tracks like {shown}"}[intent]
     phrase = {"songs_by": "songs by", "music_like": "music like", "genre": "genre",
               "tracks_like": "tracks like"}[intent]
-    _submit(_job(intent, value, zone), f"Voice, {name}: {phrase} {shown}, to {zone}")
+    moderator = device_moderator(device or "unknown device") and bool(engine.ANTHROPIC_API_KEY)
+    _submit(_job(intent, value, zone, moderator),
+            f"Voice, {name}: {phrase} {shown}, to {zone}" + (", AI Moderator on" if moderator else ""))
     if busy:
         return "pending", "Please wait, request pending.", {}
     return "started", f"{words}, coming up on {zone}.", {}
