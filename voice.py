@@ -166,6 +166,7 @@ def _play_now(intent, value, zone):
         artist, keys = library.artist_tracks(value)
         if not keys:
             return "problem", f"I couldn't find any songs by {value}.", {}
+        keys = engine.drop_long_closers(keys, report=print)
         random.shuffle(keys)
         ok, what = _play_keys(keys[:SHUFFLE_CAP], zid), f"{min(len(keys), SHUFFLE_CAP)} songs by {library.spoken(artist)}, shuffled"
     if not ok:

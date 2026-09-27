@@ -30,7 +30,7 @@ import engine
 GOOD = 0.80              # a match at least this close counts as found
 REFRESH_MINUTES = 30     # how often the library is re-read in the background
 AUDIO = "[Media Type]=[Audio]"
-FIELDS = "Key,Name,Artist,Album,Album Artist (auto),Disc #,Track #"
+FIELDS = "Key,Name,Artist,Album,Album Artist (auto),Disc #,Track #,Duration"
 
 _lock = threading.Lock()
 _albums = {}             # (album, album artist) -> [track rows]
@@ -40,6 +40,7 @@ _songs = {}              # normalised title -> [(title, artist, key, album, albu
 _song_titles = []
 _playlists = []
 _loaded_at = 0.0
+_closers = {}            # key -> (seconds, name, artist) for the last track of each album
 _timer = None
 
 
@@ -150,7 +151,7 @@ def _read_playlists():
 
 def load():
     """Reads the whole library from JRiver. Returns a line for the log."""
-    global _albums, _artists, _tracks, _songs, _song_titles, _playlists, _loaded_at
+    global _albums, _artists, _tracks, _songs, _song_titles, _playlists, _loaded_at, _closers
     engine.refresh_settings_if_changed()
     started = time.time()
     tracks = _read_tracks()
@@ -172,8 +173,21 @@ def load():
             artist = artist.strip()
             if artist:
                 artists.setdefault(norm(artist), artist)
+    closers = {}
+    for rows in albums.values():
+        if len(rows) < 2:
+            continue   # a lone track can't be told apart from a single
+        last = max(rows, key=track_order)
+        if track_order(last)[1] <= 0:
+            continue   # no track numbers, so no telling which one is last
+        try:
+            seconds = float(last.get("Duration") or 0)
+        except ValueError:
+            continue
+        closers[str(last["Key"])] = (seconds, last.get("Name") or "", last.get("Artist") or "")
     with _lock:
         _albums, _artists, _tracks, _playlists = albums, artists, tracks, playlists
+        _closers = closers
         _songs, _song_titles = songs, [t for t in songs if t]
         _loaded_at = time.time()
     return (f"Library read for voice: {len(albums)} albums, {len(playlists)} playlists "
@@ -208,6 +222,12 @@ def ensure_loaded():
     """A command that arrives before the first read waits for it (about a second)."""
     if not _loaded_at:
         load()
+
+
+def closer_info(key):
+    """(seconds, name, artist) if the track is the last on its album, else None."""
+    with _lock:
+        return _closers.get(str(key))
 
 
 # --- finding ---------------------------------------------------------------------

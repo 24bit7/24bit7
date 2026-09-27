@@ -133,7 +133,8 @@ class SettingsTab(tk.Frame):
         for key in ["LISTENBRAINZ_ALGORITHM", "LISTENBRAINZ_TRACK_ALGORITHM", "SIMILAR_ARTIST_LIMIT", "TRACKS_PER_ARTIST_POOL",
                     "TRACKS_PER_ARTIST_PICK", "TOP_TRACKS_COUNT", "VIBE_TRACK_COUNT", "TOP_TRACKS_ORDER",
                     "CACHE_DAYS", "JRIVER_HOST", "YOUTUBE_PLAYLIST_LENGTH",
-                    "SIMILAR_TRACK_COUNT", "SIMILAR_TRACK_PER_ARTIST", "SIMILAR_TRACK_ORDER"] + KEY_FIELDS:
+                    "SIMILAR_TRACK_COUNT", "SIMILAR_TRACK_PER_ARTIST", "SIMILAR_TRACK_ORDER",
+                    "LONG_CLOSER_MINUTES"] + KEY_FIELDS:
             updates[key] = self.vars[key].get().strip()
         for group in ("DIGITAL_STORES", "REFERENCE_SITES"):
             updates[group] = ",".join(code for code, v in self.vars[group].items() if v.get())
@@ -154,6 +155,7 @@ class SettingsTab(tk.Frame):
         agree = self.vars["SIMILAR_TRACK_MIN_AGREEMENT"].get()
         updates["SIMILAR_TRACK_MIN_AGREEMENT"] = "1" if agree == "Off" else agree
         updates["SIMILAR_TRACK_TOPUP"] = "1" if self.vars["SIMILAR_TRACK_TOPUP"].get() else "0"
+        updates["SKIP_LONG_CLOSERS"] = "1" if self.vars["SKIP_LONG_CLOSERS"].get() else "0"
         for key in ("START_IN_TRAY", "CLOSE_TO_TRAY"):
             updates[key] = "1" if self.vars[key].get() else "0"
         return updates
@@ -452,6 +454,34 @@ class SettingsTab(tk.Frame):
         # --- Vibe Playlist ---
         heading("Vibe Playlist")
         spin("Number of tracks", "VIBE_TRACK_COUNT", "20", 5, 100)
+
+        # --- Hidden Tracks ---
+        heading("Hidden Tracks")
+        row = tk.Frame(tab)
+        row.grid(row=self._row, column=0, columnspan=2, sticky="w", pady=4)
+        self.vars["SKIP_LONG_CLOSERS"] = tk.BooleanVar(value=self.env.get("SKIP_LONG_CLOSERS", "1") == "1")
+        self.vars["LONG_CLOSER_MINUTES"] = tk.StringVar(value=self.env.get("LONG_CLOSER_MINUTES", "6"))
+        self._closer_sb = tk.Spinbox(row, from_=3, to=30, textvariable=self.vars["LONG_CLOSER_MINUTES"],
+                                     width=4, command=self._save)
+        ttk.Checkbutton(row, text="Skip the last track on an album if it's longer than",
+                        variable=self.vars["SKIP_LONG_CLOSERS"],
+                        command=self._long_closers_toggled).pack(side="left")
+        self._closer_sb.pack(side="left", padx=(6, 6))
+        tk.Label(row, text="minutes").pack(side="left")
+        self.vars["LONG_CLOSER_MINUTES"].trace_add("write", self._save)
+        self._row += 1
+        note("Long album closers often hide a bonus track after a long silence. This applies\n"
+             "to every playlist 24bit7 builds. Albums, songs and playlists you ask for by\n"
+             "name always play in full.")
+        self._sync_long_closers()
+
+    def _long_closers_toggled(self):
+        self._sync_long_closers()
+        self._save()
+
+    def _sync_long_closers(self):
+        """The minutes box greys out while the tick is off."""
+        self._closer_sb.config(state="normal" if self.vars["SKIP_LONG_CLOSERS"].get() else "disabled")
 
     def _sync_pick_limit(self):
         """

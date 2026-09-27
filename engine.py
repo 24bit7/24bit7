@@ -119,6 +119,7 @@ def load_settings():
     global VOICE_ENABLED, VOICE_KEY, VOICE_PORT
     global START_IN_TRAY, CLOSE_TO_TRAY
     global LISTEN_SITES, CUSTOM_SITES
+    global SKIP_LONG_CLOSERS, LONG_CLOSER_MINUTES
 
     load_dotenv(ENV_FILE, override=True)
 
@@ -182,6 +183,9 @@ def load_settings():
     CACHE_DAYS = _int_setting("CACHE_DAYS", 30, 1, 365)
     TABLE_FONT_SIZE = _int_setting("TABLE_FONT_SIZE", 9, 6, 16)   # Discover table font
     VIBE_TRACK_COUNT = _int_setting("VIBE_TRACK_COUNT", 20, 5, 100)  # target size for vibe playlists
+    # Hidden-track check: leave out an album's last track when it runs longer than this
+    SKIP_LONG_CLOSERS = os.getenv("SKIP_LONG_CLOSERS", "1").strip().lower() in ("1", "true", "yes")
+    LONG_CLOSER_MINUTES = _int_setting("LONG_CLOSER_MINUTES", 6, 3, 30)
     # Where finished playlists go: "jriver" = Same zone (the default), "zone:<name>"
     # = a named JRiver zone, or "youtube" (opens in the browser). Zone names keep
     # their case, as JRiver's do.
@@ -259,6 +263,10 @@ TRACKS_PER_ARTIST_PICK=3
 TOP_TRACKS_COUNT=10
 TOP_TRACKS_ORDER=popular
 VIBE_TRACK_COUNT=20
+# Every playlist: skip an album's last track when it's longer than this many
+# minutes, as those files often carry a hidden track after a long silence
+SKIP_LONG_CLOSERS=1
+LONG_CLOSER_MINUTES=6
 SIMILAR_TRACK_COUNT=30
 SIMILAR_TRACK_PER_ARTIST=3
 SIMILAR_TRACK_TOPUP=1
@@ -1942,6 +1950,36 @@ def output_zone(seed_info=None, zone_name=None, report=print):
     return zone_id() if zid == ACTIVE_ZONE else zid
 
 
+def drop_long_closers(keys, keep=(), report=print):
+    """
+    The hidden-track check (Settings > Playlist > All playlists). Leaves out any
+    track that is the last one on its album and runs longer than
+    LONG_CLOSER_MINUTES: those are the files most likely to hide a bonus track
+    after a long silence (System Of A Down's "Aerials" is 6:11 with one, 3:55
+    without). keep: keys never dropped, i.e. the seed track. Each skip is logged.
+    """
+    if not SKIP_LONG_CLOSERS or not keys:
+        return keys
+    try:
+        import library   # here rather than at the top: library imports engine
+        library.ensure_loaded()
+    except Exception as e:
+        report(f"  Long closer check skipped: couldn't read the library ({e}).")
+        return keys
+    limit = LONG_CLOSER_MINUTES * 60
+    keep = {str(k) for k in keep if k}
+    kept = []
+    for key in keys:
+        closer = library.closer_info(key)
+        if closer and str(key) not in keep and closer[0] > limit:
+            seconds, name, artist = closer
+            length = f"{int(seconds) // 60}:{int(seconds) % 60:02d}"
+            report(f"  Skipped {name} by {artist}: last on its album and {length} long.")
+            continue
+        kept.append(key)
+    return kept
+
+
 def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=None):
     """
     Sends a finished playlist to the output zone, or opens it on YouTube.
@@ -1962,6 +2000,7 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
         return
     keys = [str(k) for k in keys]
     seed_key = str((seed_info or {}).get("FileKey") or "")
+    keys = drop_long_closers(keys, keep=[seed_key], report=report)
     seed_zone_id = (seed_info or {}).get("ZoneID")
     if seed_info and not typed and seed_key and seed_zone_id and seed_zone_id != zone:
         keys = [seed_key] + [k for k in keys if k != seed_key]
