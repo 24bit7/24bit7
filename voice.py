@@ -50,39 +50,89 @@ def _devices_table():
     con = engine.db()
     con.execute("""CREATE TABLE IF NOT EXISTS voice_devices (
         device_id TEXT PRIMARY KEY, name TEXT, zone TEXT, last_heard TEXT)""")
-    if "moderator" not in [row[1] for row in con.execute("PRAGMA table_info(voice_devices)")]:
-        con.execute("ALTER TABLE voice_devices ADD COLUMN moderator INTEGER DEFAULT 0")   # added in 1.4.0
-        con.commit()
+    columns = [row[1] for row in con.execute("PRAGMA table_info(voice_devices)")]
+    if "moderator" not in columns:   # a per-device AI Moderator tick, during 1.4.0's development
+        con.execute("ALTER TABLE voice_devices ADD COLUMN moderator INTEGER DEFAULT 0")
+    if "sources" not in columns:
+        # Each device's own Sources and Playlist settings (JSON), or NULL to copy Windows (Main).
+        con.execute("ALTER TABLE voice_devices ADD COLUMN sources TEXT")
+        con.execute("ALTER TABLE voice_devices ADD COLUMN playlist TEXT")
+        # A device that had its own AI Moderator tick gets its own Sources, with the moderator on
+        own = json.dumps({**engine.profile_values("sources"), "AI_MODERATOR": "1"})
+        con.execute("UPDATE voice_devices SET sources=? WHERE moderator=1", (own,))
+    if "own_settings" not in columns:
+        # The Own settings tick: only a ticked device gets tabs under Sources and Playlist.
+        # A device that already has settings of its own starts ticked.
+        con.execute("ALTER TABLE voice_devices ADD COLUMN own_settings INTEGER DEFAULT 0")
+        con.execute("UPDATE voice_devices SET own_settings=1 WHERE sources IS NOT NULL OR playlist IS NOT NULL")
+    con.commit()
 
 
 def devices():
-    """[(device_id, name, zone, last_heard, moderator)], most recently heard first."""
+    """[(device_id, name, zone, last_heard, own_settings)], most recently heard first."""
     with _lock:
         _devices_table()
         return engine.db().execute(
-            "SELECT device_id, name, zone, last_heard, COALESCE(moderator, 0) FROM voice_devices "
+            "SELECT device_id, name, zone, last_heard, COALESCE(own_settings, 0) FROM voice_devices "
             "WHERE device_id != ? ORDER BY last_heard DESC", (TEST_DEVICE,)).fetchall()
 
 
-def update_device(device_id, name=None, zone=None, moderator=None):
+def set_own_settings(device_id, on):
+    """The Own settings tick. Unticked, the device uses Windows (Main); what it had is kept for next time."""
+    with _lock:
+        _devices_table()
+        engine.db().execute("UPDATE voice_devices SET own_settings=? WHERE device_id=?", (1 if on else 0, device_id))
+        engine.db().commit()
+
+
+def update_device(device_id, name=None, zone=None):
     with _lock:
         _devices_table()
         if name is not None:
             engine.db().execute("UPDATE voice_devices SET name=? WHERE device_id=?", (name, device_id))
         if zone is not None:
             engine.db().execute("UPDATE voice_devices SET zone=? WHERE device_id=?", (zone, device_id))
-        if moderator is not None:
-            engine.db().execute("UPDATE voice_devices SET moderator=? WHERE device_id=?",
-                                (1 if moderator else 0, device_id))
         engine.db().commit()
 
 
-def device_moderator(device_id):
-    """Whether this device's playlists go through the AI Moderator (its tick under Settings > Voice Commands)."""
+def device_page(device_id, kind):
+    """A device's own "sources" or "playlist" settings as a dict, or None when it copies Windows (Main)."""
+    if kind not in ("sources", "playlist") or not device_id:
+        return None
     with _lock:
         _devices_table()
-        row = engine.db().execute("SELECT moderator FROM voice_devices WHERE device_id=?", (device_id,)).fetchone()
-    return bool(row and row[0])
+        row = engine.db().execute(f"SELECT {kind} FROM voice_devices WHERE device_id=?", (device_id,)).fetchone()
+    try:
+        return json.loads(row[0]) if row and row[0] else None
+    except ValueError:
+        return None
+
+
+def set_device_page(device_id, kind, values):
+    """Saves a device's own settings of one kind; None goes back to copying Windows (Main)."""
+    if kind not in ("sources", "playlist"):
+        return
+    with _lock:
+        _devices_table()
+        engine.db().execute(f"UPDATE voice_devices SET {kind}=? WHERE device_id=?",
+                            (json.dumps(values) if values is not None else None, device_id))
+        engine.db().commit()
+
+
+def device_profile(device_id):
+    """
+    Everything a device has of its own (Sources and Playlist), for engine.use_profile.
+    Empty when its Own settings tick is off, or both its tabs copy Windows (Main).
+    """
+    with _lock:
+        _devices_table()
+        row = engine.db().execute("SELECT own_settings FROM voice_devices WHERE device_id=?", (device_id,)).fetchone()
+    if not (row and row[0]):
+        return {}
+    profile = {}
+    for kind in ("sources", "playlist"):
+        profile.update(device_page(device_id, kind) or {})
+    return profile
 
 
 def remove_device(device_id):
@@ -112,12 +162,12 @@ def _hear_device(device_id):
 
 # --- commands -----------------------------------------------------------------
 
-def _job(intent, value, zone, moderator=False):
-    """The build itself, run on the Play tab's worker thread."""
+def _job(intent, value, zone, profile=None):
+    """The build itself, run on the Play tab's worker thread, with the device's own settings if it has any."""
     def run(report):
         engine.refresh_settings_if_changed()
         engine.OUTPUT_OVERRIDE = zone
-        engine.MODERATOR_OVERRIDE = moderator   # the device's own tick, not the Play tab's
+        engine.use_profile(profile)
         try:
             if intent == "songs_by":
                 engine.play_top_n(report=report, seed_info=engine.typed_seed_info(value))
@@ -136,7 +186,7 @@ def _job(intent, value, zone, moderator=False):
                 engine.create_vibe_playlist(value, report=report)
         finally:
             engine.OUTPUT_OVERRIDE = None
-            engine.MODERATOR_OVERRIDE = None
+            engine.use_profile(None)
     return run
 
 
@@ -283,9 +333,9 @@ def handle_command(body, busy=False):
              "genre": f"A {shown} playlist", "tracks_like": f"Tracks like {shown}"}[intent]
     phrase = {"songs_by": "songs by", "music_like": "music like", "genre": "genre",
               "tracks_like": "tracks like"}[intent]
-    moderator = device_moderator(device or "unknown device") and bool(engine.ANTHROPIC_API_KEY)
-    _submit(_job(intent, value, zone, moderator),
-            f"Voice, {name}: {phrase} {shown}, to {zone}" + (", AI Moderator on" if moderator else ""))
+    profile = device_profile(device or "unknown device")
+    _submit(_job(intent, value, zone, profile),
+            f"Voice, {name}: {phrase} {shown}, to {zone}" + (", with its own settings" if profile else ""))
     if busy:
         return "pending", "Please wait, request pending.", {}
     return "started", f"{words}, coming up on {zone}.", {}

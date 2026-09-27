@@ -31,7 +31,21 @@ ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
 OUTPUT_OVERRIDE = None  # a zone name that beats the Output setting for one run (voice commands)
-MODERATOR_OVERRIDE = None  # True/False beats the Play tab's AI Moderator for one run (voice: the speaker's tick)
+MODERATOR_OVERRIDE = None  # True/False beats the AI_MODERATOR setting for one run
+PROFILE = {}               # a device's own Sources/Playlist settings, laid over .env for its voice commands
+
+# The settings a device can have its own copy of (Settings > Sources and Playlist, device tabs)
+PROFILE_KEYS = {
+    "sources": ["SIMILAR_SOURCES", "SIMILAR_MIN_AGREEMENT", "LISTENBRAINZ_ALGORITHM", "SIMILAR_TRACK_SOURCES",
+                "SIMILAR_TRACK_MIN_AGREEMENT", "LISTENBRAINZ_TRACK_ALGORITHM", "TOP_TRACK_SOURCES", "AI_MODERATOR"],
+    "playlist": ["SIMILAR_ARTIST_TRACK_COUNT", "SIMILAR_ARTIST_LIMIT", "TRACKS_PER_ARTIST_POOL",
+                 "TRACKS_PER_ARTIST_PICK", "SIMILAR_TRACK_COUNT", "SIMILAR_TRACK_PER_ARTIST", "SIMILAR_TRACK_ORDER",
+                 "TOP_TRACKS_COUNT", "TOP_TRACKS_ORDER", "VIBE_TRACK_COUNT",
+                 "DRIFT_ARTISTS", "DRIFT_ARTISTS_USING", "DRIFT_ARTISTS_ROUNDS",
+                 "DRIFT_TRACKS", "DRIFT_TRACKS_USING", "DRIFT_TRACKS_ROUNDS",
+                 "DRIFT_VIBE", "DRIFT_VIBE_USING", "DRIFT_VIBE_ROUNDS",
+                 "SKIP_LONG_CLOSERS", "LONG_CLOSER_MINUTES"],
+}
 CSV_FILE = os.path.join(APP_DIR, "FutureDiscoveries.csv")      # legacy log, imported once into the database
 DB_FILE = os.path.join(APP_DIR, "24bit7.db")
 
@@ -125,6 +139,7 @@ def load_settings():
     global AI_MODERATOR, MODERATOR_WARNED
 
     load_dotenv(ENV_FILE, override=True)
+    os.environ.update(PROFILE)   # a device's own settings, for the voice command being built
 
     AUTH = (os.getenv("JRIVER_USER"), os.getenv("JRIVER_PASS"))
     JRIVER_HOST = os.getenv("JRIVER_HOST", "127.0.0.1:52199")
@@ -233,6 +248,24 @@ def load_settings():
     START_IN_TRAY = os.getenv("START_IN_TRAY", "1").strip().lower() in ("1", "true", "yes")
     CLOSE_TO_TRAY = os.getenv("CLOSE_TO_TRAY", "0").strip().lower() in ("1", "true", "yes")
     YOUTUBE_PLAYLIST_LENGTH = _int_setting("YOUTUBE_PLAYLIST_LENGTH", 50, 5, 50)   # YouTube caps a link at 50
+
+
+def use_profile(values=None):
+    """
+    Lays a device's own settings over .env until called again with None: the
+    voice command's build then reads them like any other setting. Builds run
+    one at a time on the Play tab's worker, so only one profile is ever in use.
+    """
+    global PROFILE
+    for key in PROFILE:
+        os.environ.pop(key, None)   # .env's own value (if any) comes back with the reload
+    PROFILE = {k: str(v) for k, v in (values or {}).items() if k in PROFILE_KEYS["sources"] + PROFILE_KEYS["playlist"]}
+    load_settings()
+
+
+def profile_values(kind):
+    """Windows (Main)'s current settings of one kind, as .env strings (unset ones left out)."""
+    return {k: os.environ[k] for k in PROFILE_KEYS[kind] if k in os.environ}
 
 
 def refresh_settings_if_changed():

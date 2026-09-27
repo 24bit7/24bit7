@@ -91,6 +91,25 @@ class TabbedPane(tk.Frame):
         self.event_generate("<<NotebookTabChanged>>")
         return None
 
+    def remove(self, page):
+        """Takes a page and its tab away (Settings drops a device's tab when it goes)."""
+        if page not in self._pages:
+            return
+        i = self._pages.index(page)
+        self._tabs.pop(i).master.destroy()
+        self._pages.pop(i)
+        if page is self._current:
+            page.pack_forget()
+            self._current = None
+            if self._pages:
+                self.select(self._pages[0])
+        page.destroy()
+
+    def rename(self, page, text):
+        """Changes a page's tab text (a device renamed under Voice Commands)."""
+        if page in self._pages:
+            self._tabs[self._pages.index(page)].config(text=text)
+
     # --- helpers ------------------------------------------------------------
 
     def tabs_width(self):

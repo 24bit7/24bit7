@@ -21,7 +21,7 @@ import engine
 import library
 import tray
 import voice
-from settings_gui import NO_KEY_TEXT, SettingsTab, Tooltip, warn_moderator_once, write_env
+from settings_gui import SettingsTab, write_env
 from discover_gui import DiscoverTab
 from tabs import TabbedPane, PALETTE
 
@@ -209,15 +209,6 @@ class PlayTab(tk.Frame):
         self.output_cb.pack(side="left")
         self.output_cb.bind("<<ComboboxSelected>>", self._on_output_changed)
 
-        # AI Moderator: Yes/No, remembered in .env. Greyed out, with a note, until there's an Anthropic key.
-        tk.Label(frame, text="AI Moderator", font=("Segoe UI", 9, "bold"), fg="#555").pack(side="left", padx=(16, 6))
-        self.mod_var = tk.StringVar(value="Yes" if engine.AI_MODERATOR else "No")
-        self.mod_cb = ttk.Combobox(frame, textvariable=self.mod_var, values=["No", "Yes"], state="readonly", width=5)
-        self.mod_cb.pack(side="left")
-        self.mod_cb.bind("<<ComboboxSelected>>", self._on_moderator_changed)
-        Tooltip(self.mod_cb, NO_KEY_TEXT, when=lambda: not engine.ANTHROPIC_API_KEY)
-        self._sync_moderator()
-
         self.credits_button = self.buttons[-1]   # greyed out while the Search tab is showing
 
 
@@ -241,28 +232,6 @@ class PlayTab(tk.Frame):
         except Exception as e:
             messagebox.showerror("Save failed", str(e), parent=self)
         self.output_cb.selection_clear()
-
-    def _sync_moderator(self):
-        """Greys AI Moderator out without an Anthropic key (it shows No), and back once one is added."""
-        engine.refresh_settings_if_changed()
-        if engine.ANTHROPIC_API_KEY:
-            if str(self.mod_cb.cget("state")) == "disabled":
-                self.mod_cb.config(state="readonly")
-                self.mod_var.set("Yes" if engine.AI_MODERATOR else "No")
-        else:
-            self.mod_cb.config(state="disabled")
-            self.mod_var.set("No")
-        self.after(REFRESH_MS, self._sync_moderator)
-
-    def _on_moderator_changed(self, *_):
-        on = self.mod_var.get() == "Yes"
-        if on:
-            warn_moderator_once(self)
-        try:
-            write_env({"AI_MODERATOR": "1" if on else "0"})
-        except Exception as e:
-            messagebox.showerror("Save failed", str(e), parent=self)
-        self.mod_cb.selection_clear()
 
     def _build_log(self):
         frame = tk.Frame(self, padx=16, pady=12)
