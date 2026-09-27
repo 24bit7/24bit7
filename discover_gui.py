@@ -5,7 +5,9 @@ Browses the discoveries logged by every playlist run: artists (and tracks) that
 weren't in the library, plus the ones that were, filterable by hit/miss and by
 session. A per-row Search opens the ticked stores' search pages (artist and
 track) and reference sites (artist only) in the browser, one tab each, so a
-discovery leads to buying it rather than pirating it.
+discovery leads to buying it rather than pirating it. The Label button finds who
+released the selected track and opens the label on Bandcamp, so buying it
+supports the artist through their label.
 """
 
 import csv
@@ -213,6 +215,8 @@ class DiscoverTab(tk.Frame):
         self._sites_inline.pack(side="left", padx=(16, 0))
         self._sites_below = tk.Frame(btnbar)           # ...or here, as a second row, when they don't
         self._site_buttons = []
+        self._label_button = None
+        self._label_busy = False
         self._site_signature = None
         self._site_mode = "inline"
         self._sites_needed = 0
@@ -454,6 +458,10 @@ class DiscoverTab(tk.Frame):
             b.destroy()
         parent = self._sites_inline if self._site_mode == "inline" else self._sites_below
         self._site_buttons = []
+        self._label_button = tk.Button(parent, text="Finding label..." if self._label_busy else "Label",
+                                       command=self.find_label)
+        self._label_button.pack(side="left", padx=(0, 12))
+        self._site_buttons.append(self._label_button)
         for label, kind, builder in sites:
             b = tk.Button(parent, text=label, command=lambda k=kind, f=builder: self.open_site(k, f))
             b.pack(side="left", padx=(0, 6))
@@ -483,7 +491,53 @@ class DiscoverTab(tk.Frame):
         """Site buttons only work on a selected row, so they are greyed out until there is one."""
         state = "normal" if self.tree.selection() else "disabled"
         for b in getattr(self, "_site_buttons", []):
-            b.config(state=state)
+            b.config(state="disabled" if b is self._label_button and self._label_busy else state)
+
+    def find_label(self):
+        """Finds the selected track's label in the background, then opens it on Bandcamp."""
+        sel = self.tree.selection()
+        if not sel or self._label_busy:
+            return
+        row = self._rows[int(sel[0])]
+        artist, track = (row.get("artist") or "").strip(), (row.get("track") or "").strip()
+        if not artist or not track:
+            self._set_yt_status("Label needs a row with both an artist and a track.")
+            return
+        key = f"{engine.artist_key(artist)}|{engine.clean_name(track)}"
+        cached = engine.cache_get("24bit7", "label", key)
+        if cached:
+            self._open_label(artist, track, cached)
+            return
+        self._label_busy = True
+        self._label_button.config(text="Finding label...", state="disabled")
+        self._set_yt_status(f"Finding the label for {artist} - {track}...")
+
+        def work():
+            try:
+                result, error = engine.find_label(artist, track), None
+            except Exception as e:
+                result, error = None, e
+            self.after(0, lambda: self._label_done(artist, track, key, result, error))
+        threading.Thread(target=work, daemon=True).start()
+
+    def _label_done(self, artist, track, key, result, error):
+        self._label_busy = False
+        try:
+            self._label_button.config(text="Label")
+        except tk.TclError:
+            pass
+        self._sync_site_buttons()
+        if error is not None:
+            self._set_yt_status(f"Label lookup failed: {error}")
+            return
+        if result.get("label") is not None:   # a label (or self-released) is kept; "not found" is tried again next time
+            engine.cache_put("24bit7", "label", key, result)
+        self._open_label(artist, track, result)
+
+    def _open_label(self, artist, track, result):
+        url, note = engine.label_page(artist, track, result)
+        self._set_yt_status(note + ".")
+        webbrowser.open_new_tab(url)
 
     def open_site(self, kind, builder):
         """Opens ONE site for the selected row: artist + track, or artist only for reference-style sites."""

@@ -26,7 +26,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
@@ -2963,6 +2963,135 @@ def play_top_n(report=print, seed_info=None):
         send_to_jriver(rest, seed_info=seed_info, report=report, append=fast.started)
     report("Done!")
     session_finish(session_id, len(ordered_keys), sources=" + ".join(labels_used), report=report)
+
+
+# ---------------------------------------------------------------------------
+# Label lookup (the Label button in Discover)
+# ---------------------------------------------------------------------------
+
+NO_LABEL = {"[no label]", "no label", "not on label", "self-released", "self released", "independent", "none"}
+
+
+def _mb_json(path, params):
+    """One MusicBrainz request, paced to their one-a-second rule. Parsed JSON, or None."""
+    for _ in range(3):
+        _musicbrainz_wait_turn()
+        try:
+            r = requests.get(f"https://musicbrainz.org/ws/2/{path}", params={**params, "fmt": "json"},
+                             headers={"User-Agent": USER_AGENT}, timeout=15)
+        except Exception as e:
+            print(f"[Label] MusicBrainz request failed: {e}")
+            return None
+        if r.status_code == 503:   # busy: wait and try again
+            time.sleep(1.0)
+            continue
+        return r.json() if r.status_code == 200 else None
+    return None
+
+
+def _release_rank(release):
+    """Sort key: albums first, then singles and EPs, compilations and live last; official, then earliest."""
+    group = release.get("release-group") or {}
+    primary, secondary = group.get("primary-type") or "", group.get("secondary-types") or []
+    if primary == "Album" and not secondary:
+        kind = 0
+    elif primary in ("Single", "EP") and not secondary:
+        kind = 1
+    else:
+        kind = 2
+    return kind, 0 if release.get("status") == "Official" else 1, release.get("date") or "9999"
+
+
+def musicbrainz_label(artist, track):
+    """
+    The label of the track's first proper release on MusicBrainz, as
+    (name, label MBID); ("", None) when it's self-released; None if MusicBrainz
+    doesn't know the track or its label.
+    """
+    query = 'recording:"{}" AND artist:"{}"'.format(track.replace('"', ''), artist.replace('"', ''))
+    data = _mb_json("recording/", {"query": query, "limit": 10}) or {}
+    want_title, want_artist = clean_name(track), artist_key(artist)
+    releases = []
+    for rec in data.get("recordings", []):
+        credit = " ".join(c.get("name", "") for c in rec.get("artist-credit", []) if isinstance(c, dict))
+        if clean_name(rec.get("title", "")) != want_title or want_artist not in artist_key(credit):
+            continue
+        releases += rec.get("releases", [])
+    for release in sorted(releases, key=_release_rank)[:3]:
+        info = _mb_json(f"release/{release['id']}", {"inc": "labels"}) or {}
+        for entry in info.get("label-info", []):
+            label = entry.get("label") or {}
+            name = (label.get("name") or "").strip()
+            if not name:
+                continue
+            if name.lower() in NO_LABEL:
+                return "", None
+            return name, label.get("id")
+    return None
+
+
+def musicbrainz_label_bandcamp(label_id):
+    """The label's Bandcamp page, if MusicBrainz has it linked. None otherwise."""
+    data = _mb_json(f"label/{label_id}", {"inc": "url-rels"}) or {}
+    for rel in data.get("relations", []):
+        url = ((rel.get("url") or {}).get("resource") or "").strip()
+        if rel.get("type") == "bandcamp" or "bandcamp.com" in url:
+            return url or None
+    return None
+
+
+def discogs_label(artist, track):
+    """The label from Discogs (needs a token): name, "" when self-released, or None."""
+    if not DISCOGS_TOKEN:
+        return None
+    data = discogs_get("/database/search", {"artist": artist, "track": track, "type": "release", "per_page": 10})
+    results = (data or {}).get("results", [])
+
+    def rank(item):
+        formats = [f.lower() for f in item.get("format", [])]
+        return ("compilation" in formats, "album" not in formats, item.get("year") or "9999")
+
+    for item in sorted(results, key=rank):
+        for name in item.get("label", []):
+            name = discogs_clean_name(name or "").strip()
+            if name:
+                return "" if name.lower() in NO_LABEL else name
+    return None
+
+
+def find_label(artist, track):
+    """
+    Finds who released a track, for the Label button: MusicBrainz first, then
+    Discogs. Returns {"label", "source", "bandcamp"}: label is "" for
+    self-released and None when neither source knows; bandcamp is the label's
+    own Bandcamp page when MusicBrainz links one. Network only, so it's safe
+    on a worker thread (the caller does any caching).
+    """
+    found = musicbrainz_label(artist, track)
+    if found is not None:
+        name, label_id = found
+        bandcamp = musicbrainz_label_bandcamp(label_id) if label_id else None
+        return {"label": name, "source": "MusicBrainz", "bandcamp": bandcamp}
+    name = discogs_label(artist, track)
+    if name is not None:
+        return {"label": name, "source": "Discogs", "bandcamp": None}
+    return {"label": None, "source": None, "bandcamp": None}
+
+
+def label_page(artist, track, result):
+    """(url, note) for a find_label result: the label's Bandcamp, a Bandcamp search, or Google."""
+    from urllib.parse import quote_plus
+    label = result.get("label")
+    if label is None:
+        return (f"https://www.google.com/search?q={quote_plus(f'{artist} {track} record label')}",
+                "No label found, so searching Google")
+    if label == "" or artist_key(label) == artist_key(artist):
+        return (f"https://bandcamp.com/search?q={quote_plus(artist)}&item_type=b",
+                f"Self-released, so opening {artist} on Bandcamp")
+    if result.get("bandcamp"):
+        return result["bandcamp"], f"Label: {label}, opening its Bandcamp page"
+    return (f"https://bandcamp.com/search?q={quote_plus(label)}&item_type=b",
+            f"Label: {label}, searching Bandcamp for it")
 
 
 # ---------------------------------------------------------------------------
