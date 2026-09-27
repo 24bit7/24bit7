@@ -213,7 +213,7 @@ def _top_five_start(artist, keys):
     return random.choice(hits) if hits else None
 
 
-def _play_now(intent, value, zone):
+def _play_now(intent, value, zone, device=None):
     """Albums, songs, playlists and shuffles: replace what's playing on the zone at once."""
     zid = engine.zone_id(zone)
     if intent == "playlist":
@@ -246,6 +246,14 @@ def _play_now(intent, value, zone):
         if not keys:
             return "problem", f"I couldn't find any songs by {value}.", {}
         keys = engine.drop_long_closers(keys, report=print)
+        # Recently played: the Artist's Top Tracks setting, the device's own if it has one
+        own = device_profile(device) if device else {}
+        main_on, main_days = engine.SKIP_PLAYED["top"]
+        on = own.get("SKIP_PLAYED_TOP", "1" if main_on else "0") in ("1", "true", "yes")
+        days = own.get("SKIP_PLAYED_TOP_DAYS", str(main_days))
+        played = engine.PlayedFilter("top", report=print, setting=(on, int(days) if days.isdigit() else main_days))
+        keys = [k for k in keys if played.fresh(k)] or keys   # never leave a shuffle empty
+        played.done()
         random.shuffle(keys)
         lead = _top_five_start(artist, keys)
         if lead:   # a shuffle opens on one of their best known songs
@@ -311,7 +319,7 @@ def handle_command(body, busy=False):
         return "problem", f"I can't find the {zone} zone in JRiver.", {}
     if intent in INSTANT:
         try:
-            return _play_now(intent, value, zone)
+            return _play_now(intent, value, zone, device)
         except Exception as e:
             print(f"[Voice] {intent} '{value}' failed: {e}")
             return "problem", "I couldn't reach the library in JRiver. Is JRiver running on the media PC?", {}

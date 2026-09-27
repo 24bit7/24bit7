@@ -209,6 +209,8 @@ class ProfilePage:
             out[f"{name}_USING"] = "tracks" if using.get() == "Similar tracks" else "artists"
             out[f"{name}_ROUNDS"] = rounds.get()
         out["SKIP_LONG_CLOSERS"] = "1" if v["SKIP_LONG_CLOSERS"].get() else "0"
+        for group in engine.PLAYED_GROUPS:
+            out[f"SKIP_PLAYED_{group.upper()}"] = "1" if v[f"SKIP_PLAYED_{group.upper()}"].get() else "0"
         return out
 
 
@@ -216,7 +218,8 @@ class ProfilePage:
 PLAYLIST_TEXT_KEYS = ["SIMILAR_ARTIST_TRACK_COUNT", "SIMILAR_ARTIST_LIMIT", "TRACKS_PER_ARTIST_POOL",
                       "TRACKS_PER_ARTIST_PICK", "SIMILAR_TRACK_COUNT", "SIMILAR_TRACK_PER_ARTIST",
                       "SIMILAR_TRACK_ORDER", "TOP_TRACKS_COUNT", "TOP_TRACKS_ORDER", "VIBE_TRACK_COUNT",
-                      "LONG_CLOSER_MINUTES"]
+                      "LONG_CLOSER_MINUTES", "SKIP_PLAYED_ARTISTS_DAYS", "SKIP_PLAYED_TRACKS_DAYS",
+                      "SKIP_PLAYED_TOP_DAYS", "SKIP_PLAYED_VIBE_DAYS"]
 
 
 def drift_values(env, group):
@@ -266,6 +269,12 @@ def sync_drift(p):
     for on, _, _, boxes in p.drift.values():
         for cb in boxes:
             cb.config(state="readonly" if on.get() else "disabled")
+
+
+def sync_played(p):
+    """Each group's days box greys out while its Skip recently played tick is off."""
+    for group, box in p.played_boxes.items():
+        box.config(state="normal" if p.vars[f"SKIP_PLAYED_{group.upper()}"].get() else "disabled")
 
 
 def sync_long_closers(p):
@@ -675,7 +684,8 @@ class SettingsTab(tk.Frame):
         one boxed section per mode, so the labels don't need to repeat the mode name.
         """
         p.loading = True
-        p.drift = {}   # group -> (on, using, rounds, (dropdowns))
+        p.drift = {}          # group -> (on, using, rounds, (dropdowns))
+        p.played_boxes = {}   # group -> its days box
         where = {}     # the box being filled and its next row
 
         def begin(title, help_text=None):
@@ -745,6 +755,30 @@ class SettingsTab(tk.Frame):
             place(row, pady=(0, 4))
             p.drift[group] = (on, using, rounds, (using_cb, rounds_cb))
 
+        def recent(group):
+            """Skip tracks played in the last [n] days, with its ?."""
+            name = f"SKIP_PLAYED_{group.upper()}"
+            main_on, main_days = engine.SKIP_PLAYED[group]
+            p.vars[name] = tk.BooleanVar(value=p.env.get(name, "1" if main_on else "0") in ("1", "true", "yes"))
+            p.vars[f"{name}_DAYS"] = tk.StringVar(value=p.env.get(f"{name}_DAYS", str(main_days)))
+            row = tk.Frame(where["box"])
+
+            def toggled():
+                sync_played(p)
+                p.save()
+            ttk.Checkbutton(row, text="Skip tracks played in the last", variable=p.vars[name],
+                            command=toggled).pack(side="left")
+            days = tk.Spinbox(row, from_=1, to=365, textvariable=p.vars[f"{name}_DAYS"], width=4, command=p.save)
+            days.pack(side="left", padx=(6, 6))
+            tk.Label(row, text="days").pack(side="left")
+            help_mark(row, "Leaves out anything JRiver has played within that many days, using its Last "
+                           "Played date. The seed track is never left out. JRiver's library is re-read every "
+                           "half hour, so a track played in the last few minutes may still get in. Drift, if "
+                           "it's on, fills any gaps this leaves.").pack(side="left", padx=(8, 0))
+            p.vars[f"{name}_DAYS"].trace_add("write", p.save)
+            p.played_boxes[group] = days
+            place(row, pady=(8, 4))
+
         # --- Similar Artists ---
         begin("Similar Artists")
         spin("Number of tracks", "SIMILAR_ARTIST_TRACK_COUNT", "30", 5, 100)
@@ -756,6 +790,7 @@ class SettingsTab(tk.Frame):
                             "(say 3 of 5) means the same seed gives a different playlist each run, as the "
                             "selection is random.")
         pool_var.trace_add("write", lambda *a: sync_pick_limit(p))
+        recent("artists")
         drift("artists")
 
         # --- Similar Tracks ---
@@ -765,6 +800,7 @@ class SettingsTab(tk.Frame):
         choice("Order", "SIMILAR_TRACK_ORDER", "shuffled", ["shuffled", "similar first"],
                "Similar first keeps the order the sources agreed on, strongest matches first. "
                "Shuffled mixes them up.")
+        recent("tracks")
         drift("tracks")
 
         # --- Artist's Top Tracks ---
@@ -772,10 +808,12 @@ class SettingsTab(tk.Frame):
         spin("Number of tracks (1-20)", "TOP_TRACKS_COUNT", "10", 1, 20)
         choice("Order", "TOP_TRACKS_ORDER", "popular", ["popular", "reverse", "random"],
                "popular: most played first\nreverse: least played first\nrandom: shuffled")
+        recent("top")
 
         # --- Vibe Playlist ---
         begin("Vibe Playlist")
         spin("Number of tracks", "VIBE_TRACK_COUNT", "20", 5, 100)
+        recent("vibe")
         drift("vibe")
 
         # --- Hidden Tracks ---
@@ -799,7 +837,7 @@ class SettingsTab(tk.Frame):
         p.vars["LONG_CLOSER_MINUTES"].trace_add("write", p.save)
         place(row)
 
-        p.resync = lambda: (sync_pick_limit(p), sync_drift(p), sync_long_closers(p))
+        p.resync = lambda: (sync_pick_limit(p), sync_drift(p), sync_long_closers(p), sync_played(p))
         p.resync()
         p.loading = False
 

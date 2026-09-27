@@ -44,8 +44,11 @@ PROFILE_KEYS = {
                  "DRIFT_ARTISTS", "DRIFT_ARTISTS_USING", "DRIFT_ARTISTS_ROUNDS",
                  "DRIFT_TRACKS", "DRIFT_TRACKS_USING", "DRIFT_TRACKS_ROUNDS",
                  "DRIFT_VIBE", "DRIFT_VIBE_USING", "DRIFT_VIBE_ROUNDS",
-                 "SKIP_LONG_CLOSERS", "LONG_CLOSER_MINUTES"],
+                 "SKIP_LONG_CLOSERS", "LONG_CLOSER_MINUTES",
+                 "SKIP_PLAYED_ARTISTS", "SKIP_PLAYED_ARTISTS_DAYS", "SKIP_PLAYED_TRACKS", "SKIP_PLAYED_TRACKS_DAYS",
+                 "SKIP_PLAYED_TOP", "SKIP_PLAYED_TOP_DAYS", "SKIP_PLAYED_VIBE", "SKIP_PLAYED_VIBE_DAYS"],
 }
+PLAYED_GROUPS = ("artists", "tracks", "top", "vibe")   # Similar Artists, Similar Tracks, Artist's Top Tracks, Vibe
 CSV_FILE = os.path.join(APP_DIR, "FutureDiscoveries.csv")      # legacy log, imported once into the database
 DB_FILE = os.path.join(APP_DIR, "24bit7.db")
 
@@ -136,7 +139,7 @@ def load_settings():
     global LISTEN_SITES, CUSTOM_SITES
     global SKIP_LONG_CLOSERS, LONG_CLOSER_MINUTES
     global SIMILAR_ARTIST_TRACK_COUNT, DRIFT
-    global AI_MODERATOR, MODERATOR_WARNED
+    global AI_MODERATOR, MODERATOR_WARNED, SKIP_PLAYED
 
     load_dotenv(ENV_FILE, override=True)
     os.environ.update(PROFILE)   # a device's own settings, for the voice command being built
@@ -222,6 +225,12 @@ def load_settings():
     # AI Moderator (Play tab Yes/No) and whether its one-off credits warning has been shown
     AI_MODERATOR = os.getenv("AI_MODERATOR", "0").strip().lower() in ("1", "true", "yes")
     MODERATOR_WARNED = os.getenv("MODERATOR_WARNED", "0").strip().lower() in ("1", "true", "yes")
+    # Skip tracks played recently, per Play mode group: {group: (on, days)}
+    SKIP_PLAYED = {}
+    for group in PLAYED_GROUPS:
+        name = f"SKIP_PLAYED_{group.upper()}"
+        SKIP_PLAYED[group] = (os.getenv(name, "0").strip().lower() in ("1", "true", "yes"),
+                              _int_setting(f"{name}_DAYS", 7, 1, 365))
     SKIP_LONG_CLOSERS = os.getenv("SKIP_LONG_CLOSERS", "1").strip().lower() in ("1", "true", "yes")
     LONG_CLOSER_MINUTES = _int_setting("LONG_CLOSER_MINUTES", 6, 3, 30)
     # Where finished playlists go: "jriver" = Same zone (the default), "zone:<name>"
@@ -335,6 +344,15 @@ DRIFT_TRACKS_ROUNDS=3
 DRIFT_VIBE=0
 DRIFT_VIBE_USING=artists
 DRIFT_VIBE_ROUNDS=3
+# Skip tracks JRiver has played in the last so many days, per Play mode (1 on, 0 off)
+SKIP_PLAYED_ARTISTS=0
+SKIP_PLAYED_ARTISTS_DAYS=7
+SKIP_PLAYED_TRACKS=0
+SKIP_PLAYED_TRACKS_DAYS=7
+SKIP_PLAYED_TOP=0
+SKIP_PLAYED_TOP_DAYS=7
+SKIP_PLAYED_VIBE=0
+SKIP_PLAYED_VIBE_DAYS=7
 # Every playlist: skip an album's last track when it's longer than this many
 # minutes, as those files often carry a hidden track after a long silence
 SKIP_LONG_CLOSERS=1
@@ -2297,6 +2315,50 @@ def moderate(tracks, seed, report=print):
     return removed
 
 
+class PlayedFilter:
+    """
+    Skip tracks played recently (Settings > Playlist, per Play mode): a track
+    JRiver played within the last N days isn't used. Reads Last Played from the
+    library held in memory, so it costs nothing per track; that copy refreshes
+    every half hour, so a track played in the last few minutes may still get in.
+    keep: keys never skipped (the seed track). Counts what it skips for one log line.
+    """
+
+    def __init__(self, group, keep=(), report=print, setting=None):
+        self.on, self.days = setting or SKIP_PLAYED.get(group, (False, 7))
+        self.keep = {str(k) for k in keep if k}
+        self.report, self.skipped = report, 0
+        if not self.on:
+            return
+        try:
+            import library   # here rather than at the top: library imports engine
+            library.ensure_loaded()
+            self.library = library
+        except Exception as e:
+            report(f"  Recently played check skipped: couldn't read the library ({e}).")
+            self.on = False
+            return
+        if library.played_dates_unreadable():
+            report("  Recently played check skipped: JRiver's Last Played dates couldn't be read.")
+            self.on = False
+        self.cutoff = time.time() - self.days * 86400
+
+    def fresh(self, key):
+        """False (and counted) for a track played within the set number of days."""
+        if not self.on or str(key) in self.keep:
+            return True
+        when = self.library.last_played(key)
+        if when and when >= self.cutoff:
+            self.skipped += 1
+            return False
+        return True
+
+    def done(self):
+        if self.skipped:
+            self.report(f"  Skipped {self.skipped} track{'' if self.skipped == 1 else 's'} "
+                        f"played in the last {self.days} day{'' if self.days == 1 else 's'}.")
+
+
 # ---------------------------------------------------------------------------
 # Fast start and Drift (shared by the playlist modes)
 # ---------------------------------------------------------------------------
@@ -2360,8 +2422,10 @@ class Drift:
     Every track checked is logged to the session, hit or miss, like the first pass.
     """
 
-    def __init__(self, group, target, session_id, report=print, per_artist=None, exclude_keys=(), seed=""):
+    def __init__(self, group, target, session_id, report=print, per_artist=None, exclude_keys=(), seed="",
+                 played=None):
         cfg = DRIFT.get(group, {})
+        self.played = played      # the mode's PlayedFilter, so Drift skips recent plays too
         self.seed = seed          # what the AI Moderator judges each round against
         self.on = cfg.get("on", False)
         self.using = cfg.get("using", "artists")
@@ -2472,6 +2536,8 @@ class Drift:
     def _take(self, keys, artist, title, key, score):
         if not key or str(key) in self.exclude or key in keys or self._room(artist) <= 0:
             return False
+        if self.played and not self.played.fresh(key):
+            return False
         keys.append(key)
         self.note(artist, title, key, score)
         return True
@@ -2581,9 +2647,10 @@ def create_similar_playlist(report=print, seed_info=None):
     fast = FastStart(seed_info, report)
     first_key = typed_seed_key(seed_info, seeds, session_id, report)
     fast.play(first_key)
+    played = PlayedFilter("artists", keep=[seed_info.get("FileKey"), first_key], report=report)
     drift = Drift("artists", target, session_id, report, per_artist=TRACKS_PER_ARTIST_PICK,
                   exclude_keys=[seed_info.get("FileKey"), first_key],
-                  seed=f"{seed_info['Artist']} - {seed_info['Name']}")
+                  seed=f"{seed_info['Artist']} - {seed_info['Name']}", played=played)
     for seed in seeds:
         drift.mark_seed(seed, seed_info.get("Name") or "")
 
@@ -2592,7 +2659,7 @@ def create_similar_playlist(report=print, seed_info=None):
 
     def add(found, score):
         for artist, title, key in found:
-            if key not in collected_keys and key != first_key:
+            if key not in collected_keys and key != first_key and played.fresh(key):
                 collected_keys.append(key)
                 drift.note(artist, title, key, score)
                 fast.play(key)
@@ -2637,8 +2704,10 @@ def create_similar_playlist(report=print, seed_info=None):
         random.shuffle(body)
         keys_list = fast.lead(([first_key] if first_key else []) + body, first_key)[:target]
         queued = finish_playlist(keys_list, drift, fast, seed_info, report)
+        played.done()
         report("Queue refreshed.")
     else:
+        played.done()
         report("No library matches found.")
     session_finish(session_id, queued, sources=source_label, report=report)
 
@@ -2788,8 +2857,10 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
     fast = FastStart(seed_info, report)
     first_key = typed_seed_key(seed_info, seeds, session_id, report)
     fast.play(first_key)
+    played = PlayedFilter("tracks", keep=[seed_info.get("FileKey"), first_key], report=report)
     drift = Drift("tracks", target, session_id, report, per_artist=per_artist,
-                  exclude_keys=[seed_info.get("FileKey"), first_key], seed=f"{seed_info['Artist']} - {track}")
+                  exclude_keys=[seed_info.get("FileKey"), first_key], seed=f"{seed_info['Artist']} - {track}",
+                  played=played)
     # With the AI Moderator on, find a few extra, so anything it removes is replaced
     wanted = target + (max(1, int(target * MODERATOR_SHARE)) if moderator_on() else 0)
     for seed in seeds:
@@ -2818,7 +2889,7 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
             checked.add(ident)
             key = find_jriver_key_by_track(artist, title) if use_youtube else library.find_track_key(artist, title)
             session_log(session_id, artist, title, sources, found=bool(key))
-            if key and key not in keys:
+            if key and key not in keys and played.fresh(key):
                 keys.append(key)
                 per[ident[0]] = per.get(ident[0], 0) + 1
                 drift.note(artist, title, key, len(sources))
@@ -2845,6 +2916,7 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
         keys = fast.lead(([first_key] if first_key else []) + body, first_key)[:target]
         queued = finish_playlist(keys, drift, fast, seed_info, report,
                                  "" if SIMILAR_TRACK_ORDER == "shuffled" else ", most similar first")
+        played.done()
         report("Queue refreshed.")
     else:
         report("No library matches found.")
@@ -2879,7 +2951,9 @@ def create_vibe_playlist(vibe, report=print):
     seed_info = {"Artist": "Vibe", "Name": vibe, "Album": ""}
     session_id = session_start("vibe", seed_info, "AI")
     fast = FastStart(None, report)
-    drift = Drift("vibe", target, session_id, report, per_artist=TRACKS_PER_ARTIST_PICK, seed=f"vibe: {vibe}")
+    played = PlayedFilter("vibe", report=report)
+    drift = Drift("vibe", target, session_id, report, per_artist=TRACKS_PER_ARTIST_PICK, seed=f"vibe: {vibe}",
+                  played=played)
     # With the AI Moderator on, ask for a few extra, so anything it removes is replaced
     wanted = target + (max(1, int(target * MODERATOR_SHARE)) if moderator_on() else 0)
 
@@ -2896,7 +2970,7 @@ def create_vibe_playlist(vibe, report=print):
         key = find_jriver_key_by_track(artist, track)
         if key:
             report(f"    Found: {artist} - {track}")
-            if key not in keys:
+            if key not in keys and played.fresh(key):
                 keys.append(key)
                 drift.note(artist, track, key, 1)
                 fast.play(key)
@@ -2916,6 +2990,7 @@ def create_vibe_playlist(vibe, report=print):
     random.shuffle(keys)
     keys = fast.lead(keys)[:target]
     sent = finish_playlist(keys, drift, fast, None, report, " (shuffled)")
+    played.done()
     report("Queue refreshed.")
     session_finish(session_id, sent, report=report)
 
@@ -2955,6 +3030,7 @@ def play_top_n(report=print, seed_info=None):
     session_id = None
     ordered_keys, labels_used = [], []
     fast = FastStart(seed_info, report, enabled=(order == "popular"))
+    played = PlayedFilter("top", report=report)
     for artist in seeds:
         top_tracks, source_label = blended_top_tracks(artist, limit=n)
         if not top_tracks:
@@ -2971,7 +3047,7 @@ def play_top_n(report=print, seed_info=None):
             tag = f"  Looking up: {track_name} ({', '.join(suggested_by)})..."
             key = find_jriver_key_by_track(artist, track_name)
             report(f"{tag} {'Found.' if key else 'Not in library.'}")
-            if key and key not in ordered_keys:
+            if key and key not in ordered_keys and played.fresh(key):
                 ordered_keys.append(key)
                 fast.play(key)
             session_log(session_id, artist, track_name, suggested_by, found=bool(key))
@@ -2979,8 +3055,10 @@ def play_top_n(report=print, seed_info=None):
     if session_id is None:
         report("Could not retrieve top tracks from any configured source.")
         return
+    played.done()
     if not ordered_keys:
-        report("None of the top tracks were found in your library.")
+        report("None of the top tracks were found in your library." if not played.skipped else
+               "All the top tracks in your library were played too recently.")
         session_finish(session_id, 0, report=report)
         return
 
