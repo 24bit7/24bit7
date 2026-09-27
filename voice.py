@@ -78,7 +78,7 @@ def update_device(device_id, name=None, zone=None, moderator=None):
 
 
 def device_moderator(device_id):
-    """Whether this speaker's playlists go through the AI Moderator (its tick under Settings > Voice)."""
+    """Whether this device's playlists go through the AI Moderator (its tick under Settings > Voice Commands)."""
     with _lock:
         _devices_table()
         row = engine.db().execute("SELECT moderator FROM voice_devices WHERE device_id=?", (device_id,)).fetchone()
@@ -103,7 +103,7 @@ def _hear_device(device_id):
             con.execute("UPDATE voice_devices SET last_heard=? WHERE device_id=?", (now, device_id))
         else:
             count = con.execute("SELECT COUNT(*) FROM voice_devices").fetchone()[0]
-            row = (f"New speaker {count + 1}", "")
+            row = (f"New device {count + 1}", "")
             con.execute("INSERT INTO voice_devices (device_id, name, zone, last_heard, moderator) "
                         "VALUES (?,?,?,?,0)", (device_id, row[0], "", now))
         con.commit()
@@ -117,7 +117,7 @@ def _job(intent, value, zone, moderator=False):
     def run(report):
         engine.refresh_settings_if_changed()
         engine.OUTPUT_OVERRIDE = zone
-        engine.MODERATOR_OVERRIDE = moderator   # the speaker's own tick, not the Play tab's
+        engine.MODERATOR_OVERRIDE = moderator   # the device's own tick, not the Play tab's
         try:
             if intent == "songs_by":
                 engine.play_top_n(report=report, seed_info=engine.typed_seed_info(value))
@@ -256,7 +256,7 @@ def handle_command(body, busy=False):
     name, zone = _hear_device(device or "unknown device")
     zone = (body.get("zone") or "").strip() or zone
     if not zone:
-        return "problem", "This speaker isn't set up yet. Assign it to a zone in 24bit7, under Settings, Voice.", {}
+        return "problem", "This device isn't set up yet. Assign it to a zone in 24bit7, under Settings, Voice Commands.", {}
     if engine.zone_id(zone) is None:
         return "problem", f"I can't find the {zone} zone in JRiver.", {}
     if intent in INSTANT:
