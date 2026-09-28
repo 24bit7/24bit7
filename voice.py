@@ -341,6 +341,28 @@ def _tracks_like_seed(value):
     return None, ("ask", speech, {"ask": "tracks_like", "title": title})
 
 
+ARTIST_CLOSE = 0.85   # how close a heard artist must be to a library artist to use the library's spelling
+
+
+def _library_artist(heard):
+    """
+    The library's own spelling of a heard artist, so a mishearing like
+    'the beetles' becomes 'The Beatles'. Exact matches first (with 'Beatles, The'
+    forms), then the closest spelling at ARTIST_CLOSE or better. Otherwise the
+    heard name as it was (the artist may simply not be in the library).
+    """
+    try:
+        library.ensure_loaded()
+        with library._lock:
+            names = list(library._artists.values())
+        best_score, best = max(((library.score(heard, a), a) for a in names), default=(0.0, None))
+    except Exception:
+        return heard
+    if best and best_score >= ARTIST_CLOSE:
+        return library.spoken(best)
+    return heard
+
+
 def handle_command(body, busy=False):
     """
     Works out the reply and queues the build, or plays an album, playlist or
@@ -387,6 +409,11 @@ def handle_command(body, busy=False):
         if reply:
             return reply
 
+    heard = value
+    if intent in ("songs_by", "music_like"):
+        value = _library_artist(value)
+    corrected = f" (heard '{heard}')" if isinstance(value, str) and value.lower() != heard.lower() else ""
+
     shown = f"{value[1]} by {library.spoken(value[0])}" if intent == "tracks_like" else value
     words = {"songs_by": f"Songs by {shown}", "music_like": f"Music like {shown}",
              "genre": f"A {shown} playlist", "tracks_like": f"Tracks like {shown}"}[intent]
@@ -394,7 +421,7 @@ def handle_command(body, busy=False):
               "tracks_like": "tracks like"}[intent]
     profile = device_profile(device or "unknown device")
     _submit(_job(intent, value, zone, profile),
-            f"Voice, {name}: {phrase} {shown}, to {zone}" + (", with its own settings" if profile else ""))
+            f"Voice, {name}: {phrase} {shown}{corrected}, to {zone}" + (", with its own settings" if profile else ""))
     if busy and not _takes_over(zone):
         return "pending", "Please wait, request pending.", {}
     return "started", f"{words}, coming up on {zone}.", {}

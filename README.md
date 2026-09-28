@@ -184,7 +184,7 @@ JRiver is only needed for the Now Playing seed and for JRiver output. The Search
 
 ### Path A: download and run (Windows)
 
-1. Download `24bit7-v1.5.0-windows.zip` from the [Releases](../../releases) page.
+1. Download `24bit7-v1.5.1-windows.zip` from the [Releases](../../releases) page.
 2. Unzip it anywhere you like and run `24bit7.exe`.
 3. Windows will most likely show a blue **"Windows protected your PC"** box the first time, because the exe isn't code-signed. Click **More info**, then **Run anyway**. It only asks once.
 4. On first run the app opens on Settings. Add keys for the sources you want; each field has a **?** button with instructions for getting that key. Deezer and YouTube Music work with no key at all, and they are the two sources a fresh install has ticked.
@@ -202,7 +202,12 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.5.0
+## What's new in 1.5.1
+
+- **Voice commands take over their zone.** A new build command replaces whatever is in Playing Now for that device's zone and starts straight away, even after "Alexa, stop", which pauses the speaker without JRiver always noticing. A newer command for the same zone stops an older build still running, so its tracks no longer trickle in afterwards.
+- **Misheard artists.** "Songs by" and "music like" match the artist Alexa heard against your library, so "the beetles" plays The Beatles. The log shows what was heard.
+
+### Earlier: 1.5.0
 
 - **Dark theme.** Settings > Other > Theme switches between Light and Dark, with a restart offered straight away. Dark is charcoal with matrix green text, black dropdowns, text boxes and Discover table, and green ticks.
 - **A new look in both themes.** Folder-style tabs that open into the page below, redesigned Play buttons, the 24bit7 icon in the title bar and taskbar, and Track, Artist and Album labels in Now Playing.

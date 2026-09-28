@@ -70,3 +70,9 @@ A soundtrack copy ("- From 'Casino Royale' Soundtrack") let the same song in twi
 
 **28 Sep 2026: build.bat backs up, and makes the release zip itself.**
 A rebuild deletes the packaged app's folder, and with it the .exe's settings and history. build.bat now backs both up and puts them back. The release zip is made from the clean build before that, and checked for a .env or database, so a user's keys can never ship in it.
+
+**28 Sep 2026: Voice always takes over its zone.**
+After "Alexa, stop" the Sonos is paused from its own end and JRiver can still report it as playing, so a new playlist queued behind a track that never ended. A voice command now replaces Playing Now whatever state JRiver reports, and a newer command for a zone cancels the older build. The Play tab keeps its queue-after-the-current-track behaviour.
+
+**28 Sep 2026: Heard artist names are matched to the library.**
+Alexa heard "the beetles"; Last.fm corrected it quietly, but the library search used the heard spelling and found nothing. Songs by and music like now take the library's spelling when a name is close enough.
