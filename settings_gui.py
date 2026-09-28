@@ -352,7 +352,7 @@ class SettingsTab(tk.Frame):
         updates["DEBUG"] = "1" if self.vars["DEBUG"].get() else "0"
         updates["SIMILAR_REQUIRE_AGREEMENT"] = None   # old on/off key, superseded
         updates["SIMILAR_TRACK_TOPUP"] = None   # replaced by Drift in 1.4.0
-        for key in ("START_IN_TRAY", "CLOSE_TO_TRAY"):
+        for key in ("START_IN_TRAY", "CLOSE_TO_TRAY", "PREFER_OFFICIAL_VIDEOS"):
             updates[key] = "1" if self.vars[key].get() else "0"
         return updates
 
@@ -902,10 +902,18 @@ class SettingsTab(tk.Frame):
                         "50 is the most YouTube allows in one playlist link.").pack(side="left", padx=(8, 0))
         self.vars["YOUTUBE_PLAYLIST_LENGTH"].trace_add("write", self._save)
 
+        self.vars["PREFER_OFFICIAL_VIDEOS"] = tk.BooleanVar(
+            value=self.env.get("PREFER_OFFICIAL_VIDEOS", "0") in ("1", "true", "yes"))
+        cell = tk.Frame(box)
+        cell.grid(row=3, column=0, columnspan=3, sticky="w", pady=4)
+        tk.Checkbutton(cell, text="Prefer official music videos",
+                       variable=self.vars["PREFER_OFFICIAL_VIDEOS"], command=self._save).pack(side="left")
+        help_mark(cell, "YouTube Music usually plays the audio-only version of a song, shown with the album cover. Tick this to play the artist's official music video instead, where one exists. Videos can run longer than the song because of intros and outros, and a few may not play in your region. Songs without an official video still play as audio.").pack(side="left", padx=(8, 0))
+
         self.vars["DEBUG"] = tk.BooleanVar(value=self.env.get("DEBUG", "0") in ("1", "true", "yes"))
         tk.Checkbutton(box, text="Debug (log raw source lists to console)",
                        variable=self.vars["DEBUG"], command=self._save).grid(
-            row=3, column=0, columnspan=3, sticky="w", pady=(8, 0))
+            row=4, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
         # --- Zones: which JRiver zones appear in the Play tab's Zone and Output lists ---
         # Filled when the tab is first shown, so a slow JRiver never delays startup.

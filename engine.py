@@ -134,6 +134,7 @@ def load_settings():
     global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, CACHE_DAYS
     global TABLE_FONT_SIZE, VIBE_TRACK_COUNT
     global OUTPUT_TARGET, YOUTUBE_PLAYLIST_LENGTH, HIDDEN_ZONES, DEFAULT_ZONE, FOLLOW_ACTIVE_ZONE
+    global PREFER_OFFICIAL_VIDEOS
     global VOICE_ENABLED, VOICE_KEY, VOICE_PORT
     global START_IN_TRAY, CLOSE_TO_TRAY
     global LISTEN_SITES, CUSTOM_SITES
@@ -257,6 +258,8 @@ def load_settings():
     START_IN_TRAY = os.getenv("START_IN_TRAY", "1").strip().lower() in ("1", "true", "yes")
     CLOSE_TO_TRAY = os.getenv("CLOSE_TO_TRAY", "0").strip().lower() in ("1", "true", "yes")
     YOUTUBE_PLAYLIST_LENGTH = _int_setting("YOUTUBE_PLAYLIST_LENGTH", 50, 5, 50)   # YouTube caps a link at 50
+    # Settings > Other: use the artist's official music video instead of the audio-only upload
+    PREFER_OFFICIAL_VIDEOS = os.getenv("PREFER_OFFICIAL_VIDEOS", "0").strip().lower() in ("1", "true", "yes")
 
 
 def use_profile(values=None):
@@ -374,6 +377,8 @@ LISTEN_SITES=youtube
 # (opens an instant playlist in the browser, 5-50 videos). Set from the Play tab.
 OUTPUT_TARGET=jriver
 YOUTUBE_PLAYLIST_LENGTH=50
+# Use official music videos on YouTube where they exist, instead of audio with a cover image (1 or 0)
+PREFER_OFFICIAL_VIDEOS=0
 # JRiver zones hidden from the Play tab's lists, separated by | (Settings > Other)
 HIDDEN_ZONES=
 # Zone Now Playing opens on (blank = JRiver's active zone), and whether it follows
@@ -714,7 +719,7 @@ def queue_tracks(keys, zone=ACTIVE_ZONE):
     )
 
 
-VERSION_WORDS = r'(remaster|remastered|mix|master|edit|version|live|mono|stereo|demo|single|radio|acoustic|instrumental)'
+VERSION_WORDS = r'(remaster|remastered|mix|master|edit|version|live|mono|stereo|demo|single|radio|acoustic|instrumental|soundtrack|ost)'
 
 
 # Typographic characters that sources (MusicBrainz especially) use where a
@@ -739,6 +744,7 @@ def clean_name(s):
     """Strips common variations from track names for fuzzy matching."""
     s = normalise_punctuation(s).lower().strip()
     s = re.sub(r'\(.*?\)|\[.*?\]', '', s)                       # (Live), [Remaster 2011] etc.
+    s = re.sub(r'\s+-\s+from\s.*$', '', s)                        # " - From 'Casino Royale' Soundtrack"
     s = re.sub(rf'\s+-\s+[^-]*\b{VERSION_WORDS}\b[^-]*$', '', s)  # " - 2012 Mix/Master", " - Live at..."
     s = re.sub(r'\s*(feat\.|featuring|ft\.)\s.*', '', s)         # feat. credits
     s = re.sub(r'[^\w\s]', '', s)                                # punctuation
@@ -1907,7 +1913,50 @@ def _youtube_search_video_id(artist, track):
         score = 2 + (1 if clean_name(r.get("title") or "") == clean_name(track) else 0)
         if score > best_score:
             best, best_score = r, score
+    if best and PREFER_OFFICIAL_VIDEOS:
+        return _youtube_official_video(yt, best["videoId"], artist, track) or best["videoId"]
     return best["videoId"] if best else None
+
+
+def _video_title(s):
+    """A video title cleaned for matching: clean_name, then any trailing 'Official Video' or 'M/V'."""
+    s = clean_name(s)
+    return re.sub(r'\s+(official\s+)?(music\s+)?(video|mv|m v)$', '', s).strip()
+
+
+def _youtube_official_video(yt, song_id, artist, track):
+    """
+    The official music video for a song, or None. YouTube Music's own song/video
+    link first (the counterpart), then a video search for an official video (OMV)
+    by the same artist with a matching title. Fan uploads are never used.
+    """
+    try:
+        watch = yt.get_watch_playlist(videoId=song_id, limit=1)
+        for t in (watch or {}).get("tracks", [])[:1]:
+            vid = (t.get("counterpart") or {}).get("videoId")
+            if vid:
+                return vid
+    except Exception as e:
+        debug(f"YouTube counterpart lookup failed for {artist} - {track}: {e}")
+    try:
+        results = yt.search(f"{artist} {track}", filter="videos", limit=5)
+    except Exception as e:
+        debug(f"YouTube video search failed for {artist} - {track}: {e}")
+        return None
+    want = _video_title(track)
+    for r in results or []:
+        if r.get("videoType") != "MUSIC_VIDEO_TYPE_OMV" or not r.get("videoId"):
+            continue
+        if not any(_youtube_same_artist(n, artist) for n in _youtube_artist_names(r)):
+            continue
+        if _video_title(r.get("title") or "") == want:
+            return r["videoId"]
+    return None
+
+
+def _youtube_id_kind():
+    """Cache category: audio and official-video answers are kept apart."""
+    return "video_id_omv" if PREFER_OFFICIAL_VIDEOS else "video_id"
 
 
 def _youtube_id_cache_key(artist, track):
@@ -1916,7 +1965,7 @@ def _youtube_id_cache_key(artist, track):
 
 def youtube_video_id(artist, track):
     """The YouTube video ID for a track (cached), or None if YouTube has no match by that artist."""
-    hit = cached_call("YouTube", "video_id", _youtube_id_cache_key(artist, track),
+    hit = cached_call("YouTube", _youtube_id_kind(), _youtube_id_cache_key(artist, track),
                       lambda: [vid] if (vid := _youtube_search_video_id(artist, track)) else [])
     return hit[0] if hit else None
 
@@ -1930,7 +1979,7 @@ def prefetch_youtube_ids(pairs):
     if not output_is_youtube():
         return
     todo = [(a, t) for a, t in dict.fromkeys(pairs)
-            if cache_get("YouTube", "video_id", _youtube_id_cache_key(a, t)) is None]
+            if cache_get("YouTube", _youtube_id_kind(), _youtube_id_cache_key(a, t)) is None]
     if len(todo) < 2 or youtube_client() is None:
         return
     from concurrent.futures import ThreadPoolExecutor
@@ -1938,7 +1987,7 @@ def prefetch_youtube_ids(pairs):
         found = list(pool.map(lambda p: _youtube_search_video_id(*p), todo))
     for (a, t), vid in zip(todo, found):
         if vid:
-            cache_put("YouTube", "video_id", _youtube_id_cache_key(a, t), [vid])
+            cache_put("YouTube", _youtube_id_kind(), _youtube_id_cache_key(a, t), [vid])
 
 
 YOUTUBE_PLAYLIST_MAX = 50   # the most videos one watch_videos link will take
@@ -1952,7 +2001,7 @@ def youtube_ids_for_pairs(pairs):
     """
     ids, todo = {}, []
     for pair in dict.fromkeys(pairs):
-        hit = cache_get("YouTube", "video_id", _youtube_id_cache_key(*pair))
+        hit = cache_get("YouTube", _youtube_id_kind(), _youtube_id_cache_key(*pair))
         if hit is None:
             todo.append(pair)
         else:
@@ -1962,7 +2011,7 @@ def youtube_ids_for_pairs(pairs):
         with ThreadPoolExecutor(max_workers=YOUTUBE_LOOKUP_WORKERS) as pool:
             found = list(pool.map(lambda p: _youtube_search_video_id(*p), todo))
         for pair, vid in zip(todo, found):
-            cache_put("YouTube", "video_id", _youtube_id_cache_key(*pair), [vid] if vid else [])
+            cache_put("YouTube", _youtube_id_kind(), _youtube_id_cache_key(*pair), [vid] if vid else [])
             ids[pair] = vid
     return [ids.get(pair) for pair in pairs]
 
