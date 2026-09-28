@@ -32,6 +32,21 @@ import requests
 import engine
 import library
 
+import itertools
+
+# Voice takeover: the newest command for a zone wins
+_take_lock = threading.Lock()
+_seq = itertools.count(1)
+_latest = {}        # zone -> number of the newest voice command for it
+_open = {}          # zone -> voice builds submitted and not yet finished
+_running = [None]   # zone of the voice build running now, if any
+
+
+def _takes_over(zone):
+    """True when the build running now is a voice build for this zone and no other zone is waiting."""
+    with _take_lock:
+        return _running[0] == zone and not any(n > 0 for z, n in _open.items() if z != zone)
+
 INTENTS = ("songs_by", "music_like", "genre", "tracks_like", "album", "song", "playlist", "shuffle")
 INSTANT = ("album", "song", "playlist", "shuffle")   # played straight away, nothing to build
 SHUFFLE_CAP = 400                            # most tracks a shuffle sends to JRiver
@@ -163,31 +178,67 @@ def _hear_device(device_id):
 # --- commands -----------------------------------------------------------------
 
 def _job(intent, value, zone, profile=None):
-    """The build itself, run on the Play tab's worker thread, with the device's own settings if it has any."""
+    """
+    The build itself, run on the Play tab's worker thread, with the device's own settings if it has any.
+    Takeover: a newer voice command for the same zone stops this build at its next step (or skips it
+    if it hasn't started yet), and a paused zone counts as free, so after "Alexa, stop" the next command plays.
+    """
+    with _take_lock:
+        seq = next(_seq)
+        _latest[zone] = seq
+        _open[zone] = _open.get(zone, 0) + 1
+
+    def superseded():
+        return _latest.get(zone) != seq
+
     def run(report):
-        engine.refresh_settings_if_changed()
-        engine.OUTPUT_OVERRIDE = zone
-        engine.use_profile(profile)
+        def guarded(line):
+            if superseded():
+                raise engine.BuildCancelled()
+            report(line)
+
         try:
-            if intent == "songs_by":
-                engine.play_top_n(report=report, seed_info=engine.typed_seed_info(value))
-            elif intent == "music_like":
-                tracks, _ = engine.blended_top_tracks(value, limit=1)
-                if not tracks:
-                    report(f"Couldn't find top tracks for '{value}', so there's nothing to seed from.")
-                    return
-                report(f"  Seed track: {tracks[0][0]} (the artist's most popular track)")
-                engine.create_similar_playlist(report=report, seed_info=engine.typed_seed_info(value, tracks[0][0]))
-            elif intent == "tracks_like":
-                artist, title = value
-                engine.create_similar_tracks_playlist(report=report,
-                                                      seed_info=engine.typed_seed_info(artist, title))
-            else:
-                engine.create_vibe_playlist(value, report=report)
+            if superseded():
+                report(f"  Skipped: a newer voice command for {zone} took over.")
+                return
+            with _take_lock:
+                _running[0] = zone
+            engine.refresh_settings_if_changed()
+            engine.OUTPUT_OVERRIDE = zone
+            engine.use_profile(profile)
+            engine.VOICE_TAKEOVER = True
+            engine.CANCEL_CHECK = superseded
+            _build(intent, value, guarded)
+        except engine.BuildCancelled:
+            report(f"  Stopped: a newer voice command for {zone} took over.")
         finally:
             engine.OUTPUT_OVERRIDE = None
             engine.use_profile(None)
+            engine.VOICE_TAKEOVER = False
+            engine.CANCEL_CHECK = None
+            with _take_lock:
+                _running[0] = None
+                _open[zone] = max(0, _open.get(zone, 1) - 1)
     return run
+
+
+def _build(intent, value, report):
+    """The playlist build for a voice command (report stops it if a newer command took over)."""
+    if intent == "songs_by":
+        engine.play_top_n(report=report, seed_info=engine.typed_seed_info(value))
+    elif intent == "music_like":
+        tracks, _ = engine.blended_top_tracks(value, limit=1)
+        if not tracks:
+            report(f"Couldn't find top tracks for '{value}', so there's nothing to seed from.")
+            return
+        report(f"  Seed track: {tracks[0][0]} (the artist's most popular track)")
+        engine.create_similar_playlist(report=report, seed_info=engine.typed_seed_info(value, tracks[0][0]))
+    elif intent == "tracks_like":
+        artist, title = value
+        engine.create_similar_tracks_playlist(report=report,
+                                              seed_info=engine.typed_seed_info(artist, title))
+    else:
+        engine.create_vibe_playlist(value, report=report)
 
 
 def _play_keys(keys, zone_id):
@@ -344,7 +395,7 @@ def handle_command(body, busy=False):
     profile = device_profile(device or "unknown device")
     _submit(_job(intent, value, zone, profile),
             f"Voice, {name}: {phrase} {shown}, to {zone}" + (", with its own settings" if profile else ""))
-    if busy:
+    if busy and not _takes_over(zone):
         return "pending", "Please wait, request pending.", {}
     return "started", f"{words}, coming up on {zone}.", {}
 

@@ -2062,6 +2062,45 @@ def jriver_is_stopped(zone=ACTIVE_ZONE):
     return False
 
 
+
+# --- voice takeover ----------------------------------------------------------
+# A voice build treats a paused zone as free (after "Alexa, stop" the Sonos is
+# paused, not stopped), and a newer voice command for the same zone stops the
+# older build. The Play tab is unaffected: both flags are only set by voice.py.
+
+VOICE_TAKEOVER = False   # True while a voice build runs
+CANCEL_CHECK = None      # set by voice.py: returns True once a newer command has taken over
+
+
+class BuildCancelled(BaseException):
+    """A newer voice command took over. BaseException so no 'except Exception' swallows it."""
+
+
+def check_cancelled():
+    if CANCEL_CHECK is not None and CANCEL_CHECK():
+        raise BuildCancelled()
+
+
+def zone_state(zone=ACTIVE_ZONE):
+    """JRiver's playback state for a zone: 0 stopped, 1 paused, 2 playing, 3 waiting; None if unknown."""
+    try:
+        r = requests.get(f"{JRIVER_BASE}/Playback/Info", params={"Zone": zone}, auth=AUTH, timeout=10)
+        for item in ET.fromstring(r.text).findall("Item"):
+            if item.get("Name") == "State":
+                return int((item.text or "").strip())
+    except Exception:
+        pass
+    return None
+
+
+def zone_is_free(zone=ACTIVE_ZONE):
+    """Stopped. A voice build always takes the zone over, whatever JRiver reports
+    (after "Alexa, stop" the Sonos is paused but JRiver can still say playing)."""
+    if not VOICE_TAKEOVER:
+        return jriver_is_stopped(zone)
+    return True
+
+
 def output_zone(seed_info=None, zone_name=None, report=print):
     """
     The JRiver zone a playlist goes to, as a zone ID. zone_name (for voice
@@ -2129,6 +2168,7 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
         end of Playing Now and nothing already there is touched.
     One function for the Play tab and, later, voice commands (zone_name).
     """
+    check_cancelled()
     if output_is_youtube() and not zone_name:   # JRiver is left completely alone
         if keys and not append:
             open_youtube_playlist(keys)
@@ -2152,8 +2192,11 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
         report("  Seed track opens the playlist, as it's going to a different zone.")
     if not keys:
         return
-    if jriver_is_stopped(zone):
-        report(f"  {zone_label(zone)} was stopped, so the playlist starts there now.")
+    if zone_is_free(zone):
+        if VOICE_TAKEOVER:
+            report(f"  Voice command: the playlist takes over {zone_label(zone)} now.")
+        else:
+            report(f"  {zone_label(zone)} was stopped, so the playlist starts there now.")
         requests.get(f"{JRIVER_BASE}/Playback/PlayByKey",
                      params={"Key": ",".join(keys), "Zone": zone}, auth=AUTH)
         return
@@ -2422,7 +2465,7 @@ class FastStart:
         if not enabled or output_is_youtube() or (seed_info and not seed_info.get("Typed")):
             return   # YouTube output, or a now-playing seed (music is already playing)
         zone = output_zone(seed_info, None, lambda *_: None)
-        if zone is not None and jriver_is_stopped(zone):
+        if zone is not None and zone_is_free(zone):
             self.zone = zone
 
     @property
@@ -2431,6 +2474,7 @@ class FastStart:
 
     def play(self, key):
         """Plays the first track found. Later calls do nothing."""
+        check_cancelled()
         if self.zone is None or self.key or not key:
             return
         try:
