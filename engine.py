@@ -134,7 +134,7 @@ def load_settings():
     global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, CACHE_DAYS
     global TABLE_FONT_SIZE, VIBE_TRACK_COUNT
     global OUTPUT_TARGET, YOUTUBE_PLAYLIST_LENGTH, HIDDEN_ZONES, DEFAULT_ZONE, FOLLOW_ACTIVE_ZONE
-    global PREFER_OFFICIAL_VIDEOS
+    global PREFER_OFFICIAL_VIDEOS, THEME
     global VOICE_ENABLED, VOICE_KEY, VOICE_PORT
     global START_IN_TRAY, CLOSE_TO_TRAY
     global LISTEN_SITES, CUSTOM_SITES
@@ -260,6 +260,8 @@ def load_settings():
     YOUTUBE_PLAYLIST_LENGTH = _int_setting("YOUTUBE_PLAYLIST_LENGTH", 50, 5, 50)   # YouTube caps a link at 50
     # Settings > Other: use the artist's official music video instead of the audio-only upload
     PREFER_OFFICIAL_VIDEOS = os.getenv("PREFER_OFFICIAL_VIDEOS", "0").strip().lower() in ("1", "true", "yes")
+    # Settings > Other: light or dark, applied when the app starts
+    THEME = "dark" if os.getenv("THEME", "light").strip().lower() == "dark" else "light"
 
 
 def use_profile(values=None):
@@ -379,6 +381,8 @@ OUTPUT_TARGET=jriver
 YOUTUBE_PLAYLIST_LENGTH=50
 # Use official music videos on YouTube where they exist, instead of audio with a cover image (1 or 0)
 PREFER_OFFICIAL_VIDEOS=0
+# Colour theme: light or dark (Settings > Other)
+THEME=light
 # JRiver zones hidden from the Play tab's lists, separated by | (Settings > Other)
 HIDDEN_ZONES=
 # Zone Now Playing opens on (blank = JRiver's active zone), and whether it follows
@@ -747,6 +751,7 @@ def clean_name(s):
     s = re.sub(r'\s+-\s+from\s.*$', '', s)                        # " - From 'Casino Royale' Soundtrack"
     s = re.sub(rf'\s+-\s+[^-]*\b{VERSION_WORDS}\b[^-]*$', '', s)  # " - 2012 Mix/Master", " - Live at..."
     s = re.sub(r'\s*(feat\.|featuring|ft\.)\s.*', '', s)         # feat. credits
+    s = s.replace('&', ' and ')                                  # "Girls & Boys" = "Girls And Boys"
     s = re.sub(r'[^\w\s]', '', s)                                # punctuation
     return re.sub(r'\s+', ' ', s).strip()
 

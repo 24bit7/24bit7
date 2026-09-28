@@ -15,6 +15,7 @@ import sys
 import threading
 import webbrowser
 import tkinter as tk
+import tkinter.font as tkfont
 from tkinter import ttk, scrolledtext, messagebox
 
 import engine
@@ -23,7 +24,7 @@ import tray
 import voice
 from settings_gui import SettingsTab, write_env
 from discover_gui import DiscoverTab
-from tabs import TabbedPane, PALETTE
+from tabs import TabbedPane, PALETTE, FlatButton, InfoLine, apply_theme
 
 
 REFRESH_MS = 3000
@@ -65,18 +66,18 @@ class PlayTab(tk.Frame):
         header.pack(fill="x")
         title = tk.Frame(header)
         title.pack(anchor="w")
-        BLUE, ORANGE = "#1f4e9c", "#f28c28"
+        BLUE, ORANGE = PALETTE["brand_blue"], PALETTE["brand_orange"]
         for part, colour in (("24", BLUE), ("bit", ORANGE), ("7", BLUE)):
             tk.Label(title, text=part, font=("Segoe UI", 18, "bold"),
                      fg=colour).pack(side="left", padx=0)
         tk.Label(header, text="Smart Playlist Creator and Music Discovery Tool",
-                 font=("Segoe UI", 10), fg="#666").pack(anchor="w")
+                 font=("Segoe UI", 10), fg=PALETTE["text_muted"]).pack(anchor="w")
 
         # The seed area: two small tabs. Whichever is showing when a button is
         # pressed is the seed - what JRiver is playing, or a typed artist and track.
         outer = tk.Frame(self, padx=16, pady=8)
         outer.pack(fill="x")
-        self.seed_nb = TabbedPane(outer, font=("Segoe UI", 9, "bold"), pad=(14, 4), box=True, indent=0)
+        self.seed_nb = TabbedPane(outer, font=("Segoe UI", 9, "bold"), pad=(14, 4), box=True, indent=6)
         self.seed_nb.pack(fill="x")
 
         frame = tk.Frame(self.seed_nb, padx=10, pady=8)
@@ -85,7 +86,7 @@ class PlayTab(tk.Frame):
         # so every launch starts on the active zone. The list rescans when opened.
         zone_box = tk.Frame(frame)
         zone_box.pack(side="left", padx=(0, 32))
-        tk.Label(zone_box, text="Zone", font=("Segoe UI", 9, "bold"), fg="#555").pack(side="left", padx=(0, 6))
+        tk.Label(zone_box, text="Zone", font=("Segoe UI", 9, "bold"), fg=PALETTE["text_secondary"]).pack(side="left", padx=(0, 6))
         self.zone_var = tk.StringVar(value="")
         self._zone_picked = False    # picked by hand: stays put until the next launch
         self._zone_settled = False   # launch zone chosen (default or active zone)
@@ -96,16 +97,18 @@ class PlayTab(tk.Frame):
 
         info = tk.Frame(frame)
         info.pack(side="left", fill="x", expand=True)
-        self.np_track = tk.Label(info, text="...", font=("Segoe UI", 14, "bold"),
-                                 fg=PALETTE["brand_blue"], anchor="w", justify="left")
+        # Grey "Track:", "Artist:" and "Album:" before the names; both lines wrap as needed
+        # One prefix size for all three, and a shared tab stop just after "Artist:"
+        # so the track title and the artist name start at the same point
+        prefix_font = tkfont.Font(family="Segoe UI", size=7)
+        self._prefix_font = prefix_font
+        tab = max(prefix_font.measure("Track:"), prefix_font.measure("Artist:")) + prefix_font.measure("  ")
+        self.np_track = InfoLine(info, font=("Segoe UI", 14, "bold"), fg=PALETTE["brand_blue"],
+                                 prefix_font=prefix_font, tab=tab)
         self.np_track.pack(anchor="w", fill="x")
-        self.np_detail = tk.Label(info, text="", font=("Segoe UI", 10), fg="#555",
-                                  anchor="w", justify="left")
+        self.np_detail = InfoLine(info, font=("Segoe UI", 10), fg=PALETTE["text_secondary"], prefix_font=prefix_font, tab=tab)
         self.np_detail.pack(anchor="w", fill="x")
-        # Wrap only when text genuinely exceeds the available width.
-        info.bind("<Configure>", lambda e: (
-            self.np_track.config(wraplength=max(200, e.width - 8)),
-            self.np_detail.config(wraplength=max(200, e.width - 8))))
+        self.np_track.show(("...", None))
 
         self.search_tab = tk.Frame(self.seed_nb, padx=10, pady=8)
         self.seed_nb.add(self.search_tab, text="Search")
@@ -117,7 +120,7 @@ class PlayTab(tk.Frame):
         self.search_track.grid(row=0, column=3, sticky="w", padx=(8, 0))
         tk.Label(self.search_tab, text="Build a playlist from any track, even one you don't own. "
                                        "Press Enter for Similar Artists.",
-                 font=("Segoe UI", 8), fg="#666").grid(row=1, column=0, columnspan=4, sticky="w", pady=(6, 0))
+                 font=("Segoe UI", 8), fg=PALETTE["text_muted"]).grid(row=1, column=0, columnspan=4, sticky="w", pady=(6, 0))
         for entry in (self.search_artist, self.search_track):
             entry.bind("<Return>", lambda e: self.on_similar())
         self.seed_nb.bind("<<NotebookTabChanged>>", lambda e: self._sync_seed_buttons())
@@ -195,13 +198,14 @@ class PlayTab(tk.Frame):
             ("Vibe Playlist", self.on_vibe),
             ("Show Credits", self.on_credits),
         ]:
-            b = tk.Button(frame, text=text, command=handler, width=16, height=2)
+            b = FlatButton(frame, text=text, command=handler, width=18, height=2,
+                           quiet=(handler == self.on_credits))   # Show Credits is the quieter one
             b.pack(side="left", padx=(0, 8))
             self.buttons.append(b)
 
         # Output: where the finished playlist goes. Saved straight to .env; the engine
         # reads it at the start of each run, so changing it mid-run affects the next one.
-        tk.Label(frame, text="Output", font=("Segoe UI", 9, "bold"), fg="#555").pack(side="left", padx=(8, 6))
+        tk.Label(frame, text="Output", font=("Segoe UI", 9, "bold"), fg=PALETTE["text_secondary"]).pack(side="left", padx=(8, 6))
         self.output_var = tk.StringVar(value=self._output_label(engine.OUTPUT_TARGET))
         self.output_cb = ttk.Combobox(frame, textvariable=self.output_var,
                                       values=[SAME_ZONE_LABEL, "YouTube"], state="readonly", width=24,
@@ -252,13 +256,14 @@ class PlayTab(tk.Frame):
         self._follow_active_zone()
         info = engine.get_playing_info()
         if info and info.get("PlayingNowPosition", "-1") != "-1":
-            self.np_track.config(text=info.get("Name", "?"))
-            self.np_detail.config(
-                text=f"{info.get('Artist', '?')}   \u00b7   {info.get('Album', '?')}")
+            self.np_track.show(("Track:\t", "prefix"), (info.get("Name", "?"), None))
+            self.np_detail.show(("Artist:\t", "prefix"), (info.get("Artist", "?"), None),
+                                ("   \u00b7   ", None),
+                                ("Album: ", "prefix"), (info.get("Album", "?"), None))
             self.last_playing = info
         else:
-            self.np_track.config(text="Nothing playing")
-            self.np_detail.config(text="Start a track in this zone to seed from it")
+            self.np_track.show(("Nothing playing", None))
+            self.np_detail.show(("Start a track in this zone to seed from it", None))
             self.last_playing = None
 
     def _type_greeting(self, text, i):
@@ -405,10 +410,10 @@ class VibeDialog(tk.Toplevel):
         self.entry.focus_set()
         self.entry.bind("<Return>", lambda e: self.submit())
 
-        tk.Label(body, text="Or try one of these:", fg="#666").pack(anchor="w")
+        tk.Label(body, text="Or try one of these:", fg=PALETTE["text_muted"]).pack(anchor="w")
         self.suggest_frame = tk.Frame(body)
         self.suggest_frame.pack(fill="x", pady=(4, 12))
-        self.loading = tk.Label(self.suggest_frame, text="Thinking...", fg="#999")
+        self.loading = tk.Label(self.suggest_frame, text="Thinking...", fg=PALETTE["text_faint"])
         self.loading.pack(anchor="w")
 
         bar = tk.Frame(body)
@@ -430,7 +435,7 @@ class VibeDialog(tk.Toplevel):
             return
         self.loading.destroy()
         if not ideas:
-            tk.Label(self.suggest_frame, text="(no suggestions right now)", fg="#999").pack(anchor="w")
+            tk.Label(self.suggest_frame, text="(no suggestions right now)", fg=PALETTE["text_faint"]).pack(anchor="w")
             return
         for idea in ideas:
             tk.Button(self.suggest_frame, text=idea, anchor="w",
@@ -458,9 +463,31 @@ def _enable_dpi_awareness():
         pass
 
 
+def _set_app_id():
+    """Its own taskbar identity, so Windows shows the 24bit7 icon rather than Python's."""
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("24bit7.24bit7")
+    except Exception:
+        pass
+
+
+def _set_window_icon(root):
+    """The 24bit7 icon in the title bar and taskbar; keeps Tk's feather if the file is missing."""
+    import os
+    base = getattr(sys, "_MEIPASS", engine.APP_DIR)   # the packaged app keeps its files in _MEIPASS
+    try:
+        root.iconbitmap(default=os.path.join(base, "24bit7.ico"))
+    except Exception:
+        pass
+
+
 def main():
     _enable_dpi_awareness()
+    _set_app_id()
     root = tk.Tk()
+    _set_window_icon(root)
+    apply_theme(root, engine.THEME)   # before any widgets, so they all pick it up
     root.title(f"24bit7  v{engine.VERSION}")
     # Open at 75% of the screen so it fits any monitor/DPI, then centre it.
     sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
@@ -481,7 +508,7 @@ def main():
     # Donate link: top right of the tab row, so it shows from every tab. It is hidden
     # if the window is too narrow for it to sit clear of the tab buttons.
     donate = tk.Label(root, text="Buy me a coffee \u2615", font=("Segoe UI", 9, "underline"),
-                      fg=PALETTE["brand_blue"], cursor="hand2")
+                      fg=PALETTE["link"], cursor="hand2")
     donate.bind("<Button-1>", lambda e: webbrowser.open(DONATE_URL))
 
     def place_donate(event=None):
@@ -523,6 +550,14 @@ def main():
         library.stop()
         root.destroy()
 
+    # Settings > Other > Theme offers a restart: quit here, start again after mainloop
+    restart = {"on": False}
+
+    def restart_app(_event=None):
+        restart["on"] = True
+        quit_app()
+    root.bind("<<Restart24bit7>>", restart_app)
+
     def on_close():
         engine.refresh_settings_if_changed()
         if engine.CLOSE_TO_TRAY and tray.start(root, show_window, quit_app):
@@ -536,6 +571,10 @@ def main():
             root.withdraw()
 
     root.mainloop()
+    if restart["on"]:
+        import subprocess
+        frozen = getattr(sys, "frozen", False)   # the built .exe is its own program
+        subprocess.Popen([sys.executable] + (sys.argv[1:] if frozen else sys.argv), cwd=engine.APP_DIR)
 
 
 if __name__ == "__main__":

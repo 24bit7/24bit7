@@ -21,6 +21,7 @@ from tkinter import font as tkfont
 from datetime import datetime
 
 import engine
+from tabs import PALETTE
 
 # Search URL builders per store. Each takes an "artist track" query string.
 STORE_SEARCH = {
@@ -95,6 +96,10 @@ class DiscoverTab(tk.Frame):
         style.configure("Treeview.Heading", font=("Segoe UI", size, "bold"))
         # Row tag carries the cell font; every inserted row gets this tag.
         self.tree.tag_configure("cell", font=self._cell_font)
+        # The tick column fits its box at any font size and display scaling
+        self._tick_width = self._cell_font.measure("\u2611") + 16
+        if "tick" in (self.tree["columns"] or ()):
+            self.tree.column("tick", width=self._tick_width, minwidth=self._tick_width)
 
     def _on_font_change(self):
         """Applies a new table font size immediately and saves it to .env."""
@@ -126,19 +131,21 @@ class DiscoverTab(tk.Frame):
     # --- layout ------------------------------------------------------------
 
     def _build_controls(self):
-        bar = tk.Frame(self, padx=12, pady=8)
+        bar = tk.Frame(self, padx=22, pady=8)
         bar.pack(fill="x")
 
-        ttk.Style(self).configure("Big.TRadiobutton", font=("Segoe UI", 11))
+        # Show: which discoveries the table lists (the value the rest of the tab reads)
+        tk.Label(bar, text="Show:").pack(side="left")
         self.filter_var = tk.StringVar(value="misses")
-        for label, val in [("Misses", "misses"), ("Hits", "hits"), ("All", "all")]:
-            ttk.Radiobutton(bar, text=label, variable=self.filter_var, value=val,
-                            command=self.refresh, style="Big.TRadiobutton").pack(
-                side="left", padx=(0, 10))
+        self._filter_names = {"Misses": "misses", "Hits": "hits", "All": "all"}
+        self.filter_menu = ttk.Combobox(bar, values=list(self._filter_names), state="readonly", width=8)
+        self.filter_menu.set("Misses")
+        self.filter_menu.pack(side="left", padx=(4, 0))
+        self.filter_menu.bind("<<ComboboxSelected>>", self._on_filter_changed)
 
         # Count label is packed first so it keeps its spot on the right; the
         # session dropdown then stretches to fill whatever width is left.
-        self.count_label = tk.Label(bar, text="", fg="#777")
+        self.count_label = tk.Label(bar, text="", fg=PALETTE["text_muted"])
         self.count_label.pack(side="right")
 
         tk.Label(bar, text="   Session:").pack(side="left")
@@ -148,7 +155,7 @@ class DiscoverTab(tk.Frame):
         self.session_menu.pack(side="left", padx=(4, 12), fill="x", expand=True)
         self.session_menu.bind("<<ComboboxSelected>>", lambda e: self.refresh())
 
-        search_bar = tk.Frame(self, padx=12)
+        search_bar = tk.Frame(self, padx=22)
         search_bar.pack(fill="x")
         tk.Label(search_bar, text="Search:").pack(side="left")
         self.search_var = tk.StringVar()
@@ -156,8 +163,13 @@ class DiscoverTab(tk.Frame):
         tk.Entry(search_bar, textvariable=self.search_var).pack(
             side="left", fill="x", expand=True, padx=(4, 0))
 
+    def _on_filter_changed(self, _event=None):
+        self.filter_var.set(self._filter_names.get(self.filter_menu.get(), "misses"))
+        self.filter_menu.selection_clear()
+        self.refresh()
+
     def _build_table(self):
-        wrap = tk.Frame(self, padx=12, pady=8)
+        wrap = tk.Frame(self, padx=22, pady=8)
         wrap.pack(fill="both", expand=True)
 
         cols = ("tick", "seed", "artist", "track", "sources", "found", "date")
@@ -166,7 +178,7 @@ class DiscoverTab(tk.Frame):
         self._apply_table_font()
         headings = {"tick": "", "seed": "Seed", "artist": "Artist", "track": "Track",
                     "sources": "Suggested by", "found": "In library", "date": "When"}
-        widths = {"tick": 34, "seed": 160, "artist": 140, "track": 150, "sources": 120,
+        widths = {"tick": self._tick_width, "seed": 160, "artist": 140, "track": 150, "sources": 120,
                   "found": 65, "date": 100}
         for c in cols:
             if c == "tick":   # the tick box column: click a box (or press Space) to tick a row
@@ -183,7 +195,7 @@ class DiscoverTab(tk.Frame):
         self.tree.bind("<Button-1>", self._on_tree_click)
         self.tree.bind("<space>", lambda e: self._toggle_selected())
 
-        btnbar = tk.Frame(self, padx=12, pady=8)
+        btnbar = tk.Frame(self, padx=22, pady=8)
         btnbar.pack(fill="x")
 
         # One row: Font size on the left, the site buttons after it, Refresh and CSV

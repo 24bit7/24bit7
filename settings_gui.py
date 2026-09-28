@@ -21,7 +21,7 @@ from tkinter import ttk, messagebox
 import engine
 import tray
 import voice
-from tabs import TabbedPane
+from tabs import TabbedPane, PALETTE
 
 ENV_FILE = engine.ENV_FILE   # single source of truth for where .env lives
 
@@ -86,7 +86,7 @@ class Tooltip:
         self.tip = tk.Toplevel(self.widget)
         self.tip.wm_overrideredirect(True)
         self.tip.wm_geometry(f"+{x}+{y}")
-        tk.Label(self.tip, text=self.text, bg="#ffffe0", relief="solid", borderwidth=1, justify="left",
+        tk.Label(self.tip, text=self.text, bg=PALETTE["tooltip_bg"], fg=PALETTE["tooltip_fg"], relief="solid", borderwidth=1, justify="left",
                  wraplength=460, font=("Segoe UI", 9), padx=8, pady=5).pack()
 
     def hide(self):
@@ -115,7 +115,7 @@ HELP_MARK_BG = "#8a97aa"
 
 def help_mark(parent, text):
     """A small ? that shows text in a popup while the pointer is over it."""
-    mark = tk.Label(parent, text="?", font=("Segoe UI", 8, "bold"), fg="white", bg=HELP_MARK_BG,
+    mark = tk.Label(parent, text="?", font=("Segoe UI", 8, "bold"), fg=PALETTE["help_mark_fg"], bg=PALETTE["help_mark_bg"],
                     width=2, cursor="question_arrow")
     Tooltip(mark, text)
     return mark
@@ -128,9 +128,9 @@ def section(parent, title, help_text=None, row=None):
     in column 0 of parent, one under another, or at row if given.
     """
     box = tk.LabelFrame(parent, bd=0, padx=14, pady=10, highlightthickness=1,
-                        highlightbackground=SECTION_EDGE, highlightcolor=SECTION_EDGE)
+                        highlightbackground=PALETTE["section_edge"], highlightcolor=PALETTE["section_edge"])
     head = tk.Frame(box)
-    tk.Label(head, text=title, font=HEADING_FONT, fg=SECTION_FG).pack(side="left")
+    tk.Label(head, text=title, font=HEADING_FONT, fg=PALETTE["section_fg"]).pack(side="left")
     if help_text:
         help_mark(head, help_text).pack(side="left", padx=(6, 0))
     box.configure(labelwidget=head)
@@ -350,11 +350,20 @@ class SettingsTab(tk.Frame):
             updates[f"CUSTOM_SITE_{n}_URL"] = url or None
             updates[f"CUSTOM_SITE_{n}_MODE"] = ("artist" if artist_only else "track") if (name or url) else None
         updates["DEBUG"] = "1" if self.vars["DEBUG"].get() else "0"
+        updates["THEME"] = self.vars["THEME"].get().lower()
         updates["SIMILAR_REQUIRE_AGREEMENT"] = None   # old on/off key, superseded
         updates["SIMILAR_TRACK_TOPUP"] = None   # replaced by Drift in 1.4.0
         for key in ("START_IN_TRAY", "CLOSE_TO_TRAY", "PREFER_OFFICIAL_VIDEOS"):
             updates[key] = "1" if self.vars[key].get() else "0"
         return updates
+
+    def _on_theme_changed(self, *_):
+        """Saves the theme, then offers to restart so it takes effect."""
+        self._save()
+        choice = self.vars["THEME"].get().lower()
+        if messagebox.askyesno("Theme", f"Restart 24bit7 now to switch to the {choice} theme?",
+                               parent=self):
+            self.winfo_toplevel().event_generate("<<Restart24bit7>>")
 
     def _refresh_key_marks(self):
         """Adds '(no key yet)' after a source whose key field is empty, and clears it once filled."""
@@ -870,7 +879,7 @@ class SettingsTab(tk.Frame):
         show = tk.BooleanVar(value=False)
         def toggle():
             entry.config(show="" if show.get() else "\u2022")
-        tk.Checkbutton(parent, text="Show", variable=show, command=toggle).grid(
+        ttk.Checkbutton(parent, text="Show", variable=show, command=toggle).grid(
             row=row, column=2, sticky="w")
 
     def _build_other(self, nb):
@@ -906,14 +915,25 @@ class SettingsTab(tk.Frame):
             value=self.env.get("PREFER_OFFICIAL_VIDEOS", "0") in ("1", "true", "yes"))
         cell = tk.Frame(box)
         cell.grid(row=3, column=0, columnspan=3, sticky="w", pady=4)
-        tk.Checkbutton(cell, text="Prefer official music videos",
+        ttk.Checkbutton(cell, text="Prefer official music videos",
                        variable=self.vars["PREFER_OFFICIAL_VIDEOS"], command=self._save).pack(side="left")
         help_mark(cell, "YouTube Music usually plays the audio-only version of a song, shown with the album cover. Tick this to play the artist's official music video instead, where one exists. Videos can run longer than the song because of intros and outros, and a few may not play in your region. Songs without an official video still play as audio.").pack(side="left", padx=(8, 0))
 
+        tk.Label(box, text="Theme", anchor="w").grid(row=4, column=0, sticky="w", pady=4)
+        self.vars["THEME"] = tk.StringVar(
+            value="Dark" if self.env.get("THEME", "light").strip().lower() == "dark" else "Light")
+        cell = tk.Frame(box)
+        cell.grid(row=4, column=1, sticky="w", padx=(12, 0))
+        theme_cb = ttk.Combobox(cell, textvariable=self.vars["THEME"], values=["Light", "Dark"],
+                                state="readonly", width=8)
+        theme_cb.pack(side="left")
+        help_mark(cell, 'Light or dark colours for the whole app. The theme is applied when 24bit7 starts, so changing it offers a restart straight away.').pack(side="left", padx=(8, 0))
+        theme_cb.bind("<<ComboboxSelected>>", self._on_theme_changed)
+
         self.vars["DEBUG"] = tk.BooleanVar(value=self.env.get("DEBUG", "0") in ("1", "true", "yes"))
-        tk.Checkbutton(box, text="Debug (log raw source lists to console)",
+        ttk.Checkbutton(box, text="Debug (log raw source lists to console)",
                        variable=self.vars["DEBUG"], command=self._save).grid(
-            row=4, column=0, columnspan=3, sticky="w", pady=(8, 0))
+            row=5, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
         # --- Zones: which JRiver zones appear in the Play tab's Zone and Output lists ---
         # Filled when the tab is first shown, so a slow JRiver never delays startup.
@@ -988,10 +1008,10 @@ class SettingsTab(tk.Frame):
         self.zone_vars, self.zone_radios = {}, {}
         if not names:
             tk.Label(self.zone_frame, text="No zones found. Is JRiver running, with Media Network on?",
-                     fg=HELP_FG, font=HELP_FONT).grid(row=0, column=0, sticky="w")
+                     fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=0, column=0, sticky="w")
             return
-        tk.Label(self.zone_frame, text="Show", fg=HELP_FG, font=HELP_FONT).grid(row=0, column=0, sticky="w")
-        tk.Label(self.zone_frame, text="Default", fg=HELP_FG, font=HELP_FONT).grid(
+        tk.Label(self.zone_frame, text="Show", fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=0, column=0, sticky="w")
+        tk.Label(self.zone_frame, text="Default", fg=PALETTE["help_fg"], font=HELP_FONT).grid(
             row=0, column=1, sticky="w", padx=(24, 0))
         rb = ttk.Radiobutton(self.zone_frame, text="JRiver's active zone", value="",
                              variable=self.default_zone_var, command=self._save_zone_settings)
@@ -1006,7 +1026,7 @@ class SettingsTab(tk.Frame):
                                 command=self._save_zone_settings).grid(row=r, column=0, sticky="w")
                 self.zone_vars[name] = v
             else:
-                tk.Label(self.zone_frame, text=f"{name} (not found)", fg=HELP_FG).grid(row=r, column=0, sticky="w")
+                tk.Label(self.zone_frame, text=f"{name} (not found)", fg=PALETTE["help_fg"]).grid(row=r, column=0, sticky="w")
             rb = ttk.Radiobutton(self.zone_frame, value=name, variable=self.default_zone_var,
                                  command=self._save_zone_settings)
             rb.grid(row=r, column=1, sticky="w", padx=(24, 0))
@@ -1046,7 +1066,7 @@ class SettingsTab(tk.Frame):
         ttk.Checkbutton(box, text="Voice Commands (listen for commands from the Alexa skill)",
                         variable=self.voice_on, command=self._voice_toggled).grid(
             row=0, column=0, columnspan=5, sticky="w")
-        self.voice_status = tk.Label(box, text=voice.status(), fg=HELP_FG, font=HELP_FONT)
+        self.voice_status = tk.Label(box, text=voice.status(), fg=PALETTE["help_fg"], font=HELP_FONT)
         self.voice_status.grid(row=1, column=0, columnspan=5, sticky="w")
 
         tk.Label(box, text="Key", anchor="w").grid(row=2, column=0, sticky="w", pady=(12, 2))
@@ -1057,7 +1077,7 @@ class SettingsTab(tk.Frame):
                              show="\u2022")
         key_entry.pack(side="left")
         show_key = tk.BooleanVar(value=False)
-        tk.Checkbutton(key_box, text="Show", variable=show_key,
+        ttk.Checkbutton(key_box, text="Show", variable=show_key,
                        command=lambda: key_entry.config(show="" if show_key.get() else "\u2022")).pack(
             side="left", padx=(6, 0))
         tk.Button(box, text="Copy", width=8, command=self._voice_copy_key).grid(row=2, column=2, sticky="w", pady=(12, 2))
@@ -1090,16 +1110,16 @@ class SettingsTab(tk.Frame):
                                             postcommand=lambda: self.voice_test_zone.config(values=engine.zone_names()))
         self.voice_test_zone.pack(side="left", padx=(6, 12))
         tk.Button(test, text="Send test", width=10, command=self._voice_test).pack(side="left")
-        self.voice_test_result = tk.Label(box, text="", fg=HELP_FG, font=HELP_FONT, justify="left")
+        self.voice_test_result = tk.Label(box, text="", fg=PALETTE["help_fg"], font=HELP_FONT, justify="left")
         self.voice_test_result.grid(row=1, column=0, sticky="w", pady=(6, 0))
 
         # --- Guides: links to the two Voice Commands documents on GitHub ---
         box = section(tab, "Guides")
         for r, (title, url, blurb) in enumerate(VOICE_DOCS):
-            link = tk.Label(box, text=title, fg=SECTION_FG, cursor="hand2", font=("Segoe UI", 10, "underline"))
+            link = tk.Label(box, text=title, fg=PALETTE["section_fg"], cursor="hand2", font=("Segoe UI", 10, "underline"))
             link.grid(row=r, column=0, sticky="w", pady=2)
             link.bind("<Button-1>", lambda e, u=url: webbrowser.open_new_tab(u))
-            tk.Label(box, text=blurb, fg=HELP_FG, font=HELP_FONT).grid(row=r, column=1, sticky="w", padx=(12, 0))
+            tk.Label(box, text=blurb, fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=r, column=1, sticky="w", padx=(12, 0))
 
         tab.bind("<<Shown>>", lambda e: (self.voice_status.config(text=voice.status()), self._fill_voice_devices()))
 
@@ -1137,16 +1157,16 @@ class SettingsTab(tk.Frame):
             child.destroy()
         rows = voice.devices()
         if not rows:
-            tk.Label(self.voice_dev_frame, text="No devices heard yet.", fg=HELP_FG, font=HELP_FONT).grid(
+            tk.Label(self.voice_dev_frame, text="No devices heard yet.", fg=PALETTE["help_fg"], font=HELP_FONT).grid(
                 row=0, column=0, sticky="w")
             return
         zones = engine.zone_names()
         for c, heading in enumerate(("Name", "Zone", "Last heard", "")):
-            tk.Label(self.voice_dev_frame, text=heading, fg=HELP_FG, font=HELP_FONT).grid(
+            tk.Label(self.voice_dev_frame, text=heading, fg=PALETTE["help_fg"], font=HELP_FONT).grid(
                 row=0, column=c, sticky="w", padx=(0, 12))
         own_head = tk.Frame(self.voice_dev_frame)
         own_head.grid(row=0, column=4, sticky="w", padx=(12, 0))
-        tk.Label(own_head, text="Own settings", fg=HELP_FG, font=HELP_FONT).pack(side="left")
+        tk.Label(own_head, text="Own settings", fg=PALETTE["help_fg"], font=HELP_FONT).pack(side="left")
         help_mark(own_head, "Tick a device to give it its own tab under Settings > Sources and Settings > "
                             "Playlist. Each tab starts with Copy Windows (Main) ticked, following the Windows "
                             "app's settings; untick Copy there to change that device's settings, for example "
@@ -1233,7 +1253,7 @@ class SettingsTab(tk.Frame):
                       "are used.")
         box.grid_columnconfigure(1, weight=1)   # the link field takes whatever width is left
         for c, heading in enumerate(("Button name", "Search link", "Search by")):
-            tk.Label(box, text=heading, fg=HELP_FG, font=HELP_FONT).grid(
+            tk.Label(box, text=heading, fg=PALETTE["help_fg"], font=HELP_FONT).grid(
                 row=0, column=c, sticky="w", padx=(0, 8))
         for n in range(1, engine.CUSTOM_SITE_SLOTS + 1):
             name_var = tk.StringVar(value=self.env.get(f"CUSTOM_SITE_{n}_NAME", ""))
