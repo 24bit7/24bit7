@@ -32,7 +32,7 @@ Five actions on the **Play** tab. The seed is whichever of the two small tabs is
 
 Two supporting tabs:
 
-- **Discover** lists every track a run looked for, whether it was found (hit) or not (miss), filterable by session and searchable across all fields. Select a row and every site you have ticked has its own button along the bottom: one click, one browser tab. Stores (Bandcamp, Qobuz, Bleep, Beatport and more) and YouTube search for the artist and track; reference sites (Wikipedia, Discogs, AllMusic, MusicBrainz) search for the artist, so you can browse the discography. If your favourite site is missing, add up to three of your own under Settings > Search. Misses are one click from purchase. **Label** finds who released the selected track and opens the label on Bandcamp (see below). Tick any rows (or Select all) and **Create YouTube playlist** opens them in your browser as one playlist, so you can hear the misses before you buy.
+- **Discover** lists every track a run looked for, whether it was found (hit) or not (miss), filterable by session and searchable across all fields. Select a row and every site you have ticked has its own button along the bottom: one click, one browser tab. Stores (Bandcamp, Qobuz, Bleep, Beatport and more) and YouTube search for the artist and track; reference sites (Wikipedia, Discogs, AllMusic, MusicBrainz) search for the artist, so you can browse the discography. If your favourite site is missing, add up to three of your own under Settings > Search. Misses are one click from purchase. **Label** finds who released the selected track and opens the label on Bandcamp (see below). Tick any rows (or Select all) and **Create YouTube playlist** opens them in your browser as one playlist, so you can hear the misses before you buy. **Clear all** empties the history, and **Clear selected** removes just the ticked rows; both ask first.
 - **Settings** holds all keys and preferences, in boxed sections, with each setting's explanation behind a small **?** beside it. Changes save immediately and the running app picks them up without a restart.
 
 ---
@@ -184,7 +184,7 @@ JRiver is only needed for the Now Playing seed and for JRiver output. The Search
 
 ### Path A: download and run (Windows)
 
-1. Download `24bit7-v1.5.1-windows.zip` from the [Releases](../../releases) page.
+1. Download `24bit7-v1.5.2-windows.zip` from the [Releases](../../releases) page.
 2. Unzip it anywhere you like and run `24bit7.exe`.
 3. Windows will most likely show a blue **"Windows protected your PC"** box the first time, because the exe isn't code-signed. Click **More info**, then **Run anyway**. It only asks once.
 4. On first run the app opens on Settings. Add keys for the sources you want; each field has a **?** button with instructions for getting that key. Deezer and YouTube Music work with no key at all, and they are the two sources a fresh install has ticked.
@@ -202,7 +202,12 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.5.1
+## What's new in 1.5.2
+
+- **Shared credits.** A track credited to "Paul McCartney & Wings" or "Mark Ronson feat. Amy Winehouse" now finds a library tagged with just the first-named act. The title still has to match, and the log shows each one as "Matched on primary artist".
+- **Clear Discover history.** Clear all and Clear selected on the Discover tab, each with an "Are you sure?" first. Your cache and settings are left alone.
+
+### Earlier: 1.5.1
 
 - **Voice commands take over their zone.** A new build command replaces whatever is in Playing Now for that device's zone and starts straight away, even after "Alexa, stop", which pauses the speaker without JRiver always noticing. A newer command for the same zone stops an older build still running, so its tracks no longer trickle in afterwards.
 - **Misheard artists.** "Songs by" and "music like" match the artist Alexa heard against your library, so "the beetles" plays The Beatles. The log shows what was heard.
