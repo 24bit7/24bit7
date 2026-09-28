@@ -13,3 +13,5 @@ apply_*.py
 check_24bit7.py
 Curated.py
 *.zip
+# build.bat's copies of .env (keys) and the database
+backups/

@@ -460,6 +460,20 @@ def matrix_dropdowns(root):
                   indicatorbackground=[("pressed", MATRIX_HI), ("disabled", bg)],
                   indicatorforeground=[("disabled", faint)],
                   upperbordercolor=[("disabled", faint)], lowerbordercolor=[("disabled", faint)])
+    # a real tick instead of clam's cross: the tick box is drawn from images
+    try:
+        off, on, off_dim, on_dim = _tick_images(root, int(round(13 * scale)), scale, text, faint)
+        gap = int(round(6 * scale))
+        style.element_create("Matrix.Checkbutton.indicator", "image", off,
+                             ("disabled selected", on_dim), ("disabled", off_dim), ("selected", on),
+                             width=off.width() + gap, sticky="w")
+        style.layout("TCheckbutton", [
+            ("Checkbutton.padding", {"sticky": "nswe", "children": [
+                ("Matrix.Checkbutton.indicator", {"side": "left", "sticky": ""}),
+                ("Checkbutton.focus", {"side": "left", "sticky": "w", "children": [
+                    ("Checkbutton.label", {"sticky": "nswe"})]})]})])
+    except tk.TclError:
+        pass   # keep the drawn cross
     # the Discover table
     style.configure("Treeview", background=MATRIX_BG, fieldbackground=MATRIX_BG, foreground=MATRIX_FG,
                     bordercolor=edge, lightcolor=MATRIX_BG, darkcolor=MATRIX_BG)
@@ -482,3 +496,34 @@ def matrix_dropdowns(root):
                        ("*TCombobox*Listbox.selectBackground", MATRIX_HI),
                        ("*TCombobox*Listbox.selectForeground", MATRIX_FG)):
         root.option_add(key, value)
+
+
+def _tick_images(root, size, scale, edge, dim):
+    """
+    Four tick box images (unticked, ticked, and both greyed out) at the given size:
+    a square border, black inside, and a matrix green tick with a thick stroke.
+    Kept on root so Tk doesn't lose them.
+    """
+    border = max(1, int(round(scale)))
+    stroke = max(2, int(round(1.8 * scale)))
+
+    def box(edge_colour, tick_colour):
+        img = tk.PhotoImage(width=size, height=size)
+        img.put(edge_colour, to=(0, 0, size, size))
+        img.put(MATRIX_BG, to=(border, border, size - border, size - border))
+        if tick_colour:
+            points = [(0.22, 0.52), (0.42, 0.72), (0.80, 0.28)]
+            for (x1, y1), (x2, y2) in zip(points, points[1:]):
+                steps = size * 2
+                for i in range(steps + 1):
+                    x = (x1 + (x2 - x1) * i / steps) * size
+                    y = (y1 + (y2 - y1) * i / steps) * size
+                    half = stroke / 2
+                    img.put(tick_colour, to=(max(border, int(x - half)), max(border, int(y - half)),
+                                             min(size - border, int(x + half) + 1),
+                                             min(size - border, int(y + half) + 1)))
+        return img
+
+    images = (box(edge, None), box(edge, MATRIX_FG), box(dim, None), box(dim, dim))
+    root._tick_images = images
+    return images

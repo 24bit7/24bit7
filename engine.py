@@ -1835,12 +1835,9 @@ def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
         skip = clean_name(exclude_track)
         names = [t for t in names if clean_name(t) != skip]
     names = names[:consider]
-    # YouTube's own picks for this artist (from up next) join the pool on top
-    guaranteed = None   # YouTube's own pick for this artist always gets one of the slots
+    # YouTube's own picks for this artist (from up next) join the pool, with the
+    # same chance as the rest (no guaranteed slot since 1.5.0: Last.fm's picks are better)
     if "YouTube" in (suggested_by or []):
-        hints = youtube_hints_for(artist, exclude_track)
-        if hints:
-            guaranteed = next((n for n in names if clean_name(n) == clean_name(hints[0])), hints[0])
         have = {clean_name(n) for n in names}
         added = [h for h in youtube_hints_for(artist, exclude_track) if clean_name(h) not in have]
         if added:
@@ -1849,12 +1846,7 @@ def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
     if not names:
         report(f"    No top tracks returned for {artist}.")
         return [], 0
-    if guaranteed:
-        rest = [n for n in names if clean_name(n) != clean_name(guaranteed)]
-        chosen = [guaranteed] + random.sample(rest, min(pick - 1, len(rest)))
-        report(f"    YouTube's pick takes a slot: {guaranteed}")
-    else:
-        chosen = random.sample(names, min(pick, len(names)))
+    chosen = random.sample(names, min(pick, len(names)))
     if defer is not None:
         # YouTube output: the caller looks every pick up together at the end (much faster)
         defer.extend((artist, t, suggested_by, session_id) for t in chosen)
