@@ -6,7 +6,7 @@ If you host your whole music library locally in JRiver, you get bit-perfect play
 
 **It works live.** Play any track in JRiver, press a button, and Playing Now is rebuilt around it while the music keeps going. There is nothing to export, no listening history to upload and no second app to keep in sync: whatever is playing right now is the seed. Run it mid-album, mid-track, whenever the mood shifts.
 
-**New in 1.4.0: music sooner, and a second opinion.** Ask for a playlist with nothing playing and the first track now starts within a second or two while the rest is found behind it. When a playlist comes up short, Drift searches again from what it has already found. An optional AI Moderator listens for the one track that doesn't belong, judging tone, energy and mood rather than genre, and takes it out. Long album closers that hide a bonus track after a stretch of silence are skipped. And in Discover, a Label button finds who released a track and opens the label on Bandcamp, so buying it supports the artist through their label.
+**New in 1.5.0: a new look, and fewer near misses.** A dark theme in black and matrix green sits alongside the familiar light one, with tabs, buttons and Now Playing redrawn in both. Matching is sharper: a soundtrack copy of a track now counts as the same song, and "Girls & Boys" finds "Girls And Boys". With Output set to YouTube, playlists can use official music videos instead of audio with a cover image.
 
 You don't have to own the seed either. Type any artist and track into the Search tab and 24bit7 builds a playlist around it, from your library or, with Output set to YouTube, from YouTube. That second route needs no library, no keys and no JRiver.
 
@@ -91,20 +91,20 @@ Buying from a label's Bandcamp page supports the artist and the people who put t
 
 The other sources answer "who is similar to this artist?". YouTube Music has no such question, so 24bit7 asks it a different one: "if someone is playing this track, what would you play next?" The answer is a queue of around fifty tracks chosen for the mood of the track, not the reputation of the artist, so two songs by the same artist can lead to different places.
 
-- **Ticked alongside other sources**, the queue is boiled down to its artists in order of appearance, and that list votes in the blend like any other. YouTube's own pick for an artist is guaranteed one of that artist's slots; the rest are drawn at random from their top tracks as usual.
+- **Ticked alongside other sources**, the queue is boiled down to its artists in order of appearance, and that list votes in the blend like any other. YouTube's own pick for an artist joins the pool of their top tracks and is drawn at random with the rest.
 - **Ticked on its own**, Similar Artists plays the queue as is: each track is looked up in your library and the hits are queued in YouTube's order, with no blend and no shuffle. YouTube weaves the seed artist through its queue at about one track in four. A library tips that balance, because you probably own everything by the artist you are playing and only some of the rest, so 24bit7 keeps the seed artist to about a quarter of the finished playlist.
 
 It needs no key and no sign-in. It does rely on an unofficial library, ytmusicapi, which imitates the YouTube Music website. When YouTube changes something it can break until that library catches up.
 
 ### Output: a JRiver zone or YouTube
 
-With Output set to YouTube the playlist is built exactly as before. Then each track's video is looked up and the whole list opens in your browser as an instant playlist: no sign-in, nothing saved to an account, and up to 50 videos, which is the most YouTube allows in one playlist link (**YouTube playlist length** in Settings > Other sets the number). JRiver isn't touched. There is no library check, so nothing is a miss: every track found is logged to Discover as a hit. A video is only accepted if the artist matches, because a cover is worse than a gap.
+With Output set to YouTube the playlist is built exactly as before. Then each track's video is looked up and the whole list opens in your browser as an instant playlist: no sign-in, nothing saved to an account, and up to 50 videos, which is the most YouTube allows in one playlist link (**YouTube playlist length** in Settings > Other sets the number). Tick **Prefer official music videos** under Settings > Other to play the artist's own video where YouTube has one; videos can run longer than the song, and a few may not play in every country. JRiver isn't touched. There is no library check, so nothing is a miss: every track found is logged to Discover as a hit. A video is only accepted if the artist matches, because a cover is worse than a gap.
 
 Be clear about what this is for. YouTube audio is lossy, and 24bit7 exists because of a library of music worth owning. YouTube output is the way to hear something before you buy it, or to build a playlist for someone who doesn't own any of it.
 
 ### Library matching
 
-Recommendations arrive as names. Names are messy. 24bit7 handles accents (Trüby Trio, with or without the umlaut), typographic punctuation (MusicBrainz spells alt-J with a Unicode hyphen that looks identical and matches nothing) and version suffixes on track titles before deciding whether you own something. It deliberately matches on names rather than MusicBrainz IDs, because most personal libraries aren't tagged with them.
+Recommendations arrive as names. Names are messy. 24bit7 handles accents (Trüby Trio, with or without the umlaut), typographic punctuation (MusicBrainz spells alt-J with a Unicode hyphen that looks identical and matches nothing) and version suffixes on track titles (including soundtrack credits such as "- From 'Casino Royale' Soundtrack"), and it treats "&" and "and" as the same word before deciding whether you own something. It deliberately matches on names rather than MusicBrainz IDs, because most personal libraries aren't tagged with them.
 
 Since 1.3.0 the whole library is also held in memory when 24bit7 starts, about a second's work for a library of well over 100,000 tracks, and refreshed in the background. Similar Tracks and voice commands match against it instantly, and it finds compilation copies of a track, including libraries that tag compilations as "Artist - Title" under the series name.
 
@@ -184,7 +184,7 @@ JRiver is only needed for the Now Playing seed and for JRiver output. The Search
 
 ### Path A: download and run (Windows)
 
-1. Download `24bit7-v1.4.0-windows.zip` from the [Releases](../../releases) page.
+1. Download `24bit7-v1.5.0-windows.zip` from the [Releases](../../releases) page.
 2. Unzip it anywhere you like and run `24bit7.exe`.
 3. Windows will most likely show a blue **"Windows protected your PC"** box the first time, because the exe isn't code-signed. Click **More info**, then **Run anyway**. It only asks once.
 4. On first run the app opens on Settings. Add keys for the sources you want; each field has a **?** button with instructions for getting that key. Deezer and YouTube Music work with no key at all, and they are the two sources a fresh install has ticked.
@@ -202,7 +202,15 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.4.0
+## What's new in 1.5.0
+
+- **Dark theme.** Settings > Other > Theme switches between Light and Dark, with a restart offered straight away. Dark is charcoal with matrix green text, black dropdowns, text boxes and Discover table, and green ticks.
+- **A new look in both themes.** Folder-style tabs that open into the page below, redesigned Play buttons, the 24bit7 icon in the title bar and taskbar, and Track, Artist and Album labels in Now Playing.
+- **Official music videos.** Settings > Other > Prefer official music videos plays the artist's own video where one exists, when Output is set to YouTube. Off by default.
+- **Sharper matching.** Titles ending "- From ... Soundtrack" match the plain title, and "&" matches "and".
+- **Changed.** YouTube's pick for an artist no longer takes a guaranteed slot; it joins the pool with that artist's top tracks. Discover's Misses, Hits and All buttons are now a Show dropdown.
+
+### Earlier: 1.4.0
 
 - **Fast start.** With nothing playing, the first track starts within a second or two and the rest of the playlist follows it in. Voice "shuffle songs by" opens on one of the artist's top five.
 - **Drift.** Similar Artists, Similar Tracks and Vibe Playlist can search again from what they found when a playlist comes up short, using similar tracks or similar artists, for 1 to 6 rounds. Off by default.
@@ -255,14 +263,15 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 **Solid**: Similar Artists, Artist's Top Tracks, Show Credits, Discover, Settings, cache, mid-album queueing, multi-value artists, the agreement number.
 
-**Newer**: fast start, Drift, the AI Moderator, settings per device, skipping recent plays, Hidden Tracks, the Label button, Similar Tracks, zones, voice control, Discover's YouTube playlists, the tray, the Search tab, YouTube Music as a source and YouTube output. All are in daily use on the development PC. Voice Commands are the least plug-and-play part, as their setup guide says, and the YouTube parts rest on an unofficial library, so expect the occasional breakage. Vibe Playlist works well and is still learning its limits.
+**Newer**: the dark theme, fast start, Drift, the AI Moderator, settings per device, skipping recent plays, Hidden Tracks, the Label button, Similar Tracks, zones, voice control, Discover's YouTube playlists, the tray, the Search tab, YouTube Music as a source and YouTube output. All are in daily use on the development PC. Voice Commands are the least plug-and-play part, as their setup guide says, and the YouTube parts rest on an unofficial library, so expect the occasional breakage. Vibe Playlist works well and is still learning its limits.
 
 **Removed**: a producer-based playlist mode built on Discogs credits. Discogs credit data is too patchy to be reliable, so it was dropped rather than shipped half-working.
 
 ### Roadmap
 
 - Remembering Deezer artist IDs, for quicker first runs
-- Dark theme (the tab colours now live in one palette, which is the first step)
+- Voice: "add this track to a playlist"
+- A web browser as a Now Playing source
 - More players and outputs beyond JRiver and YouTube (distant)
 - A shared recommendation database built from the hit/miss data (very distant)
 

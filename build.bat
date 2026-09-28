@@ -27,9 +27,14 @@ if errorlevel 1 (
 
 rem --- 3. Release zip, made from the clean build before anything is put back ---
 for /f %%v in ('powershell -NoProfile -Command "(Select-String -Path engine.py -Pattern '^VERSION\s*=\s*.([0-9.]+)').Matches[0].Groups[1].Value"') do set VER=%%v
-set ZIP=releases\24bit7-v%VER%.zip
+set ZIP=releases\24bit7-v%VER%-windows.zip
 mkdir releases 2>nul
-powershell -NoProfile -Command "Compress-Archive -Path 'dist\24bit7' -DestinationPath '%ZIP%' -Force"
+powershell -NoProfile -Command "$ok = $false; for ($i = 1; $i -le 6 -and -not $ok; $i++) { try { Compress-Archive -Path 'dist\24bit7' -DestinationPath '%ZIP%' -Force -ErrorAction Stop; $ok = $true } catch { Write-Host ('  A file is busy, usually Windows Defender scanning the new build. Retrying in 5 seconds, try ' + $i + ' of 6'); Start-Sleep -Seconds 5 } }; if (-not $ok) { exit 2 }"
+if errorlevel 2 (
+    if exist "%ZIP%" del "%ZIP%"
+    echo Couldn't make the release zip: a file was still in use. Run build.bat again.
+    goto restore
+)
 powershell -NoProfile -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [IO.Compression.ZipFile]::OpenRead('%ZIP%'); $bad = @($z.Entries | Where-Object { $_.Name -in '.env', '24bit7.db' }); $z.Dispose(); if ($bad.Count) { exit 1 }"
 if errorlevel 1 (
     del "%ZIP%"
@@ -38,6 +43,7 @@ if errorlevel 1 (
     echo Release zip: %ZIP% ^(checked: no .env or database^)
 )
 
+:restore
 rem --- 4. Put the packaged app's settings and history back, for your own use ---
 if exist "%BK%\app\.env" copy /y "%BK%\app\.env" "dist\24bit7\" >nul
 if exist "%BK%\app\24bit7.db" copy /y "%BK%\app\24bit7.db" "dist\24bit7\" >nul

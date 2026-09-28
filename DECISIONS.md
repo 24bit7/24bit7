@@ -52,3 +52,21 @@ Step one lets the AI wing it with artist/track pairs checked against the library
 
 **Sep 2026: Android version parked.**
 Since JRiver runs on the PC, any mobile version is a remote, not a port. If revisited, the route is a small local web server around `engine.py` with a mobile web UI, not a native app. Not needed while listening happens at the PC.
+
+**28 Sep 2026: Tabs and buttons drawn by hand.**
+Windows draws ttk tabs and tk buttons in its own style and ignores the colours an app asks for. Both are now plain frames and labels with every colour in one palette, so they look the same on any PC and a theme only changes the palette.
+
+**28 Sep 2026: Dark theme on Tk's clam style, Light left native.**
+Clam is the only built-in ttk style that takes colours, so Dark uses it for dropdowns, tick boxes and the Discover table. Light keeps Windows' own look. The theme applies at start-up with a restart offered, because recolouring every open widget live is a lot of code for little gain.
+
+**28 Sep 2026: Matrix green in Dark.**
+The log was already black with green text, so Dark takes its cue from it: black fields, green text, orange kept from the logo. It gives the dark theme a character rather than just being grey.
+
+**28 Sep 2026: YouTube's pick loses its guaranteed slot.**
+YouTube was trusted to pick the track for each artist it suggested. In use, Last.fm's top tracks proved the better picks, so YouTube still chooses artists and adds its track to the pool, but no longer claims a slot.
+
+**28 Sep 2026: Two more matching rules.**
+A soundtrack copy ("- From 'Casino Royale' Soundtrack") let the same song in twice, and "Girls & Boys" missed "Girls And Boys" because "&" was stripped as punctuation. Both are now folded before matching.
+
+**28 Sep 2026: build.bat backs up, and makes the release zip itself.**
+A rebuild deletes the packaged app's folder, and with it the .exe's settings and history. build.bat now backs both up and puts them back. The release zip is made from the clean build before that, and checked for a .env or database, so a user's keys can never ship in it.
