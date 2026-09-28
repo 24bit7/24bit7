@@ -220,6 +220,9 @@ class DiscoverTab(tk.Frame):
         self._select_all_button.pack(side="right", padx=(0, 4))
         # Appears once a row is ticked; the status line beside it says how the last playlist went
         self._yt_button = tk.Button(self._bar_right, text="", command=self.create_youtube_playlist)
+        # Clear all always shows, at the far left of the group; Clear selected appears with the ticks
+        tk.Button(self._bar_right, text="Clear all", command=self.clear_all).pack(side="right", padx=(0, 16))
+        self._clear_sel_button = tk.Button(self._bar_right, text="", command=self.clear_selected)
         self._yt_note = ""   # how the last YouTube playlist went, shown after the row count
         self._last_view = None
 
@@ -391,6 +394,11 @@ class DiscoverTab(tk.Frame):
             self._yt_button.pack(side="right", padx=(0, 8), after=self._select_all_button)
         elif not count:
             self._yt_button.pack_forget()
+        if count and not self._clear_sel_button.winfo_manager():
+            self._clear_sel_button.pack(side="right", padx=(0, 8), after=self._yt_button)
+        elif not count:
+            self._clear_sel_button.pack_forget()
+        self._clear_sel_button.config(text=f"Clear selected ({count})")
         if str(self._yt_button.cget("state")) != "disabled":
             self._yt_button.config(text=f"Create YouTube playlist ({count})")
         self._place_site_buttons()
@@ -435,6 +443,36 @@ class DiscoverTab(tk.Frame):
         if over:
             text += f". YouTube takes {engine.YOUTUBE_PLAYLIST_MAX} at most, so {over} more were left out"
         self._set_yt_status(text + ".")
+
+    def clear_all(self):
+        if not messagebox.askyesno(
+                "Clear all history",
+                "Are you sure? This will clear your whole Discover history, every session.\n\n"
+                "It can't be undone.",
+                icon="warning", default="no", parent=self):
+            return
+        removed = engine.clear_discoveries()
+        self._rows = []
+        self.session_var.set("All sessions")
+        self.refresh()
+        self._set_yt_status(f"History cleared ({removed} {'row' if removed == 1 else 'rows'}).")
+
+    def clear_selected(self):
+        ticked = [r for r in self._rows if r.get("_ticked")]
+        if not ticked:
+            return
+        word = "row" if len(ticked) == 1 else "rows"
+        if not messagebox.askyesno(
+                "Clear selected",
+                f"Are you sure? This will clear the {len(ticked)} ticked {word} from your Discover history.\n\n"
+                "It can't be undone.",
+                icon="warning", default="no", parent=self):
+            return
+        removed = engine.clear_discoveries([r.get("id") for r in ticked])
+        for r in self._rows:
+            r["_ticked"] = False
+        self.refresh()
+        self._set_yt_status(f"Cleared {removed} {'row' if removed == 1 else 'rows'}.")
 
     def _set_yt_status(self, text):
         self._yt_note = text

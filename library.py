@@ -395,8 +395,21 @@ def find_track_key(artist, title):
             entries = [e for t in close for e in _songs[t]]
     matches = [e for e in entries if _artist_score(artist, e[1]) >= GOOD]
     if not matches:
+        # 'Mark Ronson feat. Amy Winehouse' against a tag of 'Mark Ronson' (or the other
+        # way round): compare the first-named acts, the title having matched already
+        matches = [e for e in entries if _primary_match(artist, e[1])]
+        if matches:
+            print(f"  Matched on primary artist: {artist} - {title} (as {matches[0][1]})")
+    if not matches:
         return None
     return sorted(matches, key=lambda e: _album_version_first(e, norm(e[1])))[0][2]
+
+
+def _primary_match(artist, tagged):
+    """True when the first-named act of the source's credit matches the tag's."""
+    want = engine.primary_artist(artist) or artist
+    return any(score(want, engine.primary_artist(part) or part) >= GOOD
+               for part in (tagged or "").split(";") if part.strip())
 
 
 def artist_tracks(heard):

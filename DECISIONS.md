@@ -76,3 +76,9 @@ After "Alexa, stop" the Sonos is paused from its own end and JRiver can still re
 
 **28 Sep 2026: Heard artist names are matched to the library.**
 Alexa heard "the beetles"; Last.fm corrected it quietly, but the library search used the heard spelling and found nothing. Songs by and music like now take the library's spelling when a name is close enough.
+
+**28 Sep 2026: Shared credits fall back to the first-named act.**
+"Band On The Run" came back from a source as Paul McCartney & Wings, but the library has it as Paul McCartney, so it showed as a miss. When the full credit misses, the lookup now tries the first-named act (split on &, and, feat., with, commas and the like), with the title still required to match so a duo can't pull in a solo song by mistake.
+
+**28 Sep 2026: Discover history can be cleared.**
+Clear all removes every session; Clear selected removes just the ticked rows. Both ask first with No as the default. Only Discover's history goes: the provider cache stays so builds stay fast, and the old CSV is not imported again.

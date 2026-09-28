@@ -587,7 +587,7 @@ def list_discoveries(found=None, session_id=None):
     session_id: restrict to one session, or None for all.
     """
     q = ("SELECT d.artist, d.track, d.sources, d.found, s.started_at, d.session_id, "
-         "s.seed_artist, s.seed_track "
+         "s.seed_artist, s.seed_track, d.id "
          "FROM discoveries d JOIN sessions s ON s.id = d.session_id")
     conds, args = [], []
     if found is not None:
@@ -601,8 +601,38 @@ def list_discoveries(found=None, session_id=None):
     q += " ORDER BY d.session_id DESC, d.id ASC"
     rows = db().execute(q, args).fetchall()
     return [{"artist": r[0], "track": r[1], "sources": r[2], "found": bool(r[3]),
-             "date": r[4], "session_id": r[5], "seed_artist": r[6], "seed_track": r[7]}
+             "date": r[4], "session_id": r[5], "seed_artist": r[6], "seed_track": r[7], "id": r[8]}
             for r in rows]
+
+
+def clear_discoveries(ids=None):
+    """
+    Deletes Discover history: every session and discovery when ids is None,
+    otherwise just those discovery rows, plus any session they leave empty.
+    The provider cache and the meta table are kept, so builds stay fast and
+    the old FutureDiscoveries CSV is never imported again.
+    Returns the number of discovery rows removed.
+    """
+    con = db()
+    if ids is None:
+        removed = con.execute("SELECT COUNT(*) FROM discoveries").fetchone()[0]
+        con.execute("DELETE FROM discoveries")
+        con.execute("DELETE FROM sessions")
+        con.commit()
+        return removed
+    ids = [int(i) for i in ids if i is not None]
+    removed, touched = 0, set()
+    for start in range(0, len(ids), 500):   # SQLite caps the number of ? per statement
+        chunk = ids[start:start + 500]
+        marks = ",".join("?" * len(chunk))
+        touched.update(r[0] for r in con.execute(
+            f"SELECT DISTINCT session_id FROM discoveries WHERE id IN ({marks})", chunk))
+        removed += con.execute(f"DELETE FROM discoveries WHERE id IN ({marks})", chunk).rowcount
+    for sid in touched:
+        if not con.execute("SELECT 1 FROM discoveries WHERE session_id=? LIMIT 1", (sid,)).fetchone():
+            con.execute("DELETE FROM sessions WHERE id=?", (sid,))
+    con.commit()
+    return removed
 
 
 _jriver_unreachable = []   # becomes non-empty after the first failed read
@@ -775,6 +805,23 @@ def normalise_artist(artist_name):
     ).strip()
     search_term = re.sub(r'^(The\s+)|(,\s+The)$', '', search_term, flags=re.IGNORECASE).strip()
     return search_term
+
+
+_CREDIT_JOINERS = re.compile(
+    r'\s+(?:&|and|feat\.?|ft\.?|featuring|with|x|vs\.?)\s+|\s*[,+/]\s*', re.IGNORECASE)
+
+
+def primary_artist(artist_name):
+    """
+    The first-named act in a shared credit, or None when there's only one:
+    'Paul McCartney & Wings' -> 'Paul McCartney', 'Mark Ronson feat. Amy
+    Winehouse' -> 'Mark Ronson'. Only ever a fallback after the full credit
+    misses, and the title must still match, so 'Simon & Garfunkel' can't pull
+    in a Paul Simon song by accident.
+    """
+    name = deinvert_the(normalise_punctuation(artist_name or ""))
+    first = _CREDIT_JOINERS.split(name, maxsplit=1)[0].strip()
+    return first if first and first.lower() != name.lower() else None
 
 
 def strip_accents(s):
@@ -1792,16 +1839,27 @@ def find_jriver_key_by_track(artist_name, track_name):
         return youtube_video_id(artist_name, track_name)
     clean_track = clean_name(track_name)
 
-    try:
-        items, search_term = jriver_search_artist_items(artist_name)
+    def search(artist):
+        items, search_term = jriver_search_artist_items(artist)
         artist_pattern = re.compile(rf'\b{re.escape(search_term)}\b', re.IGNORECASE)
-
         for item in items:
             fields = {f.get("Name"): f.text for f in item.findall("Field") if f.text}
             actual_track = fields.get("Name", "") or fields.get("Title", "")
-
             if artist_matches(artist_pattern, fields) and clean_name(actual_track) == clean_track:
-                return fields.get("Key")
+                return fields.get("Key"), items, search_term
+        return None, items, search_term
+
+    try:
+        key, items, search_term = search(artist_name)
+        if key:
+            return key
+        # 'Paul McCartney & Wings' misses a library tagged 'Paul McCartney': try the first-named act
+        primary = primary_artist(artist_name)
+        if primary:
+            key, _, _ = search(primary)
+            if key:
+                print(f"  Matched on primary artist: {artist_name} - {track_name} (as {primary})")
+                return key
         if DEBUG:
             sample = []
             for item in items[:5]:
