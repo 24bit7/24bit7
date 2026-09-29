@@ -4,6 +4,8 @@
 
 If you host your whole music library locally in JRiver, you get bit-perfect playback and none of the discovery. Streaming services will happily tell you what to play next; JRiver will not. 24bit7 fills that gap, using recommendation data from Last.fm, ListenBrainz, Deezer, YouTube Music and an AI model, matched against the music you already own.
 
+[![Watch the 24bit7 demo](https://img.youtube.com/vi/_7KZt4paaGY/hqdefault.jpg)](https://youtu.be/_7KZt4paaGY)
+
 **It works live.** Play any track in JRiver, press a button, and Playing Now is rebuilt around it while the music keeps going. There is nothing to export, no listening history to upload and no second app to keep in sync: whatever is playing right now is the seed. Run it mid-album, mid-track, whenever the mood shifts.
 
 **New in 1.5.0: a new look, and fewer near misses.** A dark theme in black and matrix green sits alongside the familiar light one, with tabs, buttons and Now Playing redrawn in both. Matching is sharper: a soundtrack copy of a track now counts as the same song, and "Girls & Boys" finds "Girls And Boys". With Output set to YouTube, playlists can use official music videos instead of audio with a cover image.
