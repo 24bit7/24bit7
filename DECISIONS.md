@@ -82,3 +82,6 @@ Alexa heard "the beetles"; Last.fm corrected it quietly, but the library search 
 
 **28 Sep 2026: Discover history can be cleared.**
 Clear all removes every session; Clear selected removes just the ticked rows. Both ask first with No as the default. Only Discover's history goes: the provider cache stays so builds stay fast, and the old CSV is not imported again.
+
+**1 Oct 2026: More like this keeps the current track.**
+Every other voice build takes its zone over, because after "Alexa, stop" JRiver can still report a paused Sonos as playing. More like this is asked for because the current track is good, so it uses the Play tab's rule instead: the current track carries on and the new playlist replaces what was queued after it. Skip and who is this need no build and answer at once.

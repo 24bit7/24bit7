@@ -170,6 +170,9 @@ Once it is set up, each device plays to its own zone:
 | "album *name*", "song *title*" | Plays it now, replacing what's playing |
 | "playlist *name*" | Plays one of your JRiver playlists or smartlists now, with its settings from Settings > JRiver Playlists |
 | "shuffle songs by *artist*" | Every track by the artist in your library, shuffled |
+| "skip", "next" | The next track in that device's zone |
+| "who is this", "what's playing" | Alexa says the track, artist and album playing there |
+| "more like this" | Similar Tracks from what's playing, queued after the current track |
 
 When a command is accepted, Alexa plays a short tone rather than talking over the music, which with fast start follows almost at once. When several albums or songs share a title, Alexa asks which artist, and you answer "by *artist*". When two playlists share a name, she asks which one, and you answer "by smartlist", "by playlist" or "by" and the folder.
 
@@ -217,7 +220,7 @@ JRiver is only needed for the Now Playing seed and for JRiver output. The Search
 
 ### Path A: download and run (Windows)
 
-1. Download `24bit7-v1.6.0-windows.zip` from the [Releases](../../releases) page. It's under **Assets** at the bottom of the release, below the two "Source code" downloads, which are only the Python files.
+1. Download `24bit7-v1.6.1-windows.zip` from the [Releases](../../releases) page. It's under **Assets** at the bottom of the release, below the two "Source code" downloads, which are only the Python files.
 2. Unzip it anywhere you like and run `24bit7.exe`.
 3. Windows will most likely show a blue **"Windows protected your PC"** box the first time, because the exe isn't code-signed. Click **More info**, then **Run anyway**. It only asks once.
 4. On first run the app opens on Settings. Add keys for the sources you want; each field has a **?** button with instructions for getting that key. Deezer and YouTube Music work with no key at all, and they are the two sources a fresh install has ticked.
@@ -235,7 +238,13 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.6.0
+## What's new in 1.6.1
+
+- **Skip by voice.** "Alexa, ask needle drop to skip" (or "next") moves that device's zone to the next track. A plain "Alexa, skip" goes to the speaker, which can't skip a JRiver stream; an Alexa Routine can shorten the phrase.
+- **Who is this?** Alexa says the track, artist and album playing in the device's zone, without remaster or soundtrack tags, and reads compilations tagged "Artist - Title" properly.
+- **More like this.** Similar Tracks seeded from what's playing. The current track carries on and the new playlist replaces what was queued after it.
+
+### Earlier: 1.6.0
 
 - **Non-stop.** When the last track of a playlist 24bit7 built starts, more are added, set per Play option: similar artists or similar tracks from the last or 2nd track, the rest of an artist after their top tracks, or more of the same vibe.
 - **Filters.** Named filters with Applies on, Only pick from a playlist or smartlist, and rules on rating, year, plays, dates, genre, artist, album, duration, file type, bit depth, sample rate and location.
