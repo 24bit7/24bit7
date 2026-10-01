@@ -32,10 +32,12 @@ Open the skill first ("Alexa, open needle drop"), then say the command, or say i
 | "genre *anything*", such as "genre nu metal with grunge" | Vibe Playlist (needs an Anthropic key in 24bit7) |
 | "album *name*" | Plays the album now, in track order |
 | "song *title*" | Plays the song now, then stops |
-| "playlist *name*" | Plays one of your JRiver playlists or smartlists now |
+| "playlist *name*" | Plays one of your JRiver playlists or smartlists now, with its settings from Settings > JRiver Playlists |
 | "shuffle songs by *artist*" | Every track by the artist in your library, shuffled, opening on one of their best known songs |
 
 When several albums or songs share a title, Alexa asks which artist, and you answer "by *artist*".
+
+When two playlists share a name (a "Vocal Jazz" smartlist and a "Vocal Jazz" playlist, say), Alexa asks which: "You have two called Vocal Jazz: the smartlist in Random Album, and the playlist at the top level. Say by smartlist, or by playlist." If both are the same type, she names the folders instead, and you answer "by" and the folder. To skip the question, say it up front: "playlist vocal jazz smartlist".
 
 No command starts with "play". Alexa tends to hand anything starting with "play" to a music service instead of the skill, so the skill avoids the word.
 
@@ -56,6 +58,20 @@ If something is already playing, it carries on, and the new playlist queues up b
 
 Albums, songs, playlists and shuffles need no building, so they replace whatever is playing at once.
 
+## Keeping it going
+
+With **Non-stop** ticked for a Play option (on its tab under Settings > Playlist), a playlist a voice command built doesn't end: when its last track starts, more are added. "Shuffle songs by" carries on the same way once the shuffle runs out, from the artist's most popular track. Your own JRiver playlists can keep going too, set per playlist under Settings > JRiver Playlists. Albums and songs end as normal.
+
+## Your JRiver playlists
+
+**Settings > JRiver Playlists** decides how each of your playlists and smartlists plays when you ask for it by voice:
+
+- **Shuffle**, off by default, so a playlist plays in its saved order unless you tick it.
+- **Non-stop**: No, Similar artists or Similar tracks, from the **Reseed from** track (last or 2nd).
+- **Skip recent**: leave out tracks played in the last few days. It never empties a playlist; if everything was played recently, the whole playlist plays and the log says why.
+
+Tick **Use the same settings for every playlist** to set them all at once, or untick it and give each playlist its own row. The table shows each playlist's folder and whether it's a smartlist, sorts by folder or name, and can show one folder at a time. It re-reads your playlists from JRiver each time you open it. A playlist with nothing changed plays exactly as JRiver has it.
+
 ## Devices and their settings
 
 Every Alexa device that has spoken to 24bit7 appears under **Settings > Voice Commands > Devices**, the first time it's used. Give it a name and choose the JRiver zone it plays to, and from then on that device's commands play in that zone: the kitchen speaker in the kitchen, the lounge Dot in the lounge.
@@ -63,13 +79,15 @@ Every Alexa device that has spoken to 24bit7 appears under **Settings > Voice Co
 By default, every device uses the same settings as the Windows app, called **Windows (Main)**. A device can have settings of its own instead:
 
 1. Under **Settings > Voice Commands > Devices**, tick **Own settings** for the device.
-2. **Settings > Sources** and **Settings > Playlist** now show a row of tabs: Windows (Main), then one per ticked device.
-3. Each device tab starts with **Copy Windows (Main)** ticked, greyed out and following the Windows app. Untick it to change that device's settings. Sources and Playlist are separate, so a device can have its own Sources while its Playlist still follows Windows (Main).
+2. **Settings > Sources**, **Settings > Playlist** and **Settings > JRiver Playlists** now show a row of tabs: Windows (Main), then one per ticked device.
+3. Each device tab starts with **Copy Windows (Main)** ticked, greyed out and following the Windows app. Untick it to change that device's settings. Each page is separate, so a device can have its own Sources while its Playlist still follows Windows (Main).
 
 What a device can have its own copy of:
 
-- **Sources:** which services suggest similar artists, similar tracks and top tracks, how many must agree, and the **AI Moderator**, which checks each playlist for tracks that clash with the seed's mood.
-- **Playlist:** track counts, Drift, skipping tracks played recently, and skipping long album closers that hide a bonus track.
+- **Sources:** which services suggest similar artists, similar tracks and top tracks, how many must agree, and the **AI Moderator** for Similar Artists and Similar Tracks, which checks each playlist for tracks that clash with the seed's mood.
+- **Playlist:** for each Play option, track counts, Drift, Non-stop, skipping tracks played recently, and skipping long album closers that hide a bonus track.
+- **JRiver Playlists:** how your own playlists play when asked for by voice.
+- **Filters:** a device with its own settings can be named under **Applies on** in a filter (Settings > Filters), such as keeping the kitchen to a "Kitchen Favourites" playlist. A device without its own settings gets the Windows (Main) filters.
 
 Keys, search sites, zones and the rest stay shared.
 
