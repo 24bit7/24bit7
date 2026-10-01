@@ -29,7 +29,7 @@ from discover_gui import DiscoverTab
 from tabs import TabbedPane, PALETTE, FlatButton, InfoLine, apply_theme
 
 
-REFRESH_MS = 3000
+REFRESH_MS = 10000   # Now Playing panel; paused while minimised or in the tray
 POLL_MS = 100
 DONATE_URL = "https://paypal.me/24bit7"
 SAME_ZONE_LABEL = "Same zone"
@@ -62,6 +62,8 @@ class PlayTab(tk.Frame):
         # during construction, so a slow JRiver never delays startup.
         self.after(200, self._refresh_now_playing)
         self.after(POLL_MS, self._drain_log_queue)
+        # Coming back from the tray or the taskbar: show what's playing straight away
+        root.bind("<Map>", self._on_window_shown, add="+")
 
     def _build_now_playing(self):
         header = tk.Frame(self, padx=16, pady=12)
@@ -249,8 +251,20 @@ class PlayTab(tk.Frame):
         self._greeting_active = True
         self._type_greeting("Follow the white rabbit.", 0)
 
+    def _window_visible(self):
+        try:
+            return self.root.state() not in ("withdrawn", "iconic")
+        except Exception:
+            return True
+
+    def _on_window_shown(self, event):
+        if event.widget is self.root and not self.running:
+            self._update_now_playing()
+
     def _refresh_now_playing(self):
-        if not self.running:
+        # Nobody can see the panel while 24bit7 is minimised or in the tray, so JRiver
+        # isn't asked. The Play buttons and shortcuts read the zone fresh when pressed.
+        if not self.running and self._window_visible():
             self._update_now_playing()
         self.after(REFRESH_MS, self._refresh_now_playing)
 

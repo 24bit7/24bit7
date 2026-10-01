@@ -26,7 +26,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.6.1"
+VERSION = "1.6.2"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
@@ -819,6 +819,20 @@ def _read_zones():
     return [(i, n) for i, n in zones if i and n], items.get("CurrentZoneID")
 
 
+ZONE_CACHE_SECONDS = 60
+_zone_cache = [0.0, []]   # when read, [(id, name)]
+
+
+def _zone_list(fresh=False):
+    """JRiver's zones as [(id, name)], read at most once a minute unless fresh."""
+    if not fresh and _zone_cache[1] and time.time() - _zone_cache[0] < ZONE_CACHE_SECONDS:
+        return _zone_cache[1]
+    zones, _ = _read_zones()
+    if zones:
+        _zone_cache[0], _zone_cache[1] = time.time(), zones
+    return zones
+
+
 def zone_names(include_hidden=False):
     """The zone names for the Play tab's lists, hidden ones left out unless asked for."""
     refresh_settings_if_changed()
@@ -828,19 +842,19 @@ def zone_names(include_hidden=False):
 
 def zone_id(name=None):
     """A zone's JRiver ID by name. No name means the active zone. None if a named zone can't be found."""
-    zones, current = _read_zones()
     if not name:
+        _, current = _read_zones()   # JRiver's active zone can change at any moment
         return current or ACTIVE_ZONE
-    for zid, zname in zones:
-        if zname == name:
-            return zid
+    for fresh in (False, True):   # a name not in the cached list gets one fresh read
+        for zid, zname in _zone_list(fresh):
+            if zname == name:
+                return zid
     return None
 
 
 def zone_label(zid):
     """A zone's name from its ID, for the log."""
-    zones, _ = _read_zones()
-    return next((n for i, n in zones if i == zid), f"zone {zid}")
+    return next((n for i, n in _zone_list() if i == zid), f"zone {zid}")
 
 
 def seed_zone():

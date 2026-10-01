@@ -220,7 +220,7 @@ JRiver is only needed for the Now Playing seed and for JRiver output. The Search
 
 ### Path A: download and run (Windows)
 
-1. Download `24bit7-v1.6.1-windows.zip` from the [Releases](../../releases) page. It's under **Assets** at the bottom of the release, below the two "Source code" downloads, which are only the Python files.
+1. Download `24bit7-v1.6.2-windows.zip` from the [Releases](../../releases) page. It's under **Assets** at the bottom of the release, below the two "Source code" downloads, which are only the Python files.
 2. Unzip it anywhere you like and run `24bit7.exe`.
 3. Windows will most likely show a blue **"Windows protected your PC"** box the first time, because the exe isn't code-signed. Click **More info**, then **Run anyway**. It only asks once.
 4. On first run the app opens on Settings. Add keys for the sources you want; each field has a **?** button with instructions for getting that key. Deezer and YouTube Music work with no key at all, and they are the two sources a fresh install has ticked.
@@ -238,7 +238,12 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.6.1
+## What's new in 1.6.2
+
+- **Band names.** Similar Tracks now finds a library tagged with the band's full name when a source gives the shorter one: "Jimi Hendrix" finds The Jimi Hendrix Experience. Whole words only, so Queen never finds Queens of the Stone Age, and the title still has to match. The log shows each one as "Matched on band name".
+- **Quieter in the background.** 24bit7 asks JRiver far less often. The Now Playing panel checks every 10 seconds and not at all while 24bit7 is minimised or in the tray, the zone list is read once a minute, and Non-stop checks every 15 seconds.
+
+### Earlier: 1.6.1
 
 - **Skip by voice.** "Alexa, ask needle drop to skip" (or "next") moves that device's zone to the next track. A plain "Alexa, skip" goes to the speaker, which can't skip a JRiver stream; an Alexa Routine can shorten the phrase.
 - **Who is this?** Alexa says the track, artist and album playing in the device's zone, without remaster or soundtrack tags, and reads compilations tagged "Artist - Title" properly.

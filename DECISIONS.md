@@ -85,3 +85,9 @@ Clear all removes every session; Clear selected removes just the ticked rows. Bo
 
 **1 Oct 2026: More like this keeps the current track.**
 Every other voice build takes its zone over, because after "Alexa, stop" JRiver can still report a paused Sonos as playing. More like this is asked for because the current track is good, so it uses the Play tab's rule instead: the current track carries on and the new playlist replaces what was queued after it. Skip and who is this need no build and answer at once.
+
+**1 Oct 2026: Band names match on whole words.**
+A forum user's library has The Jimi Hendrix Experience, and Similar Tracks looked for Jimi Hendrix and missed it. The JRiver search used by the other Play options already accepted an artist as whole words inside the tag; the in-memory matcher Similar Tracks uses compared whole names and didn't. It now falls back to the same whole-word rule, only after the title has matched. Whole words keep Queen away from Queens of the Stone Age; the title check keeps it away from Queen Latifah unless she has a song of the same name.
+
+**1 Oct 2026: 24bit7 asks JRiver less often.**
+A forum user saw the Playing Now cursor jump back to the playing track. It couldn't be reproduced, but 24bit7 was asking JRiver two or three things every 3 seconds even from the tray, for a panel nobody could see. The panel now checks every 10 seconds and only while the window shows, the zone list is cached for a minute, and Non-stop checks every 15 seconds. The Play buttons and shortcuts always read the zone fresh, so nothing depends on the panel being current.

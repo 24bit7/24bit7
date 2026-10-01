@@ -27,7 +27,7 @@ from dotenv import dotenv_values
 import engine
 import filters
 
-POLL_SECONDS = 4
+POLL_SECONDS = 15   # a top-up only has to land while the last track plays
 YES = ("1", "true", "yes")
 
 _submit = None

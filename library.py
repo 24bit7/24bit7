@@ -412,8 +412,27 @@ def find_track_key(artist, title):
         if matches:
             print(f"  Matched on primary artist: {artist} - {title} (as {matches[0][1]})")
     if not matches:
+        # 'Jimi Hendrix' against a tag of 'The Jimi Hendrix Experience': the source's
+        # artist as whole words inside the tag, the title having matched already
+        matches = [e for e in entries if _band_match(artist, e[1])]
+        if matches:
+            print(f"  Matched on band name: {artist} - {title} (as {matches[0][1]})")
+    if not matches:
         return None
     return sorted(matches, key=lambda e: _album_version_first(e, norm(e[1])))[0][2]
+
+
+def _band_match(artist, tagged):
+    """
+    True when the source's artist appears as whole words in the tag: 'Jimi Hendrix'
+    in 'The Jimi Hendrix Experience'. Whole words, so 'Queen' never matches
+    'Queens of the Stone Age'. Only used after the title has matched.
+    """
+    want = norm(artist)
+    if len(want) < 2:
+        return False
+    pattern = re.compile(rf"(^| ){re.escape(want)}( |$)")
+    return any(pattern.search(norm(part)) for part in (tagged or "").split(";") if part.strip())
 
 
 def _primary_match(artist, tagged):
