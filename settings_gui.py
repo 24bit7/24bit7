@@ -22,6 +22,7 @@ import engine
 import tray
 import voice
 import hotkeys
+import saved_playlists
 from tabs import TabbedPane, PALETTE
 
 ENV_FILE = engine.ENV_FILE   # single source of truth for where .env lives
@@ -201,6 +202,8 @@ class ProfilePage:
 
     def values(self):
         """The tab's settings as .env strings, for Main's .env or a device's own copy."""
+        if self.kind == "saved":   # the Saved Playlists page keeps its own table
+            return self.collect()
         v = self.vars
         if self.kind == "sources":
             out = {group: ",".join(code for code, tick in v[group].items() if tick.get())
@@ -250,8 +253,21 @@ PLAY_OPTIONS = [("artists", "Similar Artists"), ("tracks", "Similar Tracks"),
 
 # Non-stop dropdowns: (saved value, label shown)
 NONSTOP_USING_OPTIONS = [("artists", "Similar artists"), ("tracks", "Similar tracks")]
-NONSTOP_RESEED_OPTIONS = [("last", "Last track"), ("second", "Second track")]
+NONSTOP_RESEED_OPTIONS = [("last", "Last track"), ("second", "2nd track")]
 NONSTOP_WITH_OPTIONS = [("vibe", "More of the same vibe"), ("artists", "Similar artists"), ("tracks", "Similar tracks")]
+# Saved Playlists dropdowns
+SAVED_NONSTOP_OPTIONS = [("no", "No"), ("artists", "Similar artists"), ("tracks", "Similar tracks")]
+SAVED_SKIP_OPTIONS = [("0", "Off"), ("1", "1 day"), ("2", "2 days"), ("3", "3 days"), ("7", "7 days"),
+                      ("14", "14 days"), ("30", "30 days")]
+ALL_FOLDERS = "All folders"   # the JRiver Playlists folder filter's first choice
+
+
+def table_colours():
+    """(heading, odd row, even row) backgrounds for the Saved Playlists table, light or dark."""
+    import tabs
+    if tabs.THEME == "dark":
+        return "#000000", "#1f2023", "#2a2c30"
+    return "#e4e4e4", "#ffffff", "#f4f4f4"
 
 
 # The ? beside each Number of tracks
@@ -372,8 +388,9 @@ class SettingsTab(tk.Frame):
         self._build_playlist(nb)
         self._build_search_sites(nb)
         self._build_keys(nb)
-        self._build_other(nb)
         self._build_voice(nb)
+        self._build_saved(nb)   # after Voice Commands: these settings only apply to playlists asked for by voice
+        self._build_other(nb)
 
         self._loading = False
         self._refresh_key_marks()
@@ -515,9 +532,12 @@ class SettingsTab(tk.Frame):
             child.destroy()
         info["devices"] = {}
         # A rebuild reads the saved values, as the page may have been changed since Settings opened
-        env = self.env if first else read_env()
-        main = ProfilePage(kind, None, env, self.vars, self._save)
-        fill = self._fill_sources if kind == "sources" else self._fill_playlist
+        if kind == "saved":   # kept in the database, not .env
+            main = ProfilePage(kind, None, saved_playlists.main_settings(), {}, self._save_saved_main)
+        else:
+            env = self.env if first else read_env()
+            main = ProfilePage(kind, None, env, self.vars, self._save)
+        fill = self._filler(kind)
         if wanted:
             info["pane"] = TabbedPane(info["outer"], font=("Segoe UI", 9, "bold"), pad=(12, 4))
             info["pane"].pack(fill="both", expand=True, pady=(6, 0))
@@ -528,6 +548,8 @@ class SettingsTab(tk.Frame):
         info["main"] = main
         if kind == "sources":
             self._main_sources = main
+        elif kind == "saved":
+            self._main_saved = main
         else:
             self._main_playlist = main
         if wanted:
@@ -569,9 +591,12 @@ class SettingsTab(tk.Frame):
             child.destroy()
         own = voice.device_page(device_id, kind)
         copying = own is None
-        env = dict(read_env())
-        if not copying:
-            env.update(own)
+        if kind == "saved":
+            env = own if not copying else saved_playlists.main_settings()
+        else:
+            env = dict(read_env())
+            if not copying:
+                env.update(own)
         p = ProfilePage(kind, device_id, env, {}, lambda *_: None)
         p.save = lambda *_, p=p: self._save_device_page(p)
         copy_var = tk.BooleanVar(value=copying)
@@ -585,7 +610,7 @@ class SettingsTab(tk.Frame):
         body = tk.Frame(inner)
         body.grid(row=1, column=0, sticky="ew")
         inner.grid_columnconfigure(0, weight=1)
-        (self._fill_sources if kind == "sources" else self._fill_playlist)(body, p)
+        self._filler(kind)(body, p)
         p.body = body
         self._refresh_key_marks()
         if copying:
@@ -617,6 +642,234 @@ class SettingsTab(tk.Frame):
     def _build_playlist(self, nb):
         self._panes = getattr(self, "_panes", {})
         self._main_playlist = self._device_pane(nb, "Playlist", "playlist")
+
+    def _build_saved(self, nb):
+        self._panes = getattr(self, "_panes", {})
+        self._main_saved = self._device_pane(nb, "JRiver Playlists", "saved")
+
+    def _filler(self, kind):
+        return {"sources": self._fill_sources, "playlist": self._fill_playlist, "saved": self._fill_saved}[kind]
+
+    # --- the JRiver Playlists page ---
+
+    def _fill_saved(self, tab, p):
+        """
+        How your JRiver playlists play when asked for by voice: one shared row
+        (All playlists, ticked) or a row each (the table), never both at once.
+        """
+        p.loading = True
+        p.data = saved_playlists.tidy(p.env)
+        tab.grid_columnconfigure(0, weight=1)
+        WIDTHS = (16, 26, 9)   # Folder, Playlist, Type
+
+        def changed(*_):
+            if not p.loading:
+                p.save()
+
+        def row_controls(parent, r, bg, row, on_change, col=3):
+            """Shuffle, Non-stop, Reseed from and Skip for one row; writes back into row as they change."""
+            sh = tk.BooleanVar(value=row.get("shuffle") == "1")
+            ns = tk.StringVar(value=option_label(SAVED_NONSTOP_OPTIONS, row.get("nonstop", "no")))
+            rs = tk.StringVar(value=option_label(NONSTOP_RESEED_OPTIONS, row.get("reseed", "last")))
+            sk = tk.StringVar(value=option_label(SAVED_SKIP_OPTIONS, str(row.get("skip", "0"))))
+            p.keep += [sh, ns, rs, sk]
+            cell = tk.Frame(parent, bg=bg)
+            cell.grid(row=r, column=col, sticky="nsew")
+            ttk.Checkbutton(cell, variable=sh).pack(padx=20, pady=2)
+            cell = tk.Frame(parent, bg=bg)
+            cell.grid(row=r, column=col + 1, sticky="nsew")
+            ns_cb = ttk.Combobox(cell, textvariable=ns, values=[s for _, s in SAVED_NONSTOP_OPTIONS],
+                                 state="readonly", width=15)
+            ns_cb.pack(anchor="w", padx=6, pady=2)
+            cell = tk.Frame(parent, bg=bg)
+            cell.grid(row=r, column=col + 2, sticky="nsew")
+            rs_cb = ttk.Combobox(cell, textvariable=rs, values=[s for _, s in NONSTOP_RESEED_OPTIONS],
+                                 state="readonly", width=10)
+            rs_cb.pack(anchor="w", padx=6, pady=2)
+            cell = tk.Frame(parent, bg=bg)
+            cell.grid(row=r, column=col + 3, sticky="nsew")
+            sk_cb = ttk.Combobox(cell, textvariable=sk, values=[s for _, s in SAVED_SKIP_OPTIONS],
+                                 state="readonly", width=9)
+            sk_cb.pack(anchor="w", padx=6, pady=2)
+
+            def store(*_):
+                row["shuffle"] = "1" if sh.get() else "0"
+                row["nonstop"] = option_code(SAVED_NONSTOP_OPTIONS, ns.get())
+                row["reseed"] = option_code(NONSTOP_RESEED_OPTIONS, rs.get())
+                row["skip"] = option_code(SAVED_SKIP_OPTIONS, sk.get())
+                sync_reseed()
+                on_change()
+
+            def sync_reseed():
+                live = "disabled" not in ns_cb.state()
+                rs_cb.state(["!disabled"] if live and row.get("nonstop", "no") != "no" else ["disabled"])
+            for var in (sh, ns, rs, sk):
+                var.trace_add("write", store)
+            p.reseed_syncs.append(sync_reseed)
+
+        def header(parent, labels, clicks=None):
+            """A heading row; clicks maps a column to what clicking its heading does."""
+            for c, text in enumerate(labels):
+                lab = tk.Label(parent, text=text, font=LABEL_FONT, anchor="w", bg=table_colours()[0],
+                               width=WIDTHS[c] if c < 3 else 0)
+                lab.grid(row=0, column=c, sticky="we", ipadx=8, ipady=4)
+                if clicks and c in clicks:
+                    lab.config(cursor="hand2")
+                    lab.bind("<Button-1>", lambda e, f=clicks[c]: f())
+            return parent
+
+        def cell(parent, r, c, text, bg):
+            tk.Label(parent, text=text, anchor="w", bg=bg, width=WIDTHS[c]).grid(
+                row=r, column=c, sticky="we", ipadx=8, ipady=2)
+
+        p.keep, p.reseed_syncs = [], []
+        CONTROLS = ["Shuffle", "Non-stop", "Reseed from", "Skip recent"]   # short, so headings fit their dropdowns
+
+        # --- All playlists ---
+        box = section(tab, "All playlists",
+                      "Ticked, the row below applies to every playlist and the table is greyed out. "
+                      "Unticked, each playlist follows its own row in the table.")
+        p.all_var = tk.BooleanVar(value=p.data["all"] == "1")
+
+        def all_toggled():
+            p.data["all"] = "1" if p.all_var.get() else "0"
+            p.resync()
+            changed()
+        ttk.Checkbutton(box, text="Use the same settings for every playlist", variable=p.all_var,
+                        command=all_toggled).grid(row=0, column=0, sticky="w", pady=(0, 6))
+        p.all_row = header(tk.Frame(box, bd=1, relief="solid"), ["Folder", "Playlist", "Type"] + CONTROLS)
+        p.all_row.grid(row=1, column=0, sticky="w")
+        bg = p.all_row.cget("bg")
+        for c, text in enumerate(("All folders", "All playlists", "Both")):
+            cell(p.all_row, 1, c, text, bg)
+        row_controls(p.all_row, 1, bg, p.data["all_row"], changed)
+
+        # --- Playlists ---
+        box = section(tab, "Playlists",
+                      "Your JRiver playlists and smartlists. These settings apply when you ask for a playlist by "
+                      "voice. Playlists you start in JRiver itself aren't changed. Click Folder or Playlist to "
+                      "sort by it; click again for Z-A. Root (the top level) always comes first.\n"
+                      "Skip recent leaves out tracks played in the last few days, but never empties a playlist.")
+        bar = tk.Frame(box)
+        bar.grid(row=0, column=0, sticky="we", pady=(0, 8))
+        tk.Label(bar, text="Folder").pack(side="left")
+        p.folder_var = tk.StringVar(value=ALL_FOLDERS)
+        p.folder_cb = ttk.Combobox(bar, textvariable=p.folder_var, state="readonly", width=20)
+        p.folder_cb.pack(side="left", padx=(8, 18))
+        tk.Label(bar, text="Search").pack(side="left")
+        p.search_var = tk.StringVar()
+        tk.Entry(bar, textvariable=p.search_var, width=24).pack(side="left", padx=(8, 0))
+        p.count_label = tk.Label(bar, text="", fg=PALETTE["help_fg"], font=HELP_FONT)
+        p.count_label.pack(side="left", padx=(14, 0))
+        p.rescan_btn = tk.Button(bar, text="Rescan", width=10, command=lambda: rescan(loud=True))
+        p.rescan_btn.pack(side="right", padx=(24, 0))
+        p.table_holder = tk.Frame(box)
+        p.table_holder.grid(row=1, column=0, sticky="w")
+        tk.Label(box, text="New playlists arrive with Shuffle off, Non-stop No and Skip Off.",
+                 fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=2, column=0, sticky="w", pady=(6, 0))
+
+        def text_key(text):
+            text = (text or "").strip().lower()
+            return text[4:] if text.startswith("the ") else text
+
+        def ordered(rows):
+            """Sorted by Folder or Playlist, A-Z or Z-A; with Folder, Root always comes first."""
+            backwards = p.data.get("sort") == "za"
+            if p.data.get("sort_by") == "name":
+                return sorted(rows, key=lambda x: (text_key(x[1].get("name")), text_key(x[1].get("folder"))),
+                              reverse=backwards)
+            root = [x for x in rows if (x[1].get("folder") or saved_playlists.ROOT) == saved_playlists.ROOT]
+            rest = [x for x in rows if x not in root]
+            by_name = lambda x: text_key(x[1].get("name"))
+            return (sorted(root, key=by_name, reverse=backwards)
+                    + sorted(rest, key=lambda x: (text_key(x[1].get("folder")), by_name(x)), reverse=backwards))
+
+        def sort_by(column):
+            if p.data.get("sort_by") == column:
+                p.data["sort"] = "za" if p.data.get("sort") == "az" else "az"
+            else:
+                p.data["sort_by"], p.data["sort"] = column, "az"
+            build_table()
+            changed()
+
+        def fill_folders():
+            folders = {row.get("folder") or saved_playlists.ROOT for row in p.data["rows"].values()}
+            others = sorted((f for f in folders if f != saved_playlists.ROOT), key=text_key)
+            p.folder_cb.config(values=[ALL_FOLDERS] + ([saved_playlists.ROOT] if saved_playlists.ROOT in folders
+                                                       else []) + others)
+            if p.folder_var.get() not in p.folder_cb.cget("values"):
+                p.folder_var.set(ALL_FOLDERS)
+
+        def build_table(*_):
+            for child in p.table_holder.winfo_children():
+                child.destroy()
+            p.table = None
+            p.reseed_syncs[:] = p.reseed_syncs[:1]   # keep the All playlists row's
+            rows = ordered(list(p.data["rows"].items()))
+            folder = p.folder_var.get()
+            wanted = p.search_var.get().strip().lower()
+            shown = [(pid, row) for pid, row in rows
+                     if (folder == ALL_FOLDERS or (row.get("folder") or saved_playlists.ROOT) == folder)
+                     and (wanted in (row.get("name") or "").lower() or wanted in (row.get("folder") or "").lower())]
+            total = len(rows)
+            p.count_label.config(text=f"{total} playlist{'' if total == 1 else 's'}"
+                                 + (f", {len(shown)} shown" if len(shown) != total else ""))
+            if not rows:
+                tk.Label(p.table_holder, text="No playlists yet. Make sure JRiver is running, then click Rescan.",
+                         fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=0, column=0, sticky="w")
+                return
+            arrow = " \u25b2" if p.data.get("sort") == "az" else " \u25bc"
+            by = p.data.get("sort_by")
+            labels = ["Folder" + (arrow if by != "name" else ""), "Playlist" + (arrow if by == "name" else ""),
+                      "Type"] + CONTROLS
+            p.table = header(tk.Frame(p.table_holder, bd=1, relief="solid"), labels,
+                             {0: lambda: sort_by("folder"), 1: lambda: sort_by("name")})
+            p.table.grid(row=0, column=0, sticky="w")
+            for r, (pid, row) in enumerate(shown, start=1):
+                bg = table_colours()[1 if r % 2 else 2]
+                cell(p.table, r, 0, row.get("folder") or saved_playlists.ROOT, bg)
+                cell(p.table, r, 1, row.get("name") or pid, bg)
+                cell(p.table, r, 2, row.get("type") or "", bg)
+                row_controls(p.table, r, bg, row, changed)
+            p.resync()
+
+        def rescan(loud=False):
+            try:
+                found = saved_playlists.scan()
+            except Exception as e:
+                if loud:
+                    messagebox.showerror("Rescan", f"Couldn't read your playlists from JRiver.\n\n{e}", parent=self)
+                return
+            p.data = saved_playlists.merge_scan(p.data, found)
+            fill_folders()
+            build_table()
+            changed()
+
+        p.search_var.trace_add("write", build_table)
+        p.folder_cb.bind("<<ComboboxSelected>>", lambda e: (p.folder_cb.selection_clear(), build_table()))
+
+        def resync():
+            together = p.all_var.get()
+            set_enabled(p.all_row, together)
+            if getattr(p, "table", None) is not None and p.table.winfo_exists():
+                set_enabled(p.table, not together)
+            for sync in p.reseed_syncs:
+                sync()
+        p.resync = resync
+        p.collect = lambda: saved_playlists.tidy(p.data)
+        fill_folders()
+        build_table()
+        p.loading = False
+        self.after(200, rescan)   # each time the tab opens: names, folders and new playlists, fresh from JRiver
+
+    def _save_saved_main(self, *_):
+        p = getattr(self, "_main_saved", None)
+        if p is None or p.loading or self._loading:
+            return
+        try:
+            saved_playlists.set_main_settings(p.values())
+        except Exception as e:
+            messagebox.showerror("Save failed", str(e), parent=self)
 
     # --- the Sources sections ---
 

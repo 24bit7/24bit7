@@ -31,6 +31,7 @@ import requests
 
 import engine
 import library
+import saved_playlists
 
 import itertools
 
@@ -80,6 +81,9 @@ def _devices_table():
         # A device that already has settings of its own starts ticked.
         con.execute("ALTER TABLE voice_devices ADD COLUMN own_settings INTEGER DEFAULT 0")
         con.execute("UPDATE voice_devices SET own_settings=1 WHERE sources IS NOT NULL OR playlist IS NOT NULL")
+    if "saved" not in columns:
+        # Each device's own Saved Playlists settings (JSON), or NULL to copy Windows (Main)
+        con.execute("ALTER TABLE voice_devices ADD COLUMN saved TEXT")
     con.commit()
 
 
@@ -111,8 +115,8 @@ def update_device(device_id, name=None, zone=None):
 
 
 def device_page(device_id, kind):
-    """A device's own "sources" or "playlist" settings as a dict, or None when it copies Windows (Main)."""
-    if kind not in ("sources", "playlist") or not device_id:
+    """A device's own "sources", "playlist" or "saved" settings as a dict, or None when it copies Windows (Main)."""
+    if kind not in ("sources", "playlist", "saved") or not device_id:
         return None
     with _lock:
         _devices_table()
@@ -125,7 +129,7 @@ def device_page(device_id, kind):
 
 def set_device_page(device_id, kind, values):
     """Saves a device's own settings of one kind; None goes back to copying Windows (Main)."""
-    if kind not in ("sources", "playlist"):
+    if kind not in ("sources", "playlist", "saved"):
         return
     with _lock:
         _devices_table()
@@ -268,13 +272,13 @@ def _play_now(intent, value, zone, device=None):
     """Albums, songs, playlists and shuffles: replace what's playing on the zone at once."""
     zid = engine.zone_id(zone)
     if intent == "playlist":
-        found = library.find_playlist(value)
-        if not found:
-            return "problem", f"I couldn't find a playlist called {value}.", {}
-        r = requests.get(f"{engine.JRIVER_BASE}/Playback/PlayPlaylist",
-                         params={"Playlist": found.get("ID"), "PlaylistType": "ID", "Zone": zid},
-                         auth=engine.AUTH, timeout=10)
-        ok, what = r.status_code == 200, f"playlist {found.get('Name')}"
+        found, matches = saved_playlists.find(value)
+        if not matches:
+            return "problem", f"I couldn't find a playlist called {value.rsplit(' by ', 1)[0]}.", {}
+        if not found:   # two or more share the name: ask which (the answer comes back as 'name by smartlist')
+            return "ask", saved_playlists.ask_which(matches), {"ask": "playlist", "title": matches[0].get("Name")}
+        # Shuffle, Non-stop and Skip recently played from Settings > JRiver Playlists
+        ok, what = saved_playlists.play(matches[0], zid, device)
     elif intent in ("album", "song"):
         finder = library.find_album if intent == "album" else library.find_song
         found, matches = finder(value)
@@ -292,6 +296,7 @@ def _play_now(intent, value, zone, device=None):
         title, artist, keys = matches[0]
         keys = keys if intent == "album" else [keys]
         ok, what = _play_keys(keys, zid), f"{intent} {title} by {library.spoken(artist)}"
+        engine.nonstop_forget(zid)   # an album or song ends as normal
     else:
         artist, keys = library.artist_tracks(value)
         if not keys:

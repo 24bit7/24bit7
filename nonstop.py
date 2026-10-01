@@ -96,7 +96,11 @@ def _check_zones():
         zone_name = engine.zone_label(zone)
         device_id, device_name, profile = _device_for_zone(zone_name)
         origin = entry.get("origin") or entry.get("kind") or "artists"
-        if not engine.nonstop_settings(_settings_for(profile).get).get(origin, {}).get("on"):
+        if origin == "saved":   # a saved playlist: its row in Settings > Saved Playlists said Non-stop
+            on = bool(entry.get("saved_cfg"))
+        else:
+            on = engine.nonstop_settings(_settings_for(profile).get).get(origin, {}).get("on")
+        if not on:
             continue
         entry["fired"] = marker
         if _submit is not None:
@@ -165,7 +169,10 @@ def _job(zone, zone_name, profile, info):
                 return
             kind = entry.get("kind")
             origin = entry.get("origin") or kind
-            cfg = engine.NONSTOP_BY.get(origin) or engine.NONSTOP_BY["artists"]
+            if origin == "saved":
+                cfg = entry.get("saved_cfg") or {"using": "tracks", "reseed": "last"}
+            else:
+                cfg = engine.NONSTOP_BY.get(origin) or engine.NONSTOP_BY["artists"]
             report(f"  {zone_name} is on its last track, so adding more."
                    + (" (with its device's own settings)" if profile else ""))
             if kind == "top" and entry.get("stage") == "first":

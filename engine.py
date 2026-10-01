@@ -659,6 +659,12 @@ def nonstop_sent(zone):
         return set(entry["keys"]) if entry else set()
 
 
+def nonstop_forget(zone):
+    """Something else now fills this zone (an album, a song, a saved playlist without Non-stop)."""
+    with _nonstop_lock:
+        NONSTOP_ZONES.pop(zone, None)
+
+
 def playing_now_rows(zone):
     """A zone's Playing Now as [{Key, Name, Artist, Album}], in order. [] if unreadable."""
     try:
