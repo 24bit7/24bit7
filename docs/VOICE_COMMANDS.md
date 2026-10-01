@@ -34,12 +34,17 @@ Open the skill first ("Alexa, open needle drop"), then say the command, or say i
 | "song *title*" | Plays the song now, then stops |
 | "playlist *name*" | Plays one of your JRiver playlists or smartlists now, with its settings from Settings > JRiver Playlists |
 | "shuffle songs by *artist*" | Every track by the artist in your library, shuffled, opening on one of their best known songs |
+| "skip", "next" or "next song" | The next track in that device's zone |
+| "who is this" or "what's playing" | Alexa says the track, artist and album playing in that device's zone |
+| "more like this" or "more of this" | Similar Tracks seeded from what's playing. The current track carries on and the new playlist replaces what was queued after it |
 
 When several albums or songs share a title, Alexa asks which artist, and you answer "by *artist*".
 
 When two playlists share a name (a "Vocal Jazz" smartlist and a "Vocal Jazz" playlist, say), Alexa asks which: "You have two called Vocal Jazz: the smartlist in Random Album, and the playlist at the top level. Say by smartlist, or by playlist." If both are the same type, she names the folders instead, and you answer "by" and the folder. To skip the question, say it up front: "playlist vocal jazz smartlist".
 
 No command starts with "play". Alexa tends to hand anything starting with "play" to a music service instead of the skill, so the skill avoids the word.
+
+Skip, who is this and more like this always need the skill's name: "Alexa, ask needle drop to skip". A plain "Alexa, skip" goes to the speaker itself, and a speaker playing a JRiver zone has no queue of its own, so a Sonos answers that it can't skip on this stream. If you want a shorter phrase, an Alexa Routine can do it: set a phrase such as "next song" and give it the custom action "ask needle drop to skip".
 
 The skill name is up to you. This one is "needle drop" because Alexa kept mishearing the first choice. An Alexa Routine can shorten "open needle drop" to a phrase of your own.
 
@@ -48,6 +53,8 @@ The skill name is up to you. This one is "needle drop" because Alexa kept mishea
 - **"Ready."** when the skill opens and is waiting for a command.
 - **A short tone** when a command is accepted. There's nothing more to say: the music follows almost at once.
 - **"Please wait, request pending."** if another playlist is still being built. Yours runs as soon as that one finishes.
+- **"That's *track* by *artist*, from *album*."** after "who is this". Version tags such as "Remastered" or "From the ... Soundtrack" are left out, and a compilation tagged with the series as the artist and "Artist - Title" as the name is read as the real artist and title.
+- **"Nothing's playing on *zone*."** after skip, who is this or more like this when that zone is stopped, and **"Nothing to skip to."** on the last track in Playing Now.
 - **A spoken explanation** when something is wrong, such as a device that hasn't been given a zone yet. The troubleshooting table in the setup guide lists each one.
 
 ## Why the music starts so quickly
