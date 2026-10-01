@@ -49,6 +49,7 @@ PALETTE.update({
     "help_mark_fg":   "#ffffff",
     "tooltip_bg":     "#ffffe0",   # the popup a ? shows
     "tooltip_fg":     "#000000",
+    "ai_purple":      "#6b3fa0",   # anything that uses AI credits
 })
 LIGHT = dict(PALETTE)
 DARK = {
@@ -81,6 +82,7 @@ DARK = {
     "help_mark_fg":    "#00ff41",
     "tooltip_bg":      "#000000",
     "tooltip_fg":      "#00ff41",
+    "ai_purple":       "#c3a6ff",   # lavender, so it reads on charcoal
 }
 THEME = "light"
 
@@ -279,7 +281,8 @@ class FlatButton(tk.Frame):
     quiet=True gives the plainer version: window colour, grey outline, no orange bar.
     """
 
-    def __init__(self, master, text="", command=None, width=None, height=None, quiet=False, **kw):
+    def __init__(self, master, text="", command=None, width=None, height=None, quiet=False,
+                 accent=None, **kw):
         super().__init__(master, bg=PALETTE["button_outline"], **kw)
         try:
             scale = max(1.0, self.winfo_fpixels("1i") / 96.0)
@@ -288,6 +291,7 @@ class FlatButton(tk.Frame):
         px = lambda n: max(1, int(round(n * scale)))
         self._command = command
         self._quiet = quiet
+        self._accent = accent   # a bar colour other than orange (purple: uses AI credits)
         self._state = "normal"
         self._inside = False
         self._bg = (PALETTE["button_quiet_bg"] or master.cget("bg")) if quiet else PALETTE["button_bg"]
@@ -337,7 +341,7 @@ class FlatButton(tk.Frame):
     def _bar_colour(self, on):
         if self._quiet:
             return self._bg
-        return PALETTE["button_accent"] if on else PALETTE["button_outline"]
+        return (self._accent or PALETTE["button_accent"]) if on else PALETTE["button_outline"]
 
     def _on_enter(self, _e):
         self._inside = True

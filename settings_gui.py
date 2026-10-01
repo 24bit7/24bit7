@@ -124,7 +124,7 @@ def help_mark(parent, text):
     return mark
 
 
-def section(parent, title, help_text=None, row=None):
+def section(parent, title, help_text=None, row=None, title_fg=None):
     """
     A boxed section: a thin rectangle with its title (and optional ?) on the top
     edge. Returns the box to build the section's controls in. Stacked with grid
@@ -133,7 +133,7 @@ def section(parent, title, help_text=None, row=None):
     box = tk.LabelFrame(parent, bd=0, padx=14, pady=10, highlightthickness=1,
                         highlightbackground=PALETTE["section_edge"], highlightcolor=PALETTE["section_edge"])
     head = tk.Frame(box)
-    tk.Label(head, text=title, font=HEADING_FONT, fg=PALETTE["section_fg"]).pack(side="left")
+    tk.Label(head, text=title, font=HEADING_FONT, fg=title_fg or PALETTE["section_fg"]).pack(side="left")
     if help_text:
         help_mark(head, help_text).pack(side="left", padx=(6, 0))
     box.configure(labelwidget=head)
@@ -215,7 +215,8 @@ class ProfilePage:
                 out[key] = v[key].get()
             for group in engine.MODERATOR_GROUPS:
                 key = f"AI_MODERATOR_{group.upper()}"
-                out[key] = "1" if v[key].get() else "0"
+                if key in v:   # Windows (Main) sets these on the Play tab
+                    out[key] = "1" if v[key].get() else "0"
             return out
         out = {key: v[key].get().strip() for key in PLAYLIST_TEXT_KEYS}
         for group, (on, using, rounds, _) in self.drift.items():
@@ -1270,7 +1271,7 @@ class SettingsTab(tk.Frame):
                       "that clash with the seed's tone, energy and mood. Genre is never a reason on its own. "
                       "It keeps anything it's unsure about, removes at most a fifth of the tracks, and logs "
                       "each removal with its reason. Uses a little Anthropic credit each time, a fraction of "
-                      "a penny per playlist.")
+                      "a penny per playlist.", title_fg=PALETTE["ai_purple"])
         key = f"AI_MODERATOR_{group.upper()}"
         p.vars[key] = tk.BooleanVar(value=engine.moderator_settings(p.env.get)[group])
 
@@ -1320,7 +1321,8 @@ class SettingsTab(tk.Frame):
         help_mark(row, "How many sources must agree before an artist is picked. Higher means a smoother "
                        "playlist with fewer wildcards, but less chance of discovering something new. "
                        "Tip: try single sources on their own before blending.").pack(side="left", padx=(8, 0))
-        self._moderator_section(p, pages["artists"], "artists")
+        if p.device_id is not None:   # Windows (Main) chooses on the Play tab
+            self._moderator_section(p, pages["artists"], "artists")
 
         # --- Similar Tracks: its own sources and agreement ---
         box = section(pages["tracks"], "Sources",
@@ -1340,7 +1342,8 @@ class SettingsTab(tk.Frame):
         help_mark(row, "How many sources must agree on a track before it's used. If too few agreed tracks "
                        "are in your library, the agreement is relaxed a step at a time, and the log says so."
                   ).pack(side="left", padx=(8, 0))
-        self._moderator_section(p, pages["tracks"], "tracks")
+        if p.device_id is not None:   # Windows (Main) chooses on the Play tab
+            self._moderator_section(p, pages["tracks"], "tracks")
 
         # --- Artist's Top Tracks ---
         box = section(pages["top"], "Sources",
@@ -1627,7 +1630,9 @@ class SettingsTab(tk.Frame):
         tab = self._scroll_tab(nb, "Keys")
         box = section(tab, "Keys and passwords")
         for r, key in enumerate(KEY_FIELDS):
-            tk.Label(box, text=key, anchor="w").grid(row=r, column=0, sticky="w", pady=4)
+            tk.Label(box, text=key, anchor="w",
+                     **({"fg": PALETTE["ai_purple"]} if key == "ANTHROPIC_API_KEY" else {})
+                     ).grid(row=r, column=0, sticky="w", pady=4)
             var = tk.StringVar(value=self.env.get(key, ""))
             self.vars[key] = var
             entry = tk.Entry(box, textvariable=var, show="\u2022", width=32)

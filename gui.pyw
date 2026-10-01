@@ -24,9 +24,11 @@ import tray
 import voice
 import hotkeys
 import nonstop
-from settings_gui import SettingsTab, write_env
+from settings_gui import SettingsTab, write_env, warn_moderator_once, Tooltip, NO_KEY_TEXT, help_mark
 from discover_gui import DiscoverTab
 from tabs import TabbedPane, PALETTE, FlatButton, InfoLine, apply_theme
+from mix_gui import MixRows
+import playmix
 
 
 REFRESH_MS = 10000   # Now Playing panel; paused while minimised or in the tray
@@ -57,6 +59,7 @@ class PlayTab(tk.Frame):
         self._build_now_playing()
         self._build_buttons()
         self._build_log()
+        self.sync_moderator()
 
         # First Now Playing read happens just after the window appears, not
         # during construction, so a slow JRiver never delays startup.
@@ -74,8 +77,11 @@ class PlayTab(tk.Frame):
         for part, colour in (("24", BLUE), ("bit", ORANGE), ("7", BLUE)):
             tk.Label(title, text=part, font=("Segoe UI", 18, "bold"),
                      fg=colour).pack(side="left", padx=0)
-        tk.Label(header, text="Smart Playlist Creator and Music Discovery Tool",
-                 font=("Segoe UI", 10), fg=PALETTE["text_muted"]).pack(anchor="w")
+        # The tagline sits beside the logo after a "/", both at their usual sizes
+        tk.Label(title, text="/", font=("Segoe UI", 10),
+                 fg=PALETTE["text_muted"]).pack(side="left", anchor="s", padx=(12, 8), pady=(0, 5))
+        tk.Label(title, text="Smart Playlist Creator and Music Discovery Tool",
+                 font=("Segoe UI", 10), fg=PALETTE["text_muted"]).pack(side="left", anchor="s", pady=(0, 5))
 
         # The seed area: two small tabs. Whichever is showing when a button is
         # pressed is the seed - what JRiver is playing, or a typed artist and track.
@@ -107,7 +113,7 @@ class PlayTab(tk.Frame):
         prefix_font = tkfont.Font(family="Segoe UI", size=7)
         self._prefix_font = prefix_font
         tab = max(prefix_font.measure("Track:"), prefix_font.measure("Artist:")) + prefix_font.measure("  ")
-        self.np_track = InfoLine(info, font=("Segoe UI", 14, "bold"), fg=PALETTE["brand_blue"],
+        self.np_track = InfoLine(info, font=("Segoe UI", 11, "bold"), fg=PALETTE["brand_blue"],
                                  prefix_font=prefix_font, tab=tab)
         self.np_track.pack(anchor="w", fill="x")
         self.np_detail = InfoLine(info, font=("Segoe UI", 10), fg=PALETTE["text_secondary"], prefix_font=prefix_font, tab=tab)
@@ -200,12 +206,15 @@ class PlayTab(tk.Frame):
             ("Similar Tracks", self.on_similar_tracks),
             ("Artist's Top Tracks", self.on_top_tracks),
             ("Vibe Playlist", self.on_vibe),
-            ("Show Credits", self.on_credits),
         ]:
             b = FlatButton(frame, text=text, command=handler, width=18, height=2,
-                           quiet=(handler == self.on_credits))   # Show Credits is the quieter one
+                           accent=PALETTE["ai_purple"] if handler == self.on_vibe else None)   # purple: uses AI credits
             b.pack(side="left", padx=(0, 8))
             self.buttons.append(b)
+        # More options: the quieter button. Opens the row below; stays usable during a build.
+        self.more_button = FlatButton(frame, text="More options", command=self._toggle_more,
+                                      width=18, height=2, quiet=True)
+        self.more_button.pack(side="left", padx=(0, 8))
 
         # Output: where the finished playlist goes. Saved straight to .env; the engine
         # reads it at the start of each run, so changing it mid-run affects the next one.
@@ -217,8 +226,61 @@ class PlayTab(tk.Frame):
         self.output_cb.pack(side="left")
         self.output_cb.bind("<<ComboboxSelected>>", self._on_output_changed)
 
-        self.credits_button = self.buttons[-1]   # greyed out while the Search tab is showing
+        # The More options row: Show Credits, AI Moderator, Add playlist, with the playlist
+        # rows under it. Held in a frame that's always packed, so it opens in the same place.
+        self.more_box = tk.Frame(self)
+        self.more_box.pack(fill="x")
+        self.extras_row = tk.Frame(self.more_box, padx=16, pady=4)
+        self.credits_button = FlatButton(self.extras_row, text="Show Credits", command=self.on_credits,
+                                         quiet=True, width=14, height=1)
+        self.credits_button.pack(side="left")
+        self.buttons.append(self.credits_button)   # greyed out during a build, and on the Search tab
+        # AI Moderator sets Windows (Main)'s moderator; devices with settings of their own keep theirs.
+        tk.Label(self.extras_row, text="AI Moderator", font=("Segoe UI", 9, "bold"),
+                 fg=PALETTE["ai_purple"]).pack(side="left", padx=(24, 6))
+        self.moderator_var = tk.StringVar(value="No")
+        self.moderator_cb = ttk.Combobox(self.extras_row, textvariable=self.moderator_var,
+                                         values=["No", "Yes"], state="readonly", width=5)
+        self.moderator_cb.pack(side="left")
+        self.moderator_cb.bind("<<ComboboxSelected>>", self._on_moderator_changed)
+        Tooltip(self.moderator_cb, NO_KEY_TEXT, when=lambda: not engine.ANTHROPIC_API_KEY)
+        help_mark(self.extras_row, "Checks Similar Artists and Similar Tracks playlists with Claude Haiku "
+                                   "and removes tracks that clash with the seed's tone, energy and mood. "
+                                   "Uses a little Anthropic credit, a fraction of a penny per playlist. "
+                                   "Voice devices with settings of their own keep their own choice "
+                                   "(Settings > Sources).").pack(side="left", padx=(8, 0))
+        # Add playlist: JRiver playlists joined to the next build from the app (not voice)
+        FlatButton(self.extras_row, text="+ Add playlist", quiet=True, width=14, height=1,
+                   command=lambda: self.mix_rows.add()).pack(side="left", padx=(24, 0))
+        self.mix_rows = MixRows(self.more_box, padx=16)
+        self.mix_rows.on_change = self._update_more_label
+        self._show_more(playmix.is_open(), save=False)
 
+    def _toggle_more(self):
+        self._show_more(not self.extras_row.winfo_manager())
+
+    def _show_more(self, open_, save=True):
+        """Opens or closes the More options row. Open or closed is remembered between launches."""
+        if open_:
+            self.extras_row.pack(fill="x")
+            self.mix_rows.pack(fill="x")
+        else:
+            self.mix_rows.pack_forget()
+            self.extras_row.pack_forget()
+            self.more_box.configure(height=1)   # Tk keeps an emptied frame's size otherwise
+        if save:
+            playmix.set_open(open_)
+        self._update_more_label()
+
+    def _update_more_label(self):
+        """Closed, the button counts what's switched on inside it (added playlists, the moderator)."""
+        if self.extras_row.winfo_manager():
+            self.more_button.config(text="More options \u25b4")
+            return
+        active = sum(1 for r in self.mix_rows.rows if r.get("id"))
+        if self.moderator_var.get() == "Yes" and engine.ANTHROPIC_API_KEY:
+            active += 1
+        self.more_button.config(text=f"More options ({active}) \u25be" if active else "More options \u25be")
 
     @staticmethod
     def _output_label(target):
@@ -240,6 +302,28 @@ class PlayTab(tk.Frame):
         except Exception as e:
             messagebox.showerror("Save failed", str(e), parent=self)
         self.output_cb.selection_clear()
+
+    def sync_moderator(self):
+        """Shows Windows (Main)'s moderator choice, greyed out until there's an Anthropic key."""
+        if self.running:
+            return   # a voice build may have a device's settings loaded
+        engine.refresh_settings_if_changed()
+        by = engine.AI_MODERATOR_BY
+        self.moderator_var.set("Yes" if (by.get("artists") or by.get("tracks")) else "No")
+        self.moderator_cb.state(["!disabled"] if engine.ANTHROPIC_API_KEY else ["disabled"])
+        self._update_more_label()
+
+    def _on_moderator_changed(self, *_):
+        on = self.moderator_var.get() == "Yes"
+        if on:
+            warn_moderator_once(self)
+        value = "1" if on else "0"
+        try:
+            write_env({"AI_MODERATOR_ARTISTS": value, "AI_MODERATOR_TRACKS": value})
+        except Exception as e:
+            messagebox.showerror("Save failed", str(e), parent=self)
+        self.moderator_cb.selection_clear()
+        self._update_more_label()
 
     def _build_log(self):
         frame = tk.Frame(self, padx=16, pady=12)
@@ -547,6 +631,8 @@ def main():
     def on_tab_changed(event):
         if nb.select() == str(discover):
             discover.ensure_loaded()
+        elif nb.select() == str(play):
+            play.sync_moderator()
     nb.bind("<<NotebookTabChanged>>", on_tab_changed)
 
     # Fresh install: engine just created a starter .env, so open on Settings
