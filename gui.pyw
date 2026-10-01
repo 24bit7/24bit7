@@ -22,6 +22,8 @@ import engine
 import library
 import tray
 import voice
+import hotkeys
+import nonstop
 from settings_gui import SettingsTab, write_env
 from discover_gui import DiscoverTab
 from tabs import TabbedPane, PALETTE, FlatButton, InfoLine, apply_theme
@@ -357,7 +359,7 @@ class PlayTab(tk.Frame):
                 self._run_job(lambda: engine.create_similar_playlist(report=self.report, seed_info=seed),
                               needs_playing=False)
             return
-        self._run_job(lambda: engine.create_similar_playlist(report=self.report))
+        self._run_job(lambda: self._seeded(engine.create_similar_playlist), needs_playing=False)
 
     def on_similar_tracks(self):
         if self._seed_is_search():
@@ -366,7 +368,7 @@ class PlayTab(tk.Frame):
                 self._run_job(lambda: engine.create_similar_tracks_playlist(report=self.report, seed_info=seed),
                               needs_playing=False)
             return
-        self._run_job(lambda: engine.create_similar_tracks_playlist(report=self.report))
+        self._run_job(lambda: self._seeded(engine.create_similar_tracks_playlist), needs_playing=False)
 
     def on_top_tracks(self):
         if self._seed_is_search():
@@ -375,7 +377,13 @@ class PlayTab(tk.Frame):
                 self._run_job(lambda: engine.play_top_n(report=self.report, seed_info=seed),
                               needs_playing=False)
             return
-        self._run_job(lambda: engine.play_top_n(report=self.report))
+        self._run_job(lambda: self._seeded(engine.play_top_n), needs_playing=False)
+
+    def _seeded(self, build):
+        """Seeds from the Now Playing zone's track, or the last track played when its Playing Now is empty."""
+        seed = engine.seed_or_last_played(engine.seed_zone(), self.report)
+        if seed:
+            build(report=self.report, seed_info=seed)
 
     def on_credits(self):
         self._run_job(lambda: engine.explore_credits(report=self.report))
@@ -537,6 +545,17 @@ def main():
     voice.attach(lambda job, heading: play.voice_jobs.put((job, heading)),
                  lambda: play.running or not play.voice_jobs.empty())
     voice.restart()
+    # Keyboard shortcuts (Settings > Other): queued on the Play tab like voice commands
+    hotkeys.attach(lambda job, heading: play.voice_jobs.put((job, heading)))
+    problems = hotkeys.restart()
+    # Non-stop (Settings > Playlist): tops up 24bit7 playlists as they reach their last track
+    nonstop.attach(lambda job, heading: play.voice_jobs.put((job, heading)))
+    nonstop.start()
+    settings.refresh_hotkey_notes(problems)
+    if problems:
+        names = ", ".join(hotkeys.LABELS[c] for c in problems)
+        root.after(13000, lambda: play.report(f"Some keyboard shortcuts didn't register ({names}). "
+                                              f"See Settings > Other > Keyboard Shortcuts."))
 
     # --- tray: Start in the tray (when Windows launches it) and Close to tray ---
     def show_window():
@@ -547,6 +566,8 @@ def main():
     def quit_app():
         tray.stop()
         voice.stop()
+        hotkeys.stop()
+        nonstop.stop()
         library.stop()
         root.destroy()
 

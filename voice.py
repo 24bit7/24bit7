@@ -296,7 +296,7 @@ def _play_now(intent, value, zone, device=None):
         artist, keys = library.artist_tracks(value)
         if not keys:
             return "problem", f"I couldn't find any songs by {value}.", {}
-        keys = engine.drop_long_closers(keys, report=print)
+        keys = engine.drop_long_closers(keys, report=print, group="top")
         # Recently played: the Artist's Top Tracks setting, the device's own if it has one
         own = device_profile(device) if device else {}
         main_on, main_days = engine.SKIP_PLAYED["top"]
@@ -310,6 +310,9 @@ def _play_now(intent, value, zone, device=None):
         if lead:   # a shuffle opens on one of their best known songs
             keys = [lead] + [k for k in keys if str(k) != str(lead)]
         ok, what = _play_keys(keys[:SHUFFLE_CAP], zid), f"{min(len(keys), SHUFFLE_CAP)} songs by {library.spoken(artist)}, shuffled"
+        if ok:   # non-stop: when the shuffle ends, the opening track seeds a new playlist
+            engine.nonstop_record(zid, keys[:SHUFFLE_CAP], kind="top", stage="rest", vibe=None,
+                                  top_artist=artist, top_first=str(lead) if lead else None)
     if not ok:
         return "problem", "JRiver didn't start it. Is JRiver running on the media PC?", {}
     print(f"[Voice] Playing {what} on {zone}")

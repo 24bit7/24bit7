@@ -37,7 +37,8 @@ PROFILE = {}               # a device's own Sources/Playlist settings, laid over
 # The settings a device can have its own copy of (Settings > Sources and Playlist, device tabs)
 PROFILE_KEYS = {
     "sources": ["SIMILAR_SOURCES", "SIMILAR_MIN_AGREEMENT", "LISTENBRAINZ_ALGORITHM", "SIMILAR_TRACK_SOURCES",
-                "SIMILAR_TRACK_MIN_AGREEMENT", "LISTENBRAINZ_TRACK_ALGORITHM", "TOP_TRACK_SOURCES", "AI_MODERATOR"],
+                "SIMILAR_TRACK_MIN_AGREEMENT", "LISTENBRAINZ_TRACK_ALGORITHM", "TOP_TRACK_SOURCES", "AI_MODERATOR",
+                "AI_MODERATOR_ARTISTS", "AI_MODERATOR_TRACKS", "AI_MODERATOR_VIBE"],
     "playlist": ["SIMILAR_ARTIST_TRACK_COUNT", "SIMILAR_ARTIST_LIMIT", "TRACKS_PER_ARTIST_POOL",
                  "TRACKS_PER_ARTIST_PICK", "SIMILAR_TRACK_COUNT", "SIMILAR_TRACK_PER_ARTIST", "SIMILAR_TRACK_ORDER",
                  "TOP_TRACKS_COUNT", "TOP_TRACKS_ORDER", "VIBE_TRACK_COUNT",
@@ -46,7 +47,15 @@ PROFILE_KEYS = {
                  "DRIFT_VIBE", "DRIFT_VIBE_USING", "DRIFT_VIBE_ROUNDS",
                  "SKIP_LONG_CLOSERS", "LONG_CLOSER_MINUTES",
                  "SKIP_PLAYED_ARTISTS", "SKIP_PLAYED_ARTISTS_DAYS", "SKIP_PLAYED_TRACKS", "SKIP_PLAYED_TRACKS_DAYS",
-                 "SKIP_PLAYED_TOP", "SKIP_PLAYED_TOP_DAYS", "SKIP_PLAYED_VIBE", "SKIP_PLAYED_VIBE_DAYS"],
+                 "SKIP_PLAYED_TOP", "SKIP_PLAYED_TOP_DAYS", "SKIP_PLAYED_VIBE", "SKIP_PLAYED_VIBE_DAYS",
+                 "NONSTOP", "NONSTOP_USING", "NONSTOP_RESEED", "NONSTOP_TOP_REST", "NONSTOP_TOP_REST_COUNT",
+                 "NONSTOP_VIBE",
+                 "NONSTOP_ARTISTS", "NONSTOP_ARTISTS_USING", "NONSTOP_ARTISTS_RESEED",
+                 "NONSTOP_TRACKS", "NONSTOP_TRACKS_USING", "NONSTOP_TRACKS_RESEED",
+                 "NONSTOP_TOP", "NONSTOP_TOP_USING", "NONSTOP_TOP_RESEED", "NONSTOP_VIBE_RESEED", "NONSTOP_VIBE_WITH",
+                 "SKIP_LONG_CLOSERS_ARTISTS", "LONG_CLOSER_MINUTES_ARTISTS", "SKIP_LONG_CLOSERS_TRACKS",
+                 "LONG_CLOSER_MINUTES_TRACKS", "SKIP_LONG_CLOSERS_TOP", "LONG_CLOSER_MINUTES_TOP",
+                 "SKIP_LONG_CLOSERS_VIBE", "LONG_CLOSER_MINUTES_VIBE"],
 }
 PLAYED_GROUPS = ("artists", "tracks", "top", "vibe")   # Similar Artists, Similar Tracks, Artist's Top Tracks, Vibe
 CSV_FILE = os.path.join(APP_DIR, "FutureDiscoveries.csv")      # legacy log, imported once into the database
@@ -117,6 +126,63 @@ def read_custom_sites():
     return sites
 
 
+YES = ("1", "true", "yes")
+NO = ("0", "false", "no")
+
+
+def nonstop_settings(get):
+    """
+    Non-stop per Play option, from a getter (os.getenv, or a dict's get):
+    {group: {"on", "using", "reseed"}}, plus "with" for Vibe. The single
+    Non-stop section of the first 1.6.0 build (NONSTOP, NONSTOP_USING,
+    NONSTOP_RESEED, NONSTOP_VIBE) carries over as every option's starting value.
+    """
+    legacy_on = (get("NONSTOP", "0") or "0").strip().lower() in YES
+    legacy_using = (get("NONSTOP_USING", "") or "").strip().lower()
+    legacy_reseed = (get("NONSTOP_RESEED", "") or "").strip().lower()
+    out = {}
+    for group, own in (("artists", "artists"), ("tracks", "tracks"), ("top", "tracks"), ("vibe", "artists")):
+        name = f"NONSTOP_{group.upper()}"
+        raw = (get(name, "") or "").strip().lower()
+        on = raw in YES if raw in YES + NO else legacy_on
+        using = (get(f"{name}_USING", "") or legacy_using or own).strip().lower()
+        reseed = (get(f"{name}_RESEED", "") or legacy_reseed or "last").strip().lower()
+        out[group] = {"on": on, "using": using if using in ("artists", "tracks") else own,
+                      "reseed": "second" if reseed == "second" else "last"}
+    with_ = (get("NONSTOP_VIBE_WITH", "") or "").strip().lower()
+    legacy_with = (get("NONSTOP_VIBE", "") or "").strip().lower()
+    if not with_ and legacy_with in ("vibe", "artists", "tracks"):
+        with_ = legacy_with
+    out["vibe"]["with"] = with_ if with_ in ("vibe", "artists", "tracks") else "vibe"
+    return out
+
+
+def closer_settings(get):
+    """The hidden-track check per Play option: {group: (on, minutes)}. The old single setting is the starting value."""
+    base_on = (get("SKIP_LONG_CLOSERS", "1") or "1").strip().lower() in YES
+    base_minutes = (get("LONG_CLOSER_MINUTES", "6") or "6").strip()
+    out = {}
+    for group in PLAYED_GROUPS:
+        raw = (get(f"SKIP_LONG_CLOSERS_{group.upper()}", "") or "").strip().lower()
+        minutes = (get(f"LONG_CLOSER_MINUTES_{group.upper()}", "") or base_minutes).strip()
+        minutes = min(30, max(3, int(minutes))) if minutes.isdigit() else 6
+        out[group] = (raw in YES if raw in YES + NO else base_on, minutes)
+    return out
+
+
+MODERATOR_GROUPS = ("artists", "tracks")   # not Top Tracks (one artist) or Vibe (the AI picks every track)
+
+
+def moderator_settings(get):
+    """The AI Moderator per Play option: {group: on}. The old single tick is the starting value."""
+    base = (get("AI_MODERATOR", "0") or "0").strip().lower() in YES
+    out = {}
+    for group in MODERATOR_GROUPS:
+        raw = (get(f"AI_MODERATOR_{group.upper()}", "") or "").strip().lower()
+        out[group] = raw in YES if raw in YES + NO else base
+    return out
+
+
 def load_settings():
     """
     (Re)reads every setting from .env into module-level globals. Called once at
@@ -141,6 +207,8 @@ def load_settings():
     global SKIP_LONG_CLOSERS, LONG_CLOSER_MINUTES
     global SIMILAR_ARTIST_TRACK_COUNT, DRIFT
     global AI_MODERATOR, MODERATOR_WARNED, SKIP_PLAYED
+    global NONSTOP, NONSTOP_USING, NONSTOP_RESEED, NONSTOP_TOP_REST, NONSTOP_TOP_REST_COUNT, NONSTOP_VIBE
+    global NONSTOP_BY, LONG_CLOSERS, AI_MODERATOR_BY
 
     load_dotenv(ENV_FILE, override=True)
     os.environ.update(PROFILE)   # a device's own settings, for the voice command being built
@@ -211,7 +279,8 @@ def load_settings():
             on, using, rounds = True, "artists", 1
         else:
             on = False
-        DRIFT[group] = {"on": on, "using": using if using in ("artists", "tracks") else own, "rounds": rounds}
+        ok = ("artists", "tracks", "ai") if group == "vibe" else ("artists", "tracks")   # AI only for vibe
+        DRIFT[group] = {"on": on, "using": using if using in ok else own, "rounds": rounds}
     TRACKS_PER_ARTIST_POOL = _int_setting("TRACKS_PER_ARTIST_POOL", 5, 1, 20)
     TRACKS_PER_ARTIST_PICK = _int_setting("TRACKS_PER_ARTIST_PICK", 3, 1, 20)
     TOP_TRACKS_COUNT = _int_setting("TOP_TRACKS_COUNT", 10, 1, 20)
@@ -232,8 +301,22 @@ def load_settings():
         name = f"SKIP_PLAYED_{group.upper()}"
         SKIP_PLAYED[group] = (os.getenv(name, "0").strip().lower() in ("1", "true", "yes"),
                               _int_setting(f"{name}_DAYS", 1, 1, 365))
+    # Non-stop (Settings > Playlist): top up a 24bit7 playlist when its last track starts
+    NONSTOP = os.getenv("NONSTOP", "0").strip().lower() in ("1", "true", "yes")
+    NONSTOP_USING = "artists" if os.getenv("NONSTOP_USING", "tracks").strip().lower() == "artists" else "tracks"
+    NONSTOP_RESEED = "second" if os.getenv("NONSTOP_RESEED", "last").strip().lower() == "second" else "last"
+    NONSTOP_TOP_REST = os.getenv("NONSTOP_TOP_REST", "1").strip().lower() in ("1", "true", "yes")
+    raw_rest = os.getenv("NONSTOP_TOP_REST_COUNT", "20").strip().lower()
+    NONSTOP_TOP_REST_COUNT = 0 if raw_rest == "unlimited" else (max(1, int(raw_rest)) if raw_rest.isdigit() else 20)
+    NONSTOP_VIBE = os.getenv("NONSTOP_VIBE", "vibe").strip().lower()
+    if NONSTOP_VIBE not in ("vibe", "artists", "tracks"):
+        NONSTOP_VIBE = "vibe"
     SKIP_LONG_CLOSERS = os.getenv("SKIP_LONG_CLOSERS", "1").strip().lower() in ("1", "true", "yes")
     LONG_CLOSER_MINUTES = _int_setting("LONG_CLOSER_MINUTES", 6, 3, 30)
+    # Per Play option (the tabs under Settings > Sources and Playlist)
+    NONSTOP_BY = nonstop_settings(os.getenv)
+    LONG_CLOSERS = closer_settings(os.getenv)
+    AI_MODERATOR_BY = moderator_settings(os.getenv)
     # Where finished playlists go: "jriver" = Same zone (the default), "zone:<name>"
     # = a named JRiver zone, or "youtube" (opens in the browser). Zone names keep
     # their case, as JRiver's do.
@@ -516,7 +599,86 @@ def cached_call(source, kind, key, fetch_fn):
     return items
 
 
+# ---------------------------------------------------------------------------
+# Non-stop: what 24bit7 sent to each zone, so nonstop.py can top it up
+# ---------------------------------------------------------------------------
+# Every playlist 24bit7 builds is remembered per zone: its tracks and what kind of
+# build it was. When the last of those tracks starts, nonstop.py adds more. Music
+# you start in JRiver yourself isn't in the list, so non-stop leaves it alone.
+
+import itertools as _itertools
+import threading as _threading
+
+NONSTOP_KINDS = {"similar": "artists", "youtube_queue": "artists", "similar_tracks": "tracks",
+                 "top_tracks": "top", "vibe": "vibe"}
+NONSTOP_CONTEXT = {}     # the build in progress (set by session_start)
+NONSTOP_APPEND = False   # True while a non-stop top-up builds: it only ever adds, never repeats
+NONSTOP_ZONES = {}       # zone ID -> {"keys", "build", "kind", "vibe", "top_artist", "top_first", "stage", "fired"}
+_nonstop_lock = _threading.Lock()
+_nonstop_ids = _itertools.count(1)
+
+
+def nonstop_begin(mode, seed_info=None):
+    """Called as each build starts: remembers what kind of build it is."""
+    global NONSTOP_CONTEXT
+    seed_info = seed_info or {}
+    NONSTOP_CONTEXT = {"build": next(_nonstop_ids), "kind": NONSTOP_KINDS.get(mode, "artists"),
+                       "vibe": seed_info.get("Name") if mode == "vibe" else None,
+                       "top_artist": seed_artists(seed_info)[0] if mode == "top_tracks" else None}
+
+
+def nonstop_record(zone, keys, append=False, **fields):
+    """
+    Notes tracks sent to a zone. A fresh playlist (or fields, from a voice shuffle)
+    starts a new record; a Drift round or a non-stop top-up adds to it.
+    """
+    keys = {str(k) for k in keys if k}
+    ctx = NONSTOP_CONTEXT
+    with _nonstop_lock:
+        entry = NONSTOP_ZONES.get(zone)
+        fresh = (fields or entry is None or (not append and not NONSTOP_APPEND)
+                 or (not NONSTOP_APPEND and entry.get("build") != ctx.get("build")))
+        if fresh:
+            entry = {"keys": set(), "build": ctx.get("build"), "kind": ctx.get("kind"), "vibe": ctx.get("vibe"),
+                     "top_artist": ctx.get("top_artist"), "top_first": ctx.get("top_first"),
+                     "stage": "first", "fired": None}
+            entry.update(fields)
+            entry["origin"] = entry.get("kind")   # its Non-stop settings come from the option it started as
+            NONSTOP_ZONES[zone] = entry
+        elif NONSTOP_APPEND and ctx.get("kind") and entry.get("build") != ctx.get("build"):
+            # a top-up build: from here on the zone carries on as that kind of playlist
+            entry.update(build=ctx["build"], kind=ctx["kind"], vibe=ctx.get("vibe") or entry.get("vibe"),
+                         stage="after")
+        entry["keys"] |= keys
+
+
+def nonstop_sent(zone):
+    """Every track 24bit7 has sent to this zone since its playlist started."""
+    with _nonstop_lock:
+        entry = NONSTOP_ZONES.get(zone)
+        return set(entry["keys"]) if entry else set()
+
+
+def playing_now_rows(zone):
+    """A zone's Playing Now as [{Key, Name, Artist, Album}], in order. [] if unreadable."""
+    try:
+        r = requests.get(f"{JRIVER_BASE}/Playback/Playlist", params={"Zone": zone, "Fields": "Key,Name,Artist,Album"},
+                         auth=AUTH, timeout=10)
+        return [{f.get("Name"): f.text or "" for f in item.findall("Field")}
+                for item in ET.fromstring(r.text).findall(".//Item")]
+    except Exception:
+        return []
+
+
+def seed_from_row(row, zone):
+    """A library track shaped like a now-playing seed (left out of its own playlist)."""
+    return {"Artist": row.get("Artist") or "Unknown", "Name": row.get("Name") or "Unknown",
+            "Album": row.get("Album") or "", "FileKey": str(row.get("Key") or ""),
+            "PlayingNowPosition": "0", "PlayingNowTracks": "0", "ZoneID": zone}
+
+
 def session_start(mode, seed_info, sources=""):
+    nonstop_begin(mode, seed_info)
     cur = db().execute(
         "INSERT INTO sessions (started_at, mode, seed_artist, seed_track, seed_album, sources, queued) "
         "VALUES (?,?,?,?,?,?,0)",
@@ -698,6 +860,70 @@ def get_playing_info(zone=None):
             _jriver_unreachable.append(True)
             print(f"[JRiver] Not reachable ({e}). Search with YouTube output works without it.")
         return None
+
+
+def last_played_seed(zone=None, report=print):
+    """
+    The most recently played track in the library, shaped like a searched seed,
+    for when Playing Now is empty (keyboard shortcuts and the Play tab buttons).
+    Asks JRiver first, so a track played a minute ago counts; falls back to the
+    library held in memory (up to half an hour old). zone: the zone ID it's for,
+    so the playlist goes there. None if nothing has ever been played.
+    """
+    import library   # here rather than at the top: library imports engine
+    best = None
+    try:
+        r = requests.get(f"{JRIVER_BASE}/Files/Search",
+                         params={"Query": "[Media Type]=[Audio] ~sort=[Last Played]-d ~n=1", "Action": "JSON",
+                                 "Fields": "Key,Name,Artist,Album,Last Played"}, auth=AUTH, timeout=30)
+        for row in json.loads(r.text):
+            when = library.played_time(str(row.get("Last Played") or "").strip())
+            if when and (best is None or when > best[0]):
+                best = (when, {k: str(v) for k, v in row.items()})
+    except Exception:
+        pass
+    if best is None:
+        try:
+            library.ensure_loaded()
+            with library._lock:
+                key = max(library._played, key=library._played.get) if library._played else None
+                row = next((r for r in library._tracks if str(r.get("Key")) == key), None) if key else None
+            if row:
+                best = (0, row)
+        except Exception:
+            pass
+    if best is None:
+        return None
+    row = best[1]
+    seed = typed_seed_info(row.get("Artist") or "", row.get("Name") or "")
+    seed.update({"Album": row.get("Album") or "", "FileKey": str(row.get("Key") or ""),
+                 "LastPlayed": True, "ZoneID": zone or ""})
+    return seed
+
+
+def seed_or_last_played(zone=None, report=print):
+    """
+    The seed for a keyboard shortcut or a Play tab button: the zone's current
+    track (paused or stopped counts), or the most recently played track when
+    its Playing Now is empty. Logs which it used. None, after a log line, if neither.
+    """
+    zone = zone or seed_zone()
+    if zone is None:
+        report("The Now Playing zone wasn't found in JRiver.")
+        return None
+    if zone == ACTIVE_ZONE:
+        zone = zone_id()
+    info = get_playing_info(zone)
+    if info and info.get("PlayingNowPosition", "-1") != "-1" and info.get("PlayingNowTracks", "0") != "0":
+        info["ZoneID"] = info.get("ZoneID") or zone
+        return info
+    seed = last_played_seed(zone, report)
+    if not seed:
+        report("Nothing playing, and no last played track could be found. Start a track first!")
+        return None
+    report(f"  Nothing in Playing Now, so seeding from the last track played: "
+           f"{seed['Artist']}, {seed['Name']}")
+    return seed
 
 
 def remove_from_playing_now(index, zone=ACTIVE_ZONE):
@@ -1337,9 +1563,13 @@ def ai_vibe_suggestions():
     return []
 
 
-def ai_vibe_tracks(vibe, count):
-    """Artist/track pairs for a vibe. Returns [(artist, track)]."""
-    data = ai_ask_json(AI_VIBE_PROMPT.format(vibe=vibe, count=count))
+def ai_vibe_tracks(vibe, count, avoid=()):
+    """Artist/track pairs for a vibe, leaving out any 'Artist - Title' in avoid. Returns [(artist, track)]."""
+    prompt = AI_VIBE_PROMPT.format(vibe=vibe, count=count)
+    if avoid:
+        prompt += ("\n\nDon't include any of these, which have already been used or tried:\n"
+                   + "\n".join(list(avoid)[-150:]))
+    data = ai_ask_json(prompt)
     pairs = []
     if isinstance(data, list):
         for item in data:
@@ -2095,15 +2325,16 @@ def typed_seed_key(seed_info, seeds, session_id, report=print):
     name = seed_info.get("Name")
     if not seed_info.get("Typed") or not name:
         return None
+    what = "Last played track" if seed_info.get("LastPlayed") else "Searched track"
     for seed in seeds:
         key = find_jriver_key_by_track(seed, name)
         if key:
-            report("  Searched track found on YouTube, so it opens the playlist." if output_is_youtube()
-                   else "  Searched track is in your library, so it opens the playlist.")
+            report(f"  {what} found on YouTube, so it opens the playlist." if output_is_youtube()
+                   else f"  {what} is in your library, so it opens the playlist.")
             session_log(session_id, seed, name, ["seed"], found=True)
             return key
-    report("  Searched track wasn't found on YouTube, so the playlist starts without it." if output_is_youtube()
-           else "  Searched track isn't in your library, so the playlist starts without it.")
+    report(f"  {what} wasn't found on YouTube, so the playlist starts without it." if output_is_youtube()
+           else f"  {what} isn't in your library, so the playlist starts without it.")
     session_log(session_id, seeds[0], name, ["seed"], found=False)
     return None
 
@@ -2175,7 +2406,8 @@ def output_zone(seed_info=None, zone_name=None, report=print):
                    f"Pick another zone under Output.")
         return zid
     if seed_info and seed_info.get("Typed"):
-        return zone_id()
+        # a last-played seed (Playing Now was empty) goes back to the zone it was read for
+        return seed_info.get("ZoneID") or zone_id()
     if seed_info and seed_info.get("ZoneID"):
         return seed_info["ZoneID"]
     zid = seed_zone()
@@ -2185,7 +2417,7 @@ def output_zone(seed_info=None, zone_name=None, report=print):
     return zone_id() if zid == ACTIVE_ZONE else zid
 
 
-def drop_long_closers(keys, keep=(), report=print):
+def drop_long_closers(keys, keep=(), report=print, group=None):
     """
     The hidden-track check (Settings > Playlist > All playlists). Leaves out any
     track that is the last one on its album and runs longer than
@@ -2193,7 +2425,10 @@ def drop_long_closers(keys, keep=(), report=print):
     after a long silence (System Of A Down's "Aerials" is 6:11 with one, 3:55
     without). keep: keys never dropped, i.e. the seed track. Each skip is logged.
     """
-    if not SKIP_LONG_CLOSERS or not keys:
+    # each Play option has its own setting: group, else the build in progress, else Artist's Top Tracks
+    on, minutes = LONG_CLOSERS.get(group or NONSTOP_CONTEXT.get("kind") or "top",
+                                   (SKIP_LONG_CLOSERS, LONG_CLOSER_MINUTES))
+    if not on or not keys:
         return keys
     try:
         import library   # here rather than at the top: library imports engine
@@ -2201,7 +2436,7 @@ def drop_long_closers(keys, keep=(), report=print):
     except Exception as e:
         report(f"  Long closer check skipped: couldn't read the library ({e}).")
         return keys
-    limit = LONG_CLOSER_MINUTES * 60
+    limit = minutes * 60
     keep = {str(k) for k in keep if k}
     kept = []
     for key in keys:
@@ -2215,7 +2450,8 @@ def drop_long_closers(keys, keep=(), report=print):
     return kept
 
 
-def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=None, append=False):
+def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=None, append=False,
+                   closer_group=None):
     """
     Sends a finished playlist to the output zone, or opens it on YouTube.
       - A stopped zone gets the playlist as its new Playing Now, and it starts.
@@ -2238,7 +2474,14 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
         return
     keys = [str(k) for k in keys]
     seed_key = str((seed_info or {}).get("FileKey") or "")
-    keys = drop_long_closers(keys, keep=[seed_key], report=report)
+    keys = drop_long_closers(keys, keep=[seed_key], report=report, group=closer_group)
+    if NONSTOP_APPEND:   # a non-stop top-up only ever adds, and never repeats what the zone already had
+        sent = nonstop_sent(zone)
+        fresh_keys = [k for k in keys if k not in sent]
+        if keys and not fresh_keys:
+            report("  Nothing new to add: every track found had already been sent to this zone.")
+        keys, append = fresh_keys, True
+    nonstop_record(zone, keys, append)
     if append:
         if keys:
             queue_tracks(keys, zone)
@@ -2411,7 +2654,10 @@ If nothing clashes, reply {{"remove": []}}."""
 
 def moderator_on():
     """The moderator runs when it's wanted (Play tab, or the speaker for voice) and there's a key."""
-    wanted = AI_MODERATOR if MODERATOR_OVERRIDE is None else MODERATOR_OVERRIDE
+    # each Play option has its own tick; the build in progress says which option it is
+    kind = NONSTOP_CONTEXT.get("kind")
+    own = AI_MODERATOR_BY.get(kind, False) if kind else AI_MODERATOR
+    wanted = own if MODERATOR_OVERRIDE is None else MODERATOR_OVERRIDE
     return bool(wanted and ANTHROPIC_API_KEY)
 
 
@@ -2571,8 +2817,10 @@ class Drift:
     """
 
     def __init__(self, group, target, session_id, report=print, per_artist=None, exclude_keys=(), seed="",
-                 played=None):
+                 played=None, vibe=None):
         cfg = DRIFT.get(group, {})
+        self.vibe = vibe          # a vibe playlist's description, for Drift using the AI
+        self.ai_tried = set()     # (artist, title) the AI suggested that weren't used
         self.played = played      # the mode's PlayedFilter, so Drift skips recent plays too
         self.seed = seed          # what the AI Moderator judges each round against
         self.on = cfg.get("on", False)
@@ -2659,21 +2907,30 @@ class Drift:
         for n in range(1, self.rounds + 1):
             if len(keys) >= self.target:
                 break
-            seeds = self._seeds()
-            if not seeds:
-                self.report("  Drift: nothing left to seed from.")
-                break
-            names = ", ".join(a if self.using == "artists" else f"{a} - {t}" for a, t in seeds)
-            self.report(f"  Drift round {n} of {self.rounds}: {len(keys)} of {self.target}, "
-                        f"using {self.using} similar to {names}...")
-            before = len(keys)
-            if self.using == "artists":
-                self._round_artists(seeds, keys)
+            if self.using == "ai":   # a vibe playlist asking the AI again
+                self.report(f"  Drift round {n} of {self.rounds}: {len(keys)} of {self.target}, "
+                            f"asking the AI again...")
+                before = len(keys)
+                self._round_ai(keys)
             else:
-                self._round_tracks(seeds, keys)
+                seeds = self._seeds()
+                if not seeds:
+                    self.report("  Drift: nothing left to seed from.")
+                    break
+                names = ", ".join(a if self.using == "artists" else f"{a} - {t}" for a, t in seeds)
+                self.report(f"  Drift round {n} of {self.rounds}: {len(keys)} of {self.target}, "
+                            f"using {self.using} similar to {names}...")
+                before = len(keys)
+                if self.using == "artists":
+                    self._round_artists(seeds, keys)
+                else:
+                    self._round_tracks(seeds, keys)
             self.moderate(keys, keys[before:])
             new = keys[before:]
             self.report(f"  Drift round {n}: {len(new)} added.")
+            if self.using == "ai" and not new:
+                self.report("  Drift: the AI found nothing new in your library, so stopping there.")
+                break
             added += new
             if new and on_round:
                 on_round(list(new))
@@ -2712,6 +2969,27 @@ class Drift:
                     if len(keys) >= self.target:
                         return
                     self._take(keys, a, t, k, len(suggested_by))
+
+    def _round_ai(self, keys):
+        """A vibe round: the same description to the AI, told what's already been found or tried."""
+        if not self.vibe:
+            return
+        avoid = [f"{a} - {t}" for a, t, _, _ in self.finds] + [f"{a} - {t}" for a, t in self.ai_tried]
+        pairs = ai_vibe_tracks(self.vibe, max(5, self.target - len(keys) + 5), avoid=avoid)
+        prefetch_youtube_ids(pairs)
+        for artist, track in pairs:
+            if len(keys) >= self.target:
+                return
+            ident = (artist_key(artist), clean_name(track))
+            if ident in self.checked:
+                continue
+            self.checked.add(ident)
+            key = find_jriver_key_by_track(artist, track)
+            session_log(self.session_id, artist, track, "AI", found=bool(key))
+            if self._take(keys, artist, track, key, 1):
+                self.report(f"    Found: {artist} - {track}  (AI)")
+            else:
+                self.ai_tried.add((artist, track))
 
     def _round_tracks(self, seeds, keys):
         import library   # here rather than at the top: library imports engine
@@ -3101,7 +3379,7 @@ def create_vibe_playlist(vibe, report=print):
     fast = FastStart(None, report)
     played = PlayedFilter("vibe", report=report)
     drift = Drift("vibe", target, session_id, report, per_artist=TRACKS_PER_ARTIST_PICK, seed=f"vibe: {vibe}",
-                  played=played)
+                  played=played, vibe=vibe)
     # With the AI Moderator on, ask for a few extra, so anything it removes is replaced
     wanted = target + (max(1, int(target * MODERATOR_SHARE)) if moderator_on() else 0)
 
@@ -3126,6 +3404,7 @@ def create_vibe_playlist(vibe, report=print):
         else:
             report(f"    Not in library: {artist} - {track}")
             misses += 1
+            drift.ai_tried.add((artist, track))   # so Drift using the AI doesn't ask for it again
             session_log(session_id, artist, track, "AI", found=False)
     report(f"  AI picks: {len(keys)} found, {misses} missing.")
     drift.moderate(keys, [k for k in keys if str(k) != fast.key])
@@ -3210,6 +3489,7 @@ def play_top_n(report=print, seed_info=None):
         session_finish(session_id, 0, report=report)
         return
 
+    NONSTOP_CONTEXT["top_first"] = str(ordered_keys[0])   # the most popular found: non-stop seeds from it later
     if order == "random":
         random.shuffle(ordered_keys)
     elif order == "reverse":

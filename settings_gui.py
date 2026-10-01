@@ -21,6 +21,7 @@ from tkinter import ttk, messagebox
 import engine
 import tray
 import voice
+import hotkeys
 from tabs import TabbedPane, PALETTE
 
 ENV_FILE = engine.ENV_FILE   # single source of truth for where .env lives
@@ -208,17 +209,28 @@ class ProfilePage:
                 out[key] = "1" if v[key].get() == "Off" else v[key].get()
             for key in ("LISTENBRAINZ_ALGORITHM", "LISTENBRAINZ_TRACK_ALGORITHM"):
                 out[key] = v[key].get()
-            out["AI_MODERATOR"] = "1" if v["AI_MODERATOR"].get() else "0"
+            for group in engine.MODERATOR_GROUPS:
+                key = f"AI_MODERATOR_{group.upper()}"
+                out[key] = "1" if v[key].get() else "0"
             return out
         out = {key: v[key].get().strip() for key in PLAYLIST_TEXT_KEYS}
         for group, (on, using, rounds, _) in self.drift.items():
             name = f"DRIFT_{group.upper()}"
             out[name] = "1" if on.get() else "0"
-            out[f"{name}_USING"] = "tracks" if using.get() == "Similar tracks" else "artists"
+            out[f"{name}_USING"] = option_code(DRIFT_USING_OPTIONS, using.get())
             out[f"{name}_ROUNDS"] = rounds.get()
-        out["SKIP_LONG_CLOSERS"] = "1" if v["SKIP_LONG_CLOSERS"].get() else "0"
         for group in engine.PLAYED_GROUPS:
-            out[f"SKIP_PLAYED_{group.upper()}"] = "1" if v[f"SKIP_PLAYED_{group.upper()}"].get() else "0"
+            g = group.upper()
+            out[f"SKIP_PLAYED_{g}"] = "1" if v[f"SKIP_PLAYED_{g}"].get() else "0"
+            out[f"SKIP_LONG_CLOSERS_{g}"] = "1" if v[f"SKIP_LONG_CLOSERS_{g}"].get() else "0"
+            out[f"LONG_CLOSER_MINUTES_{g}"] = v[f"LONG_CLOSER_MINUTES_{g}"].get().strip()
+            out[f"NONSTOP_{g}"] = "1" if v[f"NONSTOP_{g}"].get() else "0"
+            out[f"NONSTOP_{g}_RESEED"] = option_code(NONSTOP_RESEED_OPTIONS, v[f"NONSTOP_{g}_RESEED"].get())
+            if group != "vibe":
+                out[f"NONSTOP_{g}_USING"] = option_code(NONSTOP_USING_OPTIONS, v[f"NONSTOP_{g}_USING"].get())
+        out["NONSTOP_VIBE_WITH"] = option_code(NONSTOP_WITH_OPTIONS, v["NONSTOP_VIBE_WITH"].get())
+        out["NONSTOP_TOP_REST"] = "1" if v["NONSTOP_TOP_REST"].get() else "0"
+        out["NONSTOP_TOP_REST_COUNT"] = v["NONSTOP_TOP_REST_COUNT"].get().strip().lower()
         return out
 
 
@@ -226,9 +238,34 @@ class ProfilePage:
 PLAYLIST_TEXT_KEYS = ["SIMILAR_ARTIST_TRACK_COUNT", "SIMILAR_ARTIST_LIMIT", "TRACKS_PER_ARTIST_POOL",
                       "TRACKS_PER_ARTIST_PICK", "SIMILAR_TRACK_COUNT", "SIMILAR_TRACK_PER_ARTIST",
                       "SIMILAR_TRACK_ORDER", "TOP_TRACKS_COUNT", "TOP_TRACKS_ORDER", "VIBE_TRACK_COUNT",
-                      "LONG_CLOSER_MINUTES", "SKIP_PLAYED_ARTISTS_DAYS", "SKIP_PLAYED_TRACKS_DAYS",
+                      "SKIP_PLAYED_ARTISTS_DAYS", "SKIP_PLAYED_TRACKS_DAYS",
                       "SKIP_PLAYED_TOP_DAYS", "SKIP_PLAYED_VIBE_DAYS"]
 
+# Drift using: (saved value, label shown). AI is for vibe playlists only, and never the default.
+DRIFT_USING_OPTIONS = [("artists", "Similar artists"), ("tracks", "Similar tracks"), ("ai", "AI")]
+
+# The Play options, as the tabs inside Sources and Playlist
+PLAY_OPTIONS = [("artists", "Similar Artists"), ("tracks", "Similar Tracks"),
+                ("top", "Artist's Top Tracks"), ("vibe", "Vibe Playlist")]
+
+# Non-stop dropdowns: (saved value, label shown)
+NONSTOP_USING_OPTIONS = [("artists", "Similar artists"), ("tracks", "Similar tracks")]
+NONSTOP_RESEED_OPTIONS = [("last", "Last track"), ("second", "Second track")]
+NONSTOP_WITH_OPTIONS = [("vibe", "More of the same vibe"), ("artists", "Similar artists"), ("tracks", "Similar tracks")]
+
+
+# The ? beside each Number of tracks
+TARGET_HELP = 'This is the target number of tracks. The playlist may come out shorter, depending on how many matches are in your library. If your playlists are often too short, tick Drift to fill them out.'
+TOP_TARGET_HELP = "This is the target number of tracks. The playlist may come out shorter, depending on how many of the artist's top tracks are in your library."
+
+
+def option_code(options, label):
+    """A dropdown's label back to the value saved in .env (the first option if it's not recognised)."""
+    return next((code for code, shown in options if shown == label), options[0][0])
+
+
+def option_label(options, code):
+    return dict(options).get(code, options[0][1])
 
 def drift_values(env, group):
     """A group's Drift settings from a tab's values, or Main's (with its carried-over top-up) if unset."""
@@ -237,7 +274,8 @@ def drift_values(env, group):
         return engine.DRIFT[group]
     rounds = env.get(f"{name}_ROUNDS", "3")
     return {"on": env[name].strip().lower() in ("1", "true", "yes"),
-            "using": "tracks" if env.get(f"{name}_USING", "") == "tracks" else "artists",
+            "using": {"tracks": "tracks", "ai": "ai"}.get(env.get(f"{name}_USING", ""), "artists")
+                     if group == "vibe" else ("tracks" if env.get(f"{name}_USING", "") == "tracks" else "artists"),
             "rounds": int(rounds) if rounds.isdigit() else 3}
 
 
@@ -286,8 +324,18 @@ def sync_played(p):
 
 
 def sync_long_closers(p):
-    """The minutes box greys out while the tick is off."""
-    p.closer_sb.config(state="normal" if p.vars["SKIP_LONG_CLOSERS"].get() else "disabled")
+    """Each option's minutes box greys out while its Hidden Tracks tick is off."""
+    for g, sb in p.closer_sbs.items():
+        sb.config(state="normal" if p.vars[f"SKIP_LONG_CLOSERS_{g}"].get() else "disabled")
+
+
+def sync_nonstop(p):
+    """Each option's Non-stop choices grey out while it's off; the song count while its own tick is off."""
+    for g, (body, rest_cb) in p.nonstop_parts.items():
+        on = p.vars[f"NONSTOP_{g}"].get()
+        set_enabled(body, on)
+        if rest_cb is not None:
+            rest_cb.state(["!disabled"] if on and p.vars["NONSTOP_TOP_REST"].get() else ["disabled"])
 
 
 def sync_pick_limit(p):
@@ -316,6 +364,7 @@ class SettingsTab(tk.Frame):
         self.vars = {}
         self._source_boxes = []   # (tick, code, label, purpose) for the "(no key yet)" marks
         self._loading = True   # suppress auto-save while building controls
+        self._option_tab_choice = {}   # the Play option tab last open under Sources and Playlist
 
         nb = TabbedPane(self, font=("Segoe UI", 10, "bold"), pad=(16, 6))
         nb.pack(fill="both", expand=True, padx=8, pady=8)
@@ -582,23 +631,92 @@ class SettingsTab(tk.Frame):
         help_mark(row, notes).pack(side="left", padx=(8, 0))
         return r + 1
 
-    def _source_ticks(self, p, box, r, group, names, default, command, purpose, help_text=None):
-        """One row of source tick boxes, with an optional ? at the end."""
-        row = self._line(box, r)
+    def _option_tabs(self, tab, kind, options=PLAY_OPTIONS):
+        """The row of Play option tabs inside a Sources or Playlist page. Returns {group: page}."""
+        pane = TabbedPane(tab, font=("Segoe UI", 9, "bold"), pad=(12, 4), box=True, indent=6)
+        pane.grid(row=tab.grid_size()[1], column=0, sticky="nsew")
+        tab.grid_columnconfigure(0, weight=1)
+        pages = {}
+        for group, title in options:
+            page = tk.Frame(pane, padx=10, pady=12)
+            pane.add(page, text=title)
+            pages[group] = page
+        chosen = self._option_tab_choice.get(kind)
+        if chosen in pages:   # reopen on the option last looked at
+            pane.select(pages[chosen])
+
+        def remember(_e=None):
+            for group, page in pages.items():
+                if pane.select() == str(page):
+                    self._option_tab_choice[kind] = group
+        pane.bind("<<NotebookTabChanged>>", remember, add="+")
+        return pages
+
+    def _source_ticks(self, p, box, r, group, names, default, command, purpose, help_text=None,
+                      lb_key=None, lb_notes=None):
+        """
+        The sources for one Play option, one per line, with an optional ? beside
+        the first. lb_key: the ListenBrainz algorithm dropdown, on its line.
+        """
+        frame = tk.Frame(box)
+        frame.grid(row=r, column=0, columnspan=6, sticky="w", pady=(2, 4))
         chosen = [x.strip().lower() for x in p.env.get(group, default).split(",") if x.strip()]
         p.vars[group] = {}
-        for code, label in names:
+        for n, (code, label) in enumerate(names):
+            line = tk.Frame(frame)
+            line.pack(anchor="w", pady=1)
             v = tk.BooleanVar(value=code in chosen)
             p.vars[group][code] = v
-            tick = ttk.Checkbutton(row, text=label, variable=v, command=command, style="Big.TCheckbutton")
-            tick.pack(side="left", padx=(0, 14))
+
+            def ticked(command=command):
+                self._sync_listenbrainz(p)
+                command()
+            tick = ttk.Checkbutton(line, text=label, variable=v, command=ticked, style="Big.TCheckbutton")
+            tick.pack(side="left")
             self._source_boxes.append((tick, code, label, purpose))
-        if help_text:
-            help_mark(row, help_text).pack(side="left", padx=(2, 0))
+            if help_text and n == 0:
+                help_mark(line, help_text).pack(side="left", padx=(10, 0))
+            if code == "listenbrainz" and lb_key:
+                p.vars[lb_key] = tk.StringVar(value=p.env.get(lb_key, "alltime"))
+                cb = ttk.Combobox(line, textvariable=p.vars[lb_key], values=["alltime", "recent"],
+                                  state="readonly", width=9)
+                cb.pack(side="left", padx=(14, 0))
+                cb.bind("<<ComboboxSelected>>", p.save)
+                help_mark(line, lb_notes).pack(side="left", padx=(8, 0))
+                p.lb_cbs.append((v, cb))
         return r + 1
+
+    def _sync_listenbrainz(self, p):
+        """Each ListenBrainz algorithm dropdown greys out while ListenBrainz is unticked."""
+        for tick, cb in getattr(p, "lb_cbs", []):
+            cb.state(["!disabled"] if tick.get() else ["disabled"])
+
+    def _moderator_section(self, p, page, group):
+        """An AI Moderator tick for one Play option, greyed out until there's an Anthropic key."""
+        box = section(page, "AI Moderator",
+                      "Checks each playlist (and each Drift round) once with Claude Haiku, and removes tracks "
+                      "that clash with the seed's tone, energy and mood. Genre is never a reason on its own. "
+                      "It keeps anything it's unsure about, removes at most a fifth of the tracks, and logs "
+                      "each removal with its reason. Uses a little Anthropic credit each time, a fraction of "
+                      "a penny per playlist.")
+        key = f"AI_MODERATOR_{group.upper()}"
+        p.vars[key] = tk.BooleanVar(value=engine.moderator_settings(p.env.get)[group])
+
+        def ticked():
+            if p.vars[key].get():
+                warn_moderator_once(self)
+            p.save()
+        tick = ttk.Checkbutton(box, text="Check each playlist with the AI Moderator", variable=p.vars[key],
+                               command=ticked)
+        tick.grid(row=0, column=0, sticky="w")
+        Tooltip(tick, NO_KEY_TEXT, when=lambda: not self._anthropic_key())
+        p.moderator_boxes.append(tick)
 
     def _fill_sources(self, tab, p):
         p.loading = True
+        p.moderator_boxes = []
+        pages = self._option_tabs(tab, "sources", PLAY_OPTIONS[:3])   # vibe playlists always come from the AI
+        p.lb_cbs = []
 
         def similar_changed():
             sync_agreement(p, "SIMILAR_SOURCES", "SIMILAR_MIN_AGREEMENT", "agree_cb", 5)
@@ -609,12 +727,15 @@ class SettingsTab(tk.Frame):
             p.save()
 
         # --- Similar Artists ---
-        box = section(tab, "Similar Artists")
-        r = self._source_ticks(p, box, 0, "SIMILAR_SOURCES", SOURCE_NAMES, "lastfm", similar_changed, "similar",
+        box = section(pages["artists"], "Sources",
                                "YouTube suggests from the playing track, using YouTube Music's up next queue. "
                                "No key needed. Ticked on its own, it plays YouTube's queue as is, matched against "
                                "your library. Ticked with other sources, its artists join the blend. It's an "
                                "unofficial route, so it may break now and then.")
+        r = self._source_ticks(p, box, 0, "SIMILAR_SOURCES", SOURCE_NAMES, "lastfm", similar_changed, "similar",
+                               lb_key="LISTENBRAINZ_ALGORITHM",
+                               lb_notes="alltime: from all listening history; leans toward well-known artists.\n"
+                                        "recent: what people are playing alongside this artist right now.")
         # How many sources must agree. Replaced the old on/off tick box; an old
         # on/off setting carries over (on -> 2, off -> Off).
         legacy_on = p.env.get("SIMILAR_REQUIRE_AGREEMENT", "1") in ("1", "true", "yes")
@@ -627,17 +748,16 @@ class SettingsTab(tk.Frame):
         help_mark(row, "How many sources must agree before an artist is picked. Higher means a smoother "
                        "playlist with fewer wildcards, but less chance of discovering something new. "
                        "Tip: try single sources on their own before blending.").pack(side="left", padx=(8, 0))
-        r += 1
-        self._listenbrainz_row(p, box, r, "LISTENBRAINZ_ALGORITHM",
-                               "alltime: from all listening history; leans toward well-known artists.\n"
-                               "recent: what people are playing alongside this artist right now.")
+        self._moderator_section(p, pages["artists"], "artists")
 
         # --- Similar Tracks: its own sources and agreement ---
-        box = section(tab, "Similar Tracks")
+        box = section(pages["tracks"], "Sources",
+                      "Tracks like the seed track, for the Similar Tracks button. No key needed for "
+                      "ListenBrainz or YouTube.")
         r = self._source_ticks(p, box, 0, "SIMILAR_TRACK_SOURCES", TRACK_SOURCE_NAMES, "lastfm,listenbrainz,youtube",
-                               tracks_changed, "similar",
-                               "Tracks like the seed track, for the Similar Tracks button. No key needed for "
-                               "ListenBrainz or YouTube.")
+                               tracks_changed, "similar", lb_key="LISTENBRAINZ_TRACK_ALGORITHM",
+                               lb_notes="alltime: from all listening history.\n"
+                                        "recent: roughly the last six months; older songs may find fewer matches.")
         start = p.env.get("SIMILAR_TRACK_MIN_AGREEMENT", "2").strip() or "2"
         p.vars["SIMILAR_TRACK_MIN_AGREEMENT"] = tk.StringVar(value="Off" if start in ("0", "1") else start)
         row = self._line(box, r, "Sources that must agree", pady=(10, 0))
@@ -648,40 +768,19 @@ class SettingsTab(tk.Frame):
         help_mark(row, "How many sources must agree on a track before it's used. If too few agreed tracks "
                        "are in your library, the agreement is relaxed a step at a time, and the log says so."
                   ).pack(side="left", padx=(8, 0))
-        r += 1
-        self._listenbrainz_row(p, box, r, "LISTENBRAINZ_TRACK_ALGORITHM",
-                               "alltime: from all listening history.\n"
-                               "recent: roughly the last six months; older songs may find fewer matches.")
+        self._moderator_section(p, pages["tracks"], "tracks")
 
         # --- Artist's Top Tracks ---
-        box = section(tab, "Artist's Top Tracks")
-        self._source_ticks(p, box, 0, "TOP_TRACK_SOURCES", TOP_SOURCE_NAMES, "lastfm", p.save, "top",
-                           "More services means richer, more varied playlists, but slower; fewer is quicker. "
+        box = section(pages["top"], "Sources",
+                      "More services means richer, more varied playlists, but slower; fewer is quicker. "
                            "ListenBrainz is the slowest source on a first run, because its lookups are limited "
-                           "to one a second. Repeat runs are quick.")
-
-        # --- AI Moderator ---
-        box = section(tab, "AI Moderator",
-                      "Checks each playlist (and each Drift round) once with Claude Haiku, and removes tracks "
-                      "that clash with the seed's tone, energy and mood. Genre is never a reason on its own. "
-                      "It keeps anything it's unsure about, removes at most a fifth of the tracks, and logs "
-                      "each removal with its reason. Uses a little Anthropic credit each time, a fraction of "
-                      "a penny per playlist.")
-        p.vars["AI_MODERATOR"] = tk.BooleanVar(value=p.env.get("AI_MODERATOR", "0") in ("1", "true", "yes"))
-
-        def moderator_ticked():
-            if p.vars["AI_MODERATOR"].get():
-                warn_moderator_once(self)
-            p.save()
-        p.moderator_box = ttk.Checkbutton(box, text="Check each playlist with the AI Moderator",
-                                          variable=p.vars["AI_MODERATOR"], command=moderator_ticked)
-        p.moderator_box.grid(row=0, column=0, sticky="w")
-        Tooltip(p.moderator_box, NO_KEY_TEXT, when=lambda: not self._anthropic_key())
+                      "to one a second. Repeat runs are quick.")
+        self._source_ticks(p, box, 0, "TOP_TRACK_SOURCES", TOP_SOURCE_NAMES, "lastfm", p.save, "top")
 
         p.resync = lambda: (sync_agreement(p, "SIMILAR_SOURCES", "SIMILAR_MIN_AGREEMENT", "agree_cb", 5),
                             sync_agreement(p, "SIMILAR_TRACK_SOURCES", "SIMILAR_TRACK_MIN_AGREEMENT",
                                            "track_agree_cb", 99),
-                            self._sync_moderator_box(p))
+                            self._sync_moderator_box(p), self._sync_listenbrainz(p))
         p.resync()
         p.loading = False
 
@@ -690,23 +789,29 @@ class SettingsTab(tk.Frame):
         return (var.get().strip() if var is not None else "") or engine.ANTHROPIC_API_KEY
 
     def _sync_moderator_box(self, p):
-        """Greyed out until there's an Anthropic key."""
-        p.moderator_box.state(["!disabled"] if self._anthropic_key() else ["disabled"])
+        """Every AI Moderator tick is greyed out until there's an Anthropic key."""
+        for tick in getattr(p, "moderator_boxes", []):
+            tick.state(["!disabled"] if self._anthropic_key() else ["disabled"])
 
     # --- the Playlist sections ---
 
     def _fill_playlist(self, tab, p):
         """
-        Playlist settings grouped under the Play-tab mode each one belongs to,
-        one boxed section per mode, so the labels don't need to repeat the mode name.
+        Playlist settings in one tab per Play option: the playlist itself, then
+        Drift, Non-stop and Hidden Tracks, each in its own boxed section.
         """
         p.loading = True
-        p.drift = {}          # group -> (on, using, rounds, (dropdowns))
-        p.played_boxes = {}   # group -> its days box
+        p.drift = {}           # group -> (on, using, rounds, (dropdowns))
+        p.played_boxes = {}    # group -> its days box
+        p.closer_sbs = {}      # GROUP -> its minutes box
+        p.nonstop_parts = {}   # GROUP -> (its choices, the song-count dropdown or None)
+        pages = self._option_tabs(tab, "playlist")
+        nonstop_cfg = engine.nonstop_settings(p.env.get)
+        closer_cfg = engine.closer_settings(p.env.get)
         where = {}     # the box being filled and its next row
 
-        def begin(title, help_text=None):
-            where["box"], where["r"] = section(tab, title, help_text), 0
+        def begin(group, title, help_text=None):
+            where["box"], where["r"] = section(pages[group], title, help_text), 0
 
         def place(widget, pady=4):
             """Puts a label-less row (a tick box and friends) across the box."""
@@ -741,37 +846,6 @@ class SettingsTab(tk.Frame):
                 help_mark(cell, help_text).pack(side="left", padx=(8, 0))
             where["r"] += 1
 
-        def drift(group):
-            """The Drift tick box and its ?, then Drift using and Rounds."""
-            box = where["box"]
-            cfg = drift_values(p.env, group)
-            on = tk.BooleanVar(value=cfg["on"])
-            using = tk.StringVar(value="Similar tracks" if cfg["using"] == "tracks" else "Similar artists")
-            rounds = tk.StringVar(value=str(cfg["rounds"]))
-            head = tk.Frame(box)
-
-            def toggled():
-                sync_drift(p)
-                p.save()
-            ttk.Checkbutton(head, text="Drift", variable=on, command=toggled).pack(side="left")
-            help_mark(head, "If a playlist comes up short, search again using what's already been found, "
-                            "until the playlist reaches its length. More rounds fill more gaps but can wander "
-                            "further from where you started.").pack(side="left", padx=(8, 0))
-            place(head, pady=(10, 2))
-            row = tk.Frame(box)
-            tk.Label(row, text="Drift using").pack(side="left")
-            using_cb = ttk.Combobox(row, textvariable=using, values=["Similar tracks", "Similar artists"],
-                                    state="readonly", width=14)
-            using_cb.pack(side="left", padx=(6, 18))
-            tk.Label(row, text="Rounds").pack(side="left")
-            rounds_cb = ttk.Combobox(row, textvariable=rounds, values=[str(n) for n in range(1, 7)],
-                                     state="readonly", width=3)
-            rounds_cb.pack(side="left", padx=(6, 0))
-            for cb in (using_cb, rounds_cb):
-                cb.bind("<<ComboboxSelected>>", p.save)
-            place(row, pady=(0, 4))
-            p.drift[group] = (on, using, rounds, (using_cb, rounds_cb))
-
         def recent(group):
             """Skip tracks played in the last [n] days (1 by default), with its ?."""
             name = f"SKIP_PLAYED_{group.upper()}"
@@ -796,9 +870,140 @@ class SettingsTab(tk.Frame):
             p.played_boxes[group] = days
             place(row, pady=(8, 4))
 
+        def drift(group):
+            """The Drift section: its tick box, then Drift using and Rounds."""
+            note = ("If a playlist comes up short, search again using what's already been found, "
+                    "until the playlist reaches its length. More rounds fill more gaps but can "
+                    "wander further from where you started.")
+            if group == "vibe":
+                note += ("\nAI asks again with your description, leaving out what's already been found or "
+                         "tried. Each round uses a little Anthropic credit, so it only runs when you pick it.")
+            begin(group, "Drift", note)
+            box = where["box"]
+            cfg = drift_values(p.env, group)
+            on = tk.BooleanVar(value=cfg["on"])
+            using = tk.StringVar(value=option_label(DRIFT_USING_OPTIONS, cfg["using"]))
+            rounds = tk.StringVar(value=str(cfg["rounds"]))
+
+            def toggled():
+                sync_drift(p)
+                p.save()
+            place(ttk.Checkbutton(box, text="Search again when a playlist comes up short", variable=on,
+                                  command=toggled), pady=(0, 2))
+            row = tk.Frame(box)
+            tk.Label(row, text="Drift using").pack(side="left")
+            choices = DRIFT_USING_OPTIONS if group == "vibe" else DRIFT_USING_OPTIONS[:2]
+            using_cb = ttk.Combobox(row, textvariable=using, values=[shown for _, shown in choices],
+                                    state="readonly", width=14)
+            using_cb.pack(side="left", padx=(6, 18))
+            tk.Label(row, text="Rounds").pack(side="left")
+            rounds_cb = ttk.Combobox(row, textvariable=rounds, values=[str(n) for n in range(1, 7)],
+                                     state="readonly", width=3)
+            rounds_cb.pack(side="left", padx=(6, 0))
+            for cb in (using_cb, rounds_cb):
+                cb.bind("<<ComboboxSelected>>", p.save)
+            place(row, pady=(0, 4))
+            p.drift[group] = (on, using, rounds, (using_cb, rounds_cb))
+
+        def nonstop(group):
+            """The Non-stop section: its tick box, then how this option's playlists carry on."""
+            g, cfg = group.upper(), nonstop_cfg[group]
+            begin(group, "Non-stop",
+                  "When the last track of a playlist 24bit7 built starts playing, more are added to the end, "
+                  "so the music doesn't stop. A playlist keeps following these settings all evening, even "
+                  "after it carries on as Similar Tracks or Similar Artists. Only playlists 24bit7 sent are "
+                  "topped up: an album or playlist you start in JRiver yourself ends as normal.")
+            box = where["box"]
+            p.vars[f"NONSTOP_{g}"] = tk.BooleanVar(value=cfg["on"])
+
+            def toggled():
+                sync_nonstop(p)
+                p.save()
+            place(ttk.Checkbutton(box, text="Keep going when the playlist reaches its last track",
+                                  variable=p.vars[f"NONSTOP_{g}"], command=toggled), pady=(0, 2))
+            body = tk.Frame(box)
+            place(body, pady=(0, 4))
+            rows = {"r": 0}
+
+            def option(label, key, options, current, help_text):
+                r = rows["r"]
+                tk.Label(body, text=label, anchor="w").grid(row=r, column=0, sticky="w", pady=4)
+                p.vars[key] = tk.StringVar(value=option_label(options, current))
+                cell = tk.Frame(body)
+                cell.grid(row=r, column=1, sticky="w", padx=(12, 0))
+                cb = ttk.Combobox(cell, textvariable=p.vars[key], values=[shown for _, shown in options],
+                                  state="readonly", width=22)
+                cb.pack(side="left")
+                cb.bind("<<ComboboxSelected>>", p.save)
+                help_mark(cell, help_text).pack(side="left", padx=(8, 0))
+                rows["r"] += 1
+
+            rest_cb = None
+            if group == "top":
+                row = tk.Frame(body)
+                row.grid(row=rows["r"], column=0, columnspan=2, sticky="w", pady=(2, 4))
+                rows["r"] += 1
+                p.vars["NONSTOP_TOP_REST"] = tk.BooleanVar(
+                    value=p.env.get("NONSTOP_TOP_REST", "1") in ("1", "true", "yes"))
+                count = p.env.get("NONSTOP_TOP_REST_COUNT", "20").strip()
+                p.vars["NONSTOP_TOP_REST_COUNT"] = tk.StringVar(
+                    value="Unlimited" if count.lower() == "unlimited" else count)
+
+                def rest_toggled():
+                    sync_nonstop(p)
+                    p.save()
+                ttk.Checkbutton(row, text="First, the rest of the artist, up to",
+                                variable=p.vars["NONSTOP_TOP_REST"], command=rest_toggled).pack(side="left")
+                rest_cb = ttk.Combobox(row, textvariable=p.vars["NONSTOP_TOP_REST_COUNT"],
+                                       values=["10", "20", "30", "50", "100", "Unlimited"],
+                                       state="readonly", width=10)
+                rest_cb.pack(side="left", padx=(6, 6))
+                rest_cb.bind("<<ComboboxSelected>>", p.save)
+                tk.Label(row, text="songs").pack(side="left")
+                help_mark(row, "When the top tracks finish, the artist's other songs in your library play "
+                               "next, shuffled. After that, their most popular track seeds a new playlist. "
+                               "Unticked, it goes straight to the new playlist.").pack(side="left", padx=(8, 0))
+            if group == "vibe":
+                option("Continues with", "NONSTOP_VIBE_WITH", NONSTOP_WITH_OPTIONS, cfg["with"],
+                       "More of the same vibe asks the AI again with the original description (a little "
+                       "Anthropic credit each time). Similar artists or Similar tracks carry on from the "
+                       "music, with no credit used.")
+            else:
+                option("Then play using" if group == "top" else "Play using", f"NONSTOP_{g}_USING",
+                       NONSTOP_USING_OPTIONS, cfg["using"], "What each top-up is built with.")
+            option("Reseed from", f"NONSTOP_{g}_RESEED", NONSTOP_RESEED_OPTIONS, cfg["reseed"],
+                   "Last track: each top-up follows on from where the music has got to, so it wanders as "
+                   "the evening goes on.\nSecond track: each top-up seeds from the first pick after the "
+                   "original seed, so the music stays close to how it started.")
+            p.nonstop_parts[g] = (body, rest_cb)
+
+        def hidden(group):
+            """The Hidden Tracks section for one Play option."""
+            g = group.upper()
+            on, minutes = closer_cfg[group]
+            begin(group, "Hidden Tracks")
+            row = tk.Frame(where["box"])
+            p.vars[f"SKIP_LONG_CLOSERS_{g}"] = tk.BooleanVar(value=on)
+            p.vars[f"LONG_CLOSER_MINUTES_{g}"] = tk.StringVar(value=str(minutes))
+            sb = tk.Spinbox(row, from_=3, to=30, textvariable=p.vars[f"LONG_CLOSER_MINUTES_{g}"],
+                            width=4, command=p.save)
+
+            def toggled():
+                sync_long_closers(p)
+                p.save()
+            ttk.Checkbutton(row, text="Skip the last track on an album if it's longer than",
+                            variable=p.vars[f"SKIP_LONG_CLOSERS_{g}"], command=toggled).pack(side="left")
+            sb.pack(side="left", padx=(6, 6))
+            tk.Label(row, text="minutes").pack(side="left")
+            help_mark(row, "Long album closers often hide a bonus track after a long silence. Albums, songs "
+                           "and playlists you ask for by name always play in full.").pack(side="left", padx=(8, 0))
+            p.vars[f"LONG_CLOSER_MINUTES_{g}"].trace_add("write", p.save)
+            p.closer_sbs[g] = sb
+            place(row)
+
         # --- Similar Artists ---
-        begin("Similar Artists")
-        spin("Number of tracks", "SIMILAR_ARTIST_TRACK_COUNT", "30", 5, 100)
+        begin("artists", "Playlist")
+        spin("Number of tracks", "SIMILAR_ARTIST_TRACK_COUNT", "30", 5, 100, TARGET_HELP)
         spin("Number of artists", "SIMILAR_ARTIST_LIMIT", "20", 1, 50)
         pool_var, _ = spin("Number of artist's top tracks", "TRACKS_PER_ARTIST_POOL", "5", 1, 20)
         _, p.pick_sb = spin("Tracks per artist selection", "TRACKS_PER_ARTIST_PICK", "3", 1, 20,
@@ -809,55 +1014,42 @@ class SettingsTab(tk.Frame):
         pool_var.trace_add("write", lambda *a: sync_pick_limit(p))
         recent("artists")
         drift("artists")
+        nonstop("artists")
+        hidden("artists")
 
         # --- Similar Tracks ---
-        begin("Similar Tracks")
-        spin("Number of tracks", "SIMILAR_TRACK_COUNT", "30", 5, 100)
+        begin("tracks", "Playlist")
+        spin("Number of tracks", "SIMILAR_TRACK_COUNT", "30", 5, 100, TARGET_HELP)
         spin("Most tracks per artist", "SIMILAR_TRACK_PER_ARTIST", "3", 1, 20, "Includes the seed artist.")
         choice("Order", "SIMILAR_TRACK_ORDER", "shuffled", ["shuffled", "similar first"],
                "Similar first keeps the order the sources agreed on, strongest matches first. "
                "Shuffled mixes them up.")
         recent("tracks")
         drift("tracks")
+        nonstop("tracks")
+        hidden("tracks")
 
         # --- Artist's Top Tracks ---
-        begin("Artist's Top Tracks")
-        spin("Number of tracks (1-20)", "TOP_TRACKS_COUNT", "10", 1, 20)
+        begin("top", "Playlist")
+        spin("Number of tracks (1-20)", "TOP_TRACKS_COUNT", "10", 1, 20, TOP_TARGET_HELP)
         choice("Order", "TOP_TRACKS_ORDER", "popular", ["popular", "reverse", "random"],
                "popular: most played first\nreverse: least played first\nrandom: shuffled")
         recent("top")
+        nonstop("top")
+        hidden("top")
 
         # --- Vibe Playlist ---
-        begin("Vibe Playlist")
-        spin("Number of tracks", "VIBE_TRACK_COUNT", "20", 5, 100)
+        begin("vibe", "Playlist")
+        spin("Number of tracks", "VIBE_TRACK_COUNT", "20", 5, 100, TARGET_HELP)
         recent("vibe")
         drift("vibe")
+        nonstop("vibe")
+        hidden("vibe")
 
-        # --- Hidden Tracks ---
-        begin("Hidden Tracks")
-        row = tk.Frame(where["box"])
-        p.vars["SKIP_LONG_CLOSERS"] = tk.BooleanVar(value=p.env.get("SKIP_LONG_CLOSERS", "1") == "1")
-        p.vars["LONG_CLOSER_MINUTES"] = tk.StringVar(value=p.env.get("LONG_CLOSER_MINUTES", "6"))
-        p.closer_sb = tk.Spinbox(row, from_=3, to=30, textvariable=p.vars["LONG_CLOSER_MINUTES"],
-                                 width=4, command=p.save)
-
-        def closers_toggled():
-            sync_long_closers(p)
-            p.save()
-        ttk.Checkbutton(row, text="Skip the last track on an album if it's longer than",
-                        variable=p.vars["SKIP_LONG_CLOSERS"], command=closers_toggled).pack(side="left")
-        p.closer_sb.pack(side="left", padx=(6, 6))
-        tk.Label(row, text="minutes").pack(side="left")
-        help_mark(row, "Long album closers often hide a bonus track after a long silence. This applies to "
-                       "every playlist 24bit7 builds. Albums, songs and playlists you ask for by name always "
-                       "play in full.").pack(side="left", padx=(8, 0))
-        p.vars["LONG_CLOSER_MINUTES"].trace_add("write", p.save)
-        place(row)
-
-        p.resync = lambda: (sync_pick_limit(p), sync_drift(p), sync_long_closers(p), sync_played(p))
+        p.resync = lambda: (sync_pick_limit(p), sync_drift(p), sync_long_closers(p), sync_played(p),
+                            sync_nonstop(p))
         p.resync()
         p.loading = False
-
 
     def _build_keys(self, nb):
         tab = self._scroll_tab(nb, "Keys")
@@ -976,6 +1168,127 @@ class SettingsTab(tk.Frame):
         self._show_startup_note()
         if not sys.platform.startswith("win"):
             startup_box.state(["disabled"])
+
+        # --- Keyboard Shortcuts: global keys a remote can send, even with 24bit7 in the tray ---
+        box = section(tab, "Keyboard Shortcuts",
+                      "Shortcuts work anywhere in Windows, even while 24bit7 is minimised or in the tray, so a "
+                      "remote that sends key presses (a Flirc, a Harmony, a phone app) can start a playlist.\n"
+                      "Click a box and press the keys you want; Esc cancels. Letters and numbers need Ctrl, Alt, "
+                      "Shift or Win with them; F-keys and media keys can be used on their own.\n"
+                      "Each shortcut seeds from the zone's current track (paused or stopped counts), or from the "
+                      "last track played when its Playing Now is empty, and plays to that zone. A zone with an "
+                      "Alexa device that has Own settings uses that device's settings.")
+        self._build_shortcuts(box)
+
+    # --- Keyboard Shortcuts ------------------------------------------------------
+
+    def _build_shortcuts(self, box):
+        self.hotkey_vars, self.hotkey_notes = {}, {}
+        self._hotkey_capturing, self._hotkey_held = None, set()
+        if not hotkeys.AVAILABLE:
+            tk.Label(box, text="Keyboard shortcuts need Windows.", fg=PALETTE["help_fg"],
+                     font=HELP_FONT).grid(row=0, column=0, sticky="w")
+            return
+        tk.Label(box, text="Shortcuts apply to which zone:", anchor="w").grid(row=0, column=0, sticky="w", pady=4)
+        self.hotkey_zone_var = tk.StringVar(value=self.env.get("HOTKEY_ZONE", "") or hotkeys.NOW_PLAYING_ZONE)
+        zone_cb = ttk.Combobox(box, textvariable=self.hotkey_zone_var, state="readonly", width=28,
+                               values=[hotkeys.NOW_PLAYING_ZONE])
+        zone_cb.config(postcommand=lambda: zone_cb.config(
+            values=[hotkeys.NOW_PLAYING_ZONE] + engine.zone_names(include_hidden=True)))
+        zone_cb.grid(row=0, column=1, columnspan=3, sticky="w", padx=(12, 0))
+        zone_cb.bind("<<ComboboxSelected>>", lambda e: self._hotkey_zone_changed(zone_cb))
+        for r, (code, label) in enumerate(hotkeys.ACTIONS, start=1):
+            tk.Label(box, text=label, anchor="w").grid(row=r, column=0, sticky="w", pady=3)
+            var = tk.StringVar(value=self.env.get(f"HOTKEY_{code}", ""))
+            entry = tk.Entry(box, textvariable=var, width=24, state="readonly", cursor="hand2")
+            entry.grid(row=r, column=1, sticky="w", padx=(12, 0))
+            entry.bind("<Button-1>", lambda e: e.widget.focus_set())
+            entry.bind("<FocusIn>", lambda e, c=code: self._hotkey_capture_start(c))
+            entry.bind("<FocusOut>", lambda e, c=code: self._hotkey_capture_end(c))
+            entry.bind("<KeyPress>", lambda e, c=code: self._hotkey_key(c, e, True))
+            entry.bind("<KeyRelease>", lambda e, c=code: self._hotkey_key(c, e, False))
+            tk.Button(box, text="Clear", width=7, command=lambda c=code: self._hotkey_clear(c)).grid(
+                row=r, column=2, sticky="w", padx=(8, 0))
+            note = tk.Label(box, text="", fg="#a33", font=HELP_FONT, anchor="w", justify="left")
+            note.grid(row=r, column=3, sticky="w", padx=(10, 0))
+            self.hotkey_vars[code], self.hotkey_notes[code] = var, note
+
+    def refresh_hotkey_notes(self, problems=None):
+        """Shows next to each box any shortcut Windows wouldn't take."""
+        problems = hotkeys.errors() if problems is None else problems
+        for code, note in getattr(self, "hotkey_notes", {}).items():
+            note.config(text=problems.get(code, ""), fg="#a33")
+
+    def _hotkey_restart(self):
+        self.refresh_hotkey_notes(hotkeys.restart())
+
+    def _hotkey_zone_changed(self, combo):
+        value = self.hotkey_zone_var.get()
+        try:
+            write_env({"HOTKEY_ZONE": "" if value == hotkeys.NOW_PLAYING_ZONE else value})
+        except Exception as e:
+            messagebox.showerror("Save failed", str(e), parent=self)
+        combo.selection_clear()
+
+    def _hotkey_save(self, code, combo):
+        self.hotkey_vars[code].set(combo)
+        try:
+            write_env({f"HOTKEY_{code}": combo})   # blank, not removed, so the change is picked up at once
+        except Exception as e:
+            messagebox.showerror("Save failed", str(e), parent=self)
+
+    def _hotkey_clear(self, code):
+        self._hotkey_save(code, "")
+        if self._hotkey_capturing is None:
+            self._hotkey_restart()
+
+    def _hotkey_capture_start(self, code):
+        """While a box is being set, every shortcut is released, so pressing one doesn't start a playlist."""
+        self._hotkey_capturing, self._hotkey_held = code, set()
+        hotkeys.stop()
+        self.hotkey_notes[code].config(text="Press the keys you want (Esc to cancel)", fg=PALETTE["help_fg"])
+
+    def _hotkey_capture_end(self, code):
+        if self._hotkey_capturing != code:
+            return
+        self._hotkey_capturing, self._hotkey_held = None, set()
+        self._hotkey_restart()
+
+    def _hotkey_key(self, code, event, down):
+        """Builds the shortcut from the keys held: modifiers first, then the key itself."""
+        vk = event.keycode
+        if vk in hotkeys.MODIFIER_VKS:
+            (self._hotkey_held.add if down else self._hotkey_held.discard)(hotkeys.MODIFIER_VKS[vk])
+            return "break"
+        if not down:
+            return "break"
+        mods = set(self._hotkey_held)
+        if event.state & 0x0001:
+            mods.add("Shift")
+        if event.state & 0x0004:
+            mods.add("Ctrl")
+        if event.state & 0x20000:
+            mods.add("Alt")
+        note = self.hotkey_notes[code]
+        if event.keysym == "Escape" and not mods:
+            self.focus_set()   # cancel: the box keeps what it had
+            return "break"
+        if event.keysym in ("Tab", "ISO_Left_Tab") and not mods:
+            return None        # Tab still moves to the next control
+        if hotkeys.key_name(vk) is None:
+            note.config(text="That key can't be used for a shortcut.", fg="#a33")
+            return "break"
+        if not mods and hotkeys.needs_modifier(vk):
+            note.config(text="Add Ctrl, Alt, Shift or Win to that key.", fg="#a33")
+            return "break"
+        combo = hotkeys.combo_text(mods, vk)
+        for other, var in self.hotkey_vars.items():
+            if other != code and var.get() == combo:
+                note.config(text=f"Already used for {hotkeys.LABELS[other]}.", fg="#a33")
+                return "break"
+        self._hotkey_save(code, combo)
+        self.focus_set()   # done: leaving the box registers the shortcuts again
+        return "break"
 
     def _startup_toggled(self):
         try:
