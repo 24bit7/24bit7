@@ -6,7 +6,8 @@ It only listens on this PC (127.0.0.1); a tunnel is what connects it to Amazon.
 
   POST /command   header X-24bit7-Key: <VOICE_KEY>
                   body {"intent": "songs_by" | "music_like" | "genre" |
-                                  "tracks_like" | "album" | "song" | "playlist" | "shuffle",
+                                  "tracks_like" | "album" | "song" | "playlist" | "shuffle" |
+                                  "skip" | "who_is_this" | "more_like",
                         "value": "Agnes Obel", "device": "<Alexa device ID>",
                         "zone": "Sonos"}        # zone is optional and beats the device's zone
                   reply {"speech": "Music like Agnes Obel, coming up on Sonos."}
@@ -16,6 +17,8 @@ Alexa gives a skill about eight seconds to answer, so the reply goes back at onc
 and the playlist is built afterwards, one build at a time, through the Play tab.
 Albums, songs, playlists and shuffles need no building: they replace what's playing
 on the zone straight away, matched against the library held in library.py.
+Skip, who is this and more like this need no value: they work on what the
+device's zone is playing.
 Each Alexa device is remembered in the database with the zone it plays to.
 """
 
@@ -48,7 +51,10 @@ def _takes_over(zone):
     with _take_lock:
         return _running[0] == zone and not any(n > 0 for z, n in _open.items() if z != zone)
 
-INTENTS = ("songs_by", "music_like", "genre", "tracks_like", "album", "song", "playlist", "shuffle")
+INTENTS = ("songs_by", "music_like", "genre", "tracks_like", "album", "song", "playlist", "shuffle",
+           "skip", "who_is_this", "more_like")
+ZONE_INTENTS = ("skip", "who_is_this", "more_like")   # no value: they act on what the zone is playing
+THIS_WORDS = ("this", "this one", "this song", "this track", "it")   # "tracks like this" = more like this
 INSTANT = ("album", "song", "playlist", "shuffle")   # played straight away, nothing to build
 SHUFFLE_CAP = 400                            # most tracks a shuffle sends to JRiver
 TEST_DEVICE = "24bit7-settings-test"
@@ -210,7 +216,9 @@ def _job(intent, value, zone, profile=None, device=None):
             engine.refresh_settings_if_changed()
             engine.OUTPUT_OVERRIDE = zone
             engine.use_profile(profile)
-            engine.VOICE_TAKEOVER = True
+            # More like this keeps the current track playing and replaces what's queued after it,
+            # so it uses the Play tab's rule (queue after a busy zone) rather than taking the zone over
+            engine.VOICE_TAKEOVER = intent != "more_like"
             engine.CANCEL_CHECK = superseded
             engine.FILTER_DEVICE = device   # Settings > Filters ticked for this device apply
             _build(intent, value, guarded)
@@ -243,6 +251,8 @@ def _build(intent, value, report):
         artist, title = value
         engine.create_similar_tracks_playlist(report=report,
                                               seed_info=engine.typed_seed_info(artist, title))
+    elif intent == "more_like":   # value: the zone's track when the command was heard
+        engine.create_similar_tracks_playlist(report=report, seed_info=value)
     else:
         engine.create_vibe_playlist(value, report=report)
 
@@ -351,6 +361,86 @@ def _tracks_like_seed(value):
     return None, ("ask", speech, {"ask": "tracks_like", "title": title})
 
 
+# --- skip, who is this, more like this ----------------------------------------
+
+def _speakable(info):
+    """
+    (title, artist, album) as Alexa should say them. Remaster, soundtrack and
+    other version suffixes are dropped, and an 'Artist - Title' name (how
+    compilation series are tagged, with the series as the artist) is split.
+    """
+    import re
+    name = engine.normalise_punctuation(info.get("Name") or "").strip()
+    name = re.sub(r"\s*[\(\[][^\)\]]*[\)\]]", "", name)                         # (Remastered 2011), [Live]
+    name = re.sub(r"\s+-\s+from\s.*$", "", name, flags=re.I)                     # - From 'Casino Royale' Soundtrack
+    name = re.sub(rf"\s+-\s+[^-]*\b{engine.VERSION_WORDS}\b[^-]*$", "", name, flags=re.I)   # - 2012 Remaster
+    name = re.sub(r"\s*(feat\.|featuring|ft\.)\s.*$", "", name, flags=re.I).strip()
+    artists = [a for a in engine.split_values(info.get("Artist")) if a != "Unknown"]
+    artist = " and ".join(library.spoken(a) for a in artists[:2])
+    album = (info.get("Album") or "").strip()
+    if album == "Unknown":
+        album = ""
+    if " - " in name:   # compilation tagging: the real artist is in the name
+        left, right = (part.strip() for part in name.split(" - ", 1))
+        if left and right:
+            artist, name = library.spoken(left), right
+    return name or "this track", artist, album
+
+
+def _zone_command(intent, device, body):
+    """Skip, who is this and more like this, on the zone of the device that heard it."""
+    name, zone = _hear_device(device or "unknown device")
+    zone = (body.get("zone") or "").strip() or zone
+    if not zone:
+        return "problem", "This device isn't set up yet. Assign it to a zone in 24bit7, under Settings, Voice Commands.", {}
+    zid = engine.zone_id(zone)
+    if zid is None:
+        return "problem", f"I can't find the {zone} zone in JRiver.", {}
+    info = engine.get_playing_info(zid)
+    if info is None:
+        return "problem", "I couldn't reach JRiver. Is it running on the media PC?", {}
+    try:
+        pos, count = int(info.get("PlayingNowPosition") or -1), int(info.get("PlayingNowTracks") or 0)
+    except ValueError:
+        pos, count = -1, 0
+    if pos < 0 or count == 0 or engine.zone_state(zid) == 0:
+        return "problem", f"Nothing's playing on {zone}.", {}
+
+    if intent == "skip":
+        if pos + 1 >= count:
+            return "problem", "Nothing to skip to.", {}
+        try:
+            r = requests.get(f"{engine.JRIVER_BASE}/Playback/Next", params={"Zone": zid},
+                             auth=engine.AUTH, timeout=10)
+            ok = r.status_code == 200
+        except Exception:
+            ok = False
+        if not ok:
+            return "problem", "JRiver didn't skip. Is it running on the media PC?", {}
+        print(f"[Voice] {name}: skipped {info.get('Name')} on {zone}")
+        return "started", "Skipped.", {}
+
+    title, artist, album = _speakable(info)
+    if intent == "who_is_this":
+        speech = f"That's {title}" + (f" by {artist}" if artist else "")
+        speech += f", from {album}." if album and album.lower() != title.lower() else "."
+        print(f"[Voice] {name}: who is this on {zone}: {speech}")
+        return "said", speech, {}
+
+    # more like this: Similar Tracks seeded from the zone's track, queued after it
+    if _submit is None:
+        return "problem", "24bit7 isn't ready yet. Try again in a moment.", {}
+    seed = dict(info)
+    seed["ZoneID"] = zid
+    shown = f"{title} by {artist}" if artist else title
+    profile = device_profile(device or "unknown device")
+    _submit(_job("more_like", seed, zone, profile, device or "unknown device"),
+            f"Voice, {name}: more like {shown}, to {zone}" + (", with its own settings" if profile else ""))
+    if _is_busy() and not _takes_over(zone):
+        return "pending", "Please wait, request pending.", {}
+    return "started", f"More like {shown}, coming up on {zone}.", {}
+
+
 ARTIST_CLOSE = 0.85   # how close a heard artist must be to a library artist to use the library's spelling
 
 
@@ -389,6 +479,14 @@ def handle_command(body, busy=False):
         return "problem", "Say songs by, music like, or genre, followed by what you'd like.", {}
     if intent == "song" and value.lower().startswith("by "):   # Alexa heard "songs by" as "song by"
         intent, value = "songs_by", value[3:].strip()
+    if intent in ("tracks_like", "music_like") and value.lower() in THIS_WORDS:   # "songs like this"
+        intent, value = "more_like", ""
+    if intent in ZONE_INTENTS:
+        try:
+            return _zone_command(intent, device, body)
+        except Exception as e:
+            print(f"[Voice] {intent} failed: {e}")
+            return "problem", "I couldn't reach JRiver. Is it running on the media PC?", {}
     if not value:
         missing = {"genre": "the genre", "album": "the album", "song": "the song", "tracks_like": "the song",
                    "playlist": "the playlist"}.get(intent, "the artist")

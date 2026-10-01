@@ -10,6 +10,9 @@ needle drop - the Alexa skill for 24bit7.
     "song <title>"          plays that song now, then stops ("song <title> by <artist>" works too)
     "playlist <name>"       plays one of your JRiver playlists or smartlists now
     "shuffle songs by <artist>"  every track by them, shuffled, now
+    "skip" / "next"         the next track on this device's zone
+    "who is this"           says the track, artist and album playing there
+    "more like this"        Similar Tracks from what's playing, queued after it
 Or in one go: "Alexa, ask needle drop for music like Agnes Obel".
 If several albums or songs share a title, Alexa asks which, and you answer "by <artist>".
 No phrase starts with "play", so Alexa isn't tempted to hand it to a music service.
@@ -46,11 +49,13 @@ except ImportError:
 
 TIMEOUT = 6   # seconds; Alexa gives the whole skill about eight
 HELP = ("Say songs by, music like, or shuffle songs by, then an artist. Genre, then any style you like. "
-        "Tracks like, then a song. Or album, song, or playlist, then its name.")
+        "Tracks like, then a song. Or album, song, or playlist, then its name. "
+        "Or skip, who is this, or more like this.")
 INTENTS = {"SongsByIntent": "songs_by", "MusicLikeIntent": "music_like", "GenreIntent": "genre",
            "TracksLikeIntent": "tracks_like",
            "AlbumIntent": "album", "SongIntent": "song", "PlaylistIntent": "playlist",
            "ShuffleIntent": "shuffle"}
+ZONE_INTENTS = {"SkipIntent": "skip", "WhoIsThisIntent": "who_is_this", "MoreLikeThisIntent": "more_like"}
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -114,6 +119,17 @@ class CommandHandler(AbstractRequestHandler):
         return respond(handler_input, *send(intent, value, device))
 
 
+class ZoneHandler(AbstractRequestHandler):
+    """Skip, who is this, more like this: no slot, they act on what this device's zone is playing."""
+    def can_handle(self, handler_input):
+        return any(ask_utils.is_intent_name(name)(handler_input) for name in ZONE_INTENTS)
+
+    def handle(self, handler_input):
+        intent = ZONE_INTENTS[ask_utils.get_intent_name(handler_input)]
+        device = handler_input.request_envelope.context.system.device.device_id
+        return respond(handler_input, *send(intent, "", device))
+
+
 class ByArtistHandler(AbstractRequestHandler):
     """The answer to "Which artist?" after several albums or songs shared a title."""
     def can_handle(self, handler_input):
@@ -168,7 +184,7 @@ class ErrorHandler(AbstractExceptionHandler):
 
 
 sb = SkillBuilder()
-for handler in (LaunchHandler(), CommandHandler(), ByArtistHandler(), HelpHandler(), StopHandler(),
+for handler in (LaunchHandler(), CommandHandler(), ZoneHandler(), ByArtistHandler(), HelpHandler(), StopHandler(),
                 SessionEndedHandler()):
     sb.add_request_handler(handler)
 sb.add_exception_handler(ErrorHandler())

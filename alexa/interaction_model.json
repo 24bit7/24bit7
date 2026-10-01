@@ -44,6 +44,24 @@
           "samples": ["shuffle songs by {query}", "shuffle music by {query}", "shuffle everything by {query}", "shuffle {query}"]
         },
         {
+          "name": "SkipIntent",
+          "slots": [],
+          "samples": ["skip", "skip this", "skip this one", "skip track", "skip this track", "skip this song",
+                      "next", "next track", "next song"]
+        },
+        {
+          "name": "WhoIsThisIntent",
+          "slots": [],
+          "samples": ["who is this", "who's this", "what is this", "what's this", "what's playing",
+                      "what is playing", "what song is this", "who's playing", "who is playing"]
+        },
+        {
+          "name": "MoreLikeThisIntent",
+          "slots": [],
+          "samples": ["more like this", "more like this one", "more of this", "more songs like this",
+                      "more like this song", "keep this vibe going"]
+        },
+        {
           "name": "ByArtistIntent",
           "slots": [{"name": "query", "type": "AMAZON.SearchQuery"}],
           "samples": ["by {query}", "the one by {query}", "it's by {query}"]
