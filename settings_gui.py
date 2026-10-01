@@ -16,7 +16,7 @@ import sys
 import threading
 import tkinter as tk
 import webbrowser
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox, simpledialog, filedialog
 
 import engine
 import tray
@@ -231,6 +231,8 @@ class ProfilePage:
             out[f"LONG_CLOSER_MINUTES_{g}"] = v[f"LONG_CLOSER_MINUTES_{g}"].get().strip()
             out[f"NONSTOP_{g}"] = "1" if v[f"NONSTOP_{g}"].get() else "0"
             out[f"NONSTOP_{g}_RESEED"] = option_code(NONSTOP_RESEED_OPTIONS, v[f"NONSTOP_{g}_RESEED"].get())
+            out[f"RUN_AFTER_{g}"] = "1" if v[f"RUN_AFTER_{g}"].get() else "0"
+            out[f"RUN_AFTER_{g}_PATH"] = v[f"RUN_AFTER_{g}_PATH"].get().strip()
             if group != "vibe":
                 out[f"NONSTOP_{g}_USING"] = option_code(NONSTOP_USING_OPTIONS, v[f"NONSTOP_{g}_USING"].get())
         out["NONSTOP_VIBE_WITH"] = option_code(NONSTOP_WITH_OPTIONS, v["NONSTOP_VIBE_WITH"].get())
@@ -1576,6 +1578,34 @@ class SettingsTab(tk.Frame):
             p.closer_sbs[g] = sb
             place(row)
 
+        def run_after(group):
+            """The Run After Building section: a file to run once the playlist is in JRiver."""
+            key = f"RUN_AFTER_{group.upper()}"
+            begin(group, "Run After Building")
+            p.vars[key] = tk.BooleanVar(value=p.env.get(key, "0") in ("1", "true", "yes"))
+            p.vars[f"{key}_PATH"] = tk.StringVar(value=p.env.get(f"{key}_PATH", ""))
+            row = tk.Frame(where["box"])
+            ttk.Checkbutton(row, text="Run this file after building", variable=p.vars[key],
+                            command=p.save).pack(side="left")
+            entry = tk.Entry(row, textvariable=p.vars[f"{key}_PATH"], width=48)
+            entry.pack(side="left", padx=(8, 4))
+            entry.bind("<FocusOut>", p.save)
+
+            def browse():
+                path = filedialog.askopenfilename(
+                    parent=self, title="Run after building",
+                    filetypes=[("Programs and scripts", "*.bat *.cmd *.exe *.ps1 *.py *.pyw"), ("All files", "*.*")])
+                if path:
+                    p.vars[f"{key}_PATH"].set(os.path.normpath(path))
+                    p.vars[key].set(True)
+                    p.save()
+            ttk.Button(row, text="Browse...", command=browse).pack(side="left")
+            help_mark(row, "Runs the file once the playlist is in JRiver, added playlists included, and only "
+                           "if the build worked. It runs in the background and isn't told anything about the "
+                           "playlist. A .bat, .exe, PowerShell or Python script all work. Non-stop top-ups "
+                           "don't run it.").pack(side="left", padx=(8, 0))
+            place(row)
+
         # --- Similar Artists ---
         begin("artists", "Playlist")
         spin("Number of tracks", "SIMILAR_ARTIST_TRACK_COUNT", "30", 5, 100, TARGET_HELP)
@@ -1591,6 +1621,7 @@ class SettingsTab(tk.Frame):
         drift("artists")
         nonstop("artists")
         hidden("artists")
+        run_after("artists")
 
         # --- Similar Tracks ---
         begin("tracks", "Playlist")
@@ -1603,6 +1634,7 @@ class SettingsTab(tk.Frame):
         drift("tracks")
         nonstop("tracks")
         hidden("tracks")
+        run_after("tracks")
 
         # --- Artist's Top Tracks ---
         begin("top", "Playlist")
@@ -1612,6 +1644,7 @@ class SettingsTab(tk.Frame):
         recent("top")
         nonstop("top")
         hidden("top")
+        run_after("top")
 
         # --- Vibe Playlist ---
         begin("vibe", "Playlist")
@@ -1620,6 +1653,7 @@ class SettingsTab(tk.Frame):
         drift("vibe")
         nonstop("vibe")
         hidden("vibe")
+        run_after("vibe")
 
         p.resync = lambda: (sync_pick_limit(p), sync_drift(p), sync_long_closers(p), sync_played(p),
                             sync_nonstop(p))

@@ -26,7 +26,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.6.2"
+VERSION = "1.7.0"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
@@ -55,7 +55,9 @@ PROFILE_KEYS = {
                  "NONSTOP_TOP", "NONSTOP_TOP_USING", "NONSTOP_TOP_RESEED", "NONSTOP_VIBE_RESEED", "NONSTOP_VIBE_WITH",
                  "SKIP_LONG_CLOSERS_ARTISTS", "LONG_CLOSER_MINUTES_ARTISTS", "SKIP_LONG_CLOSERS_TRACKS",
                  "LONG_CLOSER_MINUTES_TRACKS", "SKIP_LONG_CLOSERS_TOP", "LONG_CLOSER_MINUTES_TOP",
-                 "SKIP_LONG_CLOSERS_VIBE", "LONG_CLOSER_MINUTES_VIBE"],
+                 "SKIP_LONG_CLOSERS_VIBE", "LONG_CLOSER_MINUTES_VIBE",
+                 "RUN_AFTER_ARTISTS", "RUN_AFTER_ARTISTS_PATH", "RUN_AFTER_TRACKS", "RUN_AFTER_TRACKS_PATH",
+                 "RUN_AFTER_TOP", "RUN_AFTER_TOP_PATH", "RUN_AFTER_VIBE", "RUN_AFTER_VIBE_PATH"],
 }
 PLAYED_GROUPS = ("artists", "tracks", "top", "vibe")   # Similar Artists, Similar Tracks, Artist's Top Tracks, Vibe
 CSV_FILE = os.path.join(APP_DIR, "FutureDiscoveries.csv")      # legacy log, imported once into the database
@@ -208,7 +210,7 @@ def load_settings():
     global SIMILAR_ARTIST_TRACK_COUNT, DRIFT
     global AI_MODERATOR, MODERATOR_WARNED, SKIP_PLAYED
     global NONSTOP, NONSTOP_USING, NONSTOP_RESEED, NONSTOP_TOP_REST, NONSTOP_TOP_REST_COUNT, NONSTOP_VIBE
-    global NONSTOP_BY, LONG_CLOSERS, AI_MODERATOR_BY
+    global NONSTOP_BY, LONG_CLOSERS, AI_MODERATOR_BY, RUN_AFTER
 
     load_dotenv(ENV_FILE, override=True)
     os.environ.update(PROFILE)   # a device's own settings, for the voice command being built
@@ -317,6 +319,10 @@ def load_settings():
     NONSTOP_BY = nonstop_settings(os.getenv)
     LONG_CLOSERS = closer_settings(os.getenv)
     AI_MODERATOR_BY = moderator_settings(os.getenv)
+    # Run After Building (Settings > Playlist): a file to run once a playlist is in JRiver
+    RUN_AFTER = {g: (os.getenv(f"RUN_AFTER_{g.upper()}", "0").strip().lower() in ("1", "true", "yes"),
+                     os.getenv(f"RUN_AFTER_{g.upper()}_PATH", "").strip().strip('"'))
+                 for g in PLAYED_GROUPS}
     # Where finished playlists go: "jriver" = Same zone (the default), "zone:<name>"
     # = a named JRiver zone, or "youtube" (opens in the browser). Zone names keep
     # their case, as JRiver's do.
@@ -612,6 +618,7 @@ import threading as _threading
 NONSTOP_KINDS = {"similar": "artists", "youtube_queue": "artists", "similar_tracks": "tracks",
                  "top_tracks": "top", "vibe": "vibe"}
 NONSTOP_CONTEXT = {}     # the build in progress (set by session_start)
+RUN_AFTER = {}           # group -> (on, path), from Settings > Playlist > Run After Building
 NONSTOP_APPEND = False   # True while a non-stop top-up builds: it only ever adds, never repeats
 FILTER_DEVICE = None     # the Alexa device a build is for (None: Windows (Main)), for Settings > Filters
 NONSTOP_ZONES = {}       # zone ID -> {"keys", "build", "kind", "vibe", "top_artist", "top_first", "stage", "fired"}
@@ -714,6 +721,42 @@ def session_finish(session_id, queued, sources=None, report=print):
     track_word = "track" if queued == 1 else "tracks"
     miss_word = "discovery" if misses == 1 else "discoveries"
     report(f"Session {session_id} saved ({queued} {track_word} queued, {misses} {miss_word} not in library).")
+    if queued and not NONSTOP_APPEND:   # a build that worked (not a non-stop top-up)
+        run_after_building(report)
+
+
+def run_after_building(report=print):
+    """
+    Settings > Playlist > Run After Building: starts the chosen file in the
+    background once the playlist is in JRiver. It isn't told anything about the
+    playlist. A device with settings of its own uses its own (voice).
+    """
+    on, path = RUN_AFTER.get(NONSTOP_CONTEXT.get("kind"), (False, ""))
+    if not on or not path:
+        return
+    if not os.path.isfile(path):
+        report(f"  Run after building: {path} wasn't found, so nothing ran.")
+        return
+    import subprocess
+    ext = os.path.splitext(path)[1].lower()
+    folder = os.path.dirname(path) or None
+    hidden = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    try:
+        if ext in (".bat", ".cmd"):
+            subprocess.Popen(["cmd", "/c", path], cwd=folder, creationflags=hidden)
+        elif ext == ".ps1":
+            subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path],
+                             cwd=folder, creationflags=hidden)
+        elif ext in (".py", ".pyw"):
+            subprocess.Popen(["py", path], cwd=folder, creationflags=hidden)
+        elif ext == ".exe":
+            subprocess.Popen([path], cwd=folder)
+        else:
+            os.startfile(path)   # anything else opens as Windows would open it
+    except Exception as e:
+        report(f"  Run after building: {os.path.basename(path)} didn't start ({e}).")
+        return
+    report(f"  Ran after building: {os.path.basename(path)}")
 
 
 def import_legacy_csv():
@@ -2379,6 +2422,10 @@ def jriver_is_stopped(zone=ACTIVE_ZONE):
 # older build. The Play tab is unaffected: both flags are only set by voice.py.
 
 VOICE_TAKEOVER = False   # True while a voice build runs
+MIX_ROWS = None          # the Play tab's added playlists for this build; None for voice, shortcuts, non-stop
+MIX_KEEP = set()         # keys from those playlists: the hidden-track check leaves them alone
+MIX_FAST_KEY = None      # an Add before playlist's first track, started by fast start
+MIX_NOTED = False        # the "left out on YouTube" note has been logged this build
 CANCEL_CHECK = None      # set by voice.py: returns True once a newer command has taken over
 
 
@@ -2495,7 +2542,7 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
         return
     keys = [str(k) for k in keys]
     seed_key = str((seed_info or {}).get("FileKey") or "")
-    keys = drop_long_closers(keys, keep=[seed_key], report=report, group=closer_group)
+    keys = drop_long_closers(keys, keep=[seed_key, *MIX_KEEP], report=report, group=closer_group)
     if NONSTOP_APPEND:   # a non-stop top-up only ever adds, and never repeats what the zone already had
         sent = nonstop_sent(zone)
         fresh_keys = [k for k in keys if k not in sent]
@@ -2627,6 +2674,9 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
     if dropped:
         report(f"  Seed artist kept to about a quarter of the playlist ({dropped} of their tracks left out).")
     queued = 0
+    if keys and mix_active():
+        keys = combine_with_mix(keys, report)
+    mix_skipped(report)
     if keys:
         report(sending_message(len(keys), ", in YouTube's order"))
         send_to_jriver(keys, seed_info=seed_info, report=report)
@@ -2805,6 +2855,23 @@ class FastStart:
         zone = output_zone(seed_info, None, lambda *_: None)
         if zone is not None and zone_is_free(zone):
             self.zone = zone
+            self._start_with_before()
+
+    def _start_with_before(self):
+        """With an Add before playlist (Play tab), its first track is the one that starts."""
+        global MIX_FAST_KEY
+        row = next((r for r in (MIX_ROWS or []) if r.get("mode") == "before"), None)
+        if row is None:
+            return
+        try:
+            import saved_playlists   # here rather than at the top: it imports engine
+            keys = saved_playlists.playlist_keys(row["id"])
+        except Exception:
+            return
+        if keys:
+            self.play(keys[0])
+            if self.key:
+                MIX_FAST_KEY = self.key
 
     @property
     def started(self):
@@ -3045,13 +3112,105 @@ class Drift:
                     self.report(f"    Found: {a} - {t}  ({', '.join(sources)})")
 
 
+def mix_active():
+    """The Play tab handed in added playlists, and the output is JRiver."""
+    return bool(MIX_ROWS) and not output_is_youtube()
+
+
+def mix_skipped(report=print):
+    """Added playlists only join JRiver output; says so once on YouTube."""
+    global MIX_NOTED
+    if MIX_ROWS and output_is_youtube() and not MIX_NOTED:
+        MIX_NOTED = True
+        report("  Added playlists are left out: they only join playlists sent to JRiver.")
+
+
+def _spread(ours, mixes):
+    """
+    24bit7's tracks with each Mix playlist woven in. Spaced evenly: every list is
+    spread over the whole length, so they all finish together (equal lengths give
+    one of each in turn). Mixed randomly: that playlist's tracks land at random.
+    24bit7's first track always leads (often the seed or searched track).
+    """
+    placed = [((i + 0.5) / len(ours) if i else -1.0, 0, k) for i, k in enumerate(ours)]   # ours leads
+    for n, (keys, spread) in enumerate(mixes, start=1):
+        if spread == "random":
+            placed += [(random.random(), n, k) for k in keys]
+        else:
+            placed += [((i + 0.5) / len(keys), n, k) for i, k in enumerate(keys)]
+    placed.sort(key=lambda x: (x[0], x[1]))
+    return [k for _, _, k in placed]
+
+
+def combine_with_mix(keys, report=print):
+    """
+    Joins the Play tab's added playlists to a finished playlist (keys: 24bit7's
+    tracks, in order). Add before ones go first and Add after ones last, in row
+    order; Mix ones are woven through. Each comes through as JRiver gives it, with
+    its own rules and order: only songs already in the set are dropped, and the
+    hidden-track check leaves them alone. Returns the keys to send.
+    """
+    import playmix, saved_playlists   # here rather than at the top: both import engine
+    fast = str(MIX_FAST_KEY or "")
+    ours = [str(k) for k in keys if str(k) != fast]
+    seen = set(ours)
+    before, after, mixes, used = [], [], [], []
+    report("Adding your playlists:")
+    for row in MIX_ROWS or []:
+        name, mode = row.get("name") or "A playlist", row.get("mode")
+        try:
+            found = [str(k) for k in saved_playlists.playlist_keys(row["id"])]
+        except Exception as e:
+            report(f"  {name}: couldn't be read from JRiver ({e}), so it was left out.")
+            continue
+        fresh = []
+        for k in found:
+            if k not in seen:
+                seen.add(k)
+                fresh.append(k)
+        if not fresh:
+            report(f"  {name}: " + ("empty, or no longer in JRiver" if not found else
+                                     "every track was already in the playlist") + ", so nothing was added.")
+            continue
+        used.append(row["id"])
+        MIX_KEEP.update(fresh)
+        how = {"before": "added before", "mix": "mixed in, " + ("at random" if row.get("spread") == "random"
+                                                                  else "spaced evenly")}.get(mode, "added after")
+        left = len(found) - len(fresh)
+        report(f"  {name}: {len(fresh)} track{'' if len(fresh) == 1 else 's'} {how}"
+               + (f" ({left} already in the playlist left out)." if left else "."))
+        if mode == "before":
+            before += fresh
+        elif mode == "mix":
+            mixes.append((fresh, row.get("spread")))
+        else:
+            after += fresh
+    if used:
+        try:
+            playmix.record_use(used)
+        except Exception:
+            pass
+    return before + _spread(ours, mixes) + after
+
+
 def finish_playlist(keys, drift, fast, seed_info, report, detail=""):
     """
     Sends a first pass, then lets Drift top it up. JRiver output: the first pass
     is queued now and each Drift round is added to the end as it's found (after
-    a fast start, everything is added behind the playing track). YouTube output:
-    Drift runs first, as the link is made once. Returns how many were sent.
+    a fast start, everything is added behind the playing track). With added
+    playlists (Play tab), Drift runs first and everything is sent together, so
+    they sit around the whole set. YouTube output: Drift runs first, as the link
+    is made once. Returns how many were sent.
     """
+    if mix_active():
+        drift.run(keys)
+        final = combine_with_mix(keys, report)
+        rest = fast.rest(final)
+        if rest:
+            report(sending_message(len(final), detail))
+            send_to_jriver(rest, seed_info=seed_info, report=report, append=fast.started)
+        return len(final)
+    mix_skipped(report)
     if output_is_youtube():
         drift.run(keys)
         if keys:
@@ -3531,7 +3690,8 @@ def play_top_n(report=print, seed_info=None):
 
     labels = {"popular": "most popular first", "reverse": "least popular first", "random": "random order"}
     report(f"\nQueuing {len(ordered_keys)} tracks, {labels[order]}...")
-    rest = fast.rest(ordered_keys)
+    mix_skipped(report)
+    rest = fast.rest(combine_with_mix(ordered_keys, report) if mix_active() else ordered_keys)
     if rest:
         send_to_jriver(rest, seed_info=seed_info, report=report, append=fast.started)
     report("Done!")

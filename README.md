@@ -8,7 +8,7 @@ If you host your whole music library locally in JRiver, you get bit-perfect play
 
 **It works live.** Play any track in JRiver, press a button, and Playing Now is rebuilt around it while the music keeps going. There is nothing to export, no listening history to upload and no second app to keep in sync: whatever is playing right now is the seed. Run it mid-album, mid-track, whenever the mood shifts.
 
-**New in 1.6.0: it keeps going, and you decide what it picks from.** Non-stop adds more music when a playlist reaches its last track, so the evening never stops. Filters keep playlists to a smartlist, a star rating, a decade or 48 kHz for a Sonos. Keyboard shortcuts let a remote start a playlist from the sofa, and your own JRiver playlists can shuffle, skip recent plays and keep going too when you ask for them by voice. Most of it came from requests on the JRiver forum.
+**New in 1.7.0: your own playlists join in.** Add any JRiver playlist or smartlist to a build from the Play tab: before 24bit7's picks, after them, or mixed through, spaced evenly or at random. It started as a request on the JRiver forum, from a user who wanted his smartlists to follow on without guessing how long a build would take. More options gathers Show Credits, the AI Moderator and the new playlists into one row, and anything that spends AI credit is now marked in purple.
 
 You don't have to own the seed either. Type any artist and track into the Search tab and 24bit7 builds a playlist around it, from your library or, with Output set to YouTube, from YouTube. That second route needs no library, no keys and no JRiver.
 
@@ -20,7 +20,7 @@ The name is a throwback to an old username. Read it as 24-bit and 24/7: audiophi
 
 ## What it does
 
-Five actions on the **Play** tab. The seed is whichever of the two small tabs is showing when you press a button: **Now Playing** (whatever JRiver is playing right now) or **Search** (any artist and track you type, owned or not).
+Four playlist buttons on the **Play** tab, plus **More options**. The seed is whichever of the two small tabs is showing when you press a button: **Now Playing** (whatever JRiver is playing right now) or **Search** (any artist and track you type, owned or not).
 
 | Action | What you get |
 |---|---|
@@ -28,7 +28,7 @@ Five actions on the **Play** tab. The seed is whichever of the two small tabs is
 | **Similar Tracks** | A playlist of tracks like the seed track, suggested track by track by Last.fm, ListenBrainz and YouTube Music and blended, so a playlist follows the song rather than the artist's reputation. |
 | **Artist's Top Tracks** | The artist's most popular tracks that you actually own, in random or popularity order. From the Search tab it needs only the artist. |
 | **Vibe Playlist** | Type a mood or scene (or pick one of three AI suggestions) and get a playlist to match. |
-| **Show Credits** | Producer, engineer and other credits for the current album, from Discogs. Not offered from the Search tab, which has no album to look up. |
+| **More options** | Opens a row underneath with **Show Credits** (producer, engineer and other credits for the current album, from Discogs; not offered from the Search tab, which has no album to look up), the **AI Moderator** and **Add playlist** (see below). It remembers whether it's open, and when closed it counts what's switched on inside it, such as "More options (2)". |
 
 **Output** sits beside the buttons and decides where the finished playlist goes: **Same zone** (the default: the zone you seeded from), any JRiver zone by name, or **YouTube**, which opens it in your browser as an instant playlist. The **Zone** dropdown on the Now Playing tab picks which zone you seed from.
 
@@ -77,7 +77,7 @@ Vibe Playlist can also drift using **AI**: each round asks the AI again with you
 
 Most playlists are right apart from one track: the stadium anthem in the middle of a run of acoustic songs. The AI Moderator is an optional check that catches it. When it's on, each playlist (and each Drift round) goes to Claude Haiku once, with the seed and the list of tracks, and it removes the ones that would jolt a listener out of the mood. It judges tone, energy and mood only, and genre is never a reason on its own: a folk song and an electronic track can sit together, and two songs in the same genre can clash. It keeps anything it's unsure about or doesn't know, removes at most a fifth of the tracks, and logs each removal with its reason. A few extra tracks are found up front, so the ones it removes are replaced. The fast start track is never checked, and Artist's Top Tracks isn't moderated, since it's one artist.
 
-It needs an Anthropic key and uses a little credit each time, a fraction of a penny per playlist; the first time you switch it on, 24bit7 says so. Without a key the option is greyed out. If the check fails or the credit runs out, the playlist builds as normal and the log says why. Switch it on under Settings > Sources, on the Similar Artists and Similar Tracks tabs, each with its own tick. Vibe playlists don't use it, because the AI has already picked every track against your description. A voice device with settings of its own has its own switches (see Voice Commands below).
+It needs an Anthropic key and uses a little credit each time, a fraction of a penny per playlist; the first time you switch it on, 24bit7 says so. Without a key the option is greyed out. If the check fails or the credit runs out, the playlist builds as normal and the log says why. Switch it on or off as you go from **More options** on the Play tab. It applies to Similar Artists and Similar Tracks. Vibe playlists don't use it, because the AI has already picked every track against your description. A voice device with settings of its own keeps its own choice under Settings > Sources; one copying Windows (Main) follows the Play tab (see Voice Commands below).
 
 ### Hidden tracks
 
@@ -152,6 +152,24 @@ New tracks are queued around the current one: everything else in Playing Now is 
 A playlist built from the Search tab follows the same rule: whatever is playing is never interrupted. Only if JRiver is stopped does the new playlist start by itself, opening with the track you searched for if you own it, and with fast start it begins playing before the rest is found.
 
 With more than one JRiver zone, the finished playlist goes to the zone Output names. A stopped zone starts playing it straight away. A busy zone keeps its current track and queues the playlist after it. If you seed from one zone and send to another, the seed track opens the playlist on the new zone. Settings > Other sets which zones appear, which zone Now Playing opens on, and whether it follows JRiver's active zone. A DLNA speaker such as a Sonos works as a zone once DLNA Controller is ticked in JRiver.
+
+### Adding your own playlists
+
+Open **More options** and press **Add playlist** to join a JRiver playlist or smartlist to the next build from the Play tab. Each row has a handle to drag it up or down, the playlist, and how it joins:
+
+- **Add before**: its tracks play first, in the playlist's own order.
+- **Add after**: its tracks follow 24bit7's, in their own order.
+- **Mix**: its tracks are woven through 24bit7's. **Spaced evenly** spreads both lists over the whole playlist so they finish together; with equal lengths that's one of each in turn. **Mixed randomly** scatters them.
+
+Rows play in the order they're listed, so two Add after playlists follow one another, top to bottom. The picker shows the playlists you use most first, then the rest A to Z, with a search box.
+
+The playlists come through exactly as JRiver gives them, so a smartlist's own rules (ratings, play history and so on) decide what's in it. 24bit7's filters, recent-play skip and hidden-track check leave them alone. The only thing it drops is a song already in its own picks, so nothing plays twice. With a playlist added, Drift finishes before anything is sent, so Add after really does come last. With Add before and a stopped zone, fast start plays that playlist's first track.
+
+Added playlists are for the Play tab only, and only with JRiver output. Voice, keyboard shortcuts and non-stop don't use them, and YouTube output leaves them out with a note in the log. The rows are remembered between runs, and a line under them says what the next build will do.
+
+### Run after building
+
+Each Play option under Settings > Playlist can run a file of your choice once its playlist is in JRiver: a .bat, an .exe, or a PowerShell or Python script. It runs in the background, only when the build worked, and isn't told anything about the playlist, so it can do whatever you like. Device tabs have their own, so a voice build can run something different. Non-stop top-ups don't run it.
 
 ### Voice Commands (optional, advanced)
 
@@ -238,7 +256,16 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.6.2
+## What's new in 1.7.0
+
+- **Your own playlists in a build.** Add JRiver playlists and smartlists before, after or mixed through any Play tab build, spaced evenly or at random, in the order you list them. The ones you use most come first in the picker.
+- **More options.** One row for Show Credits, the AI Moderator and Add playlist, opened from where Show Credits was. It remembers whether it's open, and counts what's on when it's closed.
+- **AI Moderator on the Play tab.** Switched on or off as you go, for Similar Artists and Similar Tracks. Voice devices with settings of their own keep theirs.
+- **Run after building.** Settings > Playlist can run a file once a playlist is in JRiver, per Play option and per device.
+- **Purple for AI.** Anything that spends Anthropic credit is marked in purple: the AI Moderator, Vibe Playlist's bar and the Anthropic key.
+- **Tidier header.** The tagline sits beside the logo, and the track title in Now Playing is smaller.
+
+### Earlier: 1.6.2
 
 - **Band names.** Similar Tracks now finds a library tagged with the band's full name when a source gives the shorter one: "Jimi Hendrix" finds The Jimi Hendrix Experience. Whole words only, so Queen never finds Queens of the Stone Age, and the title still has to match. The log shows each one as "Matched on band name".
 - **Quieter in the background.** 24bit7 asks JRiver far less often. The Now Playing panel checks every 10 seconds and not at all while 24bit7 is minimised or in the tray, the zone list is read once a minute, and Non-stop checks every 15 seconds.
@@ -330,7 +357,7 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 **Solid**: Similar Artists, Artist's Top Tracks, Show Credits, Discover, Settings, cache, mid-album queueing, multi-value artists, the agreement number.
 
-**Newer**: non-stop, filters, keyboard shortcuts, JRiver Playlists settings, the dark theme, fast start, Drift, the AI Moderator, settings per device, skipping recent plays, Hidden Tracks, the Label button, Similar Tracks, zones, voice control, Discover's YouTube playlists, the tray, the Search tab, YouTube Music as a source and YouTube output. All are in daily use on the development PC. Voice Commands are the least plug-and-play part, as their setup guide says, and the YouTube parts rest on an unofficial library, so expect the occasional breakage. Vibe Playlist works well and is still learning its limits.
+**Newer**: added playlists, run after building, non-stop, filters, keyboard shortcuts, JRiver Playlists settings, the dark theme, fast start, Drift, the AI Moderator, settings per device, skipping recent plays, Hidden Tracks, the Label button, Similar Tracks, zones, voice control, Discover's YouTube playlists, the tray, the Search tab, YouTube Music as a source and YouTube output. All are in daily use on the development PC. Voice Commands are the least plug-and-play part, as their setup guide says, and the YouTube parts rest on an unofficial library, so expect the occasional breakage. Vibe Playlist works well and is still learning its limits.
 
 **Removed**: a producer-based playlist mode built on Discogs credits. Discogs credit data is too patchy to be reliable, so it was dropped rather than shipped half-working.
 

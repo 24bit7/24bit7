@@ -91,3 +91,12 @@ A forum user's library has The Jimi Hendrix Experience, and Similar Tracks looke
 
 **1 Oct 2026: 24bit7 asks JRiver less often.**
 A forum user saw the Playing Now cursor jump back to the playing track. It couldn't be reproduced, but 24bit7 was asking JRiver two or three things every 3 seconds even from the tray, for a panel nobody could see. The panel now checks every 10 seconds and only while the window shows, the zone list is cached for a minute, and Non-stop checks every 15 seconds. The Play buttons and shortcuts always read the zone fresh, so nothing depends on the panel being current.
+
+**2 Oct 2026: Added playlists are for the Play tab.**
+A forum user wanted his smartlists to follow 24bit7's picks, but couldn't time it, because a build can take a second or several. Rather than only offer a hook to run a file, the Play tab adds playlists itself: before, after or mixed through. Voice, shortcuts and non-stop don't use them. Voice already has settings per device, and Run After Building covers anyone who wants to chain something by voice.
+
+**2 Oct 2026: Added playlists keep their own rules.**
+A smartlist already says what belongs in it, so 24bit7's filters, recent-play skip and hidden-track check leave added playlists alone. The one thing dropped is a song already in 24bit7's picks, so nothing plays twice.
+
+**2 Oct 2026: Drift finishes first when playlists are added.**
+Normally the first pass is queued straight away and each Drift round follows it. With an Add after playlist that would put Drift's tracks after it, so with playlists added, Drift runs to the end and the whole playlist is sent at once. Fast start still plays the first track straight away.

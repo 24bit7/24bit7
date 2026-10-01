@@ -414,14 +414,14 @@ class PlayTab(tk.Frame):
         def target():
             self.report(heading)
             job(self.report)
-        self._run_job(target, needs_playing=False)
+        self._run_job(target, needs_playing=False, mix=False)   # voice, shortcuts, non-stop: no added playlists
 
     def _clear_log(self):
         self.log.config(state="normal")
         self.log.delete("1.0", "end")
         self.log.config(state="disabled")
 
-    def _run_job(self, target, needs_playing=True):
+    def _run_job(self, target, needs_playing=True, mix=True):
         if self.running:
             return
         if needs_playing and not self.last_playing:
@@ -434,12 +434,16 @@ class PlayTab(tk.Frame):
             b.config(state="disabled")
         self._clear_log()
 
+        rows = (playmix.rows() or None) if mix else None   # added playlists: app builds only
+
         def worker():
+            engine.MIX_ROWS, engine.MIX_KEEP, engine.MIX_FAST_KEY, engine.MIX_NOTED = rows, set(), None, False
             try:
                 target()
             except Exception as e:
                 self.log_queue.put(f"[error] {e}")
             finally:
+                engine.MIX_ROWS, engine.MIX_KEEP, engine.MIX_FAST_KEY = None, set(), None
                 self.root.after(0, self._job_done)
 
         threading.Thread(target=worker, daemon=True).start()
