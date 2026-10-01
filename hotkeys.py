@@ -275,6 +275,8 @@ def _job(code):
         try:
             engine.OUTPUT_OVERRIDE = zone_name
             engine.use_profile(profile)
+            import filters
+            engine.FILTER_DEVICE = filters.device_for_zone(zone_name)
             if code == "SIMILAR_TRACKS":
                 engine.create_similar_tracks_playlist(report=report, seed_info=seed)
             elif code == "SIMILAR_ARTISTS":
@@ -284,4 +286,5 @@ def _job(code):
         finally:
             engine.OUTPUT_OVERRIDE = None
             engine.use_profile(None)
+            engine.FILTER_DEVICE = None
     return run

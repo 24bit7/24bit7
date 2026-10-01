@@ -613,6 +613,7 @@ NONSTOP_KINDS = {"similar": "artists", "youtube_queue": "artists", "similar_trac
                  "top_tracks": "top", "vibe": "vibe"}
 NONSTOP_CONTEXT = {}     # the build in progress (set by session_start)
 NONSTOP_APPEND = False   # True while a non-stop top-up builds: it only ever adds, never repeats
+FILTER_DEVICE = None     # the Alexa device a build is for (None: Windows (Main)), for Settings > Filters
 NONSTOP_ZONES = {}       # zone ID -> {"keys", "build", "kind", "vibe", "top_artist", "top_first", "stage", "fired"}
 _nonstop_lock = _threading.Lock()
 _nonstop_ids = _itertools.count(1)
@@ -2723,10 +2724,17 @@ class PlayedFilter:
     keep: keys never skipped (the seed track). Counts what it skips for one log line.
     """
 
-    def __init__(self, group, keep=(), report=print, setting=None):
+    def __init__(self, group, keep=(), report=print, setting=None, filters=False):
         self.on, self.days = setting or SKIP_PLAYED.get(group, (False, 1))
         self.keep = {str(k) for k in keep if k}
         self.report, self.skipped = report, 0
+        self.filters = None
+        if filters:   # Settings > Filters, for the playlists 24bit7 builds
+            try:
+                import filters as filter_settings
+                self.filters = filter_settings.Active(FILTER_DEVICE, report) or None
+            except Exception as e:
+                report(f"  Filters skipped: {e}")
         if not self.on:
             return
         try:
@@ -2744,7 +2752,11 @@ class PlayedFilter:
 
     def fresh(self, key):
         """False (and counted) for a track played within the set number of days."""
-        if not self.on or str(key) in self.keep:
+        if str(key) in self.keep:
+            return True
+        if self.filters is not None and not self.filters.allows(key):
+            return False
+        if not self.on:
             return True
         when = self.library.last_played(key)
         if when and when >= self.cutoff:
@@ -2753,6 +2765,8 @@ class PlayedFilter:
         return True
 
     def done(self):
+        if self.filters is not None:
+            self.filters.done()
         if self.skipped:
             self.report(f"  Skipped {self.skipped} track{'' if self.skipped == 1 else 's'} "
                         f"played in the last {self.days} day{'' if self.days == 1 else 's'}.")
@@ -3079,7 +3093,7 @@ def create_similar_playlist(report=print, seed_info=None):
     fast = FastStart(seed_info, report)
     first_key = typed_seed_key(seed_info, seeds, session_id, report)
     fast.play(first_key)
-    played = PlayedFilter("artists", keep=[seed_info.get("FileKey"), first_key], report=report)
+    played = PlayedFilter("artists", keep=[seed_info.get("FileKey"), first_key], report=report, filters=True)
     drift = Drift("artists", target, session_id, report, per_artist=TRACKS_PER_ARTIST_PICK,
                   exclude_keys=[seed_info.get("FileKey"), first_key],
                   seed=f"{seed_info['Artist']} - {seed_info['Name']}", played=played)
@@ -3289,7 +3303,7 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
     fast = FastStart(seed_info, report)
     first_key = typed_seed_key(seed_info, seeds, session_id, report)
     fast.play(first_key)
-    played = PlayedFilter("tracks", keep=[seed_info.get("FileKey"), first_key], report=report)
+    played = PlayedFilter("tracks", keep=[seed_info.get("FileKey"), first_key], report=report, filters=True)
     drift = Drift("tracks", target, session_id, report, per_artist=per_artist,
                   exclude_keys=[seed_info.get("FileKey"), first_key], seed=f"{seed_info['Artist']} - {track}",
                   played=played)
@@ -3383,7 +3397,7 @@ def create_vibe_playlist(vibe, report=print):
     seed_info = {"Artist": "Vibe", "Name": vibe, "Album": ""}
     session_id = session_start("vibe", seed_info, "AI")
     fast = FastStart(None, report)
-    played = PlayedFilter("vibe", report=report)
+    played = PlayedFilter("vibe", report=report, filters=True)
     drift = Drift("vibe", target, session_id, report, per_artist=TRACKS_PER_ARTIST_PICK, seed=f"vibe: {vibe}",
                   played=played, vibe=vibe)
     # With the AI Moderator on, ask for a few extra, so anything it removes is replaced
@@ -3463,7 +3477,7 @@ def play_top_n(report=print, seed_info=None):
     session_id = None
     ordered_keys, labels_used = [], []
     fast = FastStart(seed_info, report, enabled=(order == "popular"))
-    played = PlayedFilter("top", report=report)
+    played = PlayedFilter("top", report=report, filters=True)
     for artist in seeds:
         top_tracks, source_label = blended_top_tracks(artist, limit=n)
         if not top_tracks:

@@ -16,13 +16,14 @@ import sys
 import threading
 import tkinter as tk
 import webbrowser
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
 
 import engine
 import tray
 import voice
 import hotkeys
 import saved_playlists
+import filters
 from tabs import TabbedPane, PALETTE
 
 ENV_FILE = engine.ENV_FILE   # single source of truth for where .env lives
@@ -386,6 +387,7 @@ class SettingsTab(tk.Frame):
         nb.pack(fill="both", expand=True, padx=8, pady=8)
         self._build_sources(nb)
         self._build_playlist(nb)
+        self._build_filters(nb)
         self._build_search_sites(nb)
         self._build_keys(nb)
         self._build_voice(nb)
@@ -649,6 +651,323 @@ class SettingsTab(tk.Frame):
 
     def _filler(self, kind):
         return {"sources": self._fill_sources, "playlist": self._fill_playlist, "saved": self._fill_saved}[kind]
+
+    # --- the Filters page ---
+
+    def _build_filters(self, nb):
+        """A library of named filters on the left; the chosen one on the right."""
+        tab = self._scroll_tab(nb, "Filters")
+        self._filters = filters.load()
+        self._filter_i = 0 if self._filters else None
+        left = tk.Frame(tab)
+        left.grid(row=0, column=0, sticky="nw", padx=(0, 14))
+        self._filter_right = tk.Frame(tab)
+        self._filter_right.grid(row=0, column=1, sticky="nwe")
+        tab.grid_columnconfigure(1, weight=1)
+
+        box = section(left, "Your filters",
+                      "Filters narrow the playlists 24bit7 builds (Similar Artists, Similar Tracks, Artist's Top "
+                      "Tracks and Vibe), including Drift and non-stop top-ups. Each one applies to every Play "
+                      "option on the devices it's ticked for. Where several apply, a track must pass them all. "
+                      "Albums, songs, shuffles and JRiver playlists asked for by voice play as asked.")
+        self._filter_list = tk.Listbox(box, height=8, width=26, activestyle="none", exportselection=False,
+                                       font=("Segoe UI", 10))
+        self._filter_list.grid(row=0, column=0, sticky="w")
+        self._filter_list.bind("<<ListboxSelect>>", self._filter_picked)
+        buttons = tk.Frame(box)
+        buttons.grid(row=1, column=0, sticky="w", pady=(8, 0))
+        for text, command in (("New", self._filter_new), ("Rename", self._filter_rename),
+                              ("Duplicate", self._filter_duplicate), ("Delete", self._filter_delete)):
+            tk.Button(buttons, text=text, width=7, command=command).pack(side="left", padx=(0, 3))
+        box = section(left, "Active filters", "What applies where, from the filters that are on.")
+        self._filter_summary = tk.Frame(box)
+        self._filter_summary.grid(row=0, column=0, sticky="w")
+        tab.bind("<<Shown>>", lambda e: self._filter_refresh(), add="+")
+        self._filter_refresh()
+
+    def _filter_devices(self):
+        """[(value, label)] for Applies on: all, the Windows app, then each Alexa device."""
+        # only speakers with their own settings: any other follows Windows (Main), as everywhere else
+        return [(filters.ALL, "All devices"), (filters.MAIN, "Windows (Main)")] + filters.own_devices()
+
+    def _filter_playlists(self):
+        """[(id, label)] for Only pick from, from the JRiver Playlists table (read from JRiver if it's empty)."""
+        rows = saved_playlists.main_settings()["rows"]
+        if not rows:
+            try:
+                rows = saved_playlists.merge_scan(saved_playlists.main_settings(), saved_playlists.scan())["rows"]
+            except Exception:
+                rows = {}
+        items = [(pid, f"{r.get('name') or pid}  ({r.get('folder') or saved_playlists.ROOT}, {r.get('type') or 'Playlist'})")
+                 for pid, r in rows.items()]
+        return [("", "None")] + sorted(items, key=lambda x: x[1].lower())
+
+    def _filter_save(self):
+        try:
+            filters.save(self._filters)
+        except Exception as e:
+            messagebox.showerror("Save failed", str(e), parent=self)
+        self._filter_fill_list()
+        self._filter_fill_summary()
+
+    def _filter_refresh(self):
+        self._filter_fill_list()
+        self._filter_fill_summary()
+        self._filter_fill_editor()
+
+    def _filter_fill_list(self):
+        lb = self._filter_list
+        lb.delete(0, "end")
+        for item in self._filters:
+            lb.insert("end", item["name"] + ("" if item.get("on") else "   (off)"))
+        if self._filter_i is not None and self._filter_i < len(self._filters):
+            lb.selection_set(self._filter_i)
+
+    def _filter_fill_summary(self):
+        frame = self._filter_summary
+        for child in frame.winfo_children():
+            child.destroy()
+        r = 0
+        for value, label in self._filter_devices()[1:]:
+            names = [x["name"] for x in self._filters if filters.applies(x, None if value == filters.MAIN else value)]
+            tk.Label(frame, text=label, font=LABEL_FONT, anchor="w").grid(row=r, column=0, sticky="w",
+                                                                           pady=(4 if r else 0, 0))
+            tk.Label(frame, text=", ".join(names) or "No filters", anchor="w", fg=PALETTE["help_fg"],
+                     font=HELP_FONT, wraplength=230, justify="left").grid(row=r + 1, column=0, sticky="w")
+            r += 2
+
+    def _filter_picked(self, _e=None):
+        chosen = self._filter_list.curselection()
+        if chosen:
+            self._filter_i = chosen[0]
+            self._filter_fill_editor()
+
+    def _filter_fill_editor(self):
+        right = self._filter_right
+        for child in right.winfo_children():
+            child.destroy()
+        if self._filter_i is None or self._filter_i >= len(self._filters):
+            box = section(right, "No filter chosen")
+            tk.Label(box, text="Click New to make your first filter.", fg=PALETTE["help_fg"],
+                     font=HELP_FONT).grid(row=0, column=0, sticky="w")
+            return
+        item = self._filters[self._filter_i]
+        keep = []
+
+        box = section(right, item["name"])
+        row = tk.Frame(box)
+        row.grid(row=0, column=0, sticky="w")
+        on = tk.BooleanVar(value=bool(item.get("on")))
+        keep.append(on)
+
+        def on_toggled():
+            item["on"] = on.get()
+            self._filter_save()
+        ttk.Checkbutton(row, text="On", variable=on, command=on_toggled).pack(side="left")
+        help_mark(row, "Off keeps the filter for later without it applying anywhere.").pack(side="left", padx=(8, 0))
+        head = tk.Frame(box)
+        head.grid(row=1, column=0, sticky="w", pady=(10, 2))
+        tk.Label(head, text="Applies on", font=LABEL_FONT).pack(side="left")
+        help_mark(head, "All devices covers the Play tab and every Alexa device. Windows (Main) is the Play tab, "
+                        "plus any speaker without its own settings (Settings > Voice Commands > Own "
+                        "settings), and shortcuts and non-stop on its zone. Speakers with their own settings "
+                        "are listed by name.").pack(
+            side="left", padx=(8, 0))
+        devs = tk.Frame(box)
+        devs.grid(row=2, column=0, sticky="w")
+        ticks = {}
+
+        def devices_changed():
+            item["devices"] = [v for v, var in ticks.items() if var.get()]
+            sync_devices()
+            self._filter_save()
+
+        def sync_devices():
+            everything = ticks[filters.ALL].get()
+            for value, (var, widget) in boxes.items():
+                if value != filters.ALL:
+                    widget.state(["disabled"] if everything else ["!disabled"])
+        boxes = {}
+        for n, (value, label) in enumerate(self._filter_devices()):
+            var = tk.BooleanVar(value=value in item.get("devices", []))
+            ticks[value] = var
+            keep.append(var)
+            tick = ttk.Checkbutton(devs, text=label, variable=var, command=devices_changed)
+            tick.grid(row=n // 4, column=n % 4, sticky="w", padx=(0, 14), pady=1)
+            boxes[value] = (var, tick)
+        sync_devices()
+
+        box = section(right, "Only pick from",
+                      "Every playlist this filter applies to only uses tracks on this JRiver playlist or "
+                      "smartlist. Set up any filtering you like in JRiver's smartlist editor, and 24bit7 "
+                      "respects it. The list comes from Settings > JRiver Playlists.")
+        options = self._filter_playlists()
+        labels = dict(options)
+        pick = tk.StringVar(value=labels.get(item.get("pick_from", ""), "None"))
+        keep.append(pick)
+        cb = ttk.Combobox(box, textvariable=pick, values=[l for _, l in options], state="readonly", width=44)
+        cb.grid(row=0, column=0, sticky="w")
+
+        def picked(_e=None):
+            pid = next((p for p, l in options if l == pick.get()), "")
+            item["pick_from"] = pid
+            item["pick_name"] = pick.get().split("  (")[0] if pid else ""
+            cb.selection_clear()
+            self._filter_save()
+        cb.bind("<<ComboboxSelected>>", picked)
+
+        # --- Rules ---
+        box = section(right, "Rules",
+                      "Tracks must match all (or any) of the rules. A track with no value for a field passes that "
+                      "rule, and the log counts them; an unrated track counts as rating 0, and an unplayed one "
+                      "as played 0 times and never played. Rating 0 means unrated. Sample rate at most 48 kHz "
+                      "saves JRiver converting on the fly for a Sonos.")
+        top = tk.Frame(box)
+        top.grid(row=0, column=0, sticky="w", pady=(0, 8))
+        tk.Label(top, text="Tracks must match").pack(side="left")
+        match = tk.StringVar(value=item.get("match", "all"))
+        keep.append(match)
+        match_cb = ttk.Combobox(top, textvariable=match, values=["all", "any"], state="readonly", width=5)
+        match_cb.pack(side="left", padx=6)
+        tk.Label(top, text="of these rules").pack(side="left")
+
+        def match_changed(_e=None):
+            item["match"] = match.get()
+            match_cb.selection_clear()
+            self._filter_save()
+        match_cb.bind("<<ComboboxSelected>>", match_changed)
+        rows = tk.Frame(box)
+        rows.grid(row=1, column=0, sticky="w")
+        field_labels = [label for _, label, _, _ in filters.FIELDS]
+        units = {"days": "days", "minutes": "minutes", "khz": "kHz"}
+
+        def rule_row(r, rule):
+            label, ops, kind = filters.FIELD_INFO[rule["field"]]
+            field = tk.StringVar(value=label)
+            op = tk.StringVar(value=dict(ops).get(rule.get("op"), ops[0][1]))
+            keep.extend([field, op])
+            field_cb = ttk.Combobox(rows, textvariable=field, values=field_labels, state="readonly", width=13)
+            field_cb.grid(row=r, column=0, sticky="w", pady=3)
+            op_cb = ttk.Combobox(rows, textvariable=op, values=[l for _, l in ops], state="readonly", width=17)
+            op_cb.grid(row=r, column=1, sticky="w", padx=6)
+            cell = tk.Frame(rows)
+            cell.grid(row=r, column=2, sticky="w")
+
+            def field_changed(_e=None):
+                code = next(c for c, l, _, _ in filters.FIELDS if l == field.get())
+                if code != rule["field"]:
+                    rule.clear()
+                    rule.update(filters.blank_rule(code))
+                    self._filter_save()
+                    self._filter_fill_editor()
+
+            def op_changed(_e=None):
+                rule["op"] = next(c for c, l in ops if l == op.get())
+                self._filter_save()
+                if kind == "year":
+                    self._filter_fill_editor()   # between needs a second box
+            field_cb.bind("<<ComboboxSelected>>", field_changed)
+            op_cb.bind("<<ComboboxSelected>>", op_changed)
+            if kind == "stars":
+                chosen = {x for x in str(rule.get("value", "")).split(",") if x}
+                stars = {}
+
+                def stars_changed():
+                    rule["value"] = ",".join(str(n) for n in range(6) if stars[n].get())
+                    self._filter_save()
+                for n in range(6):
+                    stars[n] = tk.BooleanVar(value=str(n) in chosen)
+                    keep.append(stars[n])
+                    ttk.Checkbutton(cell, text=str(n), variable=stars[n], command=stars_changed).pack(
+                        side="left", padx=(0, 6))
+            else:
+                def entry(key, width):
+                    var = tk.StringVar(value=rule.get(key, ""))
+                    keep.append(var)
+                    tk.Entry(cell, textvariable=var, width=width).pack(side="left")
+
+                    def typed(*_):
+                        rule[key] = var.get().strip()
+                        self._filter_save()
+                    var.trace_add("write", typed)
+                if rule["field"] == "file_type":   # a dropdown of the types in your library
+                    var = tk.StringVar(value=rule.get("value", ""))
+                    keep.append(var)
+                    types = filters.file_types()
+                    if var.get() and var.get().lower() not in types:
+                        types.append(var.get().lower())
+                    type_cb = ttk.Combobox(cell, textvariable=var, values=types, state="readonly", width=10)
+                    type_cb.pack(side="left")
+
+                    def type_picked(_e=None, var=var, type_cb=type_cb):
+                        rule["value"] = var.get()
+                        type_cb.selection_clear()
+                        self._filter_save()
+                    type_cb.bind("<<ComboboxSelected>>", type_picked)
+                else:
+                    entry("value", 18 if kind == "text" else 8)
+                if kind == "year" and rule.get("op") == "between":
+                    tk.Label(cell, text="and").pack(side="left", padx=6)
+                    entry("value2", 8)
+                if kind in units:
+                    tk.Label(cell, text=units[kind]).pack(side="left", padx=(6, 0))
+
+            def remove():
+                item["rules"].remove(rule)
+                self._filter_save()
+                self._filter_fill_editor()
+            tk.Button(rows, text="\u2715", width=2, command=remove).grid(row=r, column=3, sticky="w", padx=(8, 0))
+        for r, rule in enumerate(item.get("rules") or []):
+            rule_row(r, rule)
+
+        def add_rule():
+            item.setdefault("rules", []).append(filters.blank_rule())
+            self._filter_save()
+            self._filter_fill_editor()
+        tk.Button(box, text="Add rule", width=10, command=add_rule).grid(row=2, column=0, sticky="w", pady=(8, 0))
+        right.keep = keep   # hold the variables while the page shows
+
+    def _filter_new(self):
+        name = simpledialog.askstring("New filter", "Name for the new filter:", parent=self)
+        if not name or not name.strip():
+            return
+        self._filters.append(filters.blank(name.strip()))
+        self._filter_i = len(self._filters) - 1
+        self._filter_save()
+        self._filter_fill_editor()
+
+    def _filter_rename(self):
+        if self._filter_i is None:
+            return
+        item = self._filters[self._filter_i]
+        name = simpledialog.askstring("Rename filter", "New name:", initialvalue=item["name"], parent=self)
+        if name and name.strip():
+            item["name"] = name.strip()
+            self._filter_save()
+            self._filter_fill_editor()
+
+    def _filter_duplicate(self):
+        if self._filter_i is None:
+            return
+        copy = filters.tidy(dict(self._filters[self._filter_i]))
+        copy.update(id=filters.blank()["id"], name=copy["name"] + " copy")
+        copy["devices"] = list(copy["devices"])
+        copy["rules"] = [dict(r) for r in copy["rules"]]
+        self._filters.insert(self._filter_i + 1, copy)
+        self._filter_i += 1
+        self._filter_save()
+        self._filter_fill_editor()
+
+    def _filter_delete(self):
+        if self._filter_i is None:
+            return
+        item = self._filters[self._filter_i]
+        if not messagebox.askyesno("Delete filter", f"Delete the filter {item['name']}?", parent=self):
+            return
+        del self._filters[self._filter_i]
+        self._filter_i = min(self._filter_i, len(self._filters) - 1) if self._filters else None
+        self._filter_save()
+        self._filter_fill_editor()
 
     # --- the JRiver Playlists page ---
 

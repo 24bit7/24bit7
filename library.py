@@ -30,7 +30,9 @@ import engine
 GOOD = 0.80              # a match at least this close counts as found
 REFRESH_MINUTES = 30     # how often the library is re-read in the background
 AUDIO = "[Media Type]=[Audio]"
-FIELDS = "Key,Name,Artist,Album,Album Artist (auto),Disc #,Track #,Duration,Last Played"
+FIELDS = ("Key,Name,Artist,Album,Album Artist (auto),Disc #,Track #,Duration,Last Played,"
+          # for Settings > Filters rules
+          "Rating,Date (year),Number Plays,Date Imported,Genre,File Type,Bit Depth,Sample Rate,Filename")
 
 _lock = threading.Lock()
 _albums = {}             # (album, album artist) -> [track rows]
@@ -43,6 +45,7 @@ _loaded_at = 0.0
 _closers = {}            # key -> (seconds, name, artist) for the last track of each album
 _played = {}             # key -> when JRiver last played it (Unix seconds), for tracks it has played
 _played_unread = False   # True when the library had Last Played values but none could be read
+_by_key = {}             # key -> track row, for filter rules
 _timer = None
 
 
@@ -154,7 +157,7 @@ def _read_playlists():
 def load():
     """Reads the whole library from JRiver. Returns a line for the log."""
     global _albums, _artists, _tracks, _songs, _song_titles, _playlists, _loaded_at, _closers
-    global _played, _played_unread
+    global _played, _played_unread, _by_key
     engine.refresh_settings_if_changed()
     started = time.time()
     tracks = _read_tracks()
@@ -196,8 +199,10 @@ def load():
             when = played_time(raw)
             if when:
                 played[str(row["Key"])] = when
+    by_key = {str(row.get("Key")): row for row in tracks}
     with _lock:
         _albums, _artists, _tracks, _playlists = albums, artists, tracks, playlists
+        _by_key = by_key
         _closers = closers
         _played, _played_unread = played, bool(seen and not played)
         _songs, _song_titles = songs, [t for t in songs if t]
@@ -260,6 +265,12 @@ def played_time(raw):
         except ValueError:
             continue
     return None
+
+
+def track_row(key):
+    """A track's fields from the library held in memory, or None."""
+    with _lock:
+        return _by_key.get(str(key))
 
 
 def last_played(key):

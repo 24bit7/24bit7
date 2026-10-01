@@ -25,6 +25,7 @@ import threading
 from dotenv import dotenv_values
 
 import engine
+import filters
 
 POLL_SECONDS = 4
 YES = ("1", "true", "yes")
@@ -128,7 +129,7 @@ def _rest_of_artist(zone, entry, info, report):
     artist, keys = library.artist_tracks(entry.get("top_artist") or info.get("Artist") or "")
     sent = engine.nonstop_sent(zone) | {str(info.get("FileKey") or "")}
     keys = [str(k) for k in keys if str(k) not in sent]
-    played = engine.PlayedFilter("top", report=report)
+    played = engine.PlayedFilter("top", report=report, filters=True)
     keys = [k for k in keys if played.fresh(k)]
     played.done()
     if not keys:
@@ -162,6 +163,7 @@ def _job(zone, zone_name, profile, info):
             engine.OUTPUT_OVERRIDE = zone_name
             engine.use_profile(profile)
             engine.NONSTOP_APPEND = True
+            engine.FILTER_DEVICE = filters.device_for_zone(zone_name)
             engine.NONSTOP_CONTEXT = {}   # adding the rest of an artist isn't a new build
             with engine._nonstop_lock:
                 entry = engine.NONSTOP_ZONES.get(zone)
@@ -199,5 +201,6 @@ def _job(zone, zone_name, profile, info):
         finally:
             engine.OUTPUT_OVERRIDE = None
             engine.NONSTOP_APPEND = False
+            engine.FILTER_DEVICE = None
             engine.use_profile(None)
     return run

@@ -181,7 +181,7 @@ def _hear_device(device_id):
 
 # --- commands -----------------------------------------------------------------
 
-def _job(intent, value, zone, profile=None):
+def _job(intent, value, zone, profile=None, device=None):
     """
     The build itself, run on the Play tab's worker thread, with the device's own settings if it has any.
     Takeover: a newer voice command for the same zone stops this build at its next step (or skips it
@@ -212,6 +212,7 @@ def _job(intent, value, zone, profile=None):
             engine.use_profile(profile)
             engine.VOICE_TAKEOVER = True
             engine.CANCEL_CHECK = superseded
+            engine.FILTER_DEVICE = device   # Settings > Filters ticked for this device apply
             _build(intent, value, guarded)
         except engine.BuildCancelled:
             report(f"  Stopped: a newer voice command for {zone} took over.")
@@ -220,6 +221,7 @@ def _job(intent, value, zone, profile=None):
             engine.use_profile(None)
             engine.VOICE_TAKEOVER = False
             engine.CANCEL_CHECK = None
+            engine.FILTER_DEVICE = None
             with _take_lock:
                 _running[0] = None
                 _open[zone] = max(0, _open.get(zone, 1) - 1)
@@ -428,7 +430,7 @@ def handle_command(body, busy=False):
     phrase = {"songs_by": "songs by", "music_like": "music like", "genre": "genre",
               "tracks_like": "tracks like"}[intent]
     profile = device_profile(device or "unknown device")
-    _submit(_job(intent, value, zone, profile),
+    _submit(_job(intent, value, zone, profile, device or "unknown device"),
             f"Voice, {name}: {phrase} {shown}{corrected}, to {zone}" + (", with its own settings" if profile else ""))
     if busy and not _takes_over(zone):
         return "pending", "Please wait, request pending.", {}
