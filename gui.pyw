@@ -28,6 +28,7 @@ from settings_gui import SettingsTab, write_env, warn_moderator_once, Tooltip, N
 from discover_gui import DiscoverTab
 from tabs import TabbedPane, PALETTE, FlatButton, InfoLine, apply_theme
 from mix_gui import MixRows
+import console_query
 import playmix
 
 
@@ -530,7 +531,9 @@ class PlayTab(tk.Frame):
         black, green, dim = "#000000", "#00ff41", "#0d4d1c"   # the console's own colours
         self.console_strip = tk.Frame(frame, bg=black)
         self.console_buttons = {}
-        for name, command in (("Copy", self._copy_log), ("Clear", self._clear_from_strip)):
+        self.console_frame = frame
+        for name, command in (("Copy", self._copy_log), ("Clear", self._clear_from_strip),
+                              ("Query", self._open_query)):
             b = tk.Label(self.console_strip, text=name, font=("Segoe UI", 8, "bold"), bg=black, fg=green,
                          padx=8, pady=1, cursor="hand2", highlightthickness=1,
                          highlightbackground=green, highlightcolor=green)
@@ -539,11 +542,23 @@ class PlayTab(tk.Frame):
             b.bind("<Leave>", lambda e, w=b: w.config(bg=black))
             b.bind("<Button-1>", lambda e, c=command: c())
             self.console_buttons[name] = b
+        # Query is lavender (it uses AI credits) and only shows once Console Query is switched on
+        lavender = "#c3a6ff"
+        self.console_buttons["Query"].config(fg=lavender, highlightbackground=lavender, highlightcolor=lavender)
+        self.console_buttons["Query"].pack_forget()
+        self._build_query_panel(frame)
         self.log.bind("<Button-1>", lambda e: self._show_console_strip(), add="+")
         self.root.bind_all("<Button-1>", self._maybe_hide_console_strip, add="+")
 
     def _show_console_strip(self):
-        """Top-right inside the console, clear of its scrollbar."""
+        """Top-right inside the console, clear of its scrollbar. Query shows when it's switched on."""
+        engine.refresh_settings_if_changed()
+        query = self.console_buttons["Query"]
+        if getattr(engine, "CONSOLE_QUERY", False) and engine.ANTHROPIC_API_KEY:
+            if not query.winfo_manager():
+                query.pack(side="left", padx=(0, 4))
+        else:
+            query.pack_forget()
         self.console_strip.place(in_=self.log, relx=1.0, x=-6, y=6, anchor="ne")
         self.console_strip.lift()
 
@@ -575,6 +590,73 @@ class PlayTab(tk.Frame):
         self._clear_log()
         self.console_strip.place_forget()
         self.console_buttons["Clear"].config(bg="#000000")
+
+    # --- Console Query: ask Claude about what's in the console ---
+
+    def _build_query_panel(self, frame):
+        """The box under the console: a question, Ask and Close, with grey hints underneath."""
+        self.query_panel = tk.Frame(frame)
+        row = tk.Frame(self.query_panel)
+        row.pack(fill="x", pady=(8, 0))
+        tk.Label(row, text="Ask Claude", font=("Segoe UI", 9, "bold"),
+                 fg=PALETTE["ai_purple"]).pack(side="left", padx=(0, 8))
+        self.query_var = tk.StringVar()
+        self.query_entry = tk.Entry(row, textvariable=self.query_var, font=("Segoe UI", 10))
+        self.query_entry.pack(side="left", fill="x", expand=True)
+        self.query_entry.bind("<Return>", lambda e: self._send_query())
+        self.query_send = FlatButton(row, text="Ask", command=self._send_query, width=8, height=1,
+                                     accent=PALETTE["ai_purple"])
+        self.query_send.pack(side="left", padx=(8, 0))
+        FlatButton(row, text="Close", command=self._close_query, width=8, height=1,
+                   quiet=True).pack(side="left", padx=(8, 0))
+        tk.Label(self.query_panel, text=console_query.HINT, font=("Segoe UI", 8),
+                 fg=PALETTE["text_muted"], anchor="w", justify="left").pack(anchor="w", pady=(4, 0))
+        self._query_busy = False
+
+    def _open_query(self):
+        self.console_strip.place_forget()
+        self.console_buttons["Query"].config(bg="#000000")
+        if not self.query_panel.winfo_manager():
+            # packed ahead of the console so it gets its height first; the console shrinks
+            self.query_panel.pack(side="bottom", fill="x", before=self.log.frame)
+        self.query_entry.focus_set()
+
+    def _close_query(self):
+        self.query_panel.pack_forget()
+
+    def _append_query(self, text, bold=False):
+        """Questions and answers go into the console in lavender, so they stand out from the log."""
+        self.log.tag_configure("query", foreground="#c3a6ff")
+        self.log.tag_configure("query_q", foreground="#c3a6ff", font=("Consolas", 9, "bold"))
+        self.log.config(state="normal")
+        self.log.insert("end", text, "query_q" if bold else "query")
+        self.log.see("end")
+        self.log.config(state="disabled")
+
+    def _send_query(self):
+        question = self.query_var.get().strip()
+        if not question or self._query_busy:
+            return
+        engine.refresh_settings_if_changed()
+        if not engine.ANTHROPIC_API_KEY:
+            messagebox.showinfo("Console Query", NO_KEY_TEXT, parent=self)
+            return
+        self._greeting_active = False
+        console = self.log.get("1.0", "end-1c")
+        self._query_busy = True
+        self.query_send.config(text="Asking...", state="disabled")
+        self.query_var.set("")
+        self._append_query(f"\nYou asked: {question}\n", bold=True)
+        console_query.ask(question, console, self.last_playing,
+                          lambda answer, error: self.after(0, lambda: self._query_done(answer, error)))
+
+    def _query_done(self, answer, error):
+        self._query_busy = False
+        self.query_send.config(text="Ask", state="normal")
+        if error:
+            self._append_query(f"Console Query didn't come back: {error}\n")
+        else:
+            self._append_query(answer + "\n")
 
     def _run_job(self, target, needs_playing=True, mix=True):
         if self.running:

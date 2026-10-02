@@ -26,7 +26,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.7.0"
+VERSION = "1.8.0"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
@@ -1916,6 +1916,23 @@ def artist_key(name):
     return norm_artist_text(canonicalise_conjunction(name)).lower().strip()
 
 
+def owner_key(artist, key):
+    """
+    Who a found track counts against for 'at most N per artist': the artist as tagged
+    in the library, so 'The Jimi Hendrix Experience' and 'Jimi Hendrix' share one
+    allowance. Falls back to the source's name (YouTube output, or not in the cache).
+    """
+    try:
+        import library   # here rather than at the top: library imports engine
+        row = library.track_row(key) if key else None
+        tagged = ((row or {}).get("Artist") or "").split(";")[0].strip()
+        if tagged:
+            return artist_key(tagged)
+    except Exception:
+        pass
+    return artist_key(artist)
+
+
 BLEND_DEPTH = 2   # ask each source for this many times the wanted count, so overlaps deeper down still merge
 
 
@@ -2156,6 +2173,15 @@ def find_jriver_key_by_track(artist_name, track_name):
             if key:
                 print(f"  Matched on primary artist: {artist_name} - {track_name} (as {primary})")
                 return key
+        # 'The Jimi Hendrix Experience' against a library tagged 'Jimi Hendrix', or the other
+        # way round: the library cache's matcher finds a name inside the credit, title matching
+        try:
+            import library   # here rather than at the top: library imports engine
+            key = library.find_track_key(artist_name, track_name)
+        except Exception:
+            key = None
+        if key:
+            return key
         if DEBUG:
             sample = []
             for item in items[:5]:
@@ -2954,7 +2980,8 @@ class Drift:
         """A track that made the playlist, so a later round can seed from it."""
         a = artist_key(artist)
         self.finds.append((artist, title, str(key), score))
-        self.per[a] = self.per.get(a, 0) + 1
+        owner = owner_key(artist, key)   # counted as tagged in the library
+        self.per[owner] = self.per.get(owner, 0) + 1
         self.seen_artists.add(a)
         self.checked.add((a, clean_name(title)))
 
@@ -2968,7 +2995,7 @@ class Drift:
         keys = {str(k) for k in keys}
         for artist, title, key, _ in self.finds:
             if key in keys:
-                a = artist_key(artist)
+                a = owner_key(artist, key)
                 self.per[a] = max(0, self.per.get(a, 0) - 1)
         self.finds = [f for f in self.finds if f[2] not in keys]
         self.exclude |= keys
@@ -2981,8 +3008,10 @@ class Drift:
             self.discard(removed)
         return removed
 
-    def _room(self, artist):
-        return self.per_artist - self.per.get(artist_key(artist), 0)
+    def _room(self, artist, key=None):
+        """Room left for this artist; with a key, counted as the track is tagged in the library."""
+        who = owner_key(artist, key) if key else artist_key(artist)
+        return self.per_artist - self.per.get(who, 0)
 
     def _seeds(self):
         ranked = sorted(enumerate(self.finds), key=lambda x: (-x[1][3], x[0]))
@@ -3042,7 +3071,7 @@ class Drift:
         return added
 
     def _take(self, keys, artist, title, key, score):
-        if not key or str(key) in self.exclude or key in keys or self._room(artist) <= 0:
+        if not key or str(key) in self.exclude or key in keys or self._room(artist, key) <= 0:
             return False
         if self.played and not self.played.fresh(key):
             return False
@@ -3280,7 +3309,8 @@ def create_similar_playlist(report=print, seed_info=None):
 
     def add(found, score):
         for artist, title, key in found:
-            if key not in collected_keys and key != first_key and played.fresh(key):
+            if key not in collected_keys and key != first_key and played.fresh(key) \
+                    and drift._room(artist, key) > 0:   # one allowance per artist as tagged
                 collected_keys.append(key)
                 drift.note(artist, title, key, score)
                 fast.play(key)
@@ -3510,9 +3540,10 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
             checked.add(ident)
             key = find_jriver_key_by_track(artist, title) if use_youtube else library.find_track_key(artist, title)
             session_log(session_id, artist, title, sources, found=bool(key))
-            if key and key not in keys and played.fresh(key):
+            owner = owner_key(artist, key) if key else ident[0]   # counted as tagged in the library
+            if key and key not in keys and played.fresh(key) and per.get(owner, 0) < per_artist:
                 keys.append(key)
-                per[ident[0]] = per.get(ident[0], 0) + 1
+                per[owner] = per.get(owner, 0) + 1
                 drift.note(artist, title, key, len(sources))
                 fast.play(key)
                 report(f"    Found: {artist} - {title}  ({', '.join(sources)})")

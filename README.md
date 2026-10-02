@@ -8,7 +8,7 @@ If you host your whole music library locally in JRiver, you get bit-perfect play
 
 **It works live.** Play any track in JRiver, press a button, and Playing Now is rebuilt around it while the music keeps going. There is nothing to export, no listening history to upload and no second app to keep in sync: whatever is playing right now is the seed. Run it mid-album, mid-track, whenever the mood shifts.
 
-**New in 1.7.0: your own playlists join in.** Add any JRiver playlist or smartlist to a build from the Play tab: before 24bit7's picks, after them, or mixed through, spaced evenly or at random. It started as a request on the JRiver forum, from a user who wanted his smartlists to follow on without guessing how long a build would take. More options gathers Show Credits, the AI Moderator and the new playlists into one row, and anything that spends AI credit is now marked in purple.
+**New in 1.8.0: ask Claude about a build.** Switch on Console Query, click into the console, press Query and ask why a playlist came out the way it did. Claude reads the console, your settings and 24bit7's own code, then explains what happened and suggests settings to change. Drift and Non-stop join the AI Moderator under More Options, and band credits such as "The Jimi Hendrix Experience" now find a library tagged "Jimi Hendrix".
 
 You don't have to own the seed either. Type any artist and track into the Search tab and 24bit7 builds a playlist around it, from your library or, with Output set to YouTube, from YouTube. That second route needs no library, no keys and no JRiver.
 
@@ -20,7 +20,7 @@ The name is a throwback to an old username. Read it as 24-bit and 24/7: audiophi
 
 ## What it does
 
-Four playlist buttons on the **Play** tab, plus **More options**. The seed is whichever of the two small tabs is showing when you press a button: **Now Playing** (whatever JRiver is playing right now) or **Search** (any artist and track you type, owned or not).
+Four playlist buttons on the **Play** tab, plus **More Options**. The seed is whichever of the two small tabs is showing when you press a button: **Now Playing** (whatever JRiver is playing right now) or **Search** (any artist and track you type, owned or not).
 
 | Action | What you get |
 |---|---|
@@ -28,7 +28,7 @@ Four playlist buttons on the **Play** tab, plus **More options**. The seed is wh
 | **Similar Tracks** | A playlist of tracks like the seed track, suggested track by track by Last.fm, ListenBrainz and YouTube Music and blended, so a playlist follows the song rather than the artist's reputation. |
 | **Artist's Top Tracks** | The artist's most popular tracks that you actually own, in random or popularity order. From the Search tab it needs only the artist. |
 | **Vibe Playlist** | Type a mood or scene (or pick one of three AI suggestions) and get a playlist to match. |
-| **More options** | Opens a row underneath with **Show Credits** (producer, engineer and other credits for the current album, from Discogs; not offered from the Search tab, which has no album to look up), the **AI Moderator** and **Add playlist** (see below). It remembers whether it's open, and when closed it counts what's switched on inside it, such as "More options (2)". |
+| **More Options** | Opens a row underneath with the **AI Moderator**, **Drift** and **Non-stop** (both change Settings > Playlist for every Play option at once), **Show Credits** (producer, engineer and other credits for the current album, from Discogs; not offered from the Search tab, which has no album to look up) and **+ Add Playlist** (see below). It remembers whether it's open. |
 
 **Output** sits beside the buttons and decides where the finished playlist goes: **Same zone** (the default: the zone you seeded from), any JRiver zone by name, or **YouTube**, which opens it in your browser as an instant playlist. The **Zone** dropdown on the Now Playing tab picks which zone you seed from.
 
@@ -77,7 +77,13 @@ Vibe Playlist can also drift using **AI**: each round asks the AI again with you
 
 Most playlists are right apart from one track: the stadium anthem in the middle of a run of acoustic songs. The AI Moderator is an optional check that catches it. When it's on, each playlist (and each Drift round) goes to Claude Haiku once, with the seed and the list of tracks, and it removes the ones that would jolt a listener out of the mood. It judges tone, energy and mood only, and genre is never a reason on its own: a folk song and an electronic track can sit together, and two songs in the same genre can clash. It keeps anything it's unsure about or doesn't know, removes at most a fifth of the tracks, and logs each removal with its reason. A few extra tracks are found up front, so the ones it removes are replaced. The fast start track is never checked, and Artist's Top Tracks isn't moderated, since it's one artist.
 
-It needs an Anthropic key and uses a little credit each time, a fraction of a penny per playlist; the first time you switch it on, 24bit7 says so. Without a key the option is greyed out. If the check fails or the credit runs out, the playlist builds as normal and the log says why. Switch it on or off as you go from **More options** on the Play tab. It applies to Similar Artists and Similar Tracks. Vibe playlists don't use it, because the AI has already picked every track against your description. A voice device with settings of its own keeps its own choice under Settings > Sources; one copying Windows (Main) follows the Play tab (see Voice Commands below).
+It needs an Anthropic key and uses a little credit each time, a fraction of a penny per playlist; the first time you switch it on, 24bit7 says so. Without a key the option is greyed out. If the check fails or the credit runs out, the playlist builds as normal and the log says why. Switch it on or off as you go from **More Options** on the Play tab. It applies to Similar Artists and Similar Tracks. Vibe playlists don't use it, because the AI has already picked every track against your description. A voice device with settings of its own keeps its own choice under Settings > Sources; one copying Windows (Main) follows the Play tab (see Voice Commands below).
+
+### Console Query
+
+When a playlist comes out short or odd, you can ask why. Tick **Enable Console Query** in Settings > Other (it's off by default, and asks before it switches on), then click into the console and press **Query**. Type a question under the console and press Enter: "Why was this track included?", "Why was the playlist so short?", "What did the AI Moderator remove?". The answer appears in the console in lavender, and the box stays open for follow-ups.
+
+Claude Haiku is sent what's in the console, your settings with every key, token, password and user name left out, what's playing, and 24bit7's own code and README, so it knows the rules and the names of the settings. It explains what most likely happened and suggests up to three changes, named as they appear in Settings. Plain music questions, such as which album a song is from, are answered from general knowledge. Running from source, it reads the code in the folder; the packaged app downloads it once from GitHub, for the version you're running. The console logs headlines rather than every track's fate, so ticking Debug as well gives Claude more to go on. It costs a few pence for the first question and much less for follow-ups within a few minutes. Clear empties the console, and with it what Claude can see.
 
 ### Hidden tracks
 
@@ -145,6 +151,8 @@ Two cases earned their own rules in 1.2.0:
 
 JRiver's multi-value fields are understood too. An artist tagged `Angus Stone;Dope Lemon` is treated as either name, not a combined one: both are seeded, both match in the library, and a track that surfaces under each is queued once.
 
+Band credits are matched both ways round. A source's "The Jimi Hendrix Experience" finds a library tagged "Jimi Hendrix", and the reverse, when the title matches too. Only three shapes count: "The" plus the name plus a band word (The Jimi Hendrix Experience), the name followed by and, & or + (Bob Marley & The Wailers matches Bob Marley), and the name after one of those at the end (it also matches The Wailers). "Of" never counts, so Eagles of Death Metal won't match Eagles, and nor does a bare suffix such as Boston Pops. "At most N per artist" counts the artist as tagged in your library, so both credits share one allowance. Each such match is logged as "Matched on band name".
+
 ### Queueing
 
 New tracks are queued around the current one: everything else in Playing Now is cleared, the current track keeps playing with no gap, and the new playlist follows it. The result is that Playing Now is exactly "what I was listening to plus what 24bit7 chose", which saves cleanly as a JRiver playlist.
@@ -155,7 +163,7 @@ With more than one JRiver zone, the finished playlist goes to the zone Output na
 
 ### Adding your own playlists
 
-Open **More options** and press **Add playlist** to join a JRiver playlist or smartlist to the next build from the Play tab. Each row has a handle to drag it up or down, the playlist, and how it joins:
+Open **More Options** and press **+ Add Playlist** to join a JRiver playlist or smartlist to the next build from the Play tab. Each row has a handle to drag it up or down, the playlist, and how it joins:
 
 - **Add before**: its tracks play first, in the playlist's own order.
 - **Add after**: its tracks follow 24bit7's, in their own order.
@@ -222,7 +230,7 @@ Every response from every source is cached in a local SQLite database with a con
 | Deezer | Similar artists, top tracks, name verification | No | Also used to verify AI-suggested artists exist. |
 | YouTube Music | Similar artists and similar tracks from the up next queue, playlist output, Discover playlists | No | No sign-in. Uses the unofficial ytmusicapi library, so it may break now and then. |
 | Discogs | Album credits, record labels | Yes (free) | Credits, and a second source for the Label button. |
-| Anthropic (Claude) | AI-suggested similar artists, Vibe Playlist, AI Moderator | Yes (paid, pennies per run) | Every suggestion is verified against Deezer before it is trusted. The moderator uses Claude Haiku, a fraction of a penny per playlist. |
+| Anthropic (Claude) | AI-suggested similar artists, Vibe Playlist, AI Moderator, Console Query | Yes (paid, pennies per run) | Every suggestion is verified against Deezer before it is trusted. The moderator uses Claude Haiku, a fraction of a penny per playlist. |
 
 Enable any combination of similar-artist sources in Settings. One is enough; several are better. Deezer and YouTube Music need no keys, so 24bit7 works out of the box.
 
@@ -256,7 +264,17 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.7.0
+## What's new in 1.8.0
+
+- **Console Query.** Ask Claude why a playlist came out the way it did, and get suggested setting changes. Off by default: Settings > Other > Enable Console Query (see Console Query above).
+- **Copy and Clear.** Click into the console to copy what you've highlighted (or all of it), or to clear it.
+- **Drift and Non-stop on the Play tab.** Both sit in More Options beside the AI Moderator and change Settings > Playlist for every Play option at once.
+- **Band names matched both ways.** "The Jimi Hendrix Experience" finds a library tagged "Jimi Hendrix", and the reverse. "At most 3 per artist" counts them as one artist.
+- **Playlists and smartlists set apart.** "Use global playlist settings" has a row for each, so a random-album smartlist can keep its own order.
+- **Now Playing refreshes on click,** on its tab or anywhere in its panel.
+- **Rounded buttons and tabs.**
+
+### Earlier: 1.7.0
 
 - **Your own playlists in a build.** Add JRiver playlists and smartlists before, after or mixed through any Play tab build, spaced evenly or at random, in the order you list them. The ones you use most come first in the picker.
 - **More options.** One row for Show Credits, the AI Moderator and Add playlist, opened from where Show Credits was. It remembers whether it's open, and counts what's on when it's closed.

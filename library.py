@@ -422,17 +422,55 @@ def find_track_key(artist, title):
     return sorted(matches, key=lambda e: _album_version_first(e, norm(e[1])))[0][2]
 
 
+def _credit_words(text):
+    """A credit as lower-case words, keeping 'the' and 'and' ('&' and '+' become 'and')."""
+    text = unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode().lower().strip()
+    m = re.match(r"^(.*),\s*the$", text)                       # Kooks, The -> the kooks
+    if m:
+        text = "the " + m.group(1)
+    text = text.replace("&", " and ").replace("+", " and ")
+    text = re.sub(r"\(.*?\)|\[.*?\]", " ", text)
+    return re.sub(r"[^a-z0-9 ]", " ", text).split()
+
+
+def _band_holds(short, long_):
+    """
+    True when long_ is a band credit built round short, in one of three shapes:
+      The Jimi Hendrix Experience  'The' + the name + one or two band words
+      Bob Marley & The Wailers     the name, then and / & / +
+      Bob Marley & The Wailers     and / & / + [the], then the name, at the end ('The Wailers')
+    Anything else, 'of' included ('Eagles of Death Metal'), or a bare suffix with no
+    'The' ('Boston Pops'), doesn't count.
+    """
+    s, l = _credit_words(short), _credit_words(long_)
+    if s[:1] == ["the"]:
+        s = s[1:]
+    core_l = l[1:] if l[:1] == ["the"] else l
+    if not s or s == core_l or len(" ".join(s)) < 3:
+        return False
+    n = len(s)
+    for i in range(len(l) - n + 1):
+        if l[i:i + n] != s:
+            continue
+        before, after = l[:i], l[i + n:]
+        if before == ["the"] and 1 <= len(after) <= 2 and not ({"of", "and"} & set(after)):
+            return True
+        if after[:1] == ["and"] and before in ([], ["the"]):
+            return True
+        if not after and (before[-1:] == ["and"] or before[-2:] == ["and", "the"]):
+            return True
+    return False
+
+
 def _band_match(artist, tagged):
     """
-    True when the source's artist appears as whole words in the tag: 'Jimi Hendrix'
-    in 'The Jimi Hendrix Experience'. Whole words, so 'Queen' never matches
-    'Queens of the Stone Age'. Only used after the title has matched.
+    True when the source's credit and a tag are the same act inside a band credit,
+    either way round: 'The Jimi Hendrix Experience' against a tag of 'Jimi Hendrix',
+    or 'Jimi Hendrix' against 'The Jimi Hendrix Experience'. Only used after the full
+    credit and the first-named act have missed, and the title has matched.
     """
-    want = norm(artist)
-    if len(want) < 2:
-        return False
-    pattern = re.compile(rf"(^| ){re.escape(want)}( |$)")
-    return any(pattern.search(norm(part)) for part in (tagged or "").split(";") if part.strip())
+    return any(_band_holds(artist, part) or _band_holds(part, artist)
+               for part in (tagged or "").split(";") if part.strip())
 
 
 def _primary_match(artist, tagged):
