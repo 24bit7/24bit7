@@ -162,6 +162,7 @@ class TabbedPane(tk.Frame):
             scale = 1.0
         self._px = lambda n: max(1, int(round(n * scale))) if n else 0
         self._font = font
+        self._tk_font = tkfont.Font(root=self, font=font)   # for sizing the rounded tabs
         self._pad = (self._px(pad[0]), self._px(pad[1]))
         self._line = self._px(LINE_WIDTH)
         self._tabs, self._pages, self._current = [], [], None
@@ -182,10 +183,11 @@ class TabbedPane(tk.Frame):
     # --- the ttk.Notebook-style interface ---------------------------------
 
     def add(self, page, text=""):
-        edge = tk.Frame(self._strip, bg=PALETTE["line"])        # shows as the tab's outline
-        label = tk.Label(edge, text=text, font=self._font, padx=self._pad[0], pady=self._pad[1],
-                         cursor="hand2")
-        label.pack(padx=self._line, pady=(self._line, 0))       # outline on the top and both sides
+        # The tab is a rounded image (outline on the top and both sides) with its text on top
+        edge = tk.Frame(self._strip, bg=self._strip.cget("bg"))
+        label = tk.Label(edge, text=text, font=self._font, compound="center", bd=0, highlightthickness=0,
+                         padx=0, pady=0, bg=self._strip.cget("bg"), cursor="hand2")
+        label.pack()
         edge.pack(side="left", anchor="s", padx=(0, self._px(TAB_GAP)))
         label.bind("<Button-1>", lambda e, p=page: self.select(p))
         edge.bind("<Configure>", lambda e: self._place_gap(), add="+")   # re-placed once Windows sizes it
@@ -230,6 +232,7 @@ class TabbedPane(tk.Frame):
         """Changes a page's tab text (a device renamed under Voice Commands)."""
         if page in self._pages:
             self._tabs[self._pages.index(page)].config(text=text)
+            self._paint()
 
     # --- helpers ------------------------------------------------------------
 
@@ -244,11 +247,14 @@ class TabbedPane(tk.Frame):
 
     def _paint(self):
         selected_bg = PALETTE["tab_selected_bg"] or self.cget("bg")
+        line_h = self._tk_font.metrics("linespace")
         for label, page in zip(self._tabs, self._pages):
             on = page is self._current
-            label.config(bg=selected_bg if on else PALETTE["tab_bg"],
-                         fg=PALETTE["tab_selected_fg"] if on else PALETTE["tab_fg"],
-                         pady=self._pad[1] + (self._px(SELECTED_RISE) if on else 0))
+            w = self._tk_font.measure(label.cget("text")) + 2 * self._pad[0] + 2 * self._line
+            h = line_h + 2 * self._pad[1] + self._line + (self._px(SELECTED_RISE) if on else 0)
+            shape = rounded_shape(self, w, h, self._px(CORNER), selected_bg if on else PALETTE["tab_bg"],
+                                  PALETTE["line"], self._line, open_bottom=True)
+            label.config(image=shape, fg=PALETTE["tab_selected_fg"] if on else PALETTE["tab_fg"])
 
         self.after_idle(self._place_gap)
 
@@ -270,53 +276,141 @@ class TabbedPane(tk.Frame):
 
 
 BUTTON_BAR = 3      # height of the orange bar under a button
+CORNER = 6          # rounded corners on buttons and tabs (pixels at 100% scaling)
+
+_SHAPES = {}        # drawn shapes, kept so Tk doesn't lose them
+
+
+def _rgba(widget, colour):
+    r, g, b = widget.winfo_rgb(colour)   # handles Windows' own names, such as SystemButtonFace
+    return (r >> 8, g >> 8, b >> 8, 255)
+
+
+def rounded_shape(widget, w, h, radius, fill, edge, line, bar=None, bar_h=0, open_bottom=False):
+    """
+    A rounded rectangle as a Tk image: an outline of width line in edge, filled with
+    fill, optionally a bar along the bottom inside the curve. open_bottom leaves the
+    bottom square with no outline (a tab sitting on the line under it). Drawn at four
+    times the size and scaled down, so the corners are smooth.
+    """
+    key = (w, h, radius, fill, edge, line, bar, bar_h, open_bottom)
+    if key in _SHAPES:
+        return _SHAPES[key]
+    from PIL import Image, ImageDraw, ImageTk
+    s = 4
+    big_w, big_h = w * s, h * s
+    tail = radius * s * 2 if open_bottom else 0   # drawn past the bottom, then cut off
+
+    def mask(inset):
+        m = Image.new("L", (big_w, big_h + tail), 0)
+        bottom = big_h + tail - 1 - (0 if open_bottom else inset)
+        ImageDraw.Draw(m).rounded_rectangle((inset, inset, big_w - 1 - inset, bottom),
+                                            radius=max(0, radius * s - inset), fill=255)
+        return m.crop((0, 0, big_w, big_h))
+
+    def layer(colour, m):
+        part = Image.new("RGBA", (big_w, big_h), _rgba(widget, colour))
+        part.putalpha(m)
+        return part
+
+    image = Image.new("RGBA", (big_w, big_h), (0, 0, 0, 0))
+    image = Image.alpha_composite(image, layer(edge, mask(0)))
+    inner = mask(line * s)
+    image = Image.alpha_composite(image, layer(fill, inner))
+    if bar and bar_h:
+        strip = Image.new("L", (big_w, big_h), 0)
+        ImageDraw.Draw(strip).rectangle((0, big_h - (line + bar_h) * s, big_w, big_h), fill=255)
+        from PIL import ImageChops
+        image = Image.alpha_composite(image, layer(bar, ImageChops.multiply(strip, inner)))
+    photo = ImageTk.PhotoImage(image.resize((w, h), Image.LANCZOS), master=widget)
+    _SHAPES[key] = photo
+    return photo
 
 
 class FlatButton(tk.Frame):
     """
-    A button drawn from a frame and a label, so its colours look the same on any PC
-    (Windows draws tk.Button its own way). Used like tk.Button for what 24bit7 needs:
+    A button drawn as a rounded image with its text on top, so its colours and shape
+    look the same on any PC (Windows draws tk.Button its own way). Used like
+    tk.Button for what 24bit7 needs:
       b = FlatButton(parent, text="...", command=handler, width=16, height=2)
       b.config(state="disabled") / b.config(state="normal")
     quiet=True gives the plainer version: window colour, grey outline, no orange bar.
+    width and height are in characters and lines, as on tk.Button.
     """
 
     def __init__(self, master, text="", command=None, width=None, height=None, quiet=False,
                  accent=None, **kw):
-        super().__init__(master, bg=PALETTE["button_outline"], **kw)
+        back = master.cget("bg")
+        super().__init__(master, bg=back, **kw)
         try:
             scale = max(1.0, self.winfo_fpixels("1i") / 96.0)
         except tk.TclError:
             scale = 1.0
-        px = lambda n: max(1, int(round(n * scale)))
+        self._px = lambda n: max(1, int(round(n * scale)))
         self._command = command
         self._quiet = quiet
         self._accent = accent   # a bar colour other than orange (purple: uses AI credits)
         self._state = "normal"
         self._inside = False
-        self._bg = (PALETTE["button_quiet_bg"] or master.cget("bg")) if quiet else PALETTE["button_bg"]
-        line = px(1)
+        self._pressed = False
+        self._chars, self._lines = width, height
+        self._bg = (PALETTE["button_quiet_bg"] or back) if quiet else PALETTE["button_bg"]
         self._font = tkfont.nametofont("TkDefaultFont").copy()   # bold, at the usual size
         self._font.configure(weight="bold")
-        self._label = tk.Label(self, text=text, width=width, height=height, bg=self._bg,
-                               fg=PALETTE["button_fg"], font=self._font, cursor="hand2")
-        self._label.pack(fill="both", expand=True, padx=line, pady=(line, 0))
-        # The bar is orange, or on the quiet button the fill colour, so both are the same height
-        self._bar = tk.Frame(self, height=px(BUTTON_BAR), bg=self._bar_colour(True))
-        self._bar.pack(fill="x", padx=line, pady=(0, line))
+        self._label = tk.Label(self, text=text, compound="center", font=self._font, bg=back,
+                               fg=PALETTE["button_fg"], bd=0, highlightthickness=0, padx=0, pady=0,
+                               cursor="hand2")
+        self._label.pack()
+        self._size = self._measure(text)
+        self._draw()
         for widget in (self, self._label):
             widget.bind("<Enter>", self._on_enter)
             widget.bind("<Leave>", self._on_leave)
             widget.bind("<ButtonPress-1>", self._on_press)
             widget.bind("<ButtonRelease-1>", self._on_release)
 
+    def _measure(self, text):
+        """The button's size in pixels, from its width and height in characters and lines."""
+        px, line = self._px, self._px(1)
+        if self._chars:
+            text_w = self._chars * self._font.measure("0")
+        else:
+            text_w = max(self._font.measure(t) for t in (text or " ").split("\n")) + 2 * px(8)
+        lines = self._lines or max(1, (text or "").count("\n") + 1)
+        text_h = lines * self._font.metrics("linespace")
+        return text_w + px(6) + 2 * line, text_h + px(4) + 2 * line + px(BUTTON_BAR)
+
+    def _draw(self):
+        on = self._state == "normal"
+        if on and self._pressed:
+            fill = PALETTE["button_press"]
+        elif on and self._inside:
+            fill = PALETTE["button_hover"]
+        else:
+            fill = self._bg
+        bar = None if self._quiet else ((self._accent or PALETTE["button_accent"]) if on
+                                        else PALETTE["button_outline"])
+        w, h = self._size
+        image = rounded_shape(self, w, h, self._px(CORNER), fill, PALETTE["button_outline"],
+                              self._px(1), bar, self._px(BUTTON_BAR))
+        self._label.config(image=image, fg=PALETTE["button_fg"] if on else PALETTE["button_off_fg"],
+                           cursor="hand2" if on else "")
+
     def config(self, cnf=None, **kw):
+        redraw = False
         if "state" in kw:
-            self._set_state(kw.pop("state"))
+            self._state = "disabled" if str(kw.pop("state")) == "disabled" else "normal"
+            redraw = True
         if "text" in kw:
-            self._label.config(text=kw.pop("text"))
+            text = kw.pop("text")
+            self._label.config(text=text)
+            if not self._chars:
+                self._size = self._measure(text)
+            redraw = True
         if "command" in kw:
             self._command = kw.pop("command")
+        if redraw:
+            self._draw()
         if kw or cnf:
             return super().config(cnf, **kw)
         return None
@@ -330,44 +424,31 @@ class FlatButton(tk.Frame):
             return self._label.cget("text")
         return super().cget(key)
 
-    def _set_state(self, state):
-        self._state = "disabled" if str(state) == "disabled" else "normal"
-        on = self._state == "normal"
-        self._label.config(fg=PALETTE["button_fg"] if on else PALETTE["button_off_fg"],
-                           bg=(PALETTE["button_hover"] if on and self._inside else self._bg),
-                           cursor="hand2" if on else "")
-        self._bar.config(bg=self._bar_colour(on))
-
-    def _bar_colour(self, on):
-        if self._quiet:
-            return self._bg
-        return (self._accent or PALETTE["button_accent"]) if on else PALETTE["button_outline"]
+    def _over(self):
+        x, y = self.winfo_pointerxy()
+        return self.winfo_containing(x, y) in (self, self._label)
 
     def _on_enter(self, _e):
         self._inside = True
-        if self._state == "normal":
-            self._label.config(bg=PALETTE["button_hover"])
+        self._draw()
 
     def _on_leave(self, _e):
-        # Leaving the label for the frame's edge still counts as inside
-        x, y = self.winfo_pointerxy()
-        if self.winfo_containing(x, y) in (self, self._label, self._bar):
+        if self._over():   # moving between the frame and the label still counts as inside
             return
-        self._inside = False
-        if self._state == "normal":
-            self._label.config(bg=self._bg)
+        self._inside = self._pressed = False
+        self._draw()
 
     def _on_press(self, _e):
         if self._state == "normal":
-            self._label.config(bg=PALETTE["button_press"])
+            self._pressed = True
+            self._draw()
 
     def _on_release(self, _e):
         if self._state != "normal":
             return
-        x, y = self.winfo_pointerxy()
-        over = self.winfo_containing(x, y) in (self, self._label, self._bar)
-        self._inside = over
-        self._label.config(bg=PALETTE["button_hover"] if over else self._bg)
+        over = self._over()
+        self._inside, self._pressed = over, False
+        self._draw()
         if over and self._command:
             self._command()
 

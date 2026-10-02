@@ -47,10 +47,17 @@ WELCOME_TEXT = (
 )
 
 
+# The Play tab's Drift and Non-stop switches: which Play options each covers, and Non-stop's reseed choices
+DRIFT_GROUPS = ("artists", "tracks", "vibe")            # Top Tracks has no Drift
+NONSTOP_GROUPS = ("artists", "tracks", "top", "vibe")
+PLAY_RESEED = [("last", "Last track"), ("second", "2nd track")]   # as Settings > Playlist shows them
+
+
 class PlayTab(tk.Frame):
     def __init__(self, master, root):
         super().__init__(master)
         self.root = root
+        self.settings = None   # the Settings tab, once built: Drift and Non-stop write through it
         self.log_queue = queue.Queue()
         self.running = False
         self.last_playing = None
@@ -119,6 +126,15 @@ class PlayTab(tk.Frame):
         self.np_detail = InfoLine(info, font=("Segoe UI", 10), fg=PALETTE["text_secondary"], prefix_font=prefix_font, tab=tab)
         self.np_detail.pack(anchor="w", fill="x")
         self.np_track.show(("...", None))
+
+        # Clicking the Now Playing tab, or anywhere in its panel, reads JRiver straight away
+        def refresh_now(_e=None):
+            if not self.running:
+                self.after_idle(self._update_now_playing)   # after the tab has switched
+        for widget in (frame, info, self.np_track, self.np_detail):
+            widget.bind("<Button-1>", refresh_now, add="+")
+            widget.config(cursor="hand2")
+        self.seed_nb._tabs[0].bind("<Button-1>", refresh_now, add="+")   # the Now Playing tab
 
         self.search_tab = tk.Frame(self.seed_nb, padx=10, pady=8)
         self.seed_nb.add(self.search_tab, text="Search")
@@ -212,7 +228,7 @@ class PlayTab(tk.Frame):
             b.pack(side="left", padx=(0, 8))
             self.buttons.append(b)
         # More options: the quieter button. Opens the row below; stays usable during a build.
-        self.more_button = FlatButton(frame, text="More options", command=self._toggle_more,
+        self.more_button = FlatButton(frame, text="More Options", command=self._toggle_more,
                                       width=18, height=2, quiet=True)
         self.more_button.pack(side="left", padx=(0, 8))
 
@@ -231,13 +247,9 @@ class PlayTab(tk.Frame):
         self.more_box = tk.Frame(self)
         self.more_box.pack(fill="x")
         self.extras_row = tk.Frame(self.more_box, padx=16, pady=4)
-        self.credits_button = FlatButton(self.extras_row, text="Show Credits", command=self.on_credits,
-                                         quiet=True, width=14, height=1)
-        self.credits_button.pack(side="left")
-        self.buttons.append(self.credits_button)   # greyed out during a build, and on the Search tab
         # AI Moderator sets Windows (Main)'s moderator; devices with settings of their own keep theirs.
         tk.Label(self.extras_row, text="AI Moderator", font=("Segoe UI", 9, "bold"),
-                 fg=PALETTE["ai_purple"]).pack(side="left", padx=(24, 6))
+                 fg=PALETTE["ai_purple"]).pack(side="left", padx=(0, 6))
         self.moderator_var = tk.StringVar(value="No")
         self.moderator_cb = ttk.Combobox(self.extras_row, textvariable=self.moderator_var,
                                          values=["No", "Yes"], state="readonly", width=5)
@@ -249,9 +261,41 @@ class PlayTab(tk.Frame):
                                    "Uses a little Anthropic credit, a fraction of a penny per playlist. "
                                    "Voice devices with settings of their own keep their own choice "
                                    "(Settings > Sources).").pack(side="left", padx=(8, 0))
+        # Drift and Non-stop: a second door onto Settings > Playlist for Windows (Main).
+        # Changing them here changes them there, for every Play option at once.
+        tk.Label(self.extras_row, text="Drift", font=("Segoe UI", 9, "bold"),
+                 fg=PALETTE["text_secondary"]).pack(side="left", padx=(24, 6))
+        self.drift_var = tk.StringVar(value="No")
+        self.drift_cb = ttk.Combobox(self.extras_row, textvariable=self.drift_var,
+                                     values=["No", "Yes"], state="readonly", width=5)
+        self.drift_cb.pack(side="left")
+        self.drift_cb.bind("<<ComboboxSelected>>", self._on_drift_changed)
+        help_mark(self.extras_row, "Searches again when a playlist comes up short, for Similar Artists, "
+                                   "Similar Tracks and Vibe. Drift using and Rounds are set for each in "
+                                   "Settings > Playlist, and changing Drift here changes it there too. "
+                                   "Shows Yes only when all three have it on. Voice devices with "
+                                   "settings of their own keep theirs.").pack(side="left", padx=(8, 0))
+        tk.Label(self.extras_row, text="Non-stop", font=("Segoe UI", 9, "bold"),
+                 fg=PALETTE["text_secondary"]).pack(side="left", padx=(24, 6))
+        self.nonstop_var = tk.StringVar(value="No")
+        self.nonstop_cb = ttk.Combobox(self.extras_row, textvariable=self.nonstop_var,
+                                       values=["No"] + [shown for _, shown in PLAY_RESEED],
+                                       state="readonly", width=10)
+        self.nonstop_cb.pack(side="left")
+        self.nonstop_cb.bind("<<ComboboxSelected>>", self._on_nonstop_changed)
+        help_mark(self.extras_row, "Keeps the music going: when the last track of a playlist 24bit7 built "
+                                   "starts, more are added, reseeded from the track chosen here. Applies to "
+                                   "all four Play options. The rest of the Non-stop settings are in "
+                                   "Settings > Playlist, and changing Non-stop here changes it there too. "
+                                   "Shows a track only when all four are on and set the same way. Voice "
+                                   "devices with settings of their own keep theirs.").pack(side="left", padx=(8, 0))
+        self.credits_button = FlatButton(self.extras_row, text="Show Credits", command=self.on_credits,
+                                         quiet=True, width=14, height=1)
+        self.credits_button.pack(side="left", padx=(24, 0))
+        self.buttons.append(self.credits_button)   # greyed out during a build, and on the Search tab
         # Add playlist: JRiver playlists joined to the next build from the app (not voice)
-        FlatButton(self.extras_row, text="+ Add playlist", quiet=True, width=14, height=1,
-                   command=lambda: self.mix_rows.add()).pack(side="left", padx=(24, 0))
+        FlatButton(self.extras_row, text="+ Add Playlist", quiet=True, width=14, height=1,
+                   command=lambda: self.mix_rows.add()).pack(side="left", padx=(8, 0))
         self.mix_rows = MixRows(self.more_box, padx=16)
         self.mix_rows.on_change = self._update_more_label
         self._show_more(playmix.is_open(), save=False)
@@ -273,14 +317,9 @@ class PlayTab(tk.Frame):
         self._update_more_label()
 
     def _update_more_label(self):
-        """Closed, the button counts what's switched on inside it (added playlists, the moderator)."""
-        if self.extras_row.winfo_manager():
-            self.more_button.config(text="More options \u25b4")
-            return
-        active = sum(1 for r in self.mix_rows.rows if r.get("id"))
-        if self.moderator_var.get() == "Yes" and engine.ANTHROPIC_API_KEY:
-            active += 1
-        self.more_button.config(text=f"More options ({active}) \u25be" if active else "More options \u25be")
+        """The More options button's arrow: up while the row is open, down while it's closed."""
+        open_ = bool(self.extras_row.winfo_manager())
+        self.more_button.config(text="More Options \u25b4" if open_ else "More Options \u25be")
 
     @staticmethod
     def _output_label(target):
@@ -311,7 +350,70 @@ class PlayTab(tk.Frame):
         by = engine.AI_MODERATOR_BY
         self.moderator_var.set("Yes" if (by.get("artists") or by.get("tracks")) else "No")
         self.moderator_cb.state(["!disabled"] if engine.ANTHROPIC_API_KEY else ["disabled"])
+        self._sync_play_switches()
         self._update_more_label()
+
+    def _sync_play_switches(self):
+        """Drift and Non-stop as Settings > Playlist has them for Windows (Main): No unless every option agrees."""
+        drift = {bool(engine.DRIFT[g]["on"]) for g in DRIFT_GROUPS if g in engine.DRIFT}
+        self.drift_var.set("Yes" if drift == {True} else "No")
+        by = engine.NONSTOP_BY
+        states = {(by[g]["reseed"] if by[g]["on"] else "no") for g in NONSTOP_GROUPS if g in by}
+        state = states.pop() if len(states) == 1 else "no"
+        self.nonstop_var.set(dict(PLAY_RESEED).get(state, "No"))
+
+    def _save_play_switches(self, updates, apply):
+        """
+        Writes Drift or Non-stop into Settings > Playlist (Windows (Main)): sets the Settings
+        tab's own controls so its next save can't put the old values back, then writes .env.
+        """
+        settings = getattr(self, "settings", None)
+        page = getattr(settings, "_main_playlist", None) if settings else None
+        try:
+            if page is not None:
+                apply(page)
+                settings._save()
+            write_env(updates)
+        except Exception as e:
+            messagebox.showerror("Save failed", str(e), parent=self)
+        engine.refresh_settings_if_changed()
+        self._update_more_label()
+
+    def _on_drift_changed(self, *_):
+        on = self.drift_var.get() == "Yes"
+        updates = {f"DRIFT_{g.upper()}": "1" if on else "0" for g in DRIFT_GROUPS}
+
+        def apply(page):
+            from settings_gui import sync_drift
+            for g in DRIFT_GROUPS:
+                if g in getattr(page, "drift", {}):
+                    page.drift[g][0].set(on)
+            if getattr(page, "drift", None):
+                sync_drift(page)
+        self.drift_cb.selection_clear()
+        self._save_play_switches(updates, apply)
+
+    def _on_nonstop_changed(self, *_):
+        choice = self.nonstop_var.get()
+        reseed = {shown: code for code, shown in PLAY_RESEED}.get(choice)
+        updates = {}
+        for g in NONSTOP_GROUPS:
+            updates[f"NONSTOP_{g.upper()}"] = "1" if reseed else "0"
+            if reseed:
+                updates[f"NONSTOP_{g.upper()}_RESEED"] = reseed
+
+        def apply(page):
+            from settings_gui import sync_nonstop
+            for g in NONSTOP_GROUPS:
+                on_key, rs_key = f"NONSTOP_{g.upper()}", f"NONSTOP_{g.upper()}_RESEED"
+                if on_key in page.vars:
+                    page.vars[on_key].set(bool(reseed))
+                if reseed and rs_key in page.vars:
+                    page.vars[rs_key].set(choice)
+            if getattr(page, "nonstop_parts", None):
+                sync_nonstop(page)
+        self.nonstop_cb.selection_clear()
+        self._save_play_switches(updates, apply)
 
     def _on_moderator_changed(self, *_):
         on = self.moderator_var.get() == "Yes"
@@ -332,6 +434,7 @@ class PlayTab(tk.Frame):
                                              font=("Consolas", 9), bg="#000000", fg="#00ff41",
                                              insertbackground="#00ff41")
         self.log.pack(fill="both", expand=True)
+        self._build_console_strip(frame)
         self._greeting_active = True
         self._type_greeting("Follow the white rabbit.", 0)
 
@@ -420,6 +523,58 @@ class PlayTab(tk.Frame):
         self.log.config(state="normal")
         self.log.delete("1.0", "end")
         self.log.config(state="disabled")
+
+    # --- the console strip: Copy and Clear, shown when you click into the console ---
+
+    def _build_console_strip(self, frame):
+        black, green, dim = "#000000", "#00ff41", "#0d4d1c"   # the console's own colours
+        self.console_strip = tk.Frame(frame, bg=black)
+        self.console_buttons = {}
+        for name, command in (("Copy", self._copy_log), ("Clear", self._clear_from_strip)):
+            b = tk.Label(self.console_strip, text=name, font=("Segoe UI", 8, "bold"), bg=black, fg=green,
+                         padx=8, pady=1, cursor="hand2", highlightthickness=1,
+                         highlightbackground=green, highlightcolor=green)
+            b.pack(side="left", padx=(0, 4))
+            b.bind("<Enter>", lambda e, w=b: w.config(bg=dim))
+            b.bind("<Leave>", lambda e, w=b: w.config(bg=black))
+            b.bind("<Button-1>", lambda e, c=command: c())
+            self.console_buttons[name] = b
+        self.log.bind("<Button-1>", lambda e: self._show_console_strip(), add="+")
+        self.root.bind_all("<Button-1>", self._maybe_hide_console_strip, add="+")
+
+    def _show_console_strip(self):
+        """Top-right inside the console, clear of its scrollbar."""
+        self.console_strip.place(in_=self.log, relx=1.0, x=-6, y=6, anchor="ne")
+        self.console_strip.lift()
+
+    def _maybe_hide_console_strip(self, event):
+        """A click anywhere but the console or the strip hides the strip."""
+        w, strip = str(event.widget), str(self.console_strip)
+        if w == str(self.log) or w == strip or w.startswith(strip + "."):
+            return
+        self.console_strip.place_forget()
+
+    def _copy_log(self):
+        """What's highlighted, or the whole console if nothing is."""
+        try:
+            text = self.log.get("sel.first", "sel.last")
+        except tk.TclError:
+            text = self.log.get("1.0", "end-1c")
+        self.clipboard_clear()
+        self.clipboard_append(text)
+        b = self.console_buttons["Copy"]
+        b.config(text="Copied")
+
+        def done():
+            self.console_strip.place_forget()
+            b.config(text="Copy", bg="#000000")
+        self.after(800, done)
+
+    def _clear_from_strip(self):
+        self._greeting_active = False   # stops the greeting typing on into an empty console
+        self._clear_log()
+        self.console_strip.place_forget()
+        self.console_buttons["Clear"].config(bg="#000000")
 
     def _run_job(self, target, needs_playing=True, mix=True):
         if self.running:
@@ -611,6 +766,7 @@ def main():
     play = PlayTab(nb, root)
     discover = DiscoverTab(nb)
     settings = SettingsTab(nb)
+    play.settings = settings   # the Play tab's Drift and Non-stop change Settings > Playlist
     nb.add(play, text="Play")
     nb.add(discover, text="Discover")
     nb.add(settings, text="Settings")

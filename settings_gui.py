@@ -67,6 +67,9 @@ KEY_FIELDS = ["LASTFM_API_KEY", "LISTENBRAINZ_TOKEN", "DISCOGS_TOKEN",
               "ANTHROPIC_API_KEY", "JRIVER_USER", "JRIVER_PASS"]
 
 NO_KEY_TEXT = "You need to add an Anthropic key to use this function"
+CONSOLE_QUERY_WARNING = ("Console Query sends the console, your settings (without keys) and 24bit7's "
+                         "code to Claude each time you ask a question. The first question costs a few "
+                         "pence, more than the AI Moderator.\n\nTurn it on?")
 MODERATOR_WARNING = ("AI Moderator checks each playlist using the Anthropic API, which uses credits "
                      "from your Anthropic account. Each playlist costs a fraction of a penny.")
 
@@ -421,6 +424,7 @@ class SettingsTab(tk.Frame):
             updates[f"CUSTOM_SITE_{n}_URL"] = url or None
             updates[f"CUSTOM_SITE_{n}_MODE"] = ("artist" if artist_only else "track") if (name or url) else None
         updates["DEBUG"] = "1" if self.vars["DEBUG"].get() else "0"
+        updates["CONSOLE_QUERY"] = "1" if self.vars["CONSOLE_QUERY"].get() else "0"
         updates["THEME"] = self.vars["THEME"].get().lower()
         updates["SIMILAR_REQUIRE_AGREEMENT"] = None   # old on/off key, superseded
         updates["SIMILAR_TRACK_TOPUP"] = None   # replaced by Drift in 1.4.0
@@ -1367,6 +1371,17 @@ class SettingsTab(tk.Frame):
         p.resync()
         p.loading = False
 
+    def _on_console_query_toggled(self):
+        """Ticking Console Query asks first; with no Anthropic key it explains and stays off."""
+        var = self.vars["CONSOLE_QUERY"]
+        if var.get():
+            if not self._anthropic_key():
+                messagebox.showinfo("Console Query", NO_KEY_TEXT, parent=self)
+                var.set(False)
+            elif not messagebox.askyesno("Console Query", CONSOLE_QUERY_WARNING, parent=self):
+                var.set(False)
+        self._save()
+
     def _anthropic_key(self):
         var = self.vars.get("ANTHROPIC_API_KEY")
         return (var.get().strip() if var is not None else "") or engine.ANTHROPIC_API_KEY
@@ -1740,9 +1755,27 @@ class SettingsTab(tk.Frame):
         theme_cb.bind("<<ComboboxSelected>>", self._on_theme_changed)
 
         self.vars["DEBUG"] = tk.BooleanVar(value=self.env.get("DEBUG", "0") in ("1", "true", "yes"))
-        ttk.Checkbutton(box, text="Debug (log raw source lists to console)",
-                       variable=self.vars["DEBUG"], command=self._save).grid(
-            row=5, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        row = tk.Frame(box)
+        row.grid(row=5, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        ttk.Checkbutton(row, text="Debug (log raw source lists to console)",
+                        variable=self.vars["DEBUG"], command=self._save).pack(side="left")
+        # Console Query: purple, as it uses AI credits. Off by default; ticking it asks first.
+        self.vars["CONSOLE_QUERY"] = tk.BooleanVar(
+            value=self.env.get("CONSOLE_QUERY", "0").strip().lower() in ("1", "true", "yes"))
+        ttk.Checkbutton(row, variable=self.vars["CONSOLE_QUERY"],
+                        command=self._on_console_query_toggled).pack(side="left", padx=(32, 0))
+        cq_label = tk.Label(row, text="Enable Console Query", fg=PALETTE["ai_purple"], cursor="hand2")
+        cq_label.pack(side="left")
+
+        def label_clicked(_e):
+            self.vars["CONSOLE_QUERY"].set(not self.vars["CONSOLE_QUERY"].get())
+            self._on_console_query_toggled()
+        cq_label.bind("<Button-1>", label_clicked)
+        help_mark(row, "Adds Query to the console's Copy and Clear strip. Ask Claude why a playlist came "
+                       "out the way it did, and get suggested setting changes. Each question sends the "
+                       "console, your settings (without keys) and 24bit7's code, so it uses more Anthropic "
+                       "credit than AI Moderator. Turning on Debug as well gives Claude more to go on."
+                  ).pack(side="left", padx=(8, 0))
 
         # --- Zones: which JRiver zones appear in the Play tab's Zone and Output lists ---
         # Filled when the tab is first shown, so a slow JRiver never delays startup.

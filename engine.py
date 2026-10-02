@@ -211,6 +211,7 @@ def load_settings():
     global AI_MODERATOR, MODERATOR_WARNED, SKIP_PLAYED
     global NONSTOP, NONSTOP_USING, NONSTOP_RESEED, NONSTOP_TOP_REST, NONSTOP_TOP_REST_COUNT, NONSTOP_VIBE
     global NONSTOP_BY, LONG_CLOSERS, AI_MODERATOR_BY, RUN_AFTER
+    global CONSOLE_QUERY
 
     load_dotenv(ENV_FILE, override=True)
     os.environ.update(PROFILE)   # a device's own settings, for the voice command being built
@@ -242,6 +243,7 @@ def load_settings():
     LISTEN_SITES = [x.strip().lower() for x in listen_raw.split(",") if x.strip().lower() in LISTEN_CODES]
     CUSTOM_SITES = read_custom_sites()
     DEBUG = os.getenv("DEBUG", "0").strip().lower() in ("1", "true", "yes")
+    CONSOLE_QUERY = os.getenv("CONSOLE_QUERY", "0").strip().lower() in ("1", "true", "yes")   # off by default
     # How many similar-artist sources must suggest an artist before it is used
     # (1 = off). Replaced the on/off SIMILAR_REQUIRE_AGREEMENT; an old .env
     # carries over as on -> 2, off -> 1.
