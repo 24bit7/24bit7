@@ -1049,22 +1049,28 @@ class SettingsTab(tk.Frame):
 
         # --- All playlists ---
         box = section(tab, "All playlists",
-                      "Ticked, the row below applies to every playlist and the table is greyed out. "
-                      "Unticked, each playlist follows its own row in the table.")
+                      "Ticked, the two rows below apply, one to every playlist and one to every "
+                      "smartlist, and the table is greyed out. Unticked, each playlist follows its own "
+                      "row in the table.\n"
+                      "JRiver can randomise a smartlist itself, for example with a random album sort, "
+                      "and shuffling it here would break those albums up, so you may want Shuffle off "
+                      "on the smartlist row.")
         p.all_var = tk.BooleanVar(value=p.data["all"] == "1")
 
         def all_toggled():
             p.data["all"] = "1" if p.all_var.get() else "0"
             p.resync()
             changed()
-        ttk.Checkbutton(box, text="Use the same settings for every playlist", variable=p.all_var,
+        ttk.Checkbutton(box, text="Use global playlist settings", variable=p.all_var,
                         command=all_toggled).grid(row=0, column=0, sticky="w", pady=(0, 6))
         p.all_row = header(tk.Frame(box, bd=1, relief="solid"), ["Folder", "Playlist", "Type"] + CONTROLS)
         p.all_row.grid(row=1, column=0, sticky="w")
         bg = p.all_row.cget("bg")
-        for c, text in enumerate(("All folders", "All playlists", "Both")):
-            cell(p.all_row, 1, c, text, bg)
-        row_controls(p.all_row, 1, bg, p.data["all_row"], changed)
+        for r, (name, kind, key) in enumerate((("All playlists", "Playlist", "all_row"),
+                                               ("All smartlists", "Smartlist", "all_row_smart")), start=1):
+            for c, text in enumerate(("All folders", name, kind)):
+                cell(p.all_row, r, c, text, bg)
+            row_controls(p.all_row, r, bg, p.data[key], changed)
 
         # --- Playlists ---
         box = section(tab, "Playlists",
@@ -1126,7 +1132,7 @@ class SettingsTab(tk.Frame):
             for child in p.table_holder.winfo_children():
                 child.destroy()
             p.table = None
-            p.reseed_syncs[:] = p.reseed_syncs[:1]   # keep the All playlists row's
+            p.reseed_syncs[:] = p.reseed_syncs[:2]   # keep the two global rows'
             rows = ordered(list(p.data["rows"].items()))
             folder = p.folder_var.get()
             wanted = p.search_var.get().strip().lower()

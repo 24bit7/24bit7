@@ -9,8 +9,8 @@ How your own JRiver playlists and smartlists play when you ask for one by voice
   Reseed from  Last track / 2nd track, for non-stop
   Skip         leave out tracks played in the last n days (never leaving the playlist empty)
 
-Either one row for every playlist ("Use the same settings for every playlist"),
-or a row each. Windows (Main) is kept in the database's meta table; a device
+Either global rows ("Use global playlist settings"), one for every playlist
+and one for every smartlist, or a row each. Windows (Main) is kept in the database's meta table; a device
 with Own settings can have its own copy (voice_devices.saved). Playlists you
 start in JRiver itself aren't touched: 24bit7 never sees them start.
 """
@@ -32,7 +32,8 @@ ROOT = "Root"   # the folder name shown for playlists at the top level
 
 
 def blank():
-    return {"all": "0", "all_row": dict(DEFAULT_ROW), "rows": {}, "sort": "az", "sort_by": "folder"}
+    return {"all": "0", "all_row": dict(DEFAULT_ROW), "all_row_smart": dict(DEFAULT_ROW), "rows": {},
+            "sort": "az", "sort_by": "folder"}
 
 
 def tidy(data):
@@ -41,6 +42,11 @@ def tidy(data):
     if isinstance(data, dict):
         out.update({k: v for k, v in data.items() if k in out})
     out["all_row"] = {**DEFAULT_ROW, **(out.get("all_row") or {})}
+    # The smartlist row: older settings start it as a copy of the playlist row, Shuffle from shuffle_smart
+    old_smart = out["all_row"].pop("shuffle_smart", None)
+    if not (isinstance(data, dict) and data.get("all_row_smart")):
+        out["all_row_smart"] = dict(out["all_row"], shuffle=old_smart or out["all_row"]["shuffle"])
+    out["all_row_smart"] = {**DEFAULT_ROW, **(out.get("all_row_smart") or {})}
     out["rows"] = {str(pid): {**DEFAULT_ROW, **(row or {})} for pid, row in (out.get("rows") or {}).items()}
     return out
 
@@ -74,10 +80,11 @@ def settings_for(device_id=None):
     return main_settings()
 
 
-def row_for(data, playlist_id):
-    """The settings one playlist plays with: the shared row, or its own (new playlists get the defaults)."""
+def row_for(data, playlist_id, kind=None):
+    """The settings one playlist plays with: the shared row, or its own (new playlists get the defaults).
+    kind is "Playlist" or "Smartlist": with global settings on, each type has its own row."""
     if str(data.get("all", "0")) == "1":
-        return dict(data["all_row"])
+        return dict(data["all_row_smart"] if kind == "Smartlist" else data["all_row"])
     return dict(data["rows"].get(str(playlist_id)) or DEFAULT_ROW)
 
 
@@ -209,7 +216,7 @@ def play(found, zone, device_id=None, report=print):
     with its Saved Playlists settings. Returns (ok, what was started, for Alexa to say).
     """
     pid, name = str(found.get("ID")), found.get("Name") or "playlist"
-    row = row_for(settings_for(device_id), pid)
+    row = row_for(settings_for(device_id), pid, type_of(found))
     shuffle = row.get("shuffle") == "1"
     days = int(row["skip"]) if str(row.get("skip", "0")).isdigit() else 0
     nonstop = row.get("nonstop", "no") if row.get("nonstop") in ("artists", "tracks") else "no"
