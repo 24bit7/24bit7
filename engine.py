@@ -9,6 +9,7 @@ import re
 import csv
 import unicodedata
 import json
+import contextlib
 import sqlite3
 from datetime import datetime
 
@@ -38,13 +39,15 @@ PROFILE = {}               # a device's own Sources/Playlist settings, laid over
 PROFILE_KEYS = {
     "sources": ["SIMILAR_SOURCES", "SIMILAR_MIN_AGREEMENT", "LISTENBRAINZ_ALGORITHM", "SIMILAR_TRACK_SOURCES",
                 "SIMILAR_TRACK_MIN_AGREEMENT", "LISTENBRAINZ_TRACK_ALGORITHM", "TOP_TRACK_SOURCES", "AI_MODERATOR",
-                "AI_MODERATOR_ARTISTS", "AI_MODERATOR_TRACKS", "AI_MODERATOR_VIBE"],
+                "AI_MODERATOR_ARTISTS", "AI_MODERATOR_TRACKS"],
     "playlist": ["SIMILAR_ARTIST_TRACK_COUNT", "SIMILAR_ARTIST_LIMIT", "TRACKS_PER_ARTIST_POOL",
                  "TRACKS_PER_ARTIST_PICK", "SIMILAR_TRACK_COUNT", "SIMILAR_TRACK_PER_ARTIST", "SIMILAR_TRACK_ORDER",
                  "TOP_TRACKS_COUNT", "TOP_TRACKS_ORDER", "VIBE_TRACK_COUNT",
                  "DRIFT_ARTISTS", "DRIFT_ARTISTS_USING", "DRIFT_ARTISTS_ROUNDS",
                  "DRIFT_TRACKS", "DRIFT_TRACKS_USING", "DRIFT_TRACKS_ROUNDS",
-                 "DRIFT_VIBE", "DRIFT_VIBE_USING", "DRIFT_VIBE_ROUNDS",
+                 "DRIFT_VIBE", "DRIFT_VIBE_USING", "DRIFT_VIBE_ROUNDS", "AI_MODERATOR_VIBE",
+                 *[f"DRIFT_{g}_{part}" for g in ("ARTISTS", "TRACKS", "VIBE")
+                   for part in ("SOURCES_MODE", "ARTIST_SOURCES", "ARTIST_AGREE", "TRACK_SOURCES", "TRACK_AGREE")],
                  "SKIP_LONG_CLOSERS", "LONG_CLOSER_MINUTES",
                  "SKIP_PLAYED_ARTISTS", "SKIP_PLAYED_ARTISTS_DAYS", "SKIP_PLAYED_TRACKS", "SKIP_PLAYED_TRACKS_DAYS",
                  "SKIP_PLAYED_TOP", "SKIP_PLAYED_TOP_DAYS", "SKIP_PLAYED_VIBE", "SKIP_PLAYED_VIBE_DAYS",
@@ -193,8 +196,10 @@ def moderator_level_value(raw, fallback="off"):
 def moderator_settings(get):
     """The AI Moderator level per Play option: {group: level}. The old single tick is the starting value."""
     base = moderator_level_value(get("AI_MODERATOR", "0"))
-    return {group: moderator_level_value(get(f"AI_MODERATOR_{group.upper()}", ""), base)
-            for group in MODERATOR_GROUPS}
+    levels = {group: moderator_level_value(get(f"AI_MODERATOR_{group.upper()}", ""), base)
+              for group in MODERATOR_GROUPS}
+    levels["vibe"] = moderator_level_value(get("AI_MODERATOR_VIBE", ""))   # AI Playlist's Drift tracks only
+    return levels
 
 
 def load_settings():
@@ -297,6 +302,13 @@ def load_settings():
             on = False
         ok = ("artists", "tracks", "ai") if group == "vibe" else ("artists", "tracks")   # AI only for vibe
         DRIFT[group] = {"on": on, "using": using if using in ok else own, "rounds": rounds}
+        # Drift sources: the same as Settings > Sources, or Custom Sources of its own
+        DRIFT[group]["custom"] = os.getenv(f"{name}_SOURCES_MODE", "same").strip().lower() == "custom"
+        for kind, most in (("artist", 5), ("track", 3)):
+            DRIFT[group][f"{kind}_sources"] = [
+                x.strip().lower() for x in os.getenv(f"{name}_{kind.upper()}_SOURCES", "").split(",")
+                if x.strip() and x.strip().lower() != "ai"]   # Drift from the sources never uses the AI
+            DRIFT[group][f"{kind}_agree"] = _int_setting(f"{name}_{kind.upper()}_AGREE", 1, 1, most)
     TRACKS_PER_ARTIST_POOL = _int_setting("TRACKS_PER_ARTIST_POOL", 5, 1, 20)
     TRACKS_PER_ARTIST_PICK = _int_setting("TRACKS_PER_ARTIST_PICK", 3, 1, 20)
     TOP_TRACKS_COUNT = _int_setting("TOP_TRACKS_COUNT", 10, 1, 20)
@@ -1870,7 +1882,7 @@ def vibe_blocker():
     """None if Vibe Playlist can run, otherwise the line to show the user."""
     refresh_settings_if_changed()
     if not ANTHROPIC_API_KEY:
-        return "Vibe Playlist needs an Anthropic API key. " + KEY_HELP_LINE
+        return "AI Playlist needs an Anthropic API key. " + KEY_HELP_LINE
     return None
 
 
@@ -2978,6 +2990,31 @@ class FastStart:
 DRIFT_SEEDS_PER_ROUND = 3   # finds each Drift round seeds from
 
 
+def drift_custom_sources(cfg, using):
+    """A Drift's Custom Sources for this round as (codes, must agree), or None for Settings > Sources."""
+    if not cfg.get("custom") or using not in ("artists", "tracks"):
+        return None
+    kind = "artist" if using == "artists" else "track"
+    codes = cfg.get(f"{kind}_sources") or []
+    return (codes, cfg.get(f"{kind}_agree", 1)) if codes else None
+
+
+@contextlib.contextmanager
+def drift_sources(cfg, using):
+    """While a Drift round runs, its Custom Sources stand in for Settings > Sources."""
+    global SIMILAR_SOURCES, SIMILAR_MIN_AGREEMENT, SIMILAR_TRACK_SOURCES
+    custom = drift_custom_sources(cfg, using)
+    saved = (SIMILAR_SOURCES, SIMILAR_MIN_AGREEMENT, SIMILAR_TRACK_SOURCES)
+    try:
+        if custom and using == "artists":
+            SIMILAR_SOURCES, SIMILAR_MIN_AGREEMENT = list(custom[0]), custom[1]
+        elif custom:
+            SIMILAR_TRACK_SOURCES = list(custom[0])
+        yield
+    finally:
+        SIMILAR_SOURCES, SIMILAR_MIN_AGREEMENT, SIMILAR_TRACK_SOURCES = saved
+
+
 class Drift:
     """
     Drift (Settings > Playlist): when a playlist comes up short of its target,
@@ -2995,6 +3032,7 @@ class Drift:
         self.ai_tried = set()     # (artist, title) the AI suggested that weren't used
         self.played = played      # the mode's PlayedFilter, so Drift skips recent plays too
         self.seed = seed          # what the AI Moderator judges each round against
+        self.group, self.cfg = group, cfg
         self.on = cfg.get("on", False)
         self.using = cfg.get("using", "artists")
         self.rounds = cfg.get("rounds", 3)
@@ -3051,6 +3089,20 @@ class Drift:
             self.discard(removed)
         return removed
 
+    def _from_label(self):
+        """Where a sources round looks, for the log: its Custom Sources, and for an AI Playlist, no AI."""
+        custom = drift_custom_sources(self.cfg, self.using)
+        if custom:
+            names = [PROVIDERS[c][0] if c in PROVIDERS else c for c in custom[0]]
+            listed = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+            agree = f", {custom[1]} must agree" if custom[1] > 1 else ""
+            no_ai = ", no AI" if self.group == "vibe" else ""
+            return f" (from {listed}{agree}{no_ai})"
+        if self.group == "vibe":
+            uses_ai = self.using == "artists" and "ai" in SIMILAR_SOURCES
+            return " (from your sources)" if uses_ai else " (from your sources, no AI)"
+        return ""
+
     def _room(self, artist, key=None):
         """Room left for this artist; with a key, counted as the track is tagged in the library."""
         who = owner_key(artist, key) if key else artist_key(artist)
@@ -3094,13 +3146,15 @@ class Drift:
                     break
                 names = ", ".join(a if self.using == "artists" else f"{a} - {t}" for a, t in seeds)
                 self.report(f"  Drift round {n} of {self.rounds}: {len(keys)} of {self.target}, "
-                            f"using {self.using} similar to {names}...")
+                            f"using {self.using} similar to {names}{self._from_label()}...")
                 before = len(keys)
-                if self.using == "artists":
-                    self._round_artists(seeds, keys)
-                else:
-                    self._round_tracks(seeds, keys)
-            self.moderate(keys, keys[before:])
+                with drift_sources(self.cfg, self.using):
+                    if self.using == "artists":
+                        self._round_artists(seeds, keys)
+                    else:
+                        self._round_tracks(seeds, keys)
+            if self.using != "ai":   # the AI's own picks are never moderated
+                self.moderate(keys, keys[before:])
             new = keys[before:]
             self.report(f"  Drift round {n}: {len(new)} added.")
             if self.using == "ai" and not new:
@@ -3172,7 +3226,11 @@ class Drift:
         for artist, title in seeds:
             if len(keys) >= self.target:
                 return
-            candidates, _ = similar_track_candidates([artist], title, self.report)
+            candidates, responding = similar_track_candidates([artist], title, self.report)
+            custom = drift_custom_sources(self.cfg, "tracks")
+            need = min(custom[1], len(responding)) if custom else 1
+            if need > 1:   # Custom Sources' "must agree" (capped at the sources that answered)
+                candidates = [c for c in candidates if len(c[1]) >= need]
             for (a, t), sources in candidates:
                 if len(keys) >= self.target:
                     return
@@ -3655,19 +3713,18 @@ def create_vibe_playlist(vibe, report=print):
         report("No vibe given.")
         return
     if not ANTHROPIC_API_KEY:
-        report("Vibe Playlist needs an Anthropic API key. " + KEY_HELP_LINE)
+        report("AI Playlist needs an Anthropic API key. " + KEY_HELP_LINE)
         return
     target = VIBE_TRACK_COUNT
-    report(f"\nVibe: {vibe}  (target {target} tracks)")
+    report(f"\nAI Playlist: {vibe}  (target {target} tracks)")
 
-    seed_info = {"Artist": "Vibe", "Name": vibe, "Album": ""}
+    seed_info = {"Artist": "AI Playlist", "Name": vibe, "Album": ""}
     session_id = session_start("vibe", seed_info, "AI")
     fast = FastStart(None, report)
     played = PlayedFilter("vibe", report=report, filters=True)
     drift = Drift("vibe", target, session_id, report, per_artist=TRACKS_PER_ARTIST_PICK, seed=f"vibe: {vibe}",
                   played=played, vibe=vibe)
-    # With the AI Moderator on, ask for a few extra, so anything it removes is replaced
-    wanted = target + moderator_extra(target)
+    wanted = target   # the AI's own picks aren't moderated, so no extras are needed
 
     report("  Asking AI for tracks...")
     pairs = ai_vibe_tracks(vibe, count=wanted)
@@ -3693,10 +3750,10 @@ def create_vibe_playlist(vibe, report=print):
             drift.ai_tried.add((artist, track))   # so Drift using the AI doesn't ask for it again
             session_log(session_id, artist, track, "AI", found=False)
     report(f"  AI picks: {len(keys)} found, {misses} missing.")
-    drift.moderate(keys, [k for k in keys if str(k) != fast.key])
+    # the AI's own picks aren't moderated; Drift tracks from the sources can be (Settings > Playlist)
 
     if not keys:
-        report("No library matches found. Try a different vibe.")
+        report("No library matches found. Try a different description.")
         session_finish(session_id, send_mix_only(fast, None, report), report=report)
         return
 

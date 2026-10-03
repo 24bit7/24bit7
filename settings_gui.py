@@ -232,8 +232,17 @@ class ProfilePage:
         for group, (on, using, rounds, _) in self.drift.items():
             name = f"DRIFT_{group.upper()}"
             out[name] = "1" if on.get() else "0"
-            out[f"{name}_USING"] = option_code(DRIFT_USING_OPTIONS, using.get())
+            out[f"{name}_USING"] = option_code(drift_using_options(group), using.get())
+            if f"{name}_SOURCES_MODE" in v:
+                out[f"{name}_SOURCES_MODE"] = option_code(DRIFT_SOURCE_MODES, v[f"{name}_SOURCES_MODE"].get())
+                for kind in ("ARTIST", "TRACK"):
+                    out[f"{name}_{kind}_SOURCES"] = ",".join(
+                        code for code, tick in v[f"{name}_{kind}_SOURCES"].items() if tick.get())
+                    agree = v[f"{name}_{kind}_AGREE"].get()
+                    out[f"{name}_{kind}_AGREE"] = "1" if agree == "Off" else agree
             out[f"{name}_ROUNDS"] = rounds.get()
+        if "AI_MODERATOR_VIBE" in v:
+            out["AI_MODERATOR_VIBE"] = v["AI_MODERATOR_VIBE"].get().lower()
         for group in engine.PLAYED_GROUPS:
             g = group.upper()
             out[f"SKIP_PLAYED_{g}"] = "1" if v[f"SKIP_PLAYED_{g}"].get() else "0"
@@ -260,15 +269,28 @@ PLAYLIST_TEXT_KEYS = ["SIMILAR_ARTIST_TRACK_COUNT", "SIMILAR_ARTIST_LIMIT", "TRA
 
 # Drift using: (saved value, label shown). AI is for vibe playlists only, and never the default.
 DRIFT_USING_OPTIONS = [("artists", "Similar artists"), ("tracks", "Similar tracks"), ("ai", "AI")]
+# AI Playlist's Drift choices say plainly which ones use the AI
+VIBE_DRIFT_USING_OPTIONS = [("artists", "Similar artists (no AI)"), ("tracks", "Similar tracks (no AI)"),
+                            ("ai", "AI (uses credits)")]
+DRIFT_SOURCE_MODES = [("same", "Same as Settings > Sources"), ("custom", "Custom Sources")]
+DRIFT_ARTIST_SOURCE_NAMES = [s for s in SOURCE_NAMES if s[0] != "ai"]   # Drift from the sources never uses the AI
+DRIFT_SOURCES_HELP = ("Same as Settings > Sources uses the sources you picked for this Play option. Custom "
+                      "Sources lets the top-up rounds use different ones, for example steadier sources first "
+                      "and more adventurous ones to fill the gaps.")
+
+
+def drift_using_options(group):
+    """The Drift using choices for a Play option (AI only for AI Playlist)."""
+    return VIBE_DRIFT_USING_OPTIONS if group == "vibe" else DRIFT_USING_OPTIONS[:2]
 
 # The Play options, as the tabs inside Sources and Playlist
 PLAY_OPTIONS = [("artists", "Similar Artists"), ("tracks", "Similar Tracks"),
-                ("top", "Artist's Top Tracks"), ("vibe", "Vibe Playlist")]
+                ("top", "Artist's Top Tracks"), ("vibe", "AI Playlist")]
 
 # Non-stop dropdowns: (saved value, label shown)
 NONSTOP_USING_OPTIONS = [("artists", "Similar artists"), ("tracks", "Similar tracks")]
 NONSTOP_RESEED_OPTIONS = [("last", "Last track"), ("second", "2nd track")]
-NONSTOP_WITH_OPTIONS = [("vibe", "More of the same vibe"), ("artists", "Similar artists"), ("tracks", "Similar tracks")]
+NONSTOP_WITH_OPTIONS = [("vibe", "More from the AI"), ("artists", "Similar artists"), ("tracks", "Similar tracks")]
 # Saved Playlists dropdowns
 SAVED_NONSTOP_OPTIONS = [("no", "No"), ("artists", "Similar artists"), ("tracks", "Similar tracks")]
 SAVED_SKIP_OPTIONS = [("0", "Off"), ("1", "1 day"), ("2", "2 days"), ("3", "3 days"), ("7", "7 days"),
@@ -345,6 +367,35 @@ def sync_drift(p):
     for on, _, _, boxes in p.drift.values():
         for cb in boxes:
             cb.config(state="readonly" if on.get() else "disabled")
+    sync_drift_sources(p)
+    # AI Playlist's moderator: only for Drift from the sources, and only with an Anthropic key
+    mod_cb = getattr(p, "vibe_mod_cb", None)
+    if mod_cb is not None and "vibe" in p.drift:
+        on, using, _, _ = p.drift["vibe"]
+        ok = (on.get() and option_code(drift_using_options("vibe"), using.get()) != "ai"
+              and bool(engine.ANTHROPIC_API_KEY))
+        mod_cb.config(state="readonly" if ok else "disabled")
+
+
+def sync_drift_sources(p):
+    """Drift sources: hidden when Drift uses the AI; the ticks only with Custom Sources, following Drift using."""
+    for group, (mode, mode_row, panel, frames) in getattr(p, "drift_src", {}).items():
+        _, using, _, _ = p.drift[group]
+        code = option_code(drift_using_options(group), using.get())
+        if code == "ai":
+            mode_row.grid_remove()
+            panel.grid_remove()
+            continue
+        mode_row.grid()
+        if option_code(DRIFT_SOURCE_MODES, mode.get()) != "custom":
+            panel.grid_remove()
+            continue
+        panel.grid()
+        for kind, frame in frames.items():
+            if (kind == "ARTIST") == (code == "artists"):
+                frame.pack(anchor="w")
+            else:
+                frame.pack_forget()
 
 
 def sync_played(p):
@@ -681,7 +732,7 @@ class SettingsTab(tk.Frame):
 
         box = section(left, "Your filters",
                       "Filters narrow the playlists 24bit7 builds (Similar Artists, Similar Tracks, Artist's Top "
-                      "Tracks and Vibe), including Drift and non-stop top-ups. Each one applies to every Play "
+                      "Tracks and AI Playlist), including Drift and non-stop top-ups. Each one applies to every Play "
                       "option on the devices it's ticked for. Where several apply, a track must pass them all. "
                       "Albums, songs, shuffles and JRiver playlists asked for by voice play as asked.")
         self._filter_list = tk.Listbox(box, height=8, width=26, activestyle="none", exportselection=False,
@@ -1409,6 +1460,7 @@ class SettingsTab(tk.Frame):
         """
         p.loading = True
         p.drift = {}           # group -> (on, using, rounds, (dropdowns))
+        p.drift_src = {}       # group -> (mode, its row, the Custom Sources panel, {kind: frame})
         p.played_boxes = {}    # group -> its days box
         p.closer_sbs = {}      # GROUP -> its minutes box
         p.nonstop_parts = {}   # GROUP -> (its choices, the song-count dropdown or None)
@@ -1483,13 +1535,15 @@ class SettingsTab(tk.Frame):
                     "until the playlist reaches its length. More rounds fill more gaps but can "
                     "wander further from where you started.")
             if group == "vibe":
-                note += ("\nAI asks again with your description, leaving out what's already been found or "
-                         "tried. Each round uses a little Anthropic credit, so it only runs when you pick it.")
+                note = ("Tops the playlist up from your music sources (Last.fm and the others you've ticked), "
+                        "not the AI, unless Drift using is set to AI. AI asks again with your description, "
+                        "leaving out what's already been found or tried, and uses a little Anthropic credit "
+                        "each round.")
             begin(group, "Drift", note)
             box = where["box"]
             cfg = drift_values(p.env, group)
             on = tk.BooleanVar(value=cfg["on"])
-            using = tk.StringVar(value=option_label(DRIFT_USING_OPTIONS, cfg["using"]))
+            using = tk.StringVar(value=option_label(drift_using_options(group), cfg["using"]))
             rounds = tk.StringVar(value=str(cfg["rounds"]))
 
             def toggled():
@@ -1499,9 +1553,9 @@ class SettingsTab(tk.Frame):
                                   command=toggled), pady=(0, 2))
             row = tk.Frame(box)
             tk.Label(row, text="Drift using").pack(side="left")
-            choices = DRIFT_USING_OPTIONS if group == "vibe" else DRIFT_USING_OPTIONS[:2]
+            choices = drift_using_options(group)
             using_cb = ttk.Combobox(row, textvariable=using, values=[shown for _, shown in choices],
-                                    state="readonly", width=14)
+                                    state="readonly", width=22 if group == "vibe" else 14)
             using_cb.pack(side="left", padx=(6, 18))
             tk.Label(row, text="Rounds").pack(side="left")
             rounds_cb = ttk.Combobox(row, textvariable=rounds, values=[str(n) for n in range(1, 7)],
@@ -1510,7 +1564,83 @@ class SettingsTab(tk.Frame):
             for cb in (using_cb, rounds_cb):
                 cb.bind("<<ComboboxSelected>>", p.save)
             place(row, pady=(0, 4))
-            p.drift[group] = (on, using, rounds, (using_cb, rounds_cb))
+            # Drift sources: the same as Settings > Sources, or Custom Sources of its own
+            name = f"DRIFT_{group.upper()}"
+            mode = tk.StringVar(value=option_label(
+                DRIFT_SOURCE_MODES, p.env.get(f"{name}_SOURCES_MODE", "same").strip().lower()))
+            p.vars[f"{name}_SOURCES_MODE"] = mode
+            mode_row = tk.Frame(box)
+            tk.Label(mode_row, text="Drift sources").pack(side="left")
+            mode_cb = ttk.Combobox(mode_row, textvariable=mode, values=[s for _, s in DRIFT_SOURCE_MODES],
+                                   state="readonly", width=26)
+            mode_cb.pack(side="left", padx=(6, 0))
+            help_mark(mode_row, DRIFT_SOURCES_HELP).pack(side="left", padx=(8, 0))
+            place(mode_row, pady=(0, 4))
+            panel = tk.Frame(box)
+            frames = {}
+            for kind, names, agree_values, main in (
+                    ("ARTIST", DRIFT_ARTIST_SOURCE_NAMES, ["Off", "2", "3", "4"], engine.SIMILAR_SOURCES),
+                    ("TRACK", TRACK_SOURCE_NAMES, ["Off", "2", "3"], engine.SIMILAR_TRACK_SOURCES)):
+                frame = tk.Frame(panel)
+                tk.Label(frame, text="Similar artists from" if kind == "ARTIST" else "Similar tracks from",
+                         fg=PALETTE["text_secondary"]).pack(anchor="w")
+                ticks = tk.Frame(frame)
+                ticks.pack(anchor="w", pady=(2, 2))
+                saved = p.env.get(f"{name}_{kind}_SOURCES", "")
+                chosen = ([x.strip().lower() for x in saved.split(",") if x.strip()] if saved.strip()
+                          else list(main))   # nothing saved yet: start from Settings > Sources
+                p.vars[f"{name}_{kind}_SOURCES"] = {}
+                for code, label in names:
+                    var = tk.BooleanVar(value=code in chosen)
+                    p.vars[f"{name}_{kind}_SOURCES"][code] = var
+                    ttk.Checkbutton(ticks, text=label, variable=var, command=p.save).pack(side="left", padx=(0, 12))
+                agree_row = tk.Frame(frame)
+                agree_row.pack(anchor="w", pady=(2, 0))
+                tk.Label(agree_row, text="Sources that must agree").pack(side="left")
+                start = p.env.get(f"{name}_{kind}_AGREE", "1").strip() or "1"
+                agree = tk.StringVar(value="Off" if start in ("0", "1") else start)
+                p.vars[f"{name}_{kind}_AGREE"] = agree
+                agree_cb = ttk.Combobox(agree_row, textvariable=agree, values=agree_values, state="readonly",
+                                        width=6)
+                agree_cb.pack(side="left", padx=(6, 0))
+                agree_cb.bind("<<ComboboxSelected>>", p.save)
+                help_mark(agree_row, "How many of the ticked sources must agree before Drift uses a suggestion. "
+                                     "It can't be more than the sources that answer.").pack(side="left", padx=(8, 0))
+                frames[kind] = frame
+            place(panel, pady=(0, 4))
+            panel.grid_configure(padx=(16, 0))
+            p.drift[group] = (on, using, rounds, (using_cb, rounds_cb, mode_cb))
+            p.drift_src[group] = (mode, mode_row, panel, frames)
+
+            def sources_changed(*_):
+                mode_cb.selection_clear()
+                sync_drift(p)
+                p.save()
+            mode_cb.bind("<<ComboboxSelected>>", sources_changed)
+            using_cb.bind("<<ComboboxSelected>>", lambda e: sync_drift(p), add="+")
+            if group == "vibe":   # AI Playlist: an AI Moderator for what Drift adds from the sources
+                mod_row = tk.Frame(box)
+                tk.Label(mod_row, text="AI Moderator on Drift tracks", fg=PALETTE["ai_purple"]).pack(side="left")
+                p.vars["AI_MODERATOR_VIBE"] = tk.StringVar(
+                    value=engine.moderator_settings(p.env.get)["vibe"].title())
+                mod_cb = ttk.Combobox(mod_row, textvariable=p.vars["AI_MODERATOR_VIBE"], values=MODERATOR_CHOICES,
+                                      state="readonly", width=9)
+                mod_cb.pack(side="left", padx=(6, 0))
+
+                def mod_chosen(*_):
+                    if p.vars["AI_MODERATOR_VIBE"].get() != "Off":
+                        warn_moderator_once(self)
+                    mod_cb.selection_clear()
+                    p.save()
+                mod_cb.bind("<<ComboboxSelected>>", mod_chosen)
+                using_cb.bind("<<ComboboxSelected>>", lambda e: sync_drift(p), add="+")
+                help_mark(mod_row, "Checks the tracks Drift adds from similar artists or similar tracks against "
+                                   "your description, and removes any that clash. The AI's own picks are never "
+                                   "checked. Only works when Drift is on and not using the AI.\n"
+                                   + MODERATOR_LEVELS_HELP).pack(side="left", padx=(8, 0))
+                Tooltip(mod_cb, NO_KEY_TEXT, when=lambda: not self._anthropic_key())
+                place(mod_row, pady=(0, 4))
+                p.vibe_mod_cb = mod_cb
 
         def nonstop(group):
             """The Non-stop section: its tick box, then how this option's playlists carry on."""
@@ -1572,7 +1702,7 @@ class SettingsTab(tk.Frame):
                                "Unticked, it goes straight to the new playlist.").pack(side="left", padx=(8, 0))
             if group == "vibe":
                 option("Continues with", "NONSTOP_VIBE_WITH", NONSTOP_WITH_OPTIONS, cfg["with"],
-                       "More of the same vibe asks the AI again with the original description (a little "
+                       "More from the AI asks the AI again with the original description (a little "
                        "Anthropic credit each time). Similar artists or Similar tracks carry on from the "
                        "music, with no credit used.")
             else:

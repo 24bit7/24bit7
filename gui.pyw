@@ -223,7 +223,7 @@ class PlayTab(tk.Frame):
             ("Similar Artists", self.on_similar),
             ("Similar Tracks", self.on_similar_tracks),
             ("Artist's Top Tracks", self.on_top_tracks),
-            ("Vibe Playlist", self.on_vibe),
+            ("AI Playlist", self.on_vibe),
         ]:
             b = FlatButton(frame, text=text, command=handler, width=18, height=2,
                            accent=PALETTE["ai_purple"] if handler == self.on_vibe else None)   # purple: uses AI credits
@@ -274,7 +274,7 @@ class PlayTab(tk.Frame):
         self.drift_cb.pack(side="left")
         self.drift_cb.bind("<<ComboboxSelected>>", self._on_drift_changed)
         help_mark(self.extras_row, "Searches again when a playlist comes up short, for Similar Artists, "
-                                   "Similar Tracks and Vibe. Drift using and Rounds are set for each in "
+                                   "Similar Tracks and AI Playlist. Drift using and Rounds are set for each in "
                                    "Settings > Playlist, and changing Drift here changes it there too. "
                                    "Shows Yes only when all three have it on. Voice devices with "
                                    "settings of their own keep theirs.").pack(side="left", padx=(8, 0))
@@ -745,7 +745,7 @@ class VibeDialog(tk.Toplevel):
     """
     def __init__(self, master, on_submit):
         super().__init__(master)
-        self.title("Vibe Playlist")
+        self.title("AI Playlist")
         self.resizable(False, False)
         self.on_submit = on_submit
         self.transient(master)
@@ -760,6 +760,11 @@ class VibeDialog(tk.Toplevel):
         self.entry.bind("<Return>", lambda e: self.submit())
 
         tk.Label(body, text="Or try one of these:", fg=PALETTE["text_muted"]).pack(anchor="w")
+        # First suggestion: more like what's playing, greyed out until something is
+        self.like_text = None
+        self.like_button = tk.Button(body, text="More tracks like what's playing", anchor="w",
+                                     state="disabled", command=lambda: self._use(self.like_text))
+        self.like_button.pack(fill="x", pady=(4, 0))
         self.suggest_frame = tk.Frame(body)
         self.suggest_frame.pack(fill="x", pady=(4, 12))
         self.loading = tk.Label(self.suggest_frame, text="Thinking...", fg=PALETTE["text_faint"])
@@ -771,6 +776,26 @@ class VibeDialog(tk.Toplevel):
         tk.Button(bar, text="Cancel", width=10, command=self.destroy).pack(side="right", padx=(0, 8))
 
         threading.Thread(target=self._load_suggestions, daemon=True).start()
+        threading.Thread(target=self._load_playing, daemon=True).start()
+
+    def _load_playing(self):
+        try:
+            info = engine.get_playing_info()
+        except Exception:
+            info = None
+        self.after(0, lambda: self._show_playing(info))
+
+    def _show_playing(self, info):
+        if not self.winfo_exists():
+            return
+        title = ((info or {}).get("Name") or "").strip()
+        artist = ((info or {}).get("Artist") or "").split(";")[0].strip()
+        if not info or info.get("PlayingNowPosition") == "-1" or not title or title == "Unknown":
+            return   # nothing playing: the button stays greyed out
+        shown = title if len(title) <= 45 else title[:42].rstrip() + "..."
+        by = f" by {engine.deinvert_the(artist)}" if artist and artist != "Unknown" else ""
+        self.like_text = f'More tracks like "{title}"{by}, with the same tone, energy and mood'
+        self.like_button.config(text=f'More tracks like "{shown}"', state="normal")
 
     def _load_suggestions(self):
         try:
