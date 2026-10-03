@@ -100,3 +100,15 @@ A smartlist already says what belongs in it, so 24bit7's filters, recent-play sk
 
 **2 Oct 2026: Drift finishes first when playlists are added.**
 Normally the first pass is queued straight away and each Drift round follows it. With an Add after playlist that would put Drift's tracks after it, so with playlists added, Drift runs to the end and the whole playlist is sent at once. Fast start still plays the first track straight away.
+
+**3 Oct 2026: Matching stays rules-based.**
+A forum user's Hollies track missed after he retagged it, and he suggested the fuzzy scoring MCUtils uses for voice search. The miss turned out to be one rule: bracketed title words were deleted rather than kept. Fixing that rule was preferred to adding a scoring layer, because rules are predictable and every match can be explained in the log. 4,196 of 4,390 bracketed titles on the development library now match where they would have missed.
+
+**3 Oct 2026: The AI Moderator gets levels, off by default.**
+The same user found it removed too little: it could take out at most a fifth of the tracks, and only when sure. Rather than make it stricter for everyone, it now has Relaxed (the old behaviour), Balanced and Strict. 24bit7's main job is to bring Last.fm and the other sources to your library without AI, so the moderator stays optional and starts Off.
+
+**3 Oct 2026: Vibe Playlist becomes AI Playlist.**
+The name hid that the AI picks every track. The new name says so, and the AI's own picks are never moderated, since asking AI to judge AI adds cost and nothing else. Drift can still top up from your sources, and only those tracks can be checked.
+
+**3 Oct 2026: Drift can use its own sources.**
+The first pass wants reliable picks; the top-up rounds are where wider sources earn their place. Custom Sources lets Drift use different sources and agreement from the Play option it belongs to, and the log names them each round.

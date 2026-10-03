@@ -29,7 +29,7 @@ Open the skill first ("Alexa, open needle drop"), then say the command, or say i
 | "songs by *artist*" | Artist's Top Tracks |
 | "music like *artist*" | Similar Artists, seeded from the artist's most popular track |
 | "tracks like *song*", or "tracks like *song* by *artist*" | Similar Tracks |
-| "genre *anything*", such as "genre nu metal with grunge" | Vibe Playlist (needs an Anthropic key in 24bit7) |
+| "genre *anything*", such as "genre nu metal with grunge" | AI Playlist (needs an Anthropic key in 24bit7) |
 | "album *name*" | Plays the album now, in track order |
 | "song *title*" | Plays the song now, then stops |
 | "playlist *name*" | Plays one of your JRiver playlists or smartlists now, with its settings from Settings > JRiver Playlists |

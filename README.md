@@ -8,7 +8,7 @@ If you host your whole music library locally in JRiver, you get bit-perfect play
 
 **It works live.** Play any track in JRiver, press a button, and Playing Now is rebuilt around it while the music keeps going. There is nothing to export, no listening history to upload and no second app to keep in sync: whatever is playing right now is the seed. Run it mid-album, mid-track, whenever the mood shifts.
 
-**New in 1.8.0: ask Claude about a build.** Switch on Console Query, click into the console, press Query and ask why a playlist came out the way it did. Claude reads the console, your settings and 24bit7's own code, then explains what happened and suggests settings to change. Drift and Non-stop join the AI Moderator under More Options, and band credits such as "The Jimi Hendrix Experience" now find a library tagged "Jimi Hendrix".
+**New in 1.9.0: steadier playlists without more AI.** The AI Moderator now has three levels, from removing only clear clashes to keeping only tracks close to the seed, and Drift can top a playlist up from sources of its own. Vibe Playlist is now AI Playlist, starting with More tracks like the song that's playing, and bracketed song titles match your library however they're tagged.
 
 You don't have to own the seed either. Type any artist and track into the Search tab and 24bit7 builds a playlist around it, from your library or, with Output set to YouTube, from YouTube. That second route needs no library, no keys and no JRiver.
 
@@ -27,7 +27,7 @@ Four playlist buttons on the **Play** tab, plus **More Options**. The seed is wh
 | **Similar Artists** | A playlist built from artists similar to the seed, blended from whichever sources you have enabled. Each artist (the seed included) contributes a random pick from its top tracks, so the same seed gives a different playlist every run. |
 | **Similar Tracks** | A playlist of tracks like the seed track, suggested track by track by Last.fm, ListenBrainz and YouTube Music and blended, so a playlist follows the song rather than the artist's reputation. |
 | **Artist's Top Tracks** | The artist's most popular tracks that you actually own, in random or popularity order. From the Search tab it needs only the artist. |
-| **Vibe Playlist** | Type a mood or scene (or pick one of three AI suggestions) and get a playlist to match. |
+| **AI Playlist** | Type a mood or scene, pick More tracks like the song that's playing, or pick one of three AI suggestions, and the AI picks a playlist to match from your library. |
 | **More Options** | Opens a row underneath with the **AI Moderator**, **Drift** and **Non-stop** (both change Settings > Playlist for every Play option at once), **Show Credits** (producer, engineer and other credits for the current album, from Discogs; not offered from the Search tab, which has no album to look up) and **+ Add Playlist** (see below). It remembers whether it's open. |
 
 **Output** sits beside the buttons and decides where the finished playlist goes: **Same zone** (the default: the zone you seeded from), any JRiver zone by name, or **YouTube**, which opens it in your browser as an instant playlist. The **Zone** dropdown on the Now Playing tab picks which zone you seed from.
@@ -35,7 +35,7 @@ Four playlist buttons on the **Play** tab, plus **More Options**. The seed is wh
 Two supporting tabs:
 
 - **Discover** lists every track a run looked for, whether it was found (hit) or not (miss), filterable by session and searchable across all fields. Select a row and every site you have ticked has its own button along the bottom: one click, one browser tab. Stores (Bandcamp, Qobuz, Bleep, Beatport and more) and YouTube search for the artist and track; reference sites (Wikipedia, Discogs, AllMusic, MusicBrainz) search for the artist, so you can browse the discography. If your favourite site is missing, add up to three of your own under Settings > Search. Misses are one click from purchase. **Label** finds who released the selected track and opens the label on Bandcamp (see below). Tick any rows (or Select all) and **Create YouTube playlist** opens them in your browser as one playlist, so you can hear the misses before you buy. **Clear all** empties the history, and **Clear selected** removes just the ticked rows; both ask first.
-- **Settings** holds all keys and preferences, in boxed sections, with each setting's explanation behind a small **?** beside it. Sources and Playlist have a tab for each Play option (Similar Artists, Similar Tracks, Artist's Top Tracks, Vibe Playlist), so each can be set up its own way. Changes save immediately and the running app picks them up without a restart.
+- **Settings** holds all keys and preferences, in boxed sections, with each setting's explanation behind a small **?** beside it. Sources and Playlist have a tab for each Play option (Similar Artists, Similar Tracks, Artist's Top Tracks, AI Playlist), so each can be set up its own way. Changes save immediately and the running app picks them up without a restart.
 
 ---
 
@@ -65,19 +65,27 @@ Similar Artists asks "who sounds like this artist?". Similar Tracks asks "what s
 
 ### Fast start
 
-With nothing playing on the output zone, a playlist used to arrive all at once when it was finished. Now the first track found starts straight away and the rest of the playlist follows it into Playing Now as it is built, so music starts within a second or two. It applies to searches, voice commands and Vibe playlists, with JRiver output (a YouTube link is made once, so it still waits for the full list). Artist's Top Tracks uses it in popular order, starting on the most popular track you own. "Shuffle songs by" opens on a random pick from the artist's top five. There is no setting: when music is already playing, there's nothing to wait for anyway.
+With nothing playing on the output zone, a playlist used to arrive all at once when it was finished. Now the first track found starts straight away and the rest of the playlist follows it into Playing Now as it is built, so music starts within a second or two. It applies to searches, voice commands and AI Playlists, with JRiver output (a YouTube link is made once, so it still waits for the full list). Artist's Top Tracks uses it in popular order, starting on the most popular track you own. "Shuffle songs by" opens on a random pick from the artist's top five. There is no setting: when music is already playing, there's nothing to wait for anyway.
 
 ### Drift
 
-Similar Artists, Similar Tracks and Vibe Playlist each have a target length, and a library doesn't always have enough to reach it. With **Drift** ticked (on each Play option's tab under Settings > Playlist, off by default), 24bit7 searches again from what it has already found: each round seeds from the three best finds not used yet, most agreed on first, and looks up either their similar tracks or their similar artists, whichever **Drift using** is set to. **Rounds** sets how many times it tries, from 1 to 6. More rounds fill more gaps but wander further from where you started, which is why it stops at 6 regardless. With JRiver output the first pass is queued straight away and each round is added to the end as it is found, so the music never waits for Drift.
+Similar Artists, Similar Tracks and AI Playlist each have a target length, and a library doesn't always have enough to reach it. With **Drift** ticked (on each Play option's tab under Settings > Playlist, off by default), 24bit7 searches again from what it has already found: each round seeds from the three best finds not used yet, most agreed on first, and looks up either their similar tracks or their similar artists, whichever **Drift using** is set to. **Rounds** sets how many times it tries, from 1 to 6. More rounds fill more gaps but wander further from where you started, which is why it stops at 6 regardless. With JRiver output the first pass is queued straight away and each round is added to the end as it is found, so the music never waits for Drift.
 
-Vibe Playlist can also drift using **AI**: each round asks the AI again with your description, telling it what has already been found or tried so it suggests something new. It uses a little Anthropic credit per round, so it's never the default; pick it if you want it.
+**Drift sources** sets where those rounds look. **Same as Settings > Sources**, the default, uses the sources you picked for that Play option. **Custom Sources** gives Drift its own source ticks and its own **Sources that must agree**, so the first pass can stay steady and the top-up can be more adventurous: Last.fm alone for Similar Artists, say, with Deezer and ListenBrainz agreeing on 2 to fill the gaps. The ticks follow Drift using, similar-artist or similar-track sources, and each set is kept separately. The log names the sources each round used.
+
+In an AI Playlist, Drift using similar artists or similar tracks tops up from your music sources, not the AI, and the settings and log say so: "Similar artists (no AI)". It can also drift using **AI**: each round asks the AI again with your description, telling it what has already been found or tried so it suggests something new. That uses a little Anthropic credit per round, so it's never the default; pick it if you want it.
 
 ### AI Moderator
 
-Most playlists are right apart from one track: the stadium anthem in the middle of a run of acoustic songs. The AI Moderator is an optional check that catches it. When it's on, each playlist (and each Drift round) goes to Claude Haiku once, with the seed and the list of tracks, and it removes the ones that would jolt a listener out of the mood. It judges tone, energy and mood only, and genre is never a reason on its own: a folk song and an electronic track can sit together, and two songs in the same genre can clash. It keeps anything it's unsure about or doesn't know, removes at most a fifth of the tracks, and logs each removal with its reason. A few extra tracks are found up front, so the ones it removes are replaced. The fast start track is never checked, and Artist's Top Tracks isn't moderated, since it's one artist.
+Most playlists are right apart from one track: the stadium anthem in the middle of a run of acoustic songs. The AI Moderator is an optional check that catches it. When it's on, each playlist (and each Drift round) goes to Claude Haiku once, with the seed and the list of tracks, and it removes the ones that would jolt a listener out of the mood. It judges tone, energy and mood only, and genre is never a reason on its own: a folk song and an electronic track can sit together, and two songs in the same genre can clash. It keeps anything it doesn't know well enough to judge, and logs each removal with its reason. How hard it looks is up to you:
 
-It needs an Anthropic key and uses a little credit each time, a fraction of a penny per playlist; the first time you switch it on, 24bit7 says so. Without a key the option is greyed out. If the check fails or the credit runs out, the playlist builds as normal and the log says why. Switch it on or off as you go from **More Options** on the Play tab. It applies to Similar Artists and Similar Tracks. Vibe playlists don't use it, because the AI has already picked every track against your description. A voice device with settings of its own keeps its own choice under Settings > Sources; one copying Windows (Main) follows the Play tab (see Voice Commands below).
+- **Relaxed** removes only clear clashes, at most a fifth of the tracks.
+- **Balanced** removes anything that noticeably shifts the tone, energy or mood away from the seed, at most two fifths.
+- **Strict** keeps only tracks that sit close to the seed, however many that leaves. Drift can top a short playlist up.
+
+It's **Off** by default. A few extra tracks are found up front, more at the stricter levels, so the ones it removes are replaced. The fast start track is never checked, and Artist's Top Tracks isn't moderated, since it's one artist.
+
+It needs an Anthropic key and uses a little credit each time, a fraction of a penny per playlist; the first time you switch it on, 24bit7 says so. Without a key the option is greyed out. If the check fails or the credit runs out, the playlist builds as normal and the log says why. Pick the level as you go from **More Options** on the Play tab. It applies to Similar Artists and Similar Tracks. An AI Playlist's own picks are never checked, because the AI has already picked every track against your description, but its Drift section has **AI Moderator on Drift tracks** for what Drift adds from your sources. It's greyed out unless Drift is on and isn't using the AI. A voice device with settings of its own keeps its own choice under Settings > Sources; one copying Windows (Main) follows the Play tab (see Voice Commands below).
 
 ### Console Query
 
@@ -99,7 +107,7 @@ A playlist used to end. With **Non-stop** ticked on a Play option's tab under Se
 
 - **Similar Artists and Similar Tracks** top up using similar artists or similar tracks (**Play using**), seeded from the **last track**, so the music wanders as the evening goes on, or the **2nd track**, the first pick after the original seed, so it stays close to how it started.
 - **Artist's Top Tracks** can first play the rest of the artist's songs in your library, shuffled (up to 20 by default, or unlimited), then carries on from their most popular track.
-- **Vibe Playlist** can ask the AI for more of the same vibe, or carry on with similar artists or similar tracks, which use no credit.
+- **AI Playlist** can ask the AI for more (More from the AI), or carry on with similar artists or similar tracks, which use no credit.
 
 A playlist keeps following the settings of the option it started as, all evening, and every top-up passes through your filters and skips anything the zone already had. Only playlists 24bit7 sent are topped up: an album or playlist you start in JRiver yourself ends as normal. Each last track triggers one top-up, so a paused or repeated track can't set off a pile of builds.
 
@@ -149,6 +157,8 @@ Two cases earned their own rules in 1.2.0:
 - **Inverted sort names.** A library tag of "XX, The" is flipped to "The XX" before any source sees it. A source handed a name it doesn't recognise will guess at the nearest popular artist, and its suggestions then describe the wrong act entirely.
 - **Dotted initials.** Sources say UNKLE; the library says U.N.K.L.E. Every spelling is searched and the results are merged, because a search for the undotted name finds remix credits and compilation titles but not the artist's own tracks.
 
+Bracketed words in a title count either way. "Long Cool Woman (in a Black Dress)" finds a library tagged "Long Cool Woman in a Black Dress", and the reverse, while brackets holding a version tag or a credit, such as (Remastered), (Live) or (feat. ...), are still ignored. On the development library, 4,196 of 4,390 such titles used to miss whenever a source wrote them the other way.
+
 JRiver's multi-value fields are understood too. An artist tagged `Angus Stone;Dope Lemon` is treated as either name, not a combined one: both are seeded, both match in the library, and a track that surfaces under each is queued once.
 
 Band credits are matched both ways round. A source's "The Jimi Hendrix Experience" finds a library tagged "Jimi Hendrix", and the reverse, when the title matches too. Only three shapes count: "The" plus the name plus a band word (The Jimi Hendrix Experience), the name followed by and, & or + (Bob Marley & The Wailers matches Bob Marley), and the name after one of those at the end (it also matches The Wailers). "Of" never counts, so Eagles of Death Metal won't match Eagles, and nor does a bare suffix such as Boston Pops. "At most N per artist" counts the artist as tagged in your library, so both credits share one allowance. Each such match is logged as "Matched on band name".
@@ -173,11 +183,13 @@ Rows play in the order they're listed, so two Add after playlists follow one ano
 
 The playlists come through exactly as JRiver gives them, so a smartlist's own rules (ratings, play history and so on) decide what's in it. 24bit7's filters, recent-play skip and hidden-track check leave them alone. The only thing it drops is a song already in its own picks, so nothing plays twice. With a playlist added, Drift finishes before anything is sent, so Add after really does come last. With Add before and a stopped zone, fast start plays that playlist's first track.
 
+If nothing matches your library, the added playlists still play on their own, so a build never leaves you with silence.
+
 Added playlists are for the Play tab only, and only with JRiver output. Voice, keyboard shortcuts and non-stop don't use them, and YouTube output leaves them out with a note in the log. The rows are remembered between runs, and a line under them says what the next build will do.
 
 ### Run after building
 
-Each Play option under Settings > Playlist can run a file of your choice once its playlist is in JRiver: a .bat, an .exe, or a PowerShell or Python script. It runs in the background, only when the build worked, and isn't told anything about the playlist, so it can do whatever you like. Device tabs have their own, so a voice build can run something different. Non-stop top-ups don't run it.
+Each Play option under Settings > Playlist can run a file of your choice once its playlist is in JRiver: a .bat, an .exe, or a PowerShell or Python script. It runs in the background after every build, whether or not anything matched, and isn't told anything about the playlist, so it can do whatever you like. Device tabs have their own, so a voice build can run something different. Non-stop top-ups don't run it.
 
 ### Voice Commands (optional, advanced)
 
@@ -192,7 +204,7 @@ Once it is set up, each device plays to its own zone:
 | "songs by *artist*" | Artist's Top Tracks |
 | "music like *artist*" | Similar Artists, seeded from the artist's most popular track |
 | "tracks like *song*" (or "*song* by *artist*") | Similar Tracks |
-| "genre *anything*" | Vibe Playlist |
+| "genre *anything*" | AI Playlist |
 | "album *name*", "song *title*" | Plays it now, replacing what's playing |
 | "playlist *name*" | Plays one of your JRiver playlists or smartlists now, with its settings from Settings > JRiver Playlists |
 | "shuffle songs by *artist*" | Every track by the artist in your library, shuffled |
@@ -230,7 +242,7 @@ Every response from every source is cached in a local SQLite database with a con
 | Deezer | Similar artists, top tracks, name verification | No | Also used to verify AI-suggested artists exist. |
 | YouTube Music | Similar artists and similar tracks from the up next queue, playlist output, Discover playlists | No | No sign-in. Uses the unofficial ytmusicapi library, so it may break now and then. |
 | Discogs | Album credits, record labels | Yes (free) | Credits, and a second source for the Label button. |
-| Anthropic (Claude) | AI-suggested similar artists, Vibe Playlist, AI Moderator, Console Query | Yes (paid, pennies per run) | Every suggestion is verified against Deezer before it is trusted. The moderator uses Claude Haiku, a fraction of a penny per playlist. |
+| Anthropic (Claude) | AI-suggested similar artists, AI Playlist, AI Moderator, Console Query | Yes (paid, pennies per run) | Every suggestion is verified against Deezer before it is trusted. The moderator uses Claude Haiku, a fraction of a penny per playlist. |
 
 Enable any combination of similar-artist sources in Settings. One is enough; several are better. Deezer and YouTube Music need no keys, so 24bit7 works out of the box.
 
@@ -264,7 +276,15 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.8.0
+## What's new in 1.9.0
+
+- **AI Moderator levels.** Off, Relaxed, Balanced or Strict, on the Play tab and per device. Off by default; if you had it on, it's now Balanced (see AI Moderator above).
+- **Drift with Custom Sources.** Each Drift section can use its own sources and its own "must agree", or stay the same as Settings > Sources (see Drift above).
+- **Vibe Playlist is now AI Playlist.** Its first suggestion is More tracks like the song that's playing. The AI's own picks are never moderated, and its Drift says plainly when it's using your sources rather than the AI, with an optional AI Moderator for those tracks.
+- **Bracketed titles match both ways.** "Long Cool Woman (in a Black Dress)" finds "Long Cool Woman in a Black Dress", and the reverse.
+- **Nothing found still finishes the job.** Run After Building runs after every build, matches or not, and added playlists play on their own when nothing matched.
+
+### Earlier: 1.8.0
 
 - **Console Query.** Ask Claude why a playlist came out the way it did, and get suggested setting changes. Off by default: Settings > Other > Enable Console Query (see Console Query above).
 - **Copy and Clear.** Click into the console to copy what you've highlighted (or all of it), or to clear it.
@@ -375,7 +395,7 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 **Solid**: Similar Artists, Artist's Top Tracks, Show Credits, Discover, Settings, cache, mid-album queueing, multi-value artists, the agreement number.
 
-**Newer**: added playlists, run after building, non-stop, filters, keyboard shortcuts, JRiver Playlists settings, the dark theme, fast start, Drift, the AI Moderator, settings per device, skipping recent plays, Hidden Tracks, the Label button, Similar Tracks, zones, voice control, Discover's YouTube playlists, the tray, the Search tab, YouTube Music as a source and YouTube output. All are in daily use on the development PC. Voice Commands are the least plug-and-play part, as their setup guide says, and the YouTube parts rest on an unofficial library, so expect the occasional breakage. Vibe Playlist works well and is still learning its limits.
+**Newer**: Drift's Custom Sources, the AI Moderator's levels, added playlists, run after building, non-stop, filters, keyboard shortcuts, JRiver Playlists settings, the dark theme, fast start, Drift, the AI Moderator, settings per device, skipping recent plays, Hidden Tracks, the Label button, Similar Tracks, zones, voice control, Discover's YouTube playlists, the tray, the Search tab, YouTube Music as a source and YouTube output. All are in daily use on the development PC. Voice Commands are the least plug-and-play part, as their setup guide says, and the YouTube parts rest on an unofficial library, so expect the occasional breakage. AI Playlist works well and is still learning its limits.
 
 **Removed**: a producer-based playlist mode built on Discogs credits. Discogs credit data is too patchy to be reliable, so it was dropped rather than shipped half-working.
 
