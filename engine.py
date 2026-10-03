@@ -27,7 +27,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.9.0"
+VERSION = "1.9.1"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
@@ -273,8 +273,8 @@ def load_settings():
     # Similar Tracks: its own sources (lastfm, listenbrainz, youtube), agreement and playlist settings
     SIMILAR_TRACK_SOURCES = [x.strip().lower() for x in
                              os.getenv("SIMILAR_TRACK_SOURCES", "lastfm,listenbrainz,youtube").split(",")
-                             if x.strip().lower() in ("lastfm", "listenbrainz", "youtube")]
-    SIMILAR_TRACK_MIN_AGREEMENT = _int_setting("SIMILAR_TRACK_MIN_AGREEMENT", 2, 1, 3)
+                             if x.strip().lower() in ("ai", "lastfm", "listenbrainz", "youtube")]
+    SIMILAR_TRACK_MIN_AGREEMENT = _int_setting("SIMILAR_TRACK_MIN_AGREEMENT", 2, 1, 4)
     SIMILAR_TRACK_COUNT = _int_setting("SIMILAR_TRACK_COUNT", 30, 5, 100)
     SIMILAR_TRACK_PER_ARTIST = _int_setting("SIMILAR_TRACK_PER_ARTIST", 3, 1, 20)
     LISTENBRAINZ_TRACK_ALGORITHM_SETTING = os.getenv("LISTENBRAINZ_TRACK_ALGORITHM", "alltime").strip().lower()
@@ -3099,7 +3099,8 @@ class Drift:
             no_ai = ", no AI" if self.group == "vibe" else ""
             return f" (from {listed}{agree}{no_ai})"
         if self.group == "vibe":
-            uses_ai = self.using == "artists" and "ai" in SIMILAR_SOURCES
+            uses_ai = ((self.using == "artists" and "ai" in SIMILAR_SOURCES)
+                       or (self.using == "tracks" and "ai" in SIMILAR_TRACK_SOURCES))
             return " (from your sources)" if uses_ai else " (from your sources, no AI)"
         return ""
 
@@ -3554,7 +3555,28 @@ def youtube_similar_tracks(artist, track, limit=SIMILAR_TRACK_FETCH):
     return youtube_up_next(artist, track)[:limit]
 
 
+AI_SIMILAR_TRACKS_PROMPT = (
+    "List {limit} songs most similar to \"{track}\" by {artist}, most similar first. "
+    "Judge on sound, mood, energy and era rather than the artist's reputation, and favour other "
+    "artists, with at most two songs by {artist}. Use each artist's and song's most common spelling. "
+    "Respond with a JSON array of objects with keys \"artist\" and \"track\" only, "
+    "no commentary, no code fences."
+)
+
+
+def ai_similar_tracks(artist, track, limit=SIMILAR_TRACK_FETCH):
+    """Claude's songs like the seed track: [[artist, title], ...], most similar first. A made-up
+    song simply isn't found in the library, so no separate check is needed."""
+    data = ai_ask_json(AI_SIMILAR_TRACKS_PROMPT.format(artist=artist, track=track, limit=min(limit, 40)))
+    out = []
+    for item in data if isinstance(data, list) else []:
+        if isinstance(item, dict) and item.get("artist") and item.get("track"):
+            out.append([str(item["artist"]).strip(), str(item["track"]).strip()])
+    return out[:limit]
+
+
 TRACK_PROVIDERS = {
+    "ai":           ("AI",           ai_similar_tracks),
     "lastfm":       ("Last.fm",      lastfm_similar_tracks),
     "listenbrainz": ("ListenBrainz", listenbrainz_similar_tracks),
     "youtube":      ("YouTube",      youtube_similar_tracks),

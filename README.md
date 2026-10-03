@@ -25,7 +25,7 @@ Four playlist buttons on the **Play** tab, plus **More Options**. The seed is wh
 | Action | What you get |
 |---|---|
 | **Similar Artists** | A playlist built from artists similar to the seed, blended from whichever sources you have enabled. Each artist (the seed included) contributes a random pick from its top tracks, so the same seed gives a different playlist every run. |
-| **Similar Tracks** | A playlist of tracks like the seed track, suggested track by track by Last.fm, ListenBrainz and YouTube Music and blended, so a playlist follows the song rather than the artist's reputation. |
+| **Similar Tracks** | A playlist of tracks like the seed track, suggested track by track by Last.fm, ListenBrainz, YouTube Music and, if you tick it, AI, and blended, so a playlist follows the song rather than the artist's reputation. |
 | **Artist's Top Tracks** | The artist's most popular tracks that you actually own, in random or popularity order. From the Search tab it needs only the artist. |
 | **AI Playlist** | Type a mood or scene, pick More tracks like the song that's playing, or pick one of three AI suggestions, and the AI picks a playlist to match from your library. |
 | **More Options** | Opens a row underneath with the **AI Moderator**, **Drift** and **Non-stop** (both change Settings > Playlist for every Play option at once), **Show Credits** (producer, engineer and other credits for the current album, from Discogs; not offered from the Search tab, which has no album to look up) and **+ Add Playlist** (see below). It remembers whether it's open. |
@@ -59,7 +59,7 @@ With more than one source enabled, **Sources that must agree** (Settings > Sourc
 
 Similar Artists asks "who sounds like this artist?". Similar Tracks asks "what sounds like this song?", which follows the mood of the seed far more closely: two songs by the same artist lead to different places.
 
-- **Three sources**, each ticked under Settings > Sources: Last.fm (track similarity from listening data), ListenBrainz (similar recordings, with a choice of all-time or roughly the last six months) and YouTube Music (its up next queue). ListenBrainz and YouTube Music need no key.
+- **Four sources**, each ticked under Settings > Sources: Last.fm (track similarity from listening data), ListenBrainz (similar recordings, with a choice of all-time or roughly the last six months), YouTube Music (its up next queue) and, optionally, AI (Claude's picks, using a little Anthropic credit per build). ListenBrainz and YouTube Music need no key.
 - **Blended by track.** A track two or three sources agree on ranks above one only a single source suggests. **Sources that must agree** works as it does for artists, and if too few agreed tracks are in your library it is relaxed a step at a time, with a line in the log.
 - **Settings > Playlist > Similar Tracks** sets the length, the most tracks any one artist gets (the seed artist included), the order (shuffled, or most similar first) and Drift, for when the library falls short.
 
@@ -242,7 +242,7 @@ Every response from every source is cached in a local SQLite database with a con
 | Deezer | Similar artists, top tracks, name verification | No | Also used to verify AI-suggested artists exist. |
 | YouTube Music | Similar artists and similar tracks from the up next queue, playlist output, Discover playlists | No | No sign-in. Uses the unofficial ytmusicapi library, so it may break now and then. |
 | Discogs | Album credits, record labels | Yes (free) | Credits, and a second source for the Label button. |
-| Anthropic (Claude) | AI-suggested similar artists, AI Playlist, AI Moderator, Console Query | Yes (paid, pennies per run) | Every suggestion is verified against Deezer before it is trusted. The moderator uses Claude Haiku, a fraction of a penny per playlist. |
+| Anthropic (Claude) | AI-suggested similar artists and tracks, AI Playlist, AI Moderator, Console Query | Yes (paid, pennies per run) | Every suggestion is verified against Deezer before it is trusted. The moderator uses Claude Haiku, a fraction of a penny per playlist. |
 
 Enable any combination of similar-artist sources in Settings. One is enough; several are better. Deezer and YouTube Music need no keys, so 24bit7 works out of the box.
 
@@ -276,7 +276,14 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.9.0
+## What's new in 1.9.1
+
+- **AI for Similar Tracks.** AI can be ticked as a Similar Tracks source, as it already could for Similar Artists. Its picks blend and vote with the other sources. Off by default; it uses a little Anthropic credit per build.
+- **Up to 4 sources can agree** on a track.
+- **AI ticks are purple** in both source lists.
+- **Drift's Custom Sources never include AI.**
+
+### Earlier: 1.9.0
 
 - **AI Moderator levels.** Off, Relaxed, Balanced or Strict, on the Play tab and per device. Off by default; if you had it on, it's now Balanced (see AI Moderator above).
 - **Drift with Custom Sources.** Each Drift section can use its own sources and its own "must agree", or stay the same as Settings > Sources (see Drift above).

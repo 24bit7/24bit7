@@ -42,7 +42,7 @@ SOURCE_NAMES = [("ai", "AI"), ("deezer", "Deezer"),
 # YouTube suggests artists only, so it isn't offered as a top-track source
 TOP_SOURCE_NAMES = [s for s in SOURCE_NAMES if s[0] != "youtube"]
 # Sources that can suggest tracks like a track
-TRACK_SOURCE_NAMES = [("lastfm", "Last.fm"), ("listenbrainz", "ListenBrainz"), ("youtube", "YouTube")]
+TRACK_SOURCE_NAMES = [("ai", "AI"), ("lastfm", "Last.fm"), ("listenbrainz", "ListenBrainz"), ("youtube", "YouTube")]
 
 
 KEY_HELP = {
@@ -1314,7 +1314,11 @@ class SettingsTab(tk.Frame):
             def ticked(command=command):
                 self._sync_listenbrainz(p)
                 command()
-            tick = ttk.Checkbutton(line, text=label, variable=v, command=ticked, style="Big.TCheckbutton")
+            tick = ttk.Checkbutton(line, text=label, variable=v, command=ticked,
+                                   style="AI.Big.TCheckbutton" if code == "ai" else "Big.TCheckbutton")
+            if code == "ai":   # purple: uses Anthropic credit
+                ttk.Style(line).configure("AI.Big.TCheckbutton", font=("Segoe UI", 11),
+                                          foreground=PALETTE["ai_purple"])
             tick.pack(side="left")
             self._source_boxes.append((tick, code, label, purpose))
             if help_text and n == 0:
@@ -1579,8 +1583,10 @@ class SettingsTab(tk.Frame):
             panel = tk.Frame(box)
             frames = {}
             for kind, names, agree_values, main in (
-                    ("ARTIST", DRIFT_ARTIST_SOURCE_NAMES, ["Off", "2", "3", "4"], engine.SIMILAR_SOURCES),
-                    ("TRACK", TRACK_SOURCE_NAMES, ["Off", "2", "3"], engine.SIMILAR_TRACK_SOURCES)):
+                    ("ARTIST", DRIFT_ARTIST_SOURCE_NAMES, ["Off", "2", "3", "4"],
+                     [c for c in engine.SIMILAR_SOURCES if c != "ai"]),
+                    ("TRACK", [s for s in TRACK_SOURCE_NAMES if s[0] != "ai"], ["Off", "2", "3"],
+                     [c for c in engine.SIMILAR_TRACK_SOURCES if c != "ai"])):
                 frame = tk.Frame(panel)
                 tk.Label(frame, text="Similar artists from" if kind == "ARTIST" else "Similar tracks from",
                          fg=PALETTE["text_secondary"]).pack(anchor="w")
