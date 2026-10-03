@@ -15,3 +15,6 @@ Curated.py
 *.zip
 # build.bat's copies of .env (keys) and the database
 backups/
+# per-PC: exported logs and the running copy's id
+logs/
+24bit7.pid

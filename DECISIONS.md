@@ -112,3 +112,9 @@ The name hid that the AI picks every track. The new name says so, and the AI's o
 
 **3 Oct 2026: Drift can use its own sources.**
 The first pass wants reliable picks; the top-up rounds are where wider sources earn their place. Custom Sources lets Drift use different sources and agreement from the Play option it belongs to, and the log names them each round.
+
+**3 Oct 2026: Thinking off for the AI list calls.**
+The diagnostics build showed Claude Sonnet 5 spending about 2,400 of 2,999 output tokens thinking before writing a 600-token song list, and the 2,000 limit cut the list off. Recalling song titles doesn't improve with deliberation, so those calls now run without it: cheaper, faster, and the list gets the budget to itself. The Moderator keeps its model as it was.
+
+**3 Oct 2026: A new launch closes the old copy.**
+Two copies fight over the keyboard shortcuts and the tray, and the second always loses silently. Closing the old one outright is blunt, but asking it to quit would only send it to the tray.

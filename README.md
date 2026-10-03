@@ -93,6 +93,10 @@ When a playlist comes out short or odd, you can ask why. Tick **Enable Console Q
 
 Claude Haiku is sent what's in the console, your settings with every key, token, password and user name left out, what's playing, and 24bit7's own code and README, so it knows the rules and the names of the settings. It explains what most likely happened and suggests up to three changes, named as they appear in Settings. Plain music questions, such as which album a song is from, are answered from general knowledge. Running from source, it reads the code in the folder; the packaged app downloads it once from GitHub, for the version you're running. The console logs headlines rather than every track's fate, so ticking Debug as well gives Claude more to go on. It costs a few pence for the first question and much less for follow-ups within a few minutes. Clear empties the console, and with it what Claude can see.
 
+### Reporting a problem
+
+Tick **Debug** in Settings > Other, do the thing that went wrong, then click into the console and press **Export to Log**. 24bit7 writes a dated file to the `logs` folder beside it (version, Python, Windows and JRiver versions, library size, your settings with every key and password hidden, and the console) and opens the folder with the file selected. Attach that file, or paste it, when you report the problem. Keys never appear in it.
+
 ### Hidden tracks
 
 Some albums end on a track that runs on after a long silence into a hidden bonus track, which feels completely out of place in a playlist. The sources can't help, because they report the long album version too. So the Hidden Tracks section on each Play option's tab under Settings > Playlist skips the last track on an album when it runs longer than a set number of minutes, 6 by default, and each Play option can set its own. Albums, songs and playlists you ask for by name always play in full.
@@ -276,7 +280,15 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.9.1
+## What's new in 1.10.0
+
+- **Debug works in the app.** Every `[debug]` line and every source's result reach the console; before, they went to a stdout that doesn't exist under pythonw.
+- **Export to Log.** Click into the console: a dated file in `logs\` with versions, library size, settings (keys hidden) and the console, for reporting a problem (see Reporting a problem above).
+- **AI replies were being cut off.** Claude's thinking was using most of the 2,000-token limit, so Similar Tracks and AI Playlist replies came back cut short, couldn't be read and were discarded; a later run that fitted was cached, which is why AI alone could fail, then work. The list calls now run with thinking off, the limit is 4,000, a reply that can't be read whole keeps every complete entry, and the console says what happened.
+- **One copy at a time.** Launching 24bit7 while it's running closes the old copy, so keyboard shortcuts and the tray belong to the one you can see.
+- **"AI request sent, cogitating..."** while a request is out; a Similar Tracks summary line; shortcut refusals show the Windows error code.
+
+### Earlier: 1.9.1
 
 - **AI for Similar Tracks.** AI can be ticked as a Similar Tracks source, as it already could for Similar Artists. Its picks blend and vote with the other sources. Off by default; it uses a little Anthropic credit per build.
 - **Up to 4 sources can agree** on a track.
