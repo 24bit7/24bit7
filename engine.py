@@ -723,7 +723,7 @@ def session_finish(session_id, queued, sources=None, report=print):
     track_word = "track" if queued == 1 else "tracks"
     miss_word = "discovery" if misses == 1 else "discoveries"
     report(f"Session {session_id} saved ({queued} {track_word} queued, {misses} {miss_word} not in library).")
-    if queued and not NONSTOP_APPEND:   # a build that worked (not a non-stop top-up)
+    if not NONSTOP_APPEND:   # every finished build, matches or not (not a non-stop top-up)
         run_after_building(report)
 
 
@@ -2669,7 +2669,7 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
             break
     if not pairs:
         report("  YouTube returned no up next queue for this track.")
-        session_finish(session_id, 0, report=report)
+        session_finish(session_id, send_mix_only(None, seed_info, report), report=report)
         return
 
     prefetch_youtube_ids([(canonicalise_conjunction(p[0]), p[1]) for p in pairs
@@ -2702,7 +2702,9 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
     if dropped:
         report(f"  Seed artist kept to about a quarter of the playlist ({dropped} of their tracks left out).")
     queued = 0
-    if keys and mix_active():
+    if mix_active():
+        if not keys:
+            report("No library matches found.")
         keys = combine_with_mix(keys, report)
     mix_skipped(report)
     if keys:
@@ -3148,6 +3150,21 @@ def mix_active():
     return bool(MIX_ROWS) and not output_is_youtube()
 
 
+def send_mix_only(fast, seed_info, report=print):
+    """
+    Nothing matched: the Play tab's added playlists go out on their own, so the
+    user's own playlists still play. Returns how many were sent (0 with no rows).
+    """
+    if not mix_active():
+        return 0
+    report("Playing your added playlists on their own.")
+    final = combine_with_mix([], report)
+    rest = fast.rest(final) if fast else final
+    if rest:
+        send_to_jriver(rest, seed_info=seed_info, report=report, append=bool(fast and fast.started))
+    return len(final)
+
+
 def mix_skipped(report=print):
     """Added playlists only join JRiver output; says so once on YouTube."""
     global MIX_NOTED
@@ -3360,6 +3377,7 @@ def create_similar_playlist(report=print, seed_info=None):
     else:
         played.done()
         report("No library matches found.")
+        queued = send_mix_only(fast, seed_info, report)
     session_finish(session_id, queued, sources=source_label, report=report)
 
 
@@ -3572,6 +3590,7 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
         report("Queue refreshed.")
     else:
         report("No library matches found.")
+        queued = send_mix_only(fast, seed_info, report)
     session_finish(session_id, queued, sources=source_label, report=report)
 
 
@@ -3613,7 +3632,7 @@ def create_vibe_playlist(vibe, report=print):
     pairs = ai_vibe_tracks(vibe, count=wanted)
     if not pairs:
         report("  AI returned nothing usable.")
-        session_finish(session_id, 0, report=report)
+        session_finish(session_id, send_mix_only(fast, None, report), report=report)
         return
 
     prefetch_youtube_ids(pairs)
@@ -3637,7 +3656,7 @@ def create_vibe_playlist(vibe, report=print):
 
     if not keys:
         report("No library matches found. Try a different vibe.")
-        session_finish(session_id, 0, report=report)
+        session_finish(session_id, send_mix_only(fast, None, report), report=report)
         return
 
     random.shuffle(keys)
@@ -3707,12 +3726,15 @@ def play_top_n(report=print, seed_info=None):
 
     if session_id is None:
         report("Could not retrieve top tracks from any configured source.")
+        nonstop_begin("top_tracks", seed_info)   # so Run After Building uses this group's file
+        send_mix_only(fast, seed_info, report)
+        run_after_building(report)
         return
     played.done()
     if not ordered_keys:
         report("None of the top tracks were found in your library." if not played.skipped else
                "All the top tracks in your library were played too recently.")
-        session_finish(session_id, 0, report=report)
+        session_finish(session_id, send_mix_only(fast, seed_info, report), report=report)
         return
 
     NONSTOP_CONTEXT["top_first"] = str(ordered_keys[0])   # the most popular found: non-stop seeds from it later
