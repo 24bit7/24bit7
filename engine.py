@@ -175,14 +175,26 @@ def closer_settings(get):
 MODERATOR_GROUPS = ("artists", "tracks")   # not Top Tracks (one artist) or Vibe (the AI picks every track)
 
 
+MODERATOR_LEVELS = ("off", "relaxed", "balanced", "strict")
+
+
+def moderator_level_value(raw, fallback="off"):
+    """A stored moderator setting as a level. Older Yes/No values: Yes is Balanced, No is Off."""
+    raw = (raw or "").strip().lower()
+    if raw in MODERATOR_LEVELS:
+        return raw
+    if raw in YES:
+        return "balanced"
+    if raw in NO:
+        return "off"
+    return fallback
+
+
 def moderator_settings(get):
-    """The AI Moderator per Play option: {group: on}. The old single tick is the starting value."""
-    base = (get("AI_MODERATOR", "0") or "0").strip().lower() in YES
-    out = {}
-    for group in MODERATOR_GROUPS:
-        raw = (get(f"AI_MODERATOR_{group.upper()}", "") or "").strip().lower()
-        out[group] = raw in YES if raw in YES + NO else base
-    return out
+    """The AI Moderator level per Play option: {group: level}. The old single tick is the starting value."""
+    base = moderator_level_value(get("AI_MODERATOR", "0"))
+    return {group: moderator_level_value(get(f"AI_MODERATOR_{group.upper()}", ""), base)
+            for group in MODERATOR_GROUPS}
 
 
 def load_settings():
@@ -297,7 +309,7 @@ def load_settings():
     VIBE_TRACK_COUNT = _int_setting("VIBE_TRACK_COUNT", 20, 5, 100)  # target size for vibe playlists
     # Hidden-track check: leave out an album's last track when it runs longer than this
     # AI Moderator (Play tab Yes/No) and whether its one-off credits warning has been shown
-    AI_MODERATOR = os.getenv("AI_MODERATOR", "0").strip().lower() in ("1", "true", "yes")
+    AI_MODERATOR = moderator_level_value(os.getenv("AI_MODERATOR", "0"))
     MODERATOR_WARNED = os.getenv("MODERATOR_WARNED", "0").strip().lower() in ("1", "true", "yes")
     # Skip tracks played recently, per Play mode group: {group: (on, days)}
     SKIP_PLAYED = {}
@@ -2718,48 +2730,74 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
 
 
 # ---------------------------------------------------------------------------
-# AI Moderator (Play tab Yes/No; a tick per speaker for voice)
+# AI Moderator (Play tab Off/Relaxed/Balanced/Strict; per device in Settings > Sources)
 # ---------------------------------------------------------------------------
 
 MODERATOR_MODEL = "claude-haiku-4-5-20251001"   # quick and cheap: one call per playlist (and per Drift round)
-MODERATOR_SHARE = 0.2                           # at most this share of the tracks checked can go
+MODERATOR_CAP = {"relaxed": 0.2, "balanced": 0.4, "strict": 1.0}     # most of the tracks checked that can go
+MODERATOR_EXTRA = {"relaxed": 0.2, "balanced": 0.4, "strict": 0.5}   # extra found up front, to replace removals
+
+MODERATOR_RULES = {
+    "relaxed": ("The playlist should feel like one continuous listening session. Small shifts\n"
+                "in energy are fine and give a playlist shape. A track is a problem only if it\n"
+                "would jolt a listener out of the mood the seed set. Only flag a track when you\n"
+                "are confident it clashes. If unsure, keep it."),
+    "balanced": ("The playlist should feel like one continuous listening session that stays\n"
+                 "close to the seed. Flag any track that would noticeably shift the tone, energy\n"
+                 "or mood away from the seed, even if it wouldn't jolt a listener outright: a\n"
+                 "loud, driving track after a gentle seed, or a slow, reflective one after an\n"
+                 "upbeat seed, should go. If unsure, keep it."),
+    "strict": ("Keep only tracks that sit close to the seed in tone, energy and mood. Flag any\n"
+               "track that differs noticeably on any one of the three, however good it is. A\n"
+               "shorter playlist that holds together is better than a longer one that wanders."),
+}
 
 MODERATOR_PROMPT = """You are a playlist moderator for a personal music library. You will be given
 a seed and a list of candidate tracks for a playlist built from it. The seed is
 a track, or for a vibe playlist, a description of the mood wanted.
 
-Your job is to find tracks that would break the listening experience. Judge
-each track on three things only:
+Your job is to find tracks that don't belong with the seed. Judge each track on
+three things only:
 - Tone: the emotional colour (warm, dark, melancholy, playful, defiant).
 - Energy: intensity and pace (a gentle acoustic song versus a pounding anthem).
 - Mood: the overall feeling a listener is in while it plays.
 
-The playlist should feel like one continuous listening session. Small shifts
-in energy are fine and give a playlist shape. A track is a problem only if it
-would jolt a listener out of the mood the seed set.
+{level_rules}
 
 Genre is not a reason to remove a track. A folk song and an electronic track
 can sit together if they share tone, energy and mood. Two tracks in the same
 genre can clash if they don't.
 
 Rules:
-- Only flag a track when you are confident it clashes. If unsure, keep it.
 - If you don't know an artist or track well enough to judge its sound, keep it.
 - Judge the specific track, not the artist's general reputation.
-- Flag no more than {max_removals} tracks.
+- {limit_rule}
 
 Reply with JSON only, no other text:
 {{"remove": [{{"index": <number>, "reason": "<one short sentence>"}}]}}
 If nothing clashes, reply {{"remove": []}}."""
 
 
-def moderator_on():
-    """The moderator runs when it's wanted (Play tab, or the speaker for voice) and there's a key."""
-    # each Play option has its own tick; the build in progress says which option it is
+def moderator_level():
+    """The level for the build in progress ('off' with no Anthropic key)."""
+    # each Play option has its own level; the build in progress says which option it is
     kind = NONSTOP_CONTEXT.get("kind")
-    own = AI_MODERATOR_BY.get(kind, False) if kind else AI_MODERATOR
-    wanted = own if MODERATOR_OVERRIDE is None else MODERATOR_OVERRIDE
-    return bool(wanted and ANTHROPIC_API_KEY)
+    level = AI_MODERATOR_BY.get(kind, "off") if kind else AI_MODERATOR
+    if MODERATOR_OVERRIDE is not None:   # True/False for one run; a level name also works
+        level = (MODERATOR_OVERRIDE if MODERATOR_OVERRIDE in MODERATOR_LEVELS else
+                 (level if level != "off" else "balanced") if MODERATOR_OVERRIDE else "off")
+    return level if (level in MODERATOR_LEVELS and ANTHROPIC_API_KEY) else "off"
+
+
+def moderator_on():
+    """The moderator runs when it's wanted (Play tab, or the device for voice) and there's a key."""
+    return moderator_level() != "off"
+
+
+def moderator_extra(target):
+    """How many extra tracks to find up front, so the moderator's removals are replaced."""
+    level = moderator_level()
+    return max(1, int(target * MODERATOR_EXTRA[level])) if level != "off" else 0
 
 
 def moderate(tracks, seed, report=print):
@@ -2769,18 +2807,21 @@ def moderate(tracks, seed, report=print):
     remove, each logged with its reason. Any failure removes nothing, so a
     playlist is never lost to the moderator: it builds unmoderated, with a log line.
     """
-    if not moderator_on() or len(tracks) < 2:
+    level = moderator_level()
+    if level == "off" or len(tracks) < 2:
         return set()
-    cap = max(1, int(len(tracks) * MODERATOR_SHARE))
+    cap = max(1, int(len(tracks) * MODERATOR_CAP[level]))
+    limit_rule = ("Flag as many tracks as you need to." if level == "strict"
+                  else f"Flag no more than {cap} tracks.")
     seed_line = f"Seed vibe: {seed[5:].strip()}" if seed.startswith("vibe:") else f"Seed: {seed}"
     listing = "\n".join(f"{n}. {artist} - {title}" for n, (_, artist, title) in enumerate(tracks, 1))
-    report(f"  AI Moderator: checking {len(tracks)} tracks against the seed...")
+    report(f"  AI Moderator ({level.title()}): checking {len(tracks)} tracks against the seed...")
     try:
         import anthropic
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         message = client.messages.create(
             model=MODERATOR_MODEL, max_tokens=1000,
-            system=MODERATOR_PROMPT.format(max_removals=cap),
+            system=MODERATOR_PROMPT.format(level_rules=MODERATOR_RULES[level], limit_rule=limit_rule),
             messages=[{"role": "user", "content": f"{seed_line}\n\nCandidates:\n{listing}"}])
         text = "".join(b.text for b in message.content if getattr(b, "type", "") == "text")
         text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
@@ -3531,7 +3572,7 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
                   exclude_keys=[seed_info.get("FileKey"), first_key], seed=f"{seed_info['Artist']} - {track}",
                   played=played)
     # With the AI Moderator on, find a few extra, so anything it removes is replaced
-    wanted = target + (max(1, int(target * MODERATOR_SHARE)) if moderator_on() else 0)
+    wanted = target + moderator_extra(target)
     for seed in seeds:
         drift.mark_seed(seed, track)
 
@@ -3626,7 +3667,7 @@ def create_vibe_playlist(vibe, report=print):
     drift = Drift("vibe", target, session_id, report, per_artist=TRACKS_PER_ARTIST_PICK, seed=f"vibe: {vibe}",
                   played=played, vibe=vibe)
     # With the AI Moderator on, ask for a few extra, so anything it removes is replaced
-    wanted = target + (max(1, int(target * MODERATOR_SHARE)) if moderator_on() else 0)
+    wanted = target + moderator_extra(target)
 
     report("  Asking AI for tracks...")
     pairs = ai_vibe_tracks(vibe, count=wanted)

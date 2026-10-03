@@ -70,6 +70,13 @@ NO_KEY_TEXT = "You need to add an Anthropic key to use this function"
 CONSOLE_QUERY_WARNING = ("Console Query sends the console, your settings (without keys) and 24bit7's "
                          "code to Claude each time you ask a question. The first question costs a few "
                          "pence, more than the AI Moderator.\n\nTurn it on?")
+MODERATOR_CHOICES = ["Off", "Relaxed", "Balanced", "Strict"]
+MODERATOR_LEVELS_HELP = (
+    "Relaxed: removes only clear clashes, at most a fifth of the tracks.\n"
+    "Balanced: removes anything that noticeably shifts the tone, energy or mood, at most two fifths.\n"
+    "Strict: keeps only tracks close to the seed, however many that leaves. Drift can top a short "
+    "playlist up.\n"
+    "Tracks it doesn't know well enough to judge are always kept, and genre is never a reason on its own.")
 MODERATOR_WARNING = ("AI Moderator checks each playlist using the Anthropic API, which uses credits "
                      "from your Anthropic account. Each playlist costs a fraction of a penny.")
 
@@ -219,7 +226,7 @@ class ProfilePage:
             for group in engine.MODERATOR_GROUPS:
                 key = f"AI_MODERATOR_{group.upper()}"
                 if key in v:   # Windows (Main) sets these on the Play tab
-                    out[key] = "1" if v[key].get() else "0"
+                    out[key] = v[key].get().lower()
             return out
         out = {key: v[key].get().strip() for key in PLAYLIST_TEXT_KEYS}
         for group, (on, using, rounds, _) in self.drift.items():
@@ -1280,22 +1287,24 @@ class SettingsTab(tk.Frame):
         """An AI Moderator tick for one Play option, greyed out until there's an Anthropic key."""
         box = section(page, "AI Moderator",
                       "Checks each playlist (and each Drift round) once with Claude Haiku, and removes tracks "
-                      "that clash with the seed's tone, energy and mood. Genre is never a reason on its own. "
-                      "It keeps anything it's unsure about, removes at most a fifth of the tracks, and logs "
-                      "each removal with its reason. Uses a little Anthropic credit each time, a fraction of "
-                      "a penny per playlist.", title_fg=PALETTE["ai_purple"])
+                      "that clash with the seed's tone, energy and mood. Logs each removal with its reason. "
+                      "Uses a little Anthropic credit each time, a fraction of a penny per playlist.",
+                      title_fg=PALETTE["ai_purple"])
         key = f"AI_MODERATOR_{group.upper()}"
-        p.vars[key] = tk.BooleanVar(value=engine.moderator_settings(p.env.get)[group])
+        p.vars[key] = tk.StringVar(value=engine.moderator_settings(p.env.get)[group].title())
 
-        def ticked():
-            if p.vars[key].get():
+        def chosen(*_):
+            if p.vars[key].get() != "Off":
                 warn_moderator_once(self)
+            cb.selection_clear()
             p.save()
-        tick = ttk.Checkbutton(box, text="Check each playlist with the AI Moderator", variable=p.vars[key],
-                               command=ticked)
-        tick.grid(row=0, column=0, sticky="w")
-        Tooltip(tick, NO_KEY_TEXT, when=lambda: not self._anthropic_key())
-        p.moderator_boxes.append(tick)
+        row = self._line(box, 0, "Level", pady=(0, 0))
+        cb = ttk.Combobox(row, textvariable=p.vars[key], values=MODERATOR_CHOICES, state="readonly", width=9)
+        cb.pack(side="left")
+        cb.bind("<<ComboboxSelected>>", chosen)
+        help_mark(row, MODERATOR_LEVELS_HELP).pack(side="left", padx=(8, 0))
+        Tooltip(cb, NO_KEY_TEXT, when=lambda: not self._anthropic_key())
+        p.moderator_boxes.append(cb)
 
     def _fill_sources(self, tab, p):
         p.loading = True

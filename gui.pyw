@@ -25,6 +25,7 @@ import voice
 import hotkeys
 import nonstop
 from settings_gui import SettingsTab, write_env, warn_moderator_once, Tooltip, NO_KEY_TEXT, help_mark
+from settings_gui import MODERATOR_CHOICES, MODERATOR_LEVELS_HELP
 from discover_gui import DiscoverTab
 from tabs import TabbedPane, PALETTE, FlatButton, InfoLine, apply_theme
 from mix_gui import MixRows
@@ -251,15 +252,16 @@ class PlayTab(tk.Frame):
         # AI Moderator sets Windows (Main)'s moderator; devices with settings of their own keep theirs.
         tk.Label(self.extras_row, text="AI Moderator", font=("Segoe UI", 9, "bold"),
                  fg=PALETTE["ai_purple"]).pack(side="left", padx=(0, 6))
-        self.moderator_var = tk.StringVar(value="No")
+        self.moderator_var = tk.StringVar(value="Off")
         self.moderator_cb = ttk.Combobox(self.extras_row, textvariable=self.moderator_var,
-                                         values=["No", "Yes"], state="readonly", width=5)
+                                         values=MODERATOR_CHOICES, state="readonly", width=9)
         self.moderator_cb.pack(side="left")
         self.moderator_cb.bind("<<ComboboxSelected>>", self._on_moderator_changed)
         Tooltip(self.moderator_cb, NO_KEY_TEXT, when=lambda: not engine.ANTHROPIC_API_KEY)
         help_mark(self.extras_row, "Checks Similar Artists and Similar Tracks playlists with Claude Haiku "
                                    "and removes tracks that clash with the seed's tone, energy and mood. "
-                                   "Uses a little Anthropic credit, a fraction of a penny per playlist. "
+                                   "Uses a little Anthropic credit, a fraction of a penny per playlist.\n"
+                                   + MODERATOR_LEVELS_HELP + "\n"
                                    "Voice devices with settings of their own keep their own choice "
                                    "(Settings > Sources).").pack(side="left", padx=(8, 0))
         # Drift and Non-stop: a second door onto Settings > Playlist for Windows (Main).
@@ -349,7 +351,8 @@ class PlayTab(tk.Frame):
             return   # a voice build may have a device's settings loaded
         engine.refresh_settings_if_changed()
         by = engine.AI_MODERATOR_BY
-        self.moderator_var.set("Yes" if (by.get("artists") or by.get("tracks")) else "No")
+        levels = {by.get("artists", "off"), by.get("tracks", "off")}
+        self.moderator_var.set(levels.pop().title() if len(levels) == 1 else "Off")   # Off unless both agree
         self.moderator_cb.state(["!disabled"] if engine.ANTHROPIC_API_KEY else ["disabled"])
         self._sync_play_switches()
         self._update_more_label()
@@ -417,10 +420,9 @@ class PlayTab(tk.Frame):
         self._save_play_switches(updates, apply)
 
     def _on_moderator_changed(self, *_):
-        on = self.moderator_var.get() == "Yes"
-        if on:
+        value = self.moderator_var.get().lower()
+        if value != "off":
             warn_moderator_once(self)
-        value = "1" if on else "0"
         try:
             write_env({"AI_MODERATOR_ARTISTS": value, "AI_MODERATOR_TRACKS": value})
         except Exception as e:
