@@ -543,9 +543,96 @@ except OSError:
     _env_mtime = None
 
 
+# --- console output -----------------------------------------------------------
+# gui.pyw points OUTPUT_HOOK at its console, so every print() in this module
+# (status lines, [AI] messages, [debug] lines) shows in the app. Under pythonw
+# there is no stdout, so without this they went nowhere.
+OUTPUT_HOOK = None
+_builtin_print = print
+
+
+def print(*args, **kwargs):   # shadows the builtin inside engine only
+    if OUTPUT_HOOK is not None:
+        try:
+            OUTPUT_HOOK(" ".join(str(a) for a in args))
+        except Exception:
+            pass
+    if sys.stdout is not None:
+        try:
+            _builtin_print(*args, **kwargs)
+        except Exception:
+            pass
+
+
 def debug(msg):
     if DEBUG:
         print(f"    [debug] {msg}")
+
+
+AI_LAST_ERROR = ""   # why the last AI request returned nothing, for the source result lines
+
+
+def _redact_env_line(line):
+    """A .env line with any key, secret, token or password value hidden."""
+    if "=" not in line or line.lstrip().startswith("#"):
+        return line
+    name, value = line.split("=", 1)
+    upper = name.strip().upper()
+    if any(w in upper for w in ("KEY", "SECRET", "TOKEN", "PASS")):
+        value = value.strip()
+        return f"{name}={'set (' + str(len(value)) + ' chars)' if value else 'not set'}"
+    return line
+
+
+def diagnostics_text():
+    """Version, machine, JRiver, library size and the settings (keys redacted)."""
+    import platform
+    lines = [f"24bit7 {VERSION}",
+             f"Exported: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+             f"Python: {platform.python_version()}  {'frozen' if getattr(sys, 'frozen', False) else 'source'}",
+             f"OS: {platform.platform()}",
+             f"Folder: {APP_DIR}"]
+    try:
+        r = requests.get(f"{JRIVER_BASE}/Alive", auth=AUTH, timeout=3)
+        m = re.search(r'Name="ProgramVersion">([^<]+)', r.text)
+        lines.append(f"JRiver: {m.group(1) if m else 'answered, version not read'}  ({JRIVER_BASE})")
+    except Exception as e:
+        lines.append(f"JRiver: not reachable at {JRIVER_BASE} ({e.__class__.__name__})")
+    try:
+        import library
+        with library._lock:
+            lines.append(f"Library: {len(library._by_key)} tracks, {len(library._playlists)} playlists"
+                         + ("" if library._loaded_at else " (not read yet)"))
+    except Exception:
+        lines.append("Library: not read")
+    try:
+        row = db().execute("SELECT COUNT(*) FROM cache").fetchone()
+        lines.append(f"Provider cache: {row[0]} entries, kept {CACHE_DAYS} days")
+    except Exception:
+        pass
+    lines.append("")
+    lines.append("--- .env (keys and passwords hidden) ---")
+    try:
+        with open(ENV_FILE, encoding="utf-8") as f:
+            for raw in f:
+                raw = raw.rstrip("\n")
+                if raw.strip():
+                    lines.append(_redact_env_line(raw))
+    except OSError:
+        lines.append("(no .env file)")
+    return "\n".join(lines)
+
+
+def export_log(console_text):
+    """Writes the diagnostics and the console to logs\\24bit7_<date>_<time>.txt; returns the path."""
+    folder = os.path.join(APP_DIR, "logs")
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, f"24bit7_{datetime.now().strftime('%Y-%m-%d_%H%M')}.txt")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(diagnostics_text())
+        f.write("\n\n--- Console ---\n")
+        f.write(console_text.rstrip() + "\n")
+    return path
 
 
 # ---------------------------------------------------------------------------
@@ -1568,7 +1655,7 @@ AI_VIBE_PROMPT = (
     "Suggest {count} songs that fit this mood or description: \"{vibe}\".\n"
     "Favour well-known, widely-available recordings across a range of artists. "
     "Respond with a JSON array of objects with keys \"artist\" and \"track\" only, "
-    "no commentary, no code fences."
+    "compact on a single line with no indentation or line breaks, no commentary, no code fences."
 )
 AI_VIBE_SUGGESTIONS_PROMPT = (
     "Suggest three short, evocative music playlist moods a listener might enjoy, "
@@ -1590,8 +1677,39 @@ def _salvage_json_array(text):
     return re.findall(r'"([^"]+)"', text)
 
 
+_AI_THINKING_OFF_OK = True   # cleared for the session if the model rejects thinking: disabled
+
+
+def _ai_create(client, **kwargs):
+    """
+    One request to Claude with thinking switched off: these calls recall lists
+    of names, which thinking doesn't improve and which it was crowding out of
+    max_tokens. A model that rejects the setting (400) gets the plain request
+    instead, once, and the setting is skipped for the rest of the session.
+    Prints a waiting line, and the time taken at Debug level.
+    """
+    global _AI_THINKING_OFF_OK
+    print("  AI request sent, cogitating...")
+    started = time.time()
+    try:
+        if _AI_THINKING_OFF_OK:
+            try:
+                return client.messages.create(thinking={"type": "disabled"}, **kwargs)
+            except Exception as e:
+                if getattr(e, "status_code", None) == 400 and "thinking" in str(e).lower():
+                    _AI_THINKING_OFF_OK = False
+                    debug(f"{kwargs.get('model')} won't run with thinking off, asking again with it on")
+                else:
+                    raise
+        return client.messages.create(**kwargs)
+    finally:
+        debug(f"AI replied in {time.time() - started:.1f} s")
+
+
 def ai_ask_list(prompt):
     """Sends a prompt expecting a JSON array of strings; returns the list or []."""
+    global AI_LAST_ERROR
+    AI_LAST_ERROR = "no API key"
     if not ANTHROPIC_API_KEY:
         print("[AI] ANTHROPIC_API_KEY is missing from .env.")
         return []
@@ -1602,11 +1720,8 @@ def ai_ask_list(prompt):
         return []
     try:
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        message = client.messages.create(
-            model=AI_MODEL,
-            max_tokens=1500,
-            messages=[{"role": "user", "content": prompt}],
-        )
+        message = _ai_create(client, model=AI_MODEL, max_tokens=1500,
+                             messages=[{"role": "user", "content": prompt}])
         text = "".join(block.text for block in message.content if getattr(block, "type", "") == "text")
         text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
         try:
@@ -1616,33 +1731,85 @@ def ai_ask_list(prompt):
             if data:
                 print(f"[AI] Response was truncated; recovered {len(data)} names.")
         if isinstance(data, list):
+            AI_LAST_ERROR = ""
             return [str(x).strip() for x in data if str(x).strip()]
-        print(f"[AI] Unexpected response shape: {text[:200]}")
+        AI_LAST_ERROR = "reply couldn't be read"
+        print(f"[AI] Reply couldn't be read: {text[:200]}")
     except Exception as e:
+        AI_LAST_ERROR = f"request failed: {e.__class__.__name__}"
         print(f"[AI] Request failed: {e}")
     return []
 
 
-def ai_ask_json(prompt, max_tokens=2000):
-    """Sends a prompt expecting JSON; returns the parsed value or None."""
+_AI_PAIR = re.compile(r'\{\s*"artist"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*"track"\s*:\s*"((?:[^"\\]|\\.)*)"\s*\}')
+
+
+def _salvage_json_pairs(text):
+    """Every complete {"artist": ..., "track": ...} entry in a reply that can't be parsed whole."""
+    out = []
+    for m in _AI_PAIR.finditer(text):
+        try:
+            out.append({"artist": json.loads(f'"{m.group(1)}"'), "track": json.loads(f'"{m.group(2)}"')})
+        except ValueError:
+            continue
+    return out
+
+
+def _json_body(text):
+    """The JSON array or object inside a reply, ignoring any words around it."""
+    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
+    starts = [i for i in (text.find("["), text.find("{")) if i >= 0]
+    if not starts:
+        return text
+    start = min(starts)
+    end = text.rfind("]" if text[start] == "[" else "}")
+    return text[start:end + 1] if end > start else text[start:]
+
+
+def ai_ask_json(prompt, max_tokens=4000):
+    """Sends a prompt expecting JSON; returns the parsed value, what could be salvaged, or None."""
+    global AI_LAST_ERROR
+    AI_LAST_ERROR = "no API key"
     if not ANTHROPIC_API_KEY:
         print("[AI] ANTHROPIC_API_KEY is missing from .env.")
         return None
     try:
         import anthropic
     except ImportError:
+        AI_LAST_ERROR = "anthropic package not installed"
         print("[AI] The anthropic package isn't installed. Run: pip install anthropic")
         return None
-    try:
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        message = client.messages.create(model=AI_MODEL, max_tokens=max_tokens,
-                                         messages=[{"role": "user", "content": prompt}])
-        text = "".join(b.text for b in message.content if getattr(b, "type", "") == "text")
-        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
-        return json.loads(text)
-    except Exception as e:
-        print(f"[AI] Request failed: {e}")
-        return None
+    for attempt in (1, 2):
+        text, stop = "", ""
+        try:
+            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            message = _ai_create(client, model=AI_MODEL, max_tokens=max_tokens,
+                                 messages=[{"role": "user", "content": prompt}])
+            text = "".join(b.text for b in message.content if getattr(b, "type", "") == "text")
+            stop = getattr(message, "stop_reason", "")
+            usage = getattr(message, "usage", None)
+            debug(f"AI reply: {len(text)} chars, stop_reason {stop}, tokens in "
+                  f"{getattr(usage, 'input_tokens', '?')} out {getattr(usage, 'output_tokens', '?')}")
+            data = json.loads(_json_body(text))
+            AI_LAST_ERROR = ""
+            return data
+        except json.JSONDecodeError as e:
+            debug(f"JSON {e.msg} at {e.pos} of {len(text)}: "
+                  f"{text[max(0, e.pos - 60):e.pos]!r} >>> {text[e.pos:e.pos + 40]!r}")
+            found = _salvage_json_pairs(text)
+            if found:
+                why = "cut short" if stop == "max_tokens" else "partly unreadable"
+                AI_LAST_ERROR = f"reply {why}, {len(found)} recovered"
+                print(f"[AI] Reply {why}; kept the {len(found)} complete entries.")
+                return found
+            AI_LAST_ERROR = "reply couldn't be read"
+            print(f"[AI] Reply couldn't be read ({e.msg} at {e.pos} of {len(text)}): {text[:200]!r}")
+        except Exception as e:
+            AI_LAST_ERROR = f"request failed: {e.__class__.__name__}"
+            print(f"[AI] Request failed: {e}")
+        if attempt == 1:
+            print("[AI] Trying once more...")
+    return None
 
 
 def ai_vibe_suggestions():
@@ -1999,7 +2166,8 @@ def blended_similar_artists(seed_artist, limit=20, seed_track=None, report=None)
                 if label not in labels:
                     labels.append(label)
             else:
-                print(f"  [{service_name}] returned no similar artists for {seed}, skipping.")
+                why = f" ({AI_LAST_ERROR})" if service_name == "AI" and AI_LAST_ERROR else ""
+                print(f"  [{service_name}] returned no similar artists for {seed}{why}, skipping.")
     blended = [(a, s) for a, s in blend_lists(results, artist_key) if artist_key(a) not in seed_keys]
     responding = {service_name for service_name, _ in results}
     # The number can't exceed the sources that actually answered this time
@@ -3560,7 +3728,7 @@ AI_SIMILAR_TRACKS_PROMPT = (
     "Judge on sound, mood, energy and era rather than the artist's reputation, and favour other "
     "artists, with at most two songs by {artist}. Use each artist's and song's most common spelling. "
     "Respond with a JSON array of objects with keys \"artist\" and \"track\" only, "
-    "no commentary, no code fences."
+    "compact on a single line with no indentation or line breaks, no commentary, no code fences."
 )
 
 
@@ -3595,20 +3763,26 @@ def similar_track_candidates(seeds, track, report=print):
         if not source_has_key(code):
             report(f"  {name} is ticked for Similar Tracks but has no key, so it's skipped. {KEY_HELP_LINE}")
             continue
-        pairs = []
+        pairs, from_cache = [], False
         for seed in seeds:   # a multi-value artist: the first name a source knows the track under
             if code == "youtube":
                 pairs = youtube_similar_tracks(seed, track)
             else:
                 label = f"{name} ({LISTENBRAINZ_TRACK_ALGORITHM_SETTING})" if code == "listenbrainz" else name
-                pairs = cached_call(label, "similar_tracks", f"{artist_key(seed)}|{clean_name(track)}",
-                                    lambda: fetch(seed, track))
+                cache_key = f"{artist_key(seed)}|{clean_name(track)}"
+                from_cache = cache_get(label, "similar_tracks", cache_key) is not None
+                pairs = cached_call(label, "similar_tracks", cache_key, lambda: fetch(seed, track))
             if pairs:
                 break
         pairs = [(canonicalise_conjunction(p[0]), normalise_punctuation(p[1])) for p in pairs or []
                  if isinstance(p, (list, tuple)) and len(p) == 2 and p[0] and p[1]
                  and p[0].strip().lower() not in YOUTUBE_SKIP_ARTISTS]
-        report(f"  {name}: {len(pairs)} similar tracks")
+        note = ""
+        if pairs and from_cache:
+            note = " (from cache)"
+        elif code == "ai" and AI_LAST_ERROR:
+            note = f" ({AI_LAST_ERROR})"
+        report(f"  {name}: {len(pairs)} similar tracks{note}")
         if pairs:
             results.append((name, pairs))
     blended = blend_lists(results, lambda p: (artist_key(p[0]), clean_name(p[1])))
@@ -3692,6 +3866,7 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
             break
         report(f"  {len(keys)} tracks with {need} or more sources agreeing, so relaxed to {need - 1}.")
         need -= 1
+    report(f"  Suggested {len(candidates)}, checked {len(checked)}, in library {len(keys)}.")
     drift.checked |= checked
     drift.moderate(keys, [k for k in keys if k != first_key and str(k) != fast.key])
 

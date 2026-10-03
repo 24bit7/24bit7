@@ -10,7 +10,9 @@ The Play tab drives engine.py on a background thread, streaming progress into
 its log via a thread-safe queue so the window never freezes.
 """
 
+import os
 import queue
+import subprocess
 import sys
 import threading
 import webbrowser
@@ -61,6 +63,7 @@ class PlayTab(tk.Frame):
         self.root = root
         self.settings = None   # the Settings tab, once built: Drift and Non-stop write through it
         self.log_queue = queue.Queue()
+        engine.OUTPUT_HOOK = self.log_queue.put   # engine's print() and [debug] lines land here
         self.running = False
         self.last_playing = None
         self.voice_jobs = queue.Queue()   # (job, heading) from voice commands, run one at a time
@@ -535,7 +538,7 @@ class PlayTab(tk.Frame):
         self.console_buttons = {}
         self.console_frame = frame
         for name, command in (("Copy", self._copy_log), ("Clear", self._clear_from_strip),
-                              ("Query", self._open_query)):
+                              ("Query", self._open_query), ("Export to Log", self._export_log)):
             b = tk.Label(self.console_strip, text=name, font=("Segoe UI", 8, "bold"), bg=black, fg=green,
                          padx=8, pady=1, cursor="hand2", highlightthickness=1,
                          highlightbackground=green, highlightcolor=green)
@@ -558,7 +561,7 @@ class PlayTab(tk.Frame):
         query = self.console_buttons["Query"]
         if getattr(engine, "CONSOLE_QUERY", False) and engine.ANTHROPIC_API_KEY:
             if not query.winfo_manager():
-                query.pack(side="left", padx=(0, 4))
+                query.pack(side="left", padx=(0, 4), before=self.console_buttons["Export to Log"])
         else:
             query.pack_forget()
         self.console_strip.place(in_=self.log, relx=1.0, x=-6, y=6, anchor="ne")
@@ -585,6 +588,25 @@ class PlayTab(tk.Frame):
         def done():
             self.console_strip.place_forget()
             b.config(text="Copy", bg="#000000")
+        self.after(800, done)
+
+    def _export_log(self):
+        """Diagnostics plus the console to a dated file in logs\\, then shows it in Explorer."""
+        b = self.console_buttons["Export to Log"]
+        try:
+            path = engine.export_log(self.log.get("1.0", "end-1c"))
+        except Exception as e:
+            messagebox.showerror("Export to Log", f"Couldn't write the log: {e}", parent=self)
+            return
+        b.config(text="Saved")
+        try:
+            subprocess.Popen(["explorer", "/select,", path])
+        except Exception:
+            pass
+
+        def done():
+            self.console_strip.place_forget()
+            b.config(text="Export to Log", bg="#000000")
         self.after(800, done)
 
     def _clear_from_strip(self):
@@ -856,9 +878,69 @@ def _set_window_icon(root):
         pass
 
 
+PID_FILE = os.path.join(engine.APP_DIR, "24bit7.pid")
+
+
+def _close_other_copy():
+    """
+    Closes the copy of 24bit7 already running, if there is one, so this launch
+    gets the keyboard shortcuts and the tray icon. Returns True if one was closed.
+    """
+    try:
+        with open(PID_FILE, encoding="utf-8") as f:
+            old = int(f.read().strip())
+    except (OSError, ValueError):
+        old = 0
+    closed = False
+    if old and old != os.getpid() and sys.platform == "win32":
+        try:
+            import ctypes
+            from ctypes import wintypes
+            k32 = ctypes.windll.kernel32
+            k32.OpenProcess.restype = wintypes.HANDLE
+            k32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            k32.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR,
+                                                       ctypes.POINTER(wintypes.DWORD)]
+            k32.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+            k32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+            k32.CloseHandle.argtypes = [wintypes.HANDLE]
+            QUERY, TERMINATE, SYNC = 0x1000, 0x0001, 0x00100000
+            h = k32.OpenProcess(QUERY | TERMINATE | SYNC, False, old)
+            if h:
+                try:
+                    buf = ctypes.create_unicode_buffer(1024)
+                    size = wintypes.DWORD(1024)
+                    name = buf.value.lower() if k32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(size)) else ""
+                    if "python" in name or "24bit7" in name:   # only ever a 24bit7 process, never a reused id
+                        k32.TerminateProcess(h, 0)
+                        k32.WaitForSingleObject(h, 3000)
+                        closed = True
+                finally:
+                    k32.CloseHandle(h)
+        except Exception:
+            pass
+    try:
+        with open(PID_FILE, "w", encoding="utf-8") as f:
+            f.write(str(os.getpid()))
+    except OSError:
+        pass
+    return closed
+
+
+def _forget_pid():
+    try:
+        with open(PID_FILE, encoding="utf-8") as f:
+            mine = f.read().strip() == str(os.getpid())
+        if mine:
+            os.remove(PID_FILE)
+    except OSError:
+        pass
+
+
 def main():
     _enable_dpi_awareness()
     _set_app_id()
+    closed_other = _close_other_copy()
     root = tk.Tk()
     _set_window_icon(root)
     apply_theme(root, engine.THEME)   # before any widgets, so they all pick it up
@@ -925,6 +1007,8 @@ def main():
         names = ", ".join(hotkeys.LABELS[c] for c in problems)
         root.after(13000, lambda: play.report(f"Some keyboard shortcuts didn't register ({names}). "
                                               f"See Settings > Other > Keyboard Shortcuts."))
+    if closed_other:
+        root.after(13000, lambda: play.report("Closed the copy of 24bit7 that was already running."))
 
     # --- tray: Start in the tray (when Windows launches it) and Close to tray ---
     def show_window():
@@ -938,6 +1022,7 @@ def main():
         hotkeys.stop()
         nonstop.stop()
         library.stop()
+        _forget_pid()
         root.destroy()
 
     # Settings > Other > Theme offers a restart: quit here, start again after mainloop

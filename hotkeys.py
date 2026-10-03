@@ -163,7 +163,10 @@ class _Listener(threading.Thread):
             if _user32.RegisterHotKey(None, n, flags | MOD_NOREPEAT, vk):
                 ids[n] = code
             else:
-                self.errors[code] = "Windows refused it: another program already uses this shortcut."
+                err = _kernel32.GetLastError()
+                why = ("another program already uses this shortcut" if err == 1409
+                       else f"Windows error {err}")
+                self.errors[code] = f"Windows refused it: {why}."
         self.ready.set()
         try:
             while _user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
