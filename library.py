@@ -113,6 +113,36 @@ def norm(text):
     return " ".join(words)
 
 
+_BRACKET_DROP_START = re.compile(r"\s*(feat\.?|featuring|ft\.?|with|from)\b", re.I)
+_BRACKET_DROP_ANY = re.compile(r"\b(remix|bonus|deluxe|" + engine.VERSION_WORDS.strip("()") + r")\b", re.I)
+
+
+def _unwrap_brackets(title):
+    """
+    'Long Cool Woman (in a Black Dress)' -> 'Long Cool Woman  in a Black Dress '.
+    Brackets holding a version tag or a credit are dropped instead, as norm() does.
+    """
+    def keep(m):
+        inner = m.group(0)[1:-1]
+        if _BRACKET_DROP_START.match(inner) or _BRACKET_DROP_ANY.search(inner):
+            return " "
+        return f" {inner} "
+    return re.sub(r"\(.*?\)|\[.*?\]", keep, title or "")
+
+
+def title_keys(title):
+    """
+    Every form a title is filed and looked up under: brackets removed (as
+    always), and brackets unwrapped with their words kept when they're part of
+    the title. Most titles have no brackets and give one key.
+    """
+    keys = []
+    for k in (norm(title), norm(_unwrap_brackets(title))):
+        if k and k not in keys:
+            keys.append(k)
+    return keys
+
+
 def score(heard, name):
     a, b = norm(heard), norm(name)
     if not a or not b:
@@ -167,11 +197,13 @@ def load():
         title, artist = (row.get("Name") or "").strip(), (row.get("Artist") or "").strip()
         album, album_artist = row.get("Album") or "", row.get("Album Artist (auto)") or ""
         if title:
-            songs.setdefault(norm(title), []).append((title, artist, row["Key"], album, album_artist, False))
+            for k in title_keys(title):
+                songs.setdefault(k, []).append((title, artist, row["Key"], album, album_artist, False))
         if " - " in title:   # a compilation track named 'Artist - Title'
             by, just_title = (part.strip() for part in title.split(" - ", 1))
             if by and just_title:
-                songs.setdefault(norm(just_title), []).append((just_title, by, row["Key"], album, album_artist, True))
+                for k in title_keys(just_title):
+                    songs.setdefault(k, []).append((just_title, by, row["Key"], album, album_artist, True))
         name = (row.get("Album") or "").strip()
         if name:
             albums.setdefault((name, row.get("Album Artist (auto)", "")), []).append(row)
@@ -396,14 +428,24 @@ def find_track_key(artist, title):
     you own several copies, the studio album version wins.
     """
     ensure_loaded()
-    want = norm(title)
-    if not want:
+    wants = title_keys(title)
+    if not wants:
         return None
+    entries, seen = [], set()
+
+    def add(found):
+        for e in found:
+            if (e[2], e[5]) not in seen:   # the same file can sit under two keys
+                seen.add((e[2], e[5]))
+                entries.append(e)
+
     with _lock:
-        entries = list(_songs.get(want, []))
+        for w in wants:
+            add(_songs.get(w, []))
         if not entries:
-            close = difflib.get_close_matches(want, _song_titles, n=3, cutoff=0.9)
-            entries = [e for t in close for e in _songs[t]]
+            for w in wants:
+                for t in difflib.get_close_matches(w, _song_titles, n=3, cutoff=0.9):
+                    add(_songs[t])
     matches = [e for e in entries if _artist_score(artist, e[1]) >= GOOD]
     if not matches:
         # 'Mark Ronson feat. Amy Winehouse' against a tag of 'Mark Ronson' (or the other
