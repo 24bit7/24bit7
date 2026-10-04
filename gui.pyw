@@ -614,11 +614,10 @@ class PlayTab(tk.Frame):
 
     def _build_console_head(self):
         black, green = "#000000", "#00ff41"
-        self.console_head = tk.Frame(self.console_box, bg=black)
-        self.console_head.pack(fill="x", before=self.log.frame)
-        self.head_arrow = tk.Label(self.console_head, text="\u25bc", font=("Consolas", 10), bg=black, fg=green,
+        self.console_head = tk.Frame(self.console_box, bg=black)   # packed only while the tabs are open
+        # Closed, the arrow floats over the top middle of the text, so the text starts on the first line
+        self.head_arrow = tk.Label(self.console_box, text="\u25bc", font=("Consolas", 10), bg=black, fg=green,
                                    cursor="hand2", padx=10)
-        self.head_arrow.pack(anchor="n")
         self.head_arrow.bind("<Button-1>", lambda e: self._set_tabs_open(not self.tabs_open))
         self.head_row = tk.Frame(self.console_head, bg=black)
         self.head_tabs = tk.Frame(self.head_row, bg=black)
@@ -644,6 +643,10 @@ class PlayTab(tk.Frame):
         self.tabs_open = open_
         self.head_arrow.config(text="\u25b2" if open_ else "\u25bc")
         if open_:
+            self.head_arrow.place_forget()
+            if not self.console_head.winfo_manager():
+                self.console_head.pack(fill="x", before=self.log.frame)
+            self.head_arrow.pack(in_=self.console_head, anchor="n")
             self.head_row.pack(fill="x", padx=8, pady=(0, 6))
             self.head_line.pack(fill="x", padx=8, pady=(0, 4))
             self.console_strip.place_forget()
@@ -652,8 +655,12 @@ class PlayTab(tk.Frame):
         else:
             self.head_row.pack_forget()
             self.head_line.pack_forget()
+            self.head_arrow.pack_forget()
+            self.console_head.pack_forget()
             if self.view != "all":
                 self._select_view("all")
+            self.head_arrow.place(in_=self.log, relx=0.5, y=0, anchor="n")
+            self.head_arrow.lift()
         if save:
             try:
                 write_env({"CONSOLE_TABS": "1" if open_ else "0"})
