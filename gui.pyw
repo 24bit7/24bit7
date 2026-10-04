@@ -15,6 +15,7 @@ import queue
 import subprocess
 import sys
 import threading
+import time
 import webbrowser
 import tkinter as tk
 import tkinter.font as tkfont
@@ -92,7 +93,7 @@ class PlayTab(tk.Frame):
         # The tagline sits beside the logo after a "/", both at their usual sizes
         tk.Label(title, text="/", font=("Segoe UI", 10),
                  fg=PALETTE["text_muted"]).pack(side="left", anchor="s", padx=(12, 8), pady=(0, 5))
-        tk.Label(title, text="Smart Playlist Creator and Music Discovery Tool",
+        tk.Label(title, text="Perfect Playlists and Music Discovery",
                  font=("Segoe UI", 10), fg=PALETTE["text_muted"]).pack(side="left", anchor="s", pady=(0, 5))
 
         # The seed area: two small tabs. Whichever is showing when a button is
@@ -493,6 +494,9 @@ class PlayTab(tk.Frame):
             self._clear_log()
 
     def _append_log(self, line):
+        if getattr(self, "_stamp_next", False) and line.strip():
+            line = time.strftime("%H:%M") + "  " + line.lstrip("\n")
+            self._stamp_next = False
         self.log.config(state="normal")
         self.log.insert("end", line + "\n")
         self.log.see("end")
@@ -694,17 +698,21 @@ class PlayTab(tk.Frame):
         for b in self.buttons:
             b.config(state="disabled")
         self._clear_log()
+        self._stamp_next = True   # the build's first line gets the time
 
         rows = (playmix.rows() or None) if mix else None   # added playlists: app builds only
 
         def worker():
             engine.MIX_ROWS, engine.MIX_KEEP, engine.MIX_FAST_KEY, engine.MIX_NOTED = rows, set(), None, False
+            engine.BUILD_STARTED, engine.LAST_OUTPUT = time.time(), None
             try:
                 target()
             except Exception as e:
-                self.log_queue.put(f"[error] {e}")
+                self.log_queue.put(f"Problem: something went wrong ({e}). Tick Debug, try again, "
+                                   f"then press Export to Log to report it.")
             finally:
                 engine.MIX_ROWS, engine.MIX_KEEP, engine.MIX_FAST_KEY = None, set(), None
+                engine.BUILD_STARTED = None
                 self.root.after(0, self._job_done)
 
         threading.Thread(target=worker, daemon=True).start()

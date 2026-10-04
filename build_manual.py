@@ -95,7 +95,7 @@ def build_html(ver):
     today = date.today()
     cover = (f'<div class="cover"><div class="logo"><span class="blue">24</span><span class="orange">bit'
              f'</span><span class="blue">7</span></div>'
-             f'<div class="tagline">Smart Playlist Creator and Music Discovery Tool</div>'
+             f'<div class="tagline">Perfect Playlists and Music Discovery</div>'
              f'<div class="title">User Manual</div>'
              f'<div class="meta">Version {html.escape(ver)} &nbsp;&middot;&nbsp; '
              f'{today.strftime("%B")} {today.year}</div></div>')

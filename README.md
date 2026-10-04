@@ -1,6 +1,6 @@
 # 24bit7
 
-**Smart playlist creation for JRiver Media Center.**
+**Perfect playlists and music discovery for JRiver Media Center.**
 
 If you host your whole music library locally in JRiver, you get bit-perfect playback and none of the discovery. Streaming services will happily tell you what to play next; JRiver will not. 24bit7 fills that gap, using recommendation data from Last.fm, ListenBrainz, Deezer, YouTube Music and an AI model, matched against the music you already own.
 

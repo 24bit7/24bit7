@@ -2049,7 +2049,7 @@ class SettingsTab(tk.Frame):
             tk.Label(head, text=part, font=("Segoe UI", 18, "bold"), fg=colour).pack(side="left")
         tk.Label(head, text="/", font=("Segoe UI", 10), fg=PALETTE["text_muted"]).pack(
             side="left", anchor="s", padx=(12, 8), pady=(0, 5))
-        tk.Label(head, text="Smart Playlist Creator and Music Discovery Tool", font=("Segoe UI", 10),
+        tk.Label(head, text="Perfect Playlists and Music Discovery", font=("Segoe UI", 10),
                  fg=PALETTE["text_muted"]).pack(side="left", anchor="s", pady=(0, 5))
         tk.Label(tab, text=f"Version {version}", font=LABEL_FONT).grid(row=1, column=0, sticky="w")
         tk.Label(tab, justify="left", wraplength=640, anchor="w",
