@@ -18,6 +18,7 @@ import sys
 import threading
 import time
 import webbrowser
+from datetime import datetime
 import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import ttk, scrolledtext, messagebox
@@ -659,10 +660,146 @@ class PlayTab(tk.Frame):
             except Exception:
                 pass
 
+    # --- the Log tab: the last 50 builds from each source, newest first ---
+
+    # (title, width in characters); Sources Used (width 1) takes whatever room is left
+    LOG_COLUMNS = [("Date and Time", 13), ("From", 12), ("Zone", 9), ("Playlist Type", 30),
+                   ("Sources Used", 1), ("Hits / Misses", 13), ("AI Moderator", 20), ("Problems", 17), ("", 15)]
+    SOURCES_COLUMN = 4
+
+    def _sync_head_strip(self):
+        """On the Log tab only Simple/Advanced shows; on a console tab, the whole strip."""
+        on_log = self.view == "log"
+        for name in ("Copy", "Clear", "Export to Log"):
+            self.head_buttons[name].pack_forget()
+        self.head_buttons["Query"].pack_forget()
+        if not on_log:
+            for name in ("Copy", "Clear", "Export to Log"):
+                self.head_buttons[name].pack(side="left", padx=(4, 0), before=self.head_buttons["Mode"])
+            self._sync_head_query()
+
+    def _show_console_text(self):
+        if getattr(self, "log_table", None) is not None and self.log_table.winfo_manager():
+            self.log_table.pack_forget()
+            self.log.pack(fill="both", expand=True)
+
+    def _build_log_table(self):
+        black = "#000000"
+        self.log_table = tk.Frame(self.console_box, bg=black)
+        canvas = tk.Canvas(self.log_table, bg=black, highlightthickness=0, bd=0)
+        bar = ttk.Scrollbar(self.log_table, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=bar.set)
+        bar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        self.log_grid = tk.Frame(canvas, bg=black, padx=8, pady=6)
+        window = canvas.create_window((0, 0), window=self.log_grid, anchor="nw")
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(window, width=e.width))
+        self.log_grid.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+
+        def wheel(e):
+            canvas.yview_scroll(int(-e.delta / 120) or (-1 if e.delta > 0 else 1), "units")
+        canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", wheel))
+        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
+        self.log_canvas = canvas
+
+    def _show_log_table(self):
+        if getattr(self, "log_table", None) is None:
+            self._build_log_table()
+        if self.log.winfo_manager():
+            self.log.pack_forget()
+        if not self.log_table.winfo_manager():
+            self.log_table.pack(fill="both", expand=True)
+        self._fill_log_table()
+
+    def _fill_log_table(self):
+        black, green, dim, white = "#000000", "#00ff41", "#0d4d1c", "#ffffff"
+        grid = self.log_grid
+        for child in grid.winfo_children():
+            child.destroy()
+        font, bold = ("Consolas", 9), ("Consolas", 9, "bold")
+        cols = len(self.LOG_COLUMNS)
+        grid.grid_columnconfigure(self.SOURCES_COLUMN, weight=1)
+        for c, (title, width) in enumerate(self.LOG_COLUMNS):
+            tk.Label(grid, text=title, font=bold, bg=black, fg=white, anchor="w", width=width).grid(
+                row=0, column=c, sticky="ew", padx=(0, 6), pady=(0, 4))
+        tk.Frame(grid, bg=green, height=1).grid(row=1, column=0, columnspan=cols, sticky="ew")
+        try:
+            rows = buildlog.recent()
+        except Exception:
+            rows = []
+        r = 2
+        for row in rows:
+            when = row["at"]
+            try:
+                when = datetime.strptime(row["at"], "%Y-%m-%d %H:%M:%S").strftime("%d %b %H:%M")
+            except (TypeError, ValueError):
+                pass
+            if row["queued"] is None:
+                hits = ""
+            elif row["misses"] is None:
+                hits = f"{row['queued']} sent"
+            else:
+                hits = f"{row['queued']} / {row['misses']}"
+            trouble = ", ".join(x for x in (
+                f"{row['problems']} problem{'' if row['problems'] == 1 else 's'}" if row["problems"] else "",
+                f"{row['notes']} note{'' if row['notes'] == 1 else 's'}" if row["notes"] else "") if x)
+            values = [(when, green), (row["from_label"] or "", green), (row["zone"] or "", green),
+                      (buildlog.playlist_type(row), green), (row["sources"] or "", green), (hits, green),
+                      (row["moderator"] or "", AI_MAGENTA),
+                      (trouble, "#ff6b6b" if row["problems"] else "#ffb000")]
+            cells = []
+            for c, (value, colour) in enumerate(values):
+                width = self.LOG_COLUMNS[c][1]
+                if c != self.SOURCES_COLUMN and len(value) > width:   # too long for its column: cut short
+                    value = value[:width - 3] + "..."
+                cell = tk.Label(grid, text=value, font=font, bg=black, fg=colour, anchor="w",
+                                width=self.LOG_COLUMNS[c][1])
+                cell.grid(row=r, column=c, sticky="ew", padx=(0, 6), pady=3)
+                if c == self.SOURCES_COLUMN and value:   # the column narrows with the window: full list on hover
+                    Tooltip(cell, value)
+                cells.append(cell)
+            link = tk.Label(grid, text="Load to Console", font=("Consolas", 9, "underline"), bg=black, fg=green,
+                            cursor="hand2", anchor="w")
+            link.grid(row=r, column=cols - 1, sticky="w", pady=3)
+            link.bind("<Button-1>", lambda e, b=row: self._load_build(b))
+            for cell in cells:
+                cell.bind("<Double-Button-1>", lambda e, b=row: self._load_build(b))
+            tk.Frame(grid, bg=dim, height=1).grid(row=r + 1, column=0, columnspan=cols, sticky="ew")
+            r += 2
+        if not rows:
+            tk.Label(grid, text="No builds kept yet. Each build appears here once it finishes.", font=font,
+                     bg=black, fg="#5f7a66", anchor="w").grid(row=r, column=0, columnspan=cols, sticky="w", pady=6)
+        else:
+            tk.Label(grid, text="The last 50 builds from each source, newest first. Double-click a row, "
+                                "or use Load to Console.", font=font, bg=black, fg="#5f7a66", anchor="w").grid(
+                row=r, column=0, columnspan=cols, sticky="w", pady=(8, 0))
+        self.log_canvas.yview_moveto(0)
+
+    def _load_build(self, row):
+        """Opens a kept build in its source's tab, with a line saying so and a way back to the latest."""
+        self.view = row["tab"] or "main"
+        self._fill_tabs()
+        self._sync_head_strip()
+        self._show_console_text()
+        when = (row["at"] or "")[11:16]
+        chain = f" (Non-stop {row['chain_pos']:03d})" if row.get("chain_pos") else ""
+        source = "Main Window" if self.view == "main" else buildlog.device_name(self.view)
+        self._show_text(row["text"] or "")
+        self.log.config(state="normal")
+        self.log.tag_configure("back", foreground="#00ff41", underline=True)
+        self.log.tag_bind("back", "<Button-1>", lambda e, v=self.view: self._select_view(v))
+        self.log.tag_bind("back", "<Enter>", lambda e: self.log.config(cursor="hand2"))
+        self.log.tag_bind("back", "<Leave>", lambda e: self.log.config(cursor=""))
+        self.log.insert("1.0", "\n")
+        self.log.insert("1.0", f"Loaded from Log: {source}, {when}{chain}  \u00b7  ")
+        self.log.insert("1.end", "Back to Latest", ("back",))
+        self.log.see("1.0")
+        self.log.config(state="disabled")
+
     def _sync_head_query(self):
         engine.refresh_settings_if_changed()
         query = self.head_buttons["Query"]
-        if getattr(engine, "CONSOLE_QUERY", False) and engine.ANTHROPIC_API_KEY:
+        if getattr(engine, "CONSOLE_QUERY", False) and engine.ANTHROPIC_API_KEY and self.view != "log":
             if not query.winfo_manager():
                 query.pack(side="left", padx=(4, 0), before=self.head_buttons["Export to Log"])
         else:
@@ -677,7 +814,7 @@ class PlayTab(tk.Frame):
             devices = buildlog.tabs()
         except Exception:
             devices = []
-        for key, label in [("all", "All"), ("main", "Main Window")] + devices:
+        for key, label in [("all", "All"), ("main", "Main Window")] + devices + [("log", "Log")]:
             b = self._head_box(self.head_tabs, label, lambda k=key: self._select_view(k))
             if key == self.view:   # the tab on screen: inverted, green with black text
                 b.config(bg="#00ff41", fg="#000000", font=("Consolas", 9, "bold"), highlightbackground="#00ff41")
@@ -687,9 +824,14 @@ class PlayTab(tk.Frame):
         return self.view == "all" or self.view == self._live_tab
 
     def _select_view(self, view):
-        """Shows a tab: All is the latest build from anywhere; the others, their own latest."""
+        """Shows a tab: All is the latest build from anywhere; the others, their own latest; Log, the table."""
         self.view = view
         self._fill_tabs()
+        self._sync_head_strip()
+        if view == "log":
+            self._show_log_table()
+            return
+        self._show_console_text()
         if self._live_visible() and (self._live or self.running):
             self._show_text("\n".join(self._live))
             return
@@ -924,6 +1066,8 @@ class PlayTab(tk.Frame):
         except Exception as e:
             print(f"Note: couldn't keep this build in the Log ({e}).")
         self._fill_tabs()   # a device's first build gives it a tab
+        if getattr(self, "view", None) == "log":
+            self._fill_log_table()
         self.running = False
         for b in self.buttons:
             b.config(state="normal")
