@@ -339,7 +339,7 @@ class FlatButton(tk.Frame):
     """
 
     def __init__(self, master, text="", command=None, width=None, height=None, quiet=False,
-                 accent=None, **kw):
+                 accent=None, text_fg=None, **kw):
         back = master.cget("bg")
         super().__init__(master, bg=back, **kw)
         try:
@@ -349,7 +349,8 @@ class FlatButton(tk.Frame):
         self._px = lambda n: max(1, int(round(n * scale)))
         self._command = command
         self._quiet = quiet
-        self._accent = accent   # a bar colour other than orange (purple: uses AI credits)
+        self._accent = accent   # a bar colour other than orange (magenta: uses AI credits)
+        self._text_fg = text_fg  # a text colour other than the usual, while the button can be pressed
         self._state = "normal"
         self._inside = False
         self._pressed = False
@@ -393,7 +394,7 @@ class FlatButton(tk.Frame):
         w, h = self._size
         image = rounded_shape(self, w, h, self._px(CORNER), fill, PALETTE["button_outline"],
                               self._px(1), bar, self._px(BUTTON_BAR))
-        self._label.config(image=image, fg=PALETTE["button_fg"] if on else PALETTE["button_off_fg"],
+        self._label.config(image=image, fg=(self._text_fg or PALETTE["button_fg"]) if on else PALETTE["button_off_fg"],
                            cursor="hand2" if on else "")
 
     def config(self, cnf=None, **kw):
