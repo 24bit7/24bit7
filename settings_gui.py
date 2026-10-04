@@ -30,16 +30,16 @@ ENV_FILE = engine.ENV_FILE   # single source of truth for where .env lives
 
 # The Voice Commands guides, on GitHub (linked from the bottom of Settings > Voice Commands)
 DOCS_URL = "https://github.com/24bit7/24bit7/blob/main/docs/"
-VOICE_DOCS = [("How Voice Commands work", DOCS_URL + "VOICE_COMMANDS.md",
+VOICE_DOCS = [("How Voice Commands work", DOCS_URL + "MANUAL.md#voice-commands",
                "What it does, what you can say, and settings per device."),
-              ("Setting up the Alexa skill", DOCS_URL + "VOICE_SETUP.md",
+              ("Setting up the Alexa skill", DOCS_URL + "MANUAL.md#setting-up-the-alexa-skill",
                "Step by step, from an Amazon developer account to your first command.")]
 
 # --- About tab -------------------------------------------------------------
 REPO_URL = "https://github.com/24bit7/24bit7"
 FORUM_URL = "https://yabb.jriver.com/interact/index.php/topic,144381.0.html"   # the JRiver forum thread; empty hides the link
 MANUAL_PDF = "24bit7_Manual.pdf"   # shipped next to 24bit7.exe in the release zip
-# The voice commands, as in docs/VOICE_COMMANDS.md
+# The voice commands, as in the manual's Voice Commands chapter
 VOICE_COMMAND_LIST = [
     ("songs by <artist>", "Artist's Top Tracks"),
     ("music like <artist>", "Similar Artists, seeded from the artist's most popular track"),
@@ -2088,7 +2088,7 @@ class SettingsTab(tk.Frame):
         g = tk.Label(guide, text="Setting up the Alexa skill", fg=PALETTE["section_fg"], cursor="hand2",
                      font=("Segoe UI", 9, "underline"))
         g.pack(side="left", padx=(6, 0))
-        g.bind("<Button-1>", lambda e: webbrowser.open_new_tab(f"{REPO_URL}/blob/{ref}/docs/VOICE_SETUP.md"))
+        g.bind("<Button-1>", lambda e: webbrowser.open_new_tab(f"{REPO_URL}/blob/{ref}/docs/MANUAL.md#setting-up-the-alexa-skill"))
         tk.Label(box, text='Say "Alexa, open needle drop", then a command, or all in one breath: '
                            '"Alexa, ask needle drop for music like Agnes Obel".',
                  justify="left", wraplength=640, fg=PALETTE["help_fg"], font=HELP_FONT).grid(
@@ -2100,7 +2100,7 @@ class SettingsTab(tk.Frame):
         r = len(VOICE_COMMAND_LIST) + 2
         tk.Label(box, text="No command starts with \"play\": Alexa hands those to a music service instead.",
                  fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=r, column=0, columnspan=2, sticky="w", pady=(6, 2))
-        self._about_link(box, "How Voice Commands work", f"{REPO_URL}/blob/{ref}/docs/VOICE_COMMANDS.md",
+        self._about_link(box, "How Voice Commands work", f"{REPO_URL}/blob/{ref}/docs/MANUAL.md#voice-commands",
                          r + 1, "Every command, what you hear back, and settings per device.")
 
         # --- Credits ---

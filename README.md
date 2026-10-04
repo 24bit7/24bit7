@@ -16,6 +16,8 @@ Everything it can't find in your library is logged, so the misses become a shopp
 
 The name is a throwback to an old username. Read it as 24-bit and 24/7: audiophile and always on.
 
+The **[user manual](docs/MANUAL.md)** explains every part of the app, page by page. The Windows download includes it as a PDF, opened from Settings > About.
+
 ---
 
 ## What it does
@@ -197,7 +199,7 @@ Each Play option under Settings > Playlist can run a file of your choice once it
 
 ### Voice Commands (optional, advanced)
 
-24bit7 can take commands from an Alexa skill you host yourself. This is not a one-click setup: you need your own Amazon developer account and Alexa-hosted skill, a Tailscale Funnel (or similar) to let Amazon reach 24bit7 on your PC, and 24bit7 left running, which Start with Windows and the tray take care of. The skill's code and interaction model are in the `alexa` folder of this repository. **[How Voice Commands work](docs/VOICE_COMMANDS.md)** explains what it does, and **[Setting up the Alexa skill](docs/VOICE_SETUP.md)** takes you through every step. Both are linked from Settings > Voice Commands too.
+24bit7 can take commands from an Alexa skill you host yourself. This is not a one-click setup: you need your own Amazon developer account and Alexa-hosted skill, a Tailscale Funnel (or similar) to let Amazon reach 24bit7 on your PC, and 24bit7 left running, which Start with Windows and the tray take care of. The skill's code and interaction model are in the `alexa` folder of this repository. The user manual's **[Voice Commands](docs/MANUAL.md#voice-commands)** chapter explains what it does, and **[Setting up the Alexa skill](docs/MANUAL.md#setting-up-the-alexa-skill)** takes you through every step. Both are linked from Settings > Voice Commands and Settings > About too.
 
 Settings > Voice Commands holds the key the skill sends and assigns each Alexa device to a zone. Tick **Own settings** for a device and it gets its own tab under Settings > Sources, Playlist and JRiver Playlists, copying the Windows app's settings until you untick Copy Windows (Main) and change them, and it can be named in a filter. Two speakers can then run two sets of settings side by side, for A/B testing or for different people.
 
