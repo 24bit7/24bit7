@@ -12,6 +12,7 @@ its log via a thread-safe queue so the window never freezes.
 
 import os
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -27,19 +28,21 @@ import tray
 import voice
 import hotkeys
 import nonstop
-from settings_gui import SettingsTab, write_env, warn_moderator_once, Tooltip, NO_KEY_TEXT, help_mark
+from settings_gui import SettingsTab, write_env, read_env, warn_moderator_once, Tooltip, NO_KEY_TEXT, help_mark
 from settings_gui import MODERATOR_CHOICES, MODERATOR_LEVELS_HELP
 from discover_gui import DiscoverTab
 from tabs import TabbedPane, PALETTE, FlatButton, InfoLine, apply_theme
 from mix_gui import MixRows
 import console_query
 import playmix
+import buildlog
 
 
 REFRESH_MS = 10000   # Now Playing panel; paused while minimised or in the tray
 POLL_MS = 100
 DONATE_URL = "https://paypal.me/24bit7"
 SAME_ZONE_LABEL = "Same zone"
+AI_MAGENTA = "#ff33ff"   # AI lines and Query in the console, which is always black
 
 WELCOME_TEXT = (
     "Welcome to 24bit7!\n\n"
@@ -441,6 +444,16 @@ class PlayTab(tk.Frame):
                                              font=("Consolas", 9), bg="#000000", fg="#00ff41",
                                              insertbackground="#00ff41")
         self.log.pack(fill="both", expand=True)
+        # Colour by line type (the words lead, so Copy, Export and Query read the same without colour)
+        bold = ("Consolas", 9, "bold")
+        self.log.tag_configure("head", foreground="#ffffff", font=bold)
+        self.log.tag_configure("problem", foreground="#ff6b6b")
+        self.log.tag_configure("note", foreground="#ffb000")
+        self.log.tag_configure("ai", foreground=AI_MAGENTA)
+        self.log.tag_configure("debug", foreground="#5f7a66")
+        self.console_mode = "advanced" if read_env().get("CONSOLE_MODE", "simple").strip().lower() == "advanced" \
+            else "simple"
+        self.log.tag_configure("debug", elide=self.console_mode == "simple")
         self._build_console_strip(frame)
         self._greeting_active = True
         self._type_greeting("Follow the white rabbit.", 0)
@@ -493,12 +506,29 @@ class PlayTab(tk.Frame):
             self._greeting_active = False
             self._clear_log()
 
+    @staticmethod
+    def _line_kind(line):
+        """Which colour a console line takes, from how it's written."""
+        body = re.sub(r"^\d\d:\d\d  ", "", line.strip())
+        if body.startswith("[debug]"):
+            return "debug"
+        if body.startswith("Problem:"):
+            return "problem"
+        if body.startswith("Note:"):
+            return "note"
+        if body.startswith("Done:") or (body and not line.startswith((" ", "\n"))):
+            return "head"
+        if re.search(r"\bAI\b", body) or body.startswith("Removed "):
+            return "ai"
+        return None
+
     def _append_log(self, line):
         if getattr(self, "_stamp_next", False) and line.strip():
             line = time.strftime("%H:%M") + "  " + line.lstrip("\n")
             self._stamp_next = False
         self.log.config(state="normal")
-        self.log.insert("end", line + "\n")
+        kind = self._line_kind(line)
+        self.log.insert("end", line + "\n", (kind,) if kind else ())
         self.log.see("end")
         self.log.config(state="disabled")
 
@@ -520,14 +550,15 @@ class PlayTab(tk.Frame):
         if self.running:
             return
         try:
-            job, heading = self.voice_jobs.get_nowait()
+            job, heading, origin = self.voice_jobs.get_nowait()
         except queue.Empty:
             return
 
         def target():
             self.report(heading)
             job(self.report)
-        self._run_job(target, needs_playing=False, mix=False)   # voice, shortcuts, non-stop: no added playlists
+        # voice, shortcuts, non-stop: no added playlists
+        self._run_job(target, needs_playing=False, mix=False, origin=origin)
 
     def _clear_log(self):
         self.log.config(state="normal")
@@ -542,7 +573,8 @@ class PlayTab(tk.Frame):
         self.console_buttons = {}
         self.console_frame = frame
         for name, command in (("Copy", self._copy_log), ("Clear", self._clear_from_strip),
-                              ("Query", self._open_query), ("Export to Log", self._export_log)):
+                              ("Query", self._open_query), ("Export to Log", self._export_log),
+                              ("Mode", self._toggle_console_mode)):
             b = tk.Label(self.console_strip, text=name, font=("Segoe UI", 8, "bold"), bg=black, fg=green,
                          padx=8, pady=1, cursor="hand2", highlightthickness=1,
                          highlightbackground=green, highlightcolor=green)
@@ -551,9 +583,10 @@ class PlayTab(tk.Frame):
             b.bind("<Leave>", lambda e, w=b: w.config(bg=black))
             b.bind("<Button-1>", lambda e, c=command: c())
             self.console_buttons[name] = b
-        # Query is lavender (it uses AI credits) and only shows once Console Query is switched on
-        lavender = "#c3a6ff"
-        self.console_buttons["Query"].config(fg=lavender, highlightbackground=lavender, highlightcolor=lavender)
+        # Query is magenta (it uses AI credits) and only shows once Console Query is switched on
+        self.console_buttons["Query"].config(fg=AI_MAGENTA, highlightbackground=AI_MAGENTA,
+                                             highlightcolor=AI_MAGENTA)
+        self.console_buttons["Mode"].config(text=self.console_mode.title())
         self.console_buttons["Query"].pack_forget()
         self._build_query_panel(frame)
         self.log.bind("<Button-1>", lambda e: self._show_console_strip(), add="+")
@@ -578,12 +611,25 @@ class PlayTab(tk.Frame):
             return
         self.console_strip.place_forget()
 
+    def _toggle_console_mode(self):
+        """Simple hides the debug lines; Advanced shows them. Both are always recorded, and remembered."""
+        self.console_mode = "advanced" if self.console_mode == "simple" else "simple"
+        self.log.tag_configure("debug", elide=self.console_mode == "simple")
+        self.console_buttons["Mode"].config(text=self.console_mode.title(), bg="#000000")
+        try:
+            write_env({"CONSOLE_MODE": self.console_mode})
+        except Exception:
+            pass
+        self.log.see("end")
+
     def _copy_log(self):
-        """What's highlighted, or the whole console if nothing is."""
+        """What's highlighted, or the whole console if nothing is. Simple leaves the debug lines out."""
         try:
             text = self.log.get("sel.first", "sel.last")
         except tk.TclError:
             text = self.log.get("1.0", "end-1c")
+        if self.console_mode == "simple":
+            text = "\n".join(x for x in text.split("\n") if not x.lstrip().startswith("[debug]"))
         self.clipboard_clear()
         self.clipboard_append(text)
         b = self.console_buttons["Copy"]
@@ -653,9 +699,9 @@ class PlayTab(tk.Frame):
         self.query_panel.pack_forget()
 
     def _append_query(self, text, bold=False):
-        """Questions and answers go into the console in lavender, so they stand out from the log."""
-        self.log.tag_configure("query", foreground="#c3a6ff")
-        self.log.tag_configure("query_q", foreground="#c3a6ff", font=("Consolas", 9, "bold"))
+        """Questions and answers go into the console in magenta, so they stand out from the log."""
+        self.log.tag_configure("query", foreground=AI_MAGENTA)
+        self.log.tag_configure("query_q", foreground=AI_MAGENTA, font=("Consolas", 9, "bold"))
         self.log.config(state="normal")
         self.log.insert("end", text, "query_q" if bold else "query")
         self.log.see("end")
@@ -671,6 +717,8 @@ class PlayTab(tk.Frame):
             return
         self._greeting_active = False
         console = self.log.get("1.0", "end-1c")
+        if self.console_mode == "simple":   # Query reads what you see: Advanced sends the debug lines too
+            console = "\n".join(x for x in console.split("\n") if not x.lstrip().startswith("[debug]"))
         self._query_busy = True
         self.query_send.config(text="Asking...", state="disabled")
         self.query_var.set("")
@@ -686,7 +734,7 @@ class PlayTab(tk.Frame):
         else:
             self._append_query(answer + "\n")
 
-    def _run_job(self, target, needs_playing=True, mix=True):
+    def _run_job(self, target, needs_playing=True, mix=True, origin=None):
         if self.running:
             return
         if needs_playing and not self.last_playing:
@@ -694,6 +742,7 @@ class PlayTab(tk.Frame):
                                 "Start a track in JRiver first, then try again.")
             return
         self.running = True
+        self._job_origin = origin   # who asked, for the build's record: None is the Main Window
         self._greeting_active = False
         for b in self.buttons:
             b.config(state="disabled")
@@ -705,11 +754,12 @@ class PlayTab(tk.Frame):
         def worker():
             engine.MIX_ROWS, engine.MIX_KEEP, engine.MIX_FAST_KEY, engine.MIX_NOTED = rows, set(), None, False
             engine.BUILD_STARTED, engine.LAST_OUTPUT = time.time(), None
+            engine.LAST_OUTPUT_ID, engine.LAST_BUILD = None, None
             try:
                 target()
             except Exception as e:
-                self.log_queue.put(f"Problem: something went wrong ({e}). Tick Debug, try again, "
-                                   f"then press Export to Log to report it.")
+                self.log_queue.put(f"Problem: something went wrong ({e}). Press Export to Log "
+                                   f"and attach the file when you report it.")
             finally:
                 engine.MIX_ROWS, engine.MIX_KEEP, engine.MIX_FAST_KEY = None, set(), None
                 engine.BUILD_STARTED = None
@@ -718,6 +768,15 @@ class PlayTab(tk.Frame):
         threading.Thread(target=worker, daemon=True).start()
 
     def _job_done(self):
+        try:   # everything the build wrote, then keep it for the console's Log
+            while True:
+                self._append_log(self.log_queue.get_nowait())
+        except queue.Empty:
+            pass
+        try:
+            buildlog.record_job(getattr(self, "_job_origin", None), self.log.get("1.0", "end-1c"))
+        except Exception as e:
+            print(f"Note: couldn't keep this build in the Log ({e}).")
         self.running = False
         for b in self.buttons:
             b.config(state="normal")
@@ -1001,14 +1060,14 @@ def main():
         root.after(400, lambda: messagebox.showinfo("Welcome to 24bit7", WELCOME_TEXT, parent=root))
 
     library.start()   # the whole library in memory: Similar Tracks and voice match against it
-    voice.attach(lambda job, heading: play.voice_jobs.put((job, heading)),
+    voice.attach(lambda job, heading, origin=None: play.voice_jobs.put((job, heading, origin)),
                  lambda: play.running or not play.voice_jobs.empty())
     voice.restart()
     # Keyboard shortcuts (Settings > Other): queued on the Play tab like voice commands
-    hotkeys.attach(lambda job, heading: play.voice_jobs.put((job, heading)))
+    hotkeys.attach(lambda job, heading, origin=None: play.voice_jobs.put((job, heading, origin)))
     problems = hotkeys.restart()
     # Non-stop (Settings > Playlist): tops up 24bit7 playlists as they reach their last track
-    nonstop.attach(lambda job, heading: play.voice_jobs.put((job, heading)))
+    nonstop.attach(lambda job, heading, origin=None: play.voice_jobs.put((job, heading, origin)))
     nonstop.start()
     settings.refresh_hotkey_notes(problems)
     if problems:

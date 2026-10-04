@@ -228,7 +228,7 @@ def _pressed(code):
     """Runs on the listener thread: queue the build on the Play tab and get straight back to listening."""
     if _submit is None:
         return
-    _submit(_job(code), f"Shortcut: {LABELS[code]}")
+    _submit(_job(code), f"Shortcut: {LABELS[code]}", {"from": "shortcut"})
 
 
 def _device_for_zone(zone_name):
@@ -250,13 +250,13 @@ def _job(code):
         if wanted:
             zid = engine.zone_id(wanted)
             if zid is None:
-                report(f"  Shortcut zone '{wanted}' wasn't found in JRiver. Pick another under "
+                report(f"  Problem: the shortcut zone '{wanted}' isn't in JRiver. Pick another under "
                        f"Settings > Other > Keyboard Shortcuts.")
                 return
         else:
             zid = engine.seed_zone()
             if zid is None:
-                report("  The Now Playing zone wasn't found in JRiver, so the shortcut did nothing.")
+                report("  Problem: the Now Playing zone isn't in JRiver, so the shortcut did nothing.")
                 return
             if zid == engine.ACTIVE_ZONE:
                 zid = engine.zone_id()

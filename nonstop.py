@@ -74,7 +74,7 @@ def _watch():
         try:
             _check_zones()
         except Exception as e:
-            print(f"[Non-stop] {e}")
+            engine.print(f"Problem: Non-stop couldn't check the zones ({e}).")
 
 
 def _check_zones():
@@ -105,7 +105,8 @@ def _check_zones():
             continue
         entry["fired"] = marker
         if _submit is not None:
-            _submit(_job(zone, zone_name, profile, info), f"Non-stop: {zone_name} reached its last track")
+            _submit(_job(zone, zone_name, profile, info), f"Non-stop: {zone_name} reached its last track",
+                    {"from": "nonstop", "zone": zone})
 
 
 def _second_track_seed(zone, info):

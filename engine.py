@@ -104,7 +104,7 @@ def _int_setting(name, default, lo, hi):
     try:
         value = int(raw) if raw else default
     except ValueError:
-        print(f"[Settings] {name}='{raw}' isn't a number, using {default}.")
+        print(f"Note: the setting {name}='{raw}' isn't a number, so {default} is used.")
         value = default
     return max(lo, min(hi, value))
 
@@ -259,7 +259,7 @@ def load_settings():
         listen_raw = "youtube"
     LISTEN_SITES = [x.strip().lower() for x in listen_raw.split(",") if x.strip().lower() in LISTEN_CODES]
     CUSTOM_SITES = read_custom_sites()
-    DEBUG = os.getenv("DEBUG", "0").strip().lower() in ("1", "true", "yes")
+    DEBUG = True   # always recorded since 1.11.0: the console's Simple/Advanced switch shows or hides them
     CONSOLE_QUERY = os.getenv("CONSOLE_QUERY", "0").strip().lower() in ("1", "true", "yes")   # off by default
     # How many similar-artist sources must suggest an artist before it is used
     # (1 = off). Replaced the on/off SIMILAR_REQUIRE_AGREEMENT; an old .env
@@ -314,7 +314,7 @@ def load_settings():
     TOP_TRACKS_COUNT = _int_setting("TOP_TRACKS_COUNT", 10, 1, 20)
     TOP_TRACKS_ORDER = os.getenv("TOP_TRACKS_ORDER", "popular").strip().lower()
     if TOP_TRACKS_ORDER not in ("popular", "reverse", "random"):
-        print(f"[Settings] TOP_TRACKS_ORDER='{TOP_TRACKS_ORDER}' not recognised, using 'popular'.")
+        print(f"Note: the setting TOP_TRACKS_ORDER='{TOP_TRACKS_ORDER}' isn't recognised, so 'popular' is used.")
         TOP_TRACKS_ORDER = "popular"
     CACHE_DAYS = _int_setting("CACHE_DAYS", 30, 1, 365)
     TABLE_FONT_SIZE = _int_setting("TABLE_FONT_SIZE", 9, 6, 16)   # Discover table font
@@ -517,7 +517,7 @@ CLOSE_TO_TRAY=0
 # Other
 CACHE_DAYS=30
 TABLE_FONT_SIZE=9
-DEBUG=0
+CONSOLE_MODE=simple
 """
 
 
@@ -530,9 +530,9 @@ def ensure_env_exists():
     try:
         with open(ENV_FILE, "w", encoding="utf-8") as f:
             f.write(DEFAULT_ENV)
-        print(f"[Settings] Created starter settings file: {ENV_FILE}")
+        print(f"Created a starter settings file: {ENV_FILE}")
     except OSError as e:
-        print(f"[Settings] Could not create {ENV_FILE}: {e}")
+        print(f"Problem: couldn't create the settings file {ENV_FILE} ({e}).")
 
 
 ensure_env_exists()
@@ -804,14 +804,24 @@ def seed_from_row(row, zone):
             "PlayingNowPosition": "0", "PlayingNowTracks": "0", "ZoneID": zone}
 
 
+BUILD_STARTED = None   # set by the GUI as each build starts, for the Done line's time
+LAST_OUTPUT = None     # where the build's tracks went: a zone name, or "YouTube"
+LAST_OUTPUT_ID = None  # ...and that zone's JRiver ID, for Non-stop's chain in the console's Log
+LAST_BUILD = None      # the finished build's mode, sources, tracks queued and misses, for buildlog
+_SESSION_STARTED = {}
+
+
 def session_start(mode, seed_info, sources=""):
     nonstop_begin(mode, seed_info)
+    if output_is_youtube() and not OUTPUT_OVERRIDE:
+        globals()["LAST_OUTPUT"] = "YouTube"
     cur = db().execute(
         "INSERT INTO sessions (started_at, mode, seed_artist, seed_track, seed_album, sources, queued) "
         "VALUES (?,?,?,?,?,?,0)",
         (datetime.now().strftime("%Y-%m-%d %H:%M"), mode,
          seed_info.get("Artist"), seed_info.get("Name"), seed_info.get("Album"), sources))
     db().commit()
+    _SESSION_STARTED[cur.lastrowid] = time.time()
     return cur.lastrowid
 
 
@@ -831,11 +841,23 @@ def session_finish(session_id, queued, sources=None, report=print):
     db().commit()
     misses = db().execute("SELECT COUNT(*) FROM discoveries WHERE session_id=? AND found=0",
                           (session_id,)).fetchone()[0]
-    track_word = "track" if queued == 1 else "tracks"
-    miss_word = "discovery" if misses == 1 else "discoveries"
-    report(f"Session {session_id} saved ({queued} {track_word} queued, {misses} {miss_word} not in library).")
+    row = db().execute("SELECT mode, sources FROM sessions WHERE id=?", (session_id,)).fetchone() or ("", "")
+    globals()["LAST_BUILD"] = {"mode": row[0], "sources": row[1], "queued": queued, "misses": misses}
+    report(done_line(queued, misses, _SESSION_STARTED.pop(session_id, None)))
     if not NONSTOP_APPEND:   # every finished build, matches or not (not a non-stop top-up)
         run_after_building(report)
+
+
+def done_line(queued, misses=0, started=None):
+    """The one closing line every build ends with: what went where, what was missing, how long it took."""
+    started = BUILD_STARTED or started
+    took = f", {max(0, round(time.time() - started))} s" if started else ""
+    tracks = f"{queued} track{'' if queued == 1 else 's'}"
+    if LAST_OUTPUT == "YouTube":
+        return f"Done: {tracks} sent to YouTube{took}."
+    where = f"{tracks} queued in {LAST_OUTPUT}" if queued and LAST_OUTPUT else (
+        f"{tracks} queued" if queued else "nothing queued")
+    return f"Done: {where}, {misses} not in library{took}."
 
 
 def run_after_building(report=print):
@@ -848,7 +870,7 @@ def run_after_building(report=print):
     if not on or not path:
         return
     if not os.path.isfile(path):
-        report(f"  Run after building: {path} wasn't found, so nothing ran.")
+        report(f"  Problem: Run After Building: {path} wasn't found, so nothing ran.")
         return
     import subprocess
     ext = os.path.splitext(path)[1].lower()
@@ -867,9 +889,9 @@ def run_after_building(report=print):
         else:
             os.startfile(path)   # anything else opens as Windows would open it
     except Exception as e:
-        report(f"  Run after building: {os.path.basename(path)} didn't start ({e}).")
+        report(f"  Problem: Run After Building: {os.path.basename(path)} didn't start ({e}).")
         return
-    report(f"  Ran after building: {os.path.basename(path)}")
+    report(f"  Ran after building: {os.path.basename(path)}.")
 
 
 def import_legacy_csv():
@@ -1035,7 +1057,7 @@ def get_playing_info(zone=None):
     except Exception as e:
         if not _jriver_unreachable:   # say it once; the GUI asks every few seconds
             _jriver_unreachable.append(True)
-            print(f"[JRiver] Not reachable ({e}). Search with YouTube output works without it.")
+            print(f"Problem: JRiver isn't reachable ({e}). The Search tab with YouTube output works without it.")
         return None
 
 
@@ -1086,7 +1108,7 @@ def seed_or_last_played(zone=None, report=print):
     """
     zone = zone or seed_zone()
     if zone is None:
-        report("The Now Playing zone wasn't found in JRiver.")
+        report("Problem: the Now Playing zone isn't in JRiver. Pick another under Zone.")
         return None
     if zone == ACTIVE_ZONE:
         zone = zone_id()
@@ -1096,10 +1118,11 @@ def seed_or_last_played(zone=None, report=print):
         return info
     seed = last_played_seed(zone, report)
     if not seed:
-        report("Nothing playing, and no last played track could be found. Start a track first!")
+        report("Problem: nothing is playing and there's no last played track. Start a track in JRiver, "
+               "or use the Search tab.")
         return None
-    report(f"  Nothing in Playing Now, so seeding from the last track played: "
-           f"{seed['Artist']}, {seed['Name']}")
+    report(f"  Note: nothing is in Playing Now, so seeding from the last track played: "
+           f"{seed['Artist']} - {seed['Name']}.")
     return seed
 
 
@@ -1126,7 +1149,7 @@ def clear_around_current(zone=ACTIVE_ZONE):
         current_pos = int(info["PlayingNowPosition"])
         count = int(info["PlayingNowTracks"])
     except (ValueError, TypeError):
-        print("[Warning] Could not read Playing Now position, skipping clear.")
+        print("  Note: couldn't read the Playing Now position, so nothing was cleared.")
         return
 
     if current_pos < 0 or count <= 1:
@@ -1134,7 +1157,7 @@ def clear_around_current(zone=ACTIVE_ZONE):
 
     after = count - 1 - current_pos
     before = current_pos
-    print(f"Clearing Playing Now: {before} before, {after} after the current track...")
+    debug(f"Clearing Playing Now: {before} before and {after} after the current track")
 
     for idx in range(count - 1, current_pos, -1):
         remove_from_playing_now(idx, zone)
@@ -1378,7 +1401,7 @@ def lastfm_similar(artist_name, limit=20):
         names = [a['name'] for a in r.json().get('similarartists', {}).get('artist', [])]
         return [canonicalise_conjunction(n) for n in names]
     except Exception as e:
-        print(f"[Error] Last.fm similar artists failed: {e}")
+        print(f"  Problem: Last.fm didn't answer for similar artists ({e}).")
         return []
 
 
@@ -1392,7 +1415,7 @@ def lastfm_top_tracks_with_counts(artist_name, limit=10):
         return [(t['name'], int(t.get('playcount', 0)))
                 for t in r.json().get('toptracks', {}).get('track', [])]
     except Exception as e:
-        print(f"[Error] Last.fm top tracks failed for {artist_name}: {e}")
+        print(f"  Problem: Last.fm didn't answer for {artist_name}'s top tracks ({e}).")
         return []
 
 
@@ -1425,10 +1448,10 @@ def deezer_artist_id(artist_name, verbose=False):
             best = max(pool, key=lambda a: a.get("nb_fan", 0))
             artist_id = best["id"]
             if verbose:
-                print(f"  [Deezer] Using '{best.get('name')}' (id {artist_id}, "
+                debug(f"Deezer: using '{best.get('name')}' (id {artist_id}, "
                       f"{best.get('nb_fan', 0)} fans) from {len(data)} search hits")
     except Exception as e:
-        print(f"[Error] Deezer artist search failed for {artist_name}: {e}")
+        print(f"  Problem: Deezer didn't answer when searching for {artist_name} ({e}).")
     _deezer_id_cache[artist_name] = artist_id
     return artist_id
 
@@ -1436,7 +1459,7 @@ def deezer_artist_id(artist_name, verbose=False):
 def deezer_similar(artist_name, limit=20):
     artist_id = deezer_artist_id(artist_name, verbose=True)
     if not artist_id:
-        print(f"[Deezer] No artist match for {artist_name}")
+        debug(f"Deezer: no artist match for {artist_name}")
         return []
     try:
         r = requests.get(f"https://api.deezer.com/artist/{artist_id}/related",
@@ -1444,7 +1467,7 @@ def deezer_similar(artist_name, limit=20):
         names = [a["name"] for a in r.json().get("data", [])]
         return [canonicalise_conjunction(n) for n in names]
     except Exception as e:
-        print(f"[Error] Deezer related artists failed: {e}")
+        print(f"  Problem: Deezer didn't answer for similar artists ({e}).")
         return []
 
 
@@ -1457,7 +1480,7 @@ def deezer_top_tracks(artist_name, limit=10):
                          params={"limit": limit})
         return [t["title"] for t in r.json().get("data", [])]
     except Exception as e:
-        print(f"[Error] Deezer top tracks failed for {artist_name}: {e}")
+        print(f"  Problem: Deezer didn't answer for {artist_name}'s top tracks ({e}).")
         return []
 
 
@@ -1483,7 +1506,7 @@ def load_known_mbids():
         rows = db().execute("SELECT key, payload, fetched_at FROM cache "
                             "WHERE source='MusicBrainz' AND kind='mbid'").fetchall()
     except Exception as e:
-        print(f"[MusicBrainz] Could not read saved artist IDs: {e}")
+        print(f"  Note: couldn't read the saved MusicBrainz IDs ({e}), so they'll be looked up again.")
         return
     now = time.time()
     for known, payload, fetched_at in rows:
@@ -1512,7 +1535,7 @@ def save_new_mbids():
         db().commit()
         debug(f"MusicBrainz: {len(pending)} artist IDs saved")
     except Exception as e:
-        print(f"[MusicBrainz] Could not save artist IDs: {e}")
+        print(f"  Note: couldn't save the new MusicBrainz IDs ({e}).")
 
 
 import threading
@@ -1539,18 +1562,19 @@ def _musicbrainz_query(name):
                              params={"query": f'artist:"{name}"', "fmt": "json", "limit": 1},
                              headers={"User-Agent": USER_AGENT})
             if r.status_code == 503:
-                print(f"  [MusicBrainz] Busy, retrying ({attempt + 1}/3)...")
+                debug(f"MusicBrainz busy, retrying ({attempt + 1} of 3)")
                 time.sleep(2.0)
                 continue
             if r.status_code != 200:
-                print(f"[Error] MusicBrainz returned {r.status_code} for {name}: {r.text[:200]}")
+                print(f"  Problem: MusicBrainz answered {r.status_code} for {name}.")
+                debug(f"MusicBrainz reply: {r.text[:200]}")
                 return None
             artists = r.json().get("artists", [])
             if not artists:
                 _mbid_confirmed_misses.add(name)   # MusicBrainz answered, and has nobody by this name
             return artists[0]["id"] if artists else None
         except Exception as e:
-            print(f"[Error] MusicBrainz lookup failed for {name}: {e}")
+            print(f"  Problem: MusicBrainz didn't answer for {name} ({e}).")
             return None
     return None
 
@@ -1586,7 +1610,7 @@ def listenbrainz_similar(artist_name, limit=20, algorithm=None):
     algorithm = algorithm or LISTENBRAINZ_ALGORITHMS[LISTENBRAINZ_DEFAULT][1]
     mbid = musicbrainz_artist_id(artist_name)
     if not mbid:
-        print(f"[ListenBrainz] No MusicBrainz match for {artist_name}")
+        debug(f"ListenBrainz: no MusicBrainz match for {artist_name}")
         return []
     try:
         r = requests.post("https://labs.api.listenbrainz.org/similar-artists/json",
@@ -1604,10 +1628,10 @@ def listenbrainz_similar(artist_name, limit=20, algorithm=None):
             if name and name != artist_name:
                 names.append(name)
         if not names and data:
-            print(f"[ListenBrainz] Unrecognised response shape, first item: {data[0]}")
+            debug(f"ListenBrainz: unrecognised reply, first item: {data[0]}")
         return [canonicalise_conjunction(n) for n in names[:limit]]
     except Exception as e:
-        print(f"[Error] ListenBrainz similar artists failed: {e}")
+        print(f"  Problem: ListenBrainz didn't answer for similar artists ({e}).")
         return []
 
 
@@ -1616,19 +1640,20 @@ def listenbrainz_top_tracks(artist_name, limit=10):
     if not mbid:
         return []
     if not LISTENBRAINZ_TOKEN:
-        print("[ListenBrainz] LISTENBRAINZ_TOKEN is missing from .env; top tracks need it.")
+        debug("ListenBrainz: no user token, so no top tracks")
         return []
     try:
         r = requests.get(f"https://api.listenbrainz.org/1/popularity/top-recordings-for-artist/{mbid}",
                          headers={"User-Agent": USER_AGENT,
                                   "Authorization": f"Token {LISTENBRAINZ_TOKEN}"})
         if r.status_code != 200:
-            print(f"[Error] ListenBrainz top recordings returned {r.status_code}: {r.text[:200]}")
+            print(f"  Problem: ListenBrainz answered {r.status_code} for top tracks.")
+            debug(f"ListenBrainz reply: {r.text[:200]}")
             return []
         try:
             data = r.json()
         except ValueError:
-            print(f"[ListenBrainz] Top recordings: status {r.status_code}, "
+            debug(f"ListenBrainz top recordings: status {r.status_code}, "
                   f"content-type {r.headers.get('Content-Type')}, body starts: {r.text[:300]!r}")
             return []
         if isinstance(data, dict):
@@ -1636,10 +1661,10 @@ def listenbrainz_top_tracks(artist_name, limit=10):
         names = [t.get("recording_name") or t.get("name") for t in data]
         names = [normalise_punctuation(n) for n in names if n]
         if not names and data:
-            print(f"[ListenBrainz] Unrecognised top-tracks shape, first item: {data[0]}")
+            debug(f"ListenBrainz: unrecognised top tracks reply, first item: {data[0]}")
         return names[:limit]
     except Exception as e:
-        print(f"[Error] ListenBrainz top tracks failed for {artist_name}: {e}")
+        print(f"  Problem: ListenBrainz didn't answer for {artist_name}'s top tracks ({e}).")
         return []
 
 
@@ -1689,7 +1714,7 @@ def _ai_create(client, **kwargs):
     Prints a waiting line, and the time taken at Debug level.
     """
     global _AI_THINKING_OFF_OK
-    print("  AI request sent, cogitating...")
+    print("  Asking the AI...")
     started = time.time()
     try:
         if _AI_THINKING_OFF_OK:
@@ -1711,12 +1736,12 @@ def ai_ask_list(prompt):
     global AI_LAST_ERROR
     AI_LAST_ERROR = "no API key"
     if not ANTHROPIC_API_KEY:
-        print("[AI] ANTHROPIC_API_KEY is missing from .env.")
+        debug("AI: no Anthropic key")
         return []
     try:
         import anthropic
     except ImportError:
-        print("[AI] The anthropic package isn't installed. Run: pip install anthropic")
+        print("  Problem: the AI can't run because the anthropic package isn't installed (pip install anthropic).")
         return []
     try:
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -1729,15 +1754,16 @@ def ai_ask_list(prompt):
         except json.JSONDecodeError:
             data = _salvage_json_array(text)
             if data:
-                print(f"[AI] Response was truncated; recovered {len(data)} names.")
+                print(f"  Note: the AI's reply was cut short; {len(data)} names were recovered.")
         if isinstance(data, list):
             AI_LAST_ERROR = ""
             return [str(x).strip() for x in data if str(x).strip()]
         AI_LAST_ERROR = "reply couldn't be read"
-        print(f"[AI] Reply couldn't be read: {text[:200]}")
+        print("  Problem: the AI's reply couldn't be read.")
+        debug(f"AI reply: {text[:200]}")
     except Exception as e:
         AI_LAST_ERROR = f"request failed: {e.__class__.__name__}"
-        print(f"[AI] Request failed: {e}")
+        print(f"  Problem: the AI request failed ({e}).")
     return []
 
 
@@ -1771,13 +1797,13 @@ def ai_ask_json(prompt, max_tokens=4000):
     global AI_LAST_ERROR
     AI_LAST_ERROR = "no API key"
     if not ANTHROPIC_API_KEY:
-        print("[AI] ANTHROPIC_API_KEY is missing from .env.")
+        debug("AI: no Anthropic key")
         return None
     try:
         import anthropic
     except ImportError:
         AI_LAST_ERROR = "anthropic package not installed"
-        print("[AI] The anthropic package isn't installed. Run: pip install anthropic")
+        print("  Problem: the AI can't run because the anthropic package isn't installed (pip install anthropic).")
         return None
     for attempt in (1, 2):
         text, stop = "", ""
@@ -1800,15 +1826,18 @@ def ai_ask_json(prompt, max_tokens=4000):
             if found:
                 why = "cut short" if stop == "max_tokens" else "partly unreadable"
                 AI_LAST_ERROR = f"reply {why}, {len(found)} recovered"
-                print(f"[AI] Reply {why}; kept the {len(found)} complete entries.")
+                print(f"  Note: the AI's reply was {why}; {len(found)} complete entries were kept.")
                 return found
             AI_LAST_ERROR = "reply couldn't be read"
-            print(f"[AI] Reply couldn't be read ({e.msg} at {e.pos} of {len(text)}): {text[:200]!r}")
+            print("  Problem: the AI's reply couldn't be read.")
+            debug(f"AI reply ({e.msg} at {e.pos} of {len(text)}): {text[:200]!r}")
         except Exception as e:
             AI_LAST_ERROR = f"request failed: {e.__class__.__name__}"
-            print(f"[AI] Request failed: {e}")
+            debug(f"AI request failed: {e}")
         if attempt == 1:
-            print("[AI] Trying once more...")
+            print("  Note: the AI request didn't work, so trying once more...")
+        else:
+            print(f"  Problem: the AI request didn't work ({AI_LAST_ERROR}).")
     return None
 
 
@@ -1883,12 +1912,13 @@ def youtube_client():
         try:
             from ytmusicapi import YTMusic
         except ImportError:
-            print("[YouTube] The ytmusicapi package isn't installed. Run: py -m pip install ytmusicapi")
+            print("  Problem: YouTube can't be used because the ytmusicapi package isn't installed "
+                  "(py -m pip install ytmusicapi).")
             return None
         try:
             _youtube_client = YTMusic()
         except Exception as e:
-            print(f"[YouTube] Could not start the YouTube Music client: {e}")
+            print(f"  Problem: YouTube Music didn't start ({e}).")
             return None
     return _youtube_client
 
@@ -1909,7 +1939,7 @@ def _youtube_fetch_up_next(artist, track):
     try:
         results = yt.search(f"{artist} {track}", filter="songs", limit=5)
     except Exception as e:
-        print(f"[YouTube] Search failed for {artist} - {track}: {e}")
+        debug(f"YouTube search failed for {artist} - {track}: {e}")
         return []
 
     best, best_score = None, 0
@@ -1924,14 +1954,14 @@ def _youtube_fetch_up_next(artist, track):
         if score > best_score:
             best, best_score = r, score
     if best is None:
-        print(f"  [YouTube] Couldn't find '{artist} - {track}' on YouTube Music, skipping.")
+        debug(f"YouTube Music has no {artist} - {track}")
         return []
     debug(f"YouTube seed: {', '.join(_youtube_artist_names(best))} - {best.get('title')} [{best['videoId']}]")
 
     try:
         watch = yt.get_watch_playlist(videoId=best["videoId"], limit=YOUTUBE_FETCH, radio=True)
     except Exception as e:
-        print(f"[YouTube] Up next fetch failed: {e}")
+        print(f"  Problem: YouTube didn't return its up next queue ({e}).")
         return []
 
     pairs = []
@@ -1952,7 +1982,7 @@ def youtube_similar(artist_name, limit=20, track=None):
     track picks per artist. Keeps its own cache, keyed on artist + track.
     """
     if not track or track == "Unknown":
-        print("  [YouTube] Needs the playing track to seed from, skipping.")
+        print("  Note: YouTube needs a track to seed from, so it was left out.")
         return []
     pairs = cached_call("YouTube", "up_next", f"{artist_key(artist_name)}|{clean_name(track)}",
                         lambda: _youtube_fetch_up_next(artist_name, track))
@@ -2008,7 +2038,8 @@ PROVIDERS = {
 # These lines go through report(), so they show in the app's log. The packaged
 # app has no console, so a print() here would never be seen.
 
-KEY_HELP_LINE = "Add one under Settings > Keys. The ? button beside the field explains how to get it."
+KEY_HELP_LINE = "Settings > Keys"
+NOTHING_PLAYING = "Problem: nothing is playing. Start a track in JRiver, or use the Search tab."
 
 
 def source_has_key(code, purpose="similar"):
@@ -2031,12 +2062,12 @@ def missing_key_notes(similar=False, top_tracks=False):
     ticked_top = set(TOP_TRACK_SOURCES) if top_tracks else set()
     notes = []
     if "lastfm" in (ticked_similar | ticked_top) and not LASTFM_KEY:
-        notes.append("Last.fm is ticked but has no API key, so it is being skipped. " + KEY_HELP_LINE)
+        notes.append("Last.fm is ticked but has no key, so it was skipped. " + KEY_HELP_LINE)
     if "ai" in (ticked_similar | ticked_top) and not ANTHROPIC_API_KEY:
-        notes.append("AI is ticked but has no Anthropic API key, so it is being skipped. " + KEY_HELP_LINE)
+        notes.append("AI is ticked but has no Anthropic key, so it was skipped. " + KEY_HELP_LINE)
     if "listenbrainz" in ticked_top and not LISTENBRAINZ_TOKEN:
         notes.append("ListenBrainz is ticked for top tracks but has no user token, "
-                     "so it is being skipped there. " + KEY_HELP_LINE)
+                     "so it was skipped there. " + KEY_HELP_LINE)
     return notes
 
 
@@ -2049,7 +2080,7 @@ def vibe_blocker():
     """None if Vibe Playlist can run, otherwise the line to show the user."""
     refresh_settings_if_changed()
     if not ANTHROPIC_API_KEY:
-        return "AI Playlist needs an Anthropic API key. " + KEY_HELP_LINE
+        return "AI Playlist needs an Anthropic key. Add it under Settings > Keys."
     return None
 
 
@@ -2066,10 +2097,10 @@ def sources_from_settings(names, setting_name):
                 continue   # ticked but no key: skipped here, named by report_missing_keys
             chosen.append(PROVIDERS[name])
         else:
-            print(f"[Settings] Unknown source '{name}' in {setting_name}, ignoring. "
+            print(f"Note: unknown source '{name}' in the setting {setting_name}, so it's ignored. "
                   f"Valid: {', '.join(PROVIDERS)}")
     if not chosen:
-        print(f"[Settings] No valid sources in {setting_name}, using Last.fm.")
+        print(f"Note: no usable sources in the setting {setting_name}, so Last.fm is used.")
         chosen.append(PROVIDERS["lastfm" if source_has_key("lastfm") else "deezer"])
     return chosen
 
@@ -2167,7 +2198,7 @@ def blended_similar_artists(seed_artist, limit=20, seed_track=None, report=None)
                     labels.append(label)
             else:
                 why = f" ({AI_LAST_ERROR})" if service_name == "AI" and AI_LAST_ERROR else ""
-                print(f"  [{service_name}] returned no similar artists for {seed}{why}, skipping.")
+                print(f"  Note: {service_name} returned no similar artists for {seed}{why}.")
     blended = [(a, s) for a, s in blend_lists(results, artist_key) if artist_key(a) not in seed_keys]
     responding = {service_name for service_name, _ in results}
     # The number can't exceed the sources that actually answered this time
@@ -2213,7 +2244,7 @@ def _safe_top_tracks(top_tracks_fn, artist, fetch):
     try:
         return top_tracks_fn(artist, limit=fetch) or []
     except Exception as e:
-        print(f"[Prefetch] Top tracks failed for {artist}: {e}")
+        debug(f"Top tracks failed for {artist}: {e}")
         return []
 
 
@@ -2268,7 +2299,7 @@ def prefetch_top_tracks(artists, limit, report=None):
             cache_put(service_name, "top_tracks", key, names)
         remaining[service_name] -= 1
         if report and remaining[service_name] == 0:
-            report(f"    {service_name} done ({time.time() - started:.0f}s)")
+            debug(f"{service_name} top tracks done in {time.time() - started:.0f} s")
 
     by_future = {f: (s, k) for s, k, f in direct}
     for future in as_completed(by_future):
@@ -2278,7 +2309,7 @@ def prefetch_top_tracks(artists, limit, report=None):
         try:
             names = outer.result().result()
         except Exception as e:
-            print(f"[Prefetch] {service_name} failed: {e}")
+            print(f"  Problem: {service_name} didn't answer for top tracks ({e}).")
             names = []
         store(service_name, key, names)
     for pool in pools:
@@ -2297,7 +2328,7 @@ def blended_top_tracks(artist, limit=10):
             results.append((service_name, names))
             labels.append(service_name)
         else:
-            print(f"  [{service_name}] returned no top tracks, skipping.")
+            debug(f"{service_name} returned no top tracks")
     return blend_lists(results, clean_name)[:limit], " + ".join(labels) if labels else "none"
 
 
@@ -2331,7 +2362,7 @@ def get_verified_keys_for_artist(artist_name, pool=None, pick=None):
         return random.sample(top_n, min(pick, len(top_n)))
 
     except Exception as e:
-        print(f"  [Error] Search failed for {artist_name}: {e}")
+        print(f"  Problem: the JRiver library search failed for {artist_name} ({e}).")
         return []
 
 
@@ -2363,7 +2394,7 @@ def find_jriver_key_by_track(artist_name, track_name):
         if primary:
             key, _, _ = search(primary)
             if key:
-                print(f"  Matched on primary artist: {artist_name} - {track_name} (as {primary})")
+                debug(f"Matched on primary artist: {artist_name} - {track_name} (as {primary})")
                 return key
         # 'The Jimi Hendrix Experience' against a library tagged 'Jimi Hendrix', or the other
         # way round: the library cache's matcher finds a name inside the credit, title matching
@@ -2382,7 +2413,7 @@ def find_jriver_key_by_track(artist_name, track_name):
             debug(f"no match for {artist_name!r} / {track_name!r} (term {search_term!r}, "
                   f"{len(items)} items; first: {'; '.join(sample) or 'none'})")
     except Exception as e:
-        print(f"  [Error] Track search failed for {track_name}: {e}")
+        print(f"  Problem: the JRiver library search failed for {track_name} ({e}).")
     return None
 
 
@@ -2414,7 +2445,7 @@ def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
         added = [h for h in youtube_hints_for(artist, exclude_track) if clean_name(h) not in have]
         if added:
             names.extend(added)
-            report(f"    YouTube pick in the pool: {', '.join(added)}")
+            debug(f"YouTube pick in the pool: {', '.join(added)}")
     if not names:
         report(f"    No top tracks returned for {artist}.")
         return [], 0
@@ -2428,7 +2459,7 @@ def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
     for track_name in chosen:
         key = find_jriver_key_by_track(artist, track_name)
         if key:
-            report(f"    Found: {track_name}")
+            report(f"    In library: {track_name}")
             keys.append(key)
             if found is not None:
                 found.append((artist, track_name, key))
@@ -2459,8 +2490,8 @@ def output_is_youtube():
 def sending_message(count, detail=""):
     """The log line announcing where a finished playlist is going."""
     if output_is_youtube():
-        return f"Sending {min(count, YOUTUBE_PLAYLIST_LENGTH)} tracks to YouTube{detail}..."
-    return f"Injecting {count} library tracks into queue{detail}..."
+        return f"  Sending {min(count, YOUTUBE_PLAYLIST_LENGTH)} tracks to YouTube{detail}..."
+    return f"  Sending {count} tracks{detail}..."
 
 
 def _youtube_search_video_id(artist, track):
@@ -2471,7 +2502,7 @@ def _youtube_search_video_id(artist, track):
     try:
         results = yt.search(f"{artist} {track}", filter="songs", limit=5)
     except Exception as e:
-        print(f"[YouTube] Search failed for {artist} - {track}: {e}")
+        debug(f"YouTube search failed for {artist} - {track}: {e}")
         return None
     best, best_score = None, 0
     for r in results or []:
@@ -2690,8 +2721,8 @@ def output_zone(seed_info=None, zone_name=None, report=print):
     if name:
         zid = zone_id(name)
         if zid is None:
-            report(f"Output zone '{name}' wasn't found in JRiver, so nothing was sent. "
-                   f"Pick another zone under Output.")
+            report(f"Problem: the output zone '{name}' isn't in JRiver, so nothing was sent. "
+                   f"Pick another under Output.")
         return zid
     if seed_info and seed_info.get("Typed"):
         # a last-played seed (Playing Now was empty) goes back to the zone it was read for
@@ -2700,7 +2731,7 @@ def output_zone(seed_info=None, zone_name=None, report=print):
         return seed_info["ZoneID"]
     zid = seed_zone()
     if zid is None:
-        report("The Now Playing zone wasn't found in JRiver, so nothing was sent.")
+        report("Problem: the Now Playing zone isn't in JRiver, so nothing was sent. Pick another under Zone.")
         return None
     return zone_id() if zid == ACTIVE_ZONE else zid
 
@@ -2722,7 +2753,7 @@ def drop_long_closers(keys, keep=(), report=print, group=None):
         import library   # here rather than at the top: library imports engine
         library.ensure_loaded()
     except Exception as e:
-        report(f"  Long closer check skipped: couldn't read the library ({e}).")
+        report(f"  Note: the hidden track check didn't run, as the library couldn't be read ({e}).")
         return keys
     limit = minutes * 60
     keep = {str(k) for k in keep if k}
@@ -2750,8 +2781,10 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
         end of Playing Now and nothing already there is touched.
     One function for the Play tab and, later, voice commands (zone_name).
     """
+    global LAST_OUTPUT
     check_cancelled()
     if output_is_youtube() and not zone_name:   # JRiver is left completely alone
+        LAST_OUTPUT = "YouTube"
         if keys and not append:
             open_youtube_playlist(keys)
         return
@@ -2760,6 +2793,8 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
     zone = output_zone(seed_info, zone_name, report)
     if zone is None:
         return
+    LAST_OUTPUT = zone_label(zone)
+    globals()["LAST_OUTPUT_ID"] = zone
     keys = [str(k) for k in keys]
     seed_key = str((seed_info or {}).get("FileKey") or "")
     keys = drop_long_closers(keys, keep=[seed_key, *MIX_KEEP], report=report, group=closer_group)
@@ -2767,13 +2802,13 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
         sent = nonstop_sent(zone)
         fresh_keys = [k for k in keys if k not in sent]
         if keys and not fresh_keys:
-            report("  Nothing new to add: every track found had already been sent to this zone.")
+            report("  Note: nothing new to add, as every track found had already been sent to this zone.")
         keys, append = fresh_keys, True
     nonstop_record(zone, keys, append)
     if append:
         if keys:
             queue_tracks(keys, zone)
-            report(f"  Added {len(keys)} track{'' if len(keys) == 1 else 's'} to {zone_label(zone)}.")
+            debug(f"Added {len(keys)} track{'' if len(keys) == 1 else 's'} to {zone_label(zone)}")
         return
     seed_zone_id = (seed_info or {}).get("ZoneID")
     if seed_info and not typed and seed_key and seed_zone_id and seed_zone_id != zone:
@@ -2783,9 +2818,9 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
         return
     if zone_is_free(zone):
         if VOICE_TAKEOVER:
-            report(f"  Voice command: the playlist takes over {zone_label(zone)} now.")
+            debug(f"Voice command: the playlist takes over {zone_label(zone)} now")
         else:
-            report(f"  {zone_label(zone)} was stopped, so the playlist starts there now.")
+            debug(f"{zone_label(zone)} was stopped, so the playlist starts there now")
         requests.get(f"{JRIVER_BASE}/Playback/PlayByKey",
                      params={"Key": ",".join(keys), "Zone": zone}, auth=AUTH)
         return
@@ -2831,7 +2866,7 @@ def resolve_deferred_picks(deferred, report=print, found=None):
     keys = []
     for artist, track, suggested_by, session_id in deferred:
         key = find_jriver_key_by_track(artist, track)   # a cache hit after the prefetch
-        report(f"    {'Found' if key else 'Not on YouTube'}: {artist} - {track}")
+        report(f"    {'On YouTube' if key else 'Not on YouTube'}: {artist} - {track}")
         session_log(session_id, artist, track, suggested_by, found=bool(key))
         if key and key not in keys:
             keys.append(key)
@@ -2860,7 +2895,7 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
         if pairs:
             break
     if not pairs:
-        report("  YouTube returned no up next queue for this track.")
+        report("  Problem: YouTube returned no up next queue for this track.")
         session_finish(session_id, send_mix_only(None, seed_info, report), report=report)
         return
 
@@ -2887,7 +2922,7 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
             keys.append(key)
             if any(_youtube_same_artist(raw_artist, s) for s in seeds):
                 seed_artist_keys.append(key)
-        report(f"    {'Found' if key else 'Not in library'}: {artist} - {title}")
+        report(f"    {'In library' if key else 'Not in library'}: {artist} - {title}")
         session_log(session_id, artist, title, ["YouTube"], found=bool(key))
 
     keys, dropped = cap_seed_artist(keys, seed_artist_keys, first_key)
@@ -2896,16 +2931,16 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
     queued = 0
     if mix_active():
         if not keys:
-            report("No library matches found.")
+            report("Problem: nothing suggested is in your library.")
         keys = combine_with_mix(keys, report)
     mix_skipped(report)
     if keys:
         report(sending_message(len(keys), ", in YouTube's order"))
         send_to_jriver(keys, seed_info=seed_info, report=report)
         queued = len(keys)
-        report("Queue refreshed.")
+        debug("Queue refreshed")
     else:
-        report("No library matches found.")
+        report("Problem: nothing suggested is in your library.")
     session_finish(session_id, queued, sources="YouTube (up next queue)", report=report)
 
 
@@ -3007,13 +3042,13 @@ def moderate(tracks, seed, report=print):
         text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
         flagged = json.loads(text).get("remove") or []
     except ImportError:
-        report("  AI Moderator skipped: the anthropic package isn't installed.")
+        report("  Problem: AI Moderator didn't run, as the anthropic package isn't installed.")
         return set()
     except Exception as e:
         if "credit balance" in str(e).lower():
-            report("  AI Moderator skipped: your Anthropic credit balance is too low.")
+            report("  Problem: AI Moderator didn't run, as your Anthropic credit balance is too low.")
         else:
-            report(f"  AI Moderator skipped: the check didn't come back ({str(e)[:120]}).")
+            report(f"  Problem: AI Moderator didn't run, as the check didn't come back ({str(e)[:120]}).")
         return set()
     removed = set()
     for item in flagged:
@@ -3049,7 +3084,7 @@ class PlayedFilter:
                 import filters as filter_settings
                 self.filters = filter_settings.Active(FILTER_DEVICE, report) or None
             except Exception as e:
-                report(f"  Filters skipped: {e}")
+                report(f"  Problem: the filters didn't run ({e}).")
         if not self.on:
             return
         try:
@@ -3057,11 +3092,11 @@ class PlayedFilter:
             library.ensure_loaded()
             self.library = library
         except Exception as e:
-            report(f"  Recently played check skipped: couldn't read the library ({e}).")
+            report(f"  Note: the recently played check didn't run, as the library couldn't be read ({e}).")
             self.on = False
             return
         if library.played_dates_unreadable():
-            report("  Recently played check skipped: JRiver's Last Played dates couldn't be read.")
+            report("  Note: the recently played check didn't run, as JRiver's Last Played dates couldn't be read.")
             self.on = False
         self.cutoff = time.time() - self.days * 86400
 
@@ -3137,11 +3172,13 @@ class FastStart:
             requests.get(f"{JRIVER_BASE}/Playback/PlayByKey",
                          params={"Key": str(key), "Zone": self.zone}, auth=AUTH, timeout=10)
         except Exception as e:
-            self.report(f"  Fast start didn't go through ({e}), so the playlist starts when it's built.")
+            self.report(f"  Note: fast start didn't go through ({e}), so the playlist starts when it's built.")
             self.zone = None
             return
         self.key = str(key)
-        self.report(f"  Fast start: the first track is playing on {zone_label(self.zone)} while the rest is found.")
+        globals()["LAST_OUTPUT"] = zone_label(self.zone)
+        globals()["LAST_OUTPUT_ID"] = self.zone
+        debug(f"Fast start: the first track is playing in {zone_label(self.zone)} while the rest is found")
 
     def lead(self, keys, first_key=None):
         """Puts the playing (or searched) track at the front, once."""
@@ -3311,7 +3348,7 @@ class Drift:
             else:
                 seeds = self._seeds()
                 if not seeds:
-                    self.report("  Drift: nothing left to seed from.")
+                    self.report("  Note: Drift has nothing left to seed from.")
                     break
                 names = ", ".join(a if self.using == "artists" else f"{a} - {t}" for a, t in seeds)
                 self.report(f"  Drift round {n} of {self.rounds}: {len(keys)} of {self.target}, "
@@ -3327,13 +3364,13 @@ class Drift:
             new = keys[before:]
             self.report(f"  Drift round {n}: {len(new)} added.")
             if self.using == "ai" and not new:
-                self.report("  Drift: the AI found nothing new in your library, so stopping there.")
+                self.report("  Note: Drift stopped, as the AI found nothing new in your library.")
                 break
             added += new
             if new and on_round:
                 on_round(list(new))
         if len(keys) < self.target:
-            self.report(f"  Drift finished short: {len(keys)} of {self.target}.")
+            self.report(f"  Note: Drift finished short, {len(keys)} of {self.target}.")
         return added
 
     def _take(self, keys, artist, title, key, score):
@@ -3385,7 +3422,7 @@ class Drift:
             key = find_jriver_key_by_track(artist, track)
             session_log(self.session_id, artist, track, "AI", found=bool(key))
             if self._take(keys, artist, track, key, 1):
-                self.report(f"    Found: {artist} - {track}  (AI)")
+                self.report(f"    In library: {artist} - {track}  (AI)")
             else:
                 self.ai_tried.add((artist, track))
 
@@ -3410,7 +3447,7 @@ class Drift:
                 key = find_jriver_key_by_track(a, t) if use_youtube else library.find_track_key(a, t)
                 session_log(self.session_id, a, t, sources, found=bool(key))
                 if self._take(keys, a, t, key, len(sources)):
-                    self.report(f"    Found: {a} - {t}  ({', '.join(sources)})")
+                    self.report(f"    In library: {a} - {t}  ({', '.join(sources)})")
 
 
 def mix_active():
@@ -3438,7 +3475,7 @@ def mix_skipped(report=print):
     global MIX_NOTED
     if MIX_ROWS and output_is_youtube() and not MIX_NOTED:
         MIX_NOTED = True
-        report("  Added playlists are left out: they only join playlists sent to JRiver.")
+        report("  Note: your added playlists were left out, as they only join playlists sent to JRiver.")
 
 
 def _spread(ours, mixes):
@@ -3477,7 +3514,7 @@ def combine_with_mix(keys, report=print):
         try:
             found = [str(k) for k in saved_playlists.playlist_keys(row["id"])]
         except Exception as e:
-            report(f"  {name}: couldn't be read from JRiver ({e}), so it was left out.")
+            report(f"  Problem: {name} couldn't be read from JRiver ({e}), so it was left out.")
             continue
         fresh = []
         for k in found:
@@ -3485,8 +3522,8 @@ def combine_with_mix(keys, report=print):
                 seen.add(k)
                 fresh.append(k)
         if not fresh:
-            report(f"  {name}: " + ("empty, or no longer in JRiver" if not found else
-                                     "every track was already in the playlist") + ", so nothing was added.")
+            report(f"  Note: {name} is " + ("empty, or no longer in JRiver" if not found else
+                                     "already all in the playlist") + ", so nothing was added from it.")
             continue
         used.append(row["id"])
         MIX_KEEP.update(fresh)
@@ -3563,11 +3600,11 @@ def create_similar_playlist(report=print, seed_info=None):
     if seed_info is None:   # no searched seed handed in, so read what JRiver is playing
         seed_info = get_playing_info()
     if not seed_info or seed_info["PlayingNowPosition"] == "-1":
-        report("Nothing playing. Seed from a track first!")
+        report(NOTHING_PLAYING)
         return
 
     seeds = seed_artists(seed_info)
-    report(f"\nSeeding from: {seed_info['Artist']} - {seed_info['Name']}")
+    report(f"Similar Artists: {seed_info['Artist']} - {seed_info['Name']}")
     # YouTube ticked on its own: play its up next queue as is, no artist blend
     if [s for s in SIMILAR_SOURCES if s in PROVIDERS] == ["youtube"]:
         create_youtube_queue_playlist(seed_info, seeds, report=report)
@@ -3612,13 +3649,13 @@ def create_similar_playlist(report=print, seed_info=None):
     # --- Similar artists ---
     similar, source_label = blended_similar_artists(seeds, limit=SIMILAR_ARTIST_LIMIT,
                                                     seed_track=seed_info['Name'], report=report)
-    report(f"  Similar artists via {source_label}: {len(similar)} candidates")
+    report(f"  Similar artists from {source_label.replace(' + ', ', ')}: {len(similar)}")
     prefetch_top_tracks([a for a, _ in similar], TRACKS_PER_ARTIST_POOL, report=report)
 
     for artist, suggested_by in similar:
         drift.saw_artist(artist)
         if suggested_by == ["AI"] and not deezer_artist_exists(artist):
-            report(f"  {artist} (AI): not a verifiable artist name, skipping.")
+            debug(f"{artist} (AI): not a verifiable artist name, left out")
             continue
         report(f"  {artist} ({', '.join(suggested_by)})...")
         found = []
@@ -3641,10 +3678,10 @@ def create_similar_playlist(report=print, seed_info=None):
         keys_list = fast.lead(([first_key] if first_key else []) + body, first_key)[:target]
         queued = finish_playlist(keys_list, drift, fast, seed_info, report)
         played.done()
-        report("Queue refreshed.")
+        debug("Queue refreshed")
     else:
         played.done()
-        report("No library matches found.")
+        report("Problem: nothing suggested is in your library.")
         queued = send_mix_only(fast, seed_info, report)
     session_finish(session_id, queued, sources=source_label, report=report)
 
@@ -3669,7 +3706,7 @@ def lastfm_similar_tracks(artist, track, limit=SIMILAR_TRACK_FETCH):
             "api_key": LASTFM_KEY, "format": "json", "limit": limit})
         return [[t["artist"]["name"], t["name"]] for t in r.json().get("similartracks", {}).get("track", [])]
     except Exception as e:
-        print(f"[Error] Last.fm similar tracks failed: {e}")
+        print(f"  Problem: Last.fm didn't answer for similar tracks ({e}).")
         return []
 
 
@@ -3695,7 +3732,7 @@ def listenbrainz_similar_tracks(artist, track, limit=SIMILAR_TRACK_FETCH):
         rows = _labs_rows(r.json()) if r.status_code == 200 else []
         mbid = next((row["recording_mbid"] for row in rows if row.get("recording_mbid")), None)
         if not mbid:
-            print(f"  [ListenBrainz] No MusicBrainz match for {artist} - {track}")
+            debug(f"ListenBrainz: no MusicBrainz match for {artist} - {track}")
             return []
         r = requests.post(f"{LABS}/similar-recordings/json", headers=headers, timeout=30,
                           json=[{"recording_mbids": [mbid],
@@ -3714,7 +3751,7 @@ def listenbrainz_similar_tracks(artist, track, limit=SIMILAR_TRACK_FETCH):
                  for row in (_labs_rows(r.json()) if r.status_code == 200 else [])}
         return [names[m] for m in mbids if m in names and names[m][1]]
     except Exception as e:
-        print(f"[Error] ListenBrainz similar tracks failed: {e}")
+        print(f"  Problem: ListenBrainz didn't answer for similar tracks ({e}).")
         return []
 
 
@@ -3761,7 +3798,7 @@ def similar_track_candidates(seeds, track, report=print):
     for code in SIMILAR_TRACK_SOURCES:
         name, fetch = TRACK_PROVIDERS[code]
         if not source_has_key(code):
-            report(f"  {name} is ticked for Similar Tracks but has no key, so it's skipped. {KEY_HELP_LINE}")
+            report(f"  Note: {name} is ticked but has no key, so it was skipped. {KEY_HELP_LINE}")
             continue
         pairs, from_cache = [], False
         for seed in seeds:   # a multi-value artist: the first name a source knows the track under
@@ -3808,15 +3845,15 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
     if seed_info is None:
         seed_info = get_playing_info()
     if not seed_info or seed_info["PlayingNowPosition"] == "-1":
-        report("Nothing playing. Seed from a track first!")
+        report(NOTHING_PLAYING)
         return
     track = seed_info.get("Name") or ""
     if not track or track == "Unknown":
-        report("Similar Tracks needs a track to seed from.")
+        report("Problem: Similar Tracks needs a track to seed from. Type one on the Search tab.")
         return
     seeds = seed_artists(seed_info)
     target, per_artist = SIMILAR_TRACK_COUNT, SIMILAR_TRACK_PER_ARTIST
-    report(f"\nTracks like: {seed_info['Artist']} - {track}  (target {target}, at most {per_artist} per artist)")
+    report(f"Similar Tracks: {seed_info['Artist']} - {track}  (target {target}, at most {per_artist} per artist)")
     session_id = session_start("similar_tracks", seed_info)
     fast = FastStart(seed_info, report)
     first_key = typed_seed_key(seed_info, seeds, session_id, report)
@@ -3859,7 +3896,7 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
                 per[owner] = per.get(owner, 0) + 1
                 drift.note(artist, title, key, len(sources))
                 fast.play(key)
-                report(f"    Found: {artist} - {title}  ({', '.join(sources)})")
+                report(f"    In library: {artist} - {title}  ({', '.join(sources)})")
             elif not key:
                 report(f"    Not in library: {artist} - {title}")
         if len(keys) >= wanted or need <= 1:
@@ -3883,9 +3920,9 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
         queued = finish_playlist(keys, drift, fast, seed_info, report,
                                  "" if SIMILAR_TRACK_ORDER == "shuffled" else ", most similar first")
         played.done()
-        report("Queue refreshed.")
+        debug("Queue refreshed")
     else:
-        report("No library matches found.")
+        report("Problem: nothing suggested is in your library.")
         queued = send_mix_only(fast, seed_info, report)
     session_finish(session_id, queued, sources=source_label, report=report)
 
@@ -3907,13 +3944,13 @@ def create_vibe_playlist(vibe, report=print):
     refresh_settings_if_changed()
     vibe = (vibe or "").strip()
     if not vibe:
-        report("No vibe given.")
+        report("Problem: no description was given.")
         return
     if not ANTHROPIC_API_KEY:
-        report("AI Playlist needs an Anthropic API key. " + KEY_HELP_LINE)
+        report("Problem: AI Playlist needs an Anthropic key. " + KEY_HELP_LINE)
         return
     target = VIBE_TRACK_COUNT
-    report(f"\nAI Playlist: {vibe}  (target {target} tracks)")
+    report(f"AI Playlist: {vibe}  (target {target} tracks)")
 
     seed_info = {"Artist": "AI Playlist", "Name": vibe, "Album": ""}
     session_id = session_start("vibe", seed_info, "AI")
@@ -3923,10 +3960,10 @@ def create_vibe_playlist(vibe, report=print):
                   played=played, vibe=vibe)
     wanted = target   # the AI's own picks aren't moderated, so no extras are needed
 
-    report("  Asking AI for tracks...")
+    report("  Asking the AI for tracks...")
     pairs = ai_vibe_tracks(vibe, count=wanted)
     if not pairs:
-        report("  AI returned nothing usable.")
+        report("  Problem: the AI returned nothing usable.")
         session_finish(session_id, send_mix_only(fast, None, report), report=report)
         return
 
@@ -3935,7 +3972,7 @@ def create_vibe_playlist(vibe, report=print):
     for artist, track in pairs:
         key = find_jriver_key_by_track(artist, track)
         if key:
-            report(f"    Found: {artist} - {track}")
+            report(f"    In library: {artist} - {track}")
             if key not in keys and played.fresh(key):
                 keys.append(key)
                 drift.note(artist, track, key, 1)
@@ -3946,11 +3983,11 @@ def create_vibe_playlist(vibe, report=print):
             misses += 1
             drift.ai_tried.add((artist, track))   # so Drift using the AI doesn't ask for it again
             session_log(session_id, artist, track, "AI", found=False)
-    report(f"  AI picks: {len(keys)} found, {misses} missing.")
+    report(f"  AI picks: {len(keys)} in library, {misses} not.")
     # the AI's own picks aren't moderated; Drift tracks from the sources can be (Settings > Playlist)
 
     if not keys:
-        report("No library matches found. Try a different description.")
+        report("Problem: nothing the AI picked is in your library. Try a different description.")
         session_finish(session_id, send_mix_only(fast, None, report), report=report)
         return
 
@@ -3958,7 +3995,7 @@ def create_vibe_playlist(vibe, report=print):
     keys = fast.lead(keys)[:target]
     sent = finish_playlist(keys, drift, fast, None, report, " (shuffled)")
     played.done()
-    report("Queue refreshed.")
+    debug("Queue refreshed")
     session_finish(session_id, sent, report=report)
 
 
@@ -3982,7 +4019,7 @@ def play_top_n(report=print, seed_info=None):
     if seed_info is None:   # no searched seed handed in, so read what JRiver is playing
         seed_info = get_playing_info()
     if not seed_info or seed_info["PlayingNowPosition"] == "-1":
-        report("Nothing playing. Seed from a track first!")
+        report(NOTHING_PLAYING)
         return
 
     seeds = seed_artists(seed_info)
@@ -3990,7 +4027,7 @@ def play_top_n(report=print, seed_info=None):
     n = TOP_TRACKS_COUNT
     order = TOP_TRACKS_ORDER
 
-    report(f"\nFetching top {n} tracks for: {seed_info['Artist']} ({order} order)")
+    report(f"Artist's Top Tracks: {seed_info['Artist']}  (top {n}, {order} order)")
     if len(seeds) > 1:
         report(f"  Multi-value artist, fetching top {n} for each of: {', '.join(seeds)}")
 
@@ -4001,9 +4038,9 @@ def play_top_n(report=print, seed_info=None):
     for artist in seeds:
         top_tracks, source_label = blended_top_tracks(artist, limit=n)
         if not top_tracks:
-            report(f"  Could not retrieve top tracks for {artist} from any configured source.")
+            report(f"  Problem: no source returned top tracks for {artist}.")
             continue
-        report(f"  {artist}: ranked via {source_label}")
+        report(f"  {artist}: ranked from {source_label.replace(' + ', ', ')}")
         if source_label not in labels_used:
             labels_used.append(source_label)
         if session_id is None:
@@ -4011,24 +4048,25 @@ def play_top_n(report=print, seed_info=None):
 
         prefetch_youtube_ids([(artist, t) for t, _ in top_tracks[:n]])
         for track_name, suggested_by in top_tracks[:n]:
-            tag = f"  Looking up: {track_name} ({', '.join(suggested_by)})..."
             key = find_jriver_key_by_track(artist, track_name)
-            report(f"{tag} {'Found.' if key else 'Not in library.'}")
+            report(f"    {'In library' if key else 'Not in library'}: {artist} - {track_name}  "
+                   f"({', '.join(suggested_by)})")
             if key and key not in ordered_keys and played.fresh(key):
                 ordered_keys.append(key)
                 fast.play(key)
             session_log(session_id, artist, track_name, suggested_by, found=bool(key))
 
     if session_id is None:
-        report("Could not retrieve top tracks from any configured source.")
+        report("Problem: no source returned any top tracks.")
         nonstop_begin("top_tracks", seed_info)   # so Run After Building uses this group's file
         send_mix_only(fast, seed_info, report)
         run_after_building(report)
         return
     played.done()
     if not ordered_keys:
-        report("None of the top tracks were found in your library." if not played.skipped else
-               "All the top tracks in your library were played too recently.")
+        report("Problem: none of the top tracks are in your library." if not played.skipped else
+               "Note: every top track in your library was played recently, so there's nothing to play. "
+               "Settings > Playlist > Artist's Top Tracks")
         session_finish(session_id, send_mix_only(fast, seed_info, report), report=report)
         return
 
@@ -4039,12 +4077,11 @@ def play_top_n(report=print, seed_info=None):
         ordered_keys.reverse()
 
     labels = {"popular": "most popular first", "reverse": "least popular first", "random": "random order"}
-    report(f"\nQueuing {len(ordered_keys)} tracks, {labels[order]}...")
+    report(f"  Sending {len(ordered_keys)} tracks, {labels[order]}...")
     mix_skipped(report)
     rest = fast.rest(combine_with_mix(ordered_keys, report) if mix_active() else ordered_keys)
     if rest:
         send_to_jriver(rest, seed_info=seed_info, report=report, append=fast.started)
-    report("Done!")
     session_finish(session_id, len(ordered_keys), sources=" + ".join(labels_used), report=report)
 
 
@@ -4063,7 +4100,7 @@ def _mb_json(path, params):
             r = requests.get(f"https://musicbrainz.org/ws/2/{path}", params={**params, "fmt": "json"},
                              headers={"User-Agent": USER_AGENT}, timeout=15)
         except Exception as e:
-            print(f"[Label] MusicBrainz request failed: {e}")
+            debug(f"Label: MusicBrainz request failed: {e}")
             return None
         if r.status_code == 503:   # busy: wait and try again
             time.sleep(1.0)
@@ -4193,18 +4230,19 @@ DISCOGS_ROLE_PRIORITY = ["Producer", "Mixed By", "Engineer", "Recorded By",
 
 def discogs_get(path, params=None):
     if not DISCOGS_TOKEN:
-        print("[Discogs] DISCOGS_TOKEN is missing from .env.")
+        debug("Discogs: no token")
         return None
     try:
         r = requests.get(f"{DISCOGS_BASE}{path}", params=params or {},
                          headers={"User-Agent": USER_AGENT,
                                   "Authorization": f"Discogs token={DISCOGS_TOKEN}"})
         if r.status_code != 200:
-            print(f"[Discogs] {path} returned {r.status_code}: {r.text[:200]}")
+            print(f"  Problem: Discogs answered {r.status_code}.")
+            debug(f"Discogs {path}: {r.text[:200]}")
             return None
         return r.json()
     except Exception as e:
-        print(f"[Discogs] Request failed for {path}: {e}")
+        print(f"  Problem: Discogs didn't answer ({e}).")
         return None
 
 
@@ -4303,27 +4341,27 @@ def explore_credits(report=print):
     refresh_settings_if_changed()
     seed_info = get_playing_info()
     if not seed_info or seed_info["PlayingNowPosition"] == "-1":
-        report("Nothing playing. Seed from a track first!")
+        report(NOTHING_PLAYING)
         return
 
     if not DISCOGS_TOKEN:
-        report("Show Credits needs a Discogs token. " + KEY_HELP_LINE)
+        report("Problem: Show Credits needs a Discogs token. " + KEY_HELP_LINE)
         return
     artist, album = seed_info["Artist"], seed_info["Album"]
-    report(f"\nLooking up credits for: {artist} - {album}")
+    report(f"Show Credits: {artist} - {album}")
 
     found = discogs_find_release(artist, album)
     if not found:
-        report("Could not find this release on Discogs.")
+        report("  Problem: this release isn't on Discogs.")
         return
     release_id, release_label = found
     report(f"  Using release: {release_label}")
 
     credits = discogs_release_credits(release_id, artist)
     if not credits:
-        report("No credits listed on this release beyond the artist.")
+        report("  Note: this release lists no credits beyond the artist.")
         return
 
-    report("\nCredited on this record:")
+    report("  Credited on this record:")
     for name, roles in credits:
-        report(f"  {name} ({', '.join(sorted(roles))})")
+        report(f"    {name} ({', '.join(sorted(roles))})")

@@ -435,7 +435,8 @@ def _zone_command(intent, device, body):
     shown = f"{title} by {artist}" if artist else title
     profile = device_profile(device or "unknown device")
     _submit(_job("more_like", seed, zone, profile, device or "unknown device"),
-            f"Voice, {name}: more like {shown}, to {zone}" + (", with its own settings" if profile else ""))
+            f"Voice, {name}: more like {shown}, to {zone}" + (", with its own settings" if profile else ""),
+            {"from": "voice", "device": device or "unknown device"})
     if _is_busy() and not _takes_over(zone):
         return "pending", "Please wait, request pending.", {}
     return "started", f"More like {shown}, coming up on {zone}.", {}
@@ -529,7 +530,8 @@ def handle_command(body, busy=False):
               "tracks_like": "tracks like"}[intent]
     profile = device_profile(device or "unknown device")
     _submit(_job(intent, value, zone, profile, device or "unknown device"),
-            f"Voice, {name}: {phrase} {shown}{corrected}, to {zone}" + (", with its own settings" if profile else ""))
+            f"Voice, {name}: {phrase} {shown}{corrected}, to {zone}" + (", with its own settings" if profile else ""),
+            {"from": "voice", "device": device or "unknown device"})
     if busy and not _takes_over(zone):
         return "pending", "Please wait, request pending.", {}
     return "started", f"{words}, coming up on {zone}.", {}
@@ -571,7 +573,37 @@ class _Handler(BaseHTTPRequestHandler):
         except ValueError:
             return self._reply(400, {"error": "body must be a JSON object"})
         status, speech, extra = handle_command(body, busy=_is_busy())
+        if status == "problem":
+            _log_problem(body, speech)
         self._reply(200, {"status": status, "speech": speech, **extra})
+
+
+SAID = {"songs_by": "songs by", "music_like": "music like", "tracks_like": "tracks like", "genre": "genre",
+        "album": "album", "song": "song", "playlist": "playlist", "shuffle": "shuffle songs by", "skip": "skip",
+        "who_is_this": "who is this", "more_like": "more like this"}
+
+
+def _log_problem(body, speech):
+    """A voice command that came to nothing: what was asked, and what Alexa said back, in the console."""
+    device = (body.get("device") or "").strip()
+    try:
+        with _lock:
+            _devices_table()
+            row = engine.db().execute("SELECT name FROM voice_devices WHERE device_id=?", (device,)).fetchone()
+        name = row[0] if row and row[0] else "an unknown device"
+    except Exception:
+        name = "an unknown device"
+    intent = (body.get("intent") or "").strip().lower()
+    asked = " ".join(x for x in (SAID.get(intent, intent or "a command"), (body.get("value") or "").strip()) if x)
+    first = f"{datetime.now().strftime('%H:%M')}  Voice, {name}: {asked}"
+    second = f'  Problem: Alexa said "{speech}"'
+    engine.print(first)
+    engine.print(second)
+    try:
+        import buildlog   # here rather than at the top: it imports engine
+        buildlog.record_instant(device or "unknown device", intent, first + "\n" + second)
+    except Exception as e:
+        engine.debug(f"Couldn't keep the failed voice command in the Log: {e}")
 
 
 _is_busy = lambda: False   # replaced by the GUI

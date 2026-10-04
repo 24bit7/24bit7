@@ -49,7 +49,7 @@ PALETTE.update({
     "help_mark_fg":   "#ffffff",
     "tooltip_bg":     "#ffffe0",   # the popup a ? shows
     "tooltip_fg":     "#000000",
-    "ai_purple":      "#6b3fa0",   # anything that uses AI credits
+    "ai_purple":      "#b000b0",   # magenta: anything that uses AI credits
 })
 LIGHT = dict(PALETTE)
 DARK = {
@@ -82,7 +82,7 @@ DARK = {
     "help_mark_fg":    "#00ff41",
     "tooltip_bg":      "#000000",
     "tooltip_fg":      "#00ff41",
-    "ai_purple":       "#c3a6ff",   # lavender, so it reads on charcoal
+    "ai_purple":       "#ff33ff",   # bright magenta, so it reads on charcoal
 }
 THEME = "light"
 
