@@ -65,6 +65,8 @@ def _count(text, word):
 
 
 def device_name(device_id):
+    if device_id == "24bit7-settings-test":
+        return "Voice Test"
     try:
         row = engine.db().execute("SELECT name FROM voice_devices WHERE device_id=?", (device_id,)).fetchone()
         return row[0] if row and row[0] else "Unknown Device"
@@ -157,6 +159,27 @@ def recent(tab=None, limit=None):
         cols = ["id", "at", "tab", "from_label", "zone", "zone_id", "kind", "sources", "queued", "misses",
                 "moderator", "problems", "notes", "chain_id", "chain_pos", "text"]
         return [dict(zip(cols, r)) for r in con.execute(sql, args).fetchall()]
+
+
+def tabs():
+    """[(tab, label)] for the devices with builds kept, by name. The Main Window isn't included."""
+    with _lock:
+        con = engine.db()
+        _table(con)
+        keys = [r[0] for r in con.execute("SELECT DISTINCT tab FROM builds WHERE tab != ?", (MAIN,)).fetchall()]
+    return sorted(((k, device_name(k)) for k in keys), key=lambda x: x[1].lower())
+
+
+def tab_for_zone(zone_id):
+    """The tab a Non-stop top-up on this zone files under: whoever started the playlist."""
+    if not zone_id:
+        return MAIN
+    with _lock:
+        con = engine.db()
+        _table(con)
+        row = con.execute("SELECT tab FROM builds WHERE zone_id=? ORDER BY id DESC LIMIT 1",
+                          (str(zone_id),)).fetchone()
+    return row[0] if row else MAIN
 
 
 def playlist_type(row):

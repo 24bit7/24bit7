@@ -440,9 +440,12 @@ class PlayTab(tk.Frame):
     def _build_log(self):
         frame = tk.Frame(self, padx=16, pady=12)
         frame.pack(fill="both", expand=True)
-        self.log = scrolledtext.ScrolledText(frame, wrap="word", state="disabled",
+        # The console: a black box holding the tab row (when open) and the text
+        self.console_box = tk.Frame(frame, bg="#000000", highlightthickness=1, highlightbackground="#555555")
+        self.console_box.pack(fill="both", expand=True)
+        self.log = scrolledtext.ScrolledText(self.console_box, wrap="word", state="disabled",
                                              font=("Consolas", 9), bg="#000000", fg="#00ff41",
-                                             insertbackground="#00ff41")
+                                             insertbackground="#00ff41", bd=0, highlightthickness=0)
         self.log.pack(fill="both", expand=True)
         # Colour by line type (the words lead, so Copy, Export and Query read the same without colour)
         bold = ("Consolas", 9, "bold")
@@ -455,6 +458,7 @@ class PlayTab(tk.Frame):
             else "simple"
         self.log.tag_configure("debug", elide=self.console_mode == "simple")
         self._build_console_strip(frame)
+        self._build_console_head()
         self._greeting_active = True
         self._type_greeting("Follow the white rabbit.", 0)
 
@@ -526,10 +530,15 @@ class PlayTab(tk.Frame):
         if getattr(self, "_stamp_next", False) and line.strip():
             line = time.strftime("%H:%M") + "  " + line.lstrip("\n")
             self._stamp_next = False
+        self._live.append(line)
+        if not self._live_visible():
+            return   # another tab is showing: the line is kept for when this build's tab is chosen
+        at_bottom = self.log.yview()[1] >= 0.999   # scrolled up to read? new lines don't pull you down
         self.log.config(state="normal")
         kind = self._line_kind(line)
         self.log.insert("end", line + "\n", (kind,) if kind else ())
-        self.log.see("end")
+        if at_bottom:
+            self.log.see("end")
         self.log.config(state="disabled")
 
     def report(self, message):
@@ -592,8 +601,141 @@ class PlayTab(tk.Frame):
         self.log.bind("<Button-1>", lambda e: self._show_console_strip(), add="+")
         self.root.bind_all("<Button-1>", self._maybe_hide_console_strip, add="+")
 
+    # --- the console's tabs: the green arrow opens All | Main Window | one per Alexa device ---
+
+    def _head_box(self, parent, text, command):
+        """A box in the tab row, drawn like the console: green on black, a thin dark green edge."""
+        b = tk.Label(parent, text=text, font=("Consolas", 9), bg="#000000", fg="#00ff41", padx=10, pady=2,
+                     cursor="hand2", highlightthickness=1, highlightbackground="#0d4d1c",
+                     highlightcolor="#0d4d1c")
+        b.bind("<Button-1>", lambda e: command())
+        return b
+
+    def _build_console_head(self):
+        black, green = "#000000", "#00ff41"
+        self.console_head = tk.Frame(self.console_box, bg=black)
+        self.console_head.pack(fill="x", before=self.log.frame)
+        self.head_arrow = tk.Label(self.console_head, text="\u25bc", font=("Consolas", 10), bg=black, fg=green,
+                                   cursor="hand2", padx=10)
+        self.head_arrow.pack(anchor="n")
+        self.head_arrow.bind("<Button-1>", lambda e: self._set_tabs_open(not self.tabs_open))
+        self.head_row = tk.Frame(self.console_head, bg=black)
+        self.head_tabs = tk.Frame(self.head_row, bg=black)
+        self.head_tabs.pack(side="left")
+        self.head_strip = tk.Frame(self.head_row, bg=black)
+        self.head_strip.pack(side="right")
+        self.head_buttons = {}
+        for name, command in (("Copy", self._copy_log), ("Clear", self._clear_from_strip),
+                              ("Query", self._open_query), ("Export to Log", self._export_log),
+                              ("Mode", self._toggle_console_mode)):
+            b = self._head_box(self.head_strip, name, command)
+            b.pack(side="left", padx=(4, 0))
+            self.head_buttons[name] = b
+        self.head_buttons["Query"].config(fg=AI_MAGENTA, highlightbackground=AI_MAGENTA, highlightcolor=AI_MAGENTA)
+        self.head_buttons["Mode"].config(text=self.console_mode.title())
+        self.head_line = tk.Frame(self.console_head, bg=green, height=1)
+        self.view = "all"                     # the tab on screen: "all", "main" or a device ID
+        self._live, self._live_tab = [], "main"   # the build running (or last run) and the tab it files under
+        self.tabs_open = read_env().get("CONSOLE_TABS", "0").strip() == "1"
+        self._set_tabs_open(self.tabs_open, save=False)
+
+    def _set_tabs_open(self, open_, save=True):
+        self.tabs_open = open_
+        self.head_arrow.config(text="\u25b2" if open_ else "\u25bc")
+        if open_:
+            self.head_row.pack(fill="x", padx=8, pady=(0, 6))
+            self.head_line.pack(fill="x", padx=8, pady=(0, 4))
+            self.console_strip.place_forget()
+            self._sync_head_query()
+            self._fill_tabs()
+        else:
+            self.head_row.pack_forget()
+            self.head_line.pack_forget()
+            if self.view != "all":
+                self._select_view("all")
+        if save:
+            try:
+                write_env({"CONSOLE_TABS": "1" if open_ else "0"})
+            except Exception:
+                pass
+
+    def _sync_head_query(self):
+        engine.refresh_settings_if_changed()
+        query = self.head_buttons["Query"]
+        if getattr(engine, "CONSOLE_QUERY", False) and engine.ANTHROPIC_API_KEY:
+            if not query.winfo_manager():
+                query.pack(side="left", padx=(4, 0), before=self.head_buttons["Export to Log"])
+        else:
+            query.pack_forget()
+
+    def _fill_tabs(self):
+        if not self.tabs_open:
+            return
+        for child in self.head_tabs.winfo_children():
+            child.destroy()
+        try:
+            devices = buildlog.tabs()
+        except Exception:
+            devices = []
+        for key, label in [("all", "All"), ("main", "Main Window")] + devices:
+            b = self._head_box(self.head_tabs, label, lambda k=key: self._select_view(k))
+            if key == self.view:   # the tab on screen: inverted, green with black text
+                b.config(bg="#00ff41", fg="#000000", font=("Consolas", 9, "bold"), highlightbackground="#00ff41")
+            b.pack(side="left", padx=(0, 4))
+
+    def _live_visible(self):
+        return self.view == "all" or self.view == self._live_tab
+
+    def _select_view(self, view):
+        """Shows a tab: All is the latest build from anywhere; the others, their own latest."""
+        self.view = view
+        self._fill_tabs()
+        if self._live_visible() and (self._live or self.running):
+            self._show_text("\n".join(self._live))
+            return
+        try:
+            rows = buildlog.recent(None if view == "all" else view, 1)
+        except Exception:
+            rows = []
+        self._show_text(rows[0]["text"] if rows else "")
+
+    def _show_text(self, text):
+        self._greeting_active = False
+        self.log.config(state="normal")
+        self.log.delete("1.0", "end")
+        for line in text.split("\n") if text else []:
+            kind = self._line_kind(line)
+            self.log.insert("end", line + "\n", (kind,) if kind else ())
+        self.log.see("end")
+        self.log.config(state="disabled")
+
+    def _begin_live(self, origin):
+        """A build is starting: note the tab it files under, and clear the screen if that's the one showing."""
+        origin = origin or {}
+        kind = origin.get("from")
+        if kind == "voice":
+            tab = origin.get("device") or "unknown device"
+        elif kind == "nonstop":
+            try:
+                tab = buildlog.tab_for_zone(origin.get("zone"))
+            except Exception:
+                tab = "main"
+        else:
+            tab = "main"
+        self._live, self._live_tab = [], tab
+        if self._live_visible():
+            self._clear_log()
+
+    def _flash_head(self, name, text):
+        b = getattr(self, "head_buttons", {}).get(name)
+        if b is not None:
+            b.config(text=text)
+            self.after(800, lambda: b.config(text=name))
+
     def _show_console_strip(self):
         """Top-right inside the console, clear of its scrollbar. Query shows when it's switched on."""
+        if getattr(self, "tabs_open", False):
+            return   # with the tabs open, the strip sits in the tab row instead
         engine.refresh_settings_if_changed()
         query = self.console_buttons["Query"]
         if getattr(engine, "CONSOLE_QUERY", False) and engine.ANTHROPIC_API_KEY:
@@ -616,6 +758,8 @@ class PlayTab(tk.Frame):
         self.console_mode = "advanced" if self.console_mode == "simple" else "simple"
         self.log.tag_configure("debug", elide=self.console_mode == "simple")
         self.console_buttons["Mode"].config(text=self.console_mode.title(), bg="#000000")
+        if hasattr(self, "head_buttons"):
+            self.head_buttons["Mode"].config(text=self.console_mode.title())
         try:
             write_env({"CONSOLE_MODE": self.console_mode})
         except Exception:
@@ -634,6 +778,7 @@ class PlayTab(tk.Frame):
         self.clipboard_append(text)
         b = self.console_buttons["Copy"]
         b.config(text="Copied")
+        self._flash_head("Copy", "Copied")
 
         def done():
             self.console_strip.place_forget()
@@ -649,6 +794,7 @@ class PlayTab(tk.Frame):
             messagebox.showerror("Export to Log", f"Couldn't write the log: {e}", parent=self)
             return
         b.config(text="Saved")
+        self._flash_head("Export to Log", "Saved")
         try:
             subprocess.Popen(["explorer", "/select,", path])
         except Exception:
@@ -692,7 +838,7 @@ class PlayTab(tk.Frame):
         self.console_buttons["Query"].config(bg="#000000")
         if not self.query_panel.winfo_manager():
             # packed ahead of the console so it gets its height first; the console shrinks
-            self.query_panel.pack(side="bottom", fill="x", before=self.log.frame)
+            self.query_panel.pack(side="bottom", fill="x", before=self.console_box)
         self.query_entry.focus_set()
 
     def _close_query(self):
@@ -746,7 +892,7 @@ class PlayTab(tk.Frame):
         self._greeting_active = False
         for b in self.buttons:
             b.config(state="disabled")
-        self._clear_log()
+        self._begin_live(origin)
         self._stamp_next = True   # the build's first line gets the time
 
         rows = (playmix.rows() or None) if mix else None   # added playlists: app builds only
@@ -777,6 +923,7 @@ class PlayTab(tk.Frame):
             buildlog.record_job(getattr(self, "_job_origin", None), self.log.get("1.0", "end-1c"))
         except Exception as e:
             print(f"Note: couldn't keep this build in the Log ({e}).")
+        self._fill_tabs()   # a device's first build gives it a tab
         self.running = False
         for b in self.buttons:
             b.config(state="normal")
