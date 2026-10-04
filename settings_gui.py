@@ -35,6 +35,36 @@ VOICE_DOCS = [("How Voice Commands work", DOCS_URL + "VOICE_COMMANDS.md",
               ("Setting up the Alexa skill", DOCS_URL + "VOICE_SETUP.md",
                "Step by step, from an Amazon developer account to your first command.")]
 
+# --- About tab -------------------------------------------------------------
+REPO_URL = "https://github.com/24bit7/24bit7"
+FORUM_URL = "https://yabb.jriver.com/interact/index.php/topic,144381.0.html"   # the JRiver forum thread; empty hides the link
+MANUAL_PDF = "24bit7_Manual.pdf"   # shipped next to 24bit7.exe in the release zip
+# The voice commands, as in docs/VOICE_COMMANDS.md
+VOICE_COMMAND_LIST = [
+    ("songs by <artist>", "Artist's Top Tracks"),
+    ("music like <artist>", "Similar Artists, seeded from the artist's most popular track"),
+    ("tracks like <song>  (by <artist>)", "Similar Tracks"),
+    ("genre <anything>", "AI Playlist, e.g. \"genre nu metal with grunge\" (needs an Anthropic key)"),
+    ("album <name>", "Plays the album now, in track order"),
+    ("song <title>  (by <artist>)", "Plays the song now, then stops"),
+    ("playlist <name>", "Plays one of your JRiver playlists or smartlists now"),
+    ("shuffle songs by <artist>", "Every track by the artist in your library, shuffled"),
+    ("skip / next / next song", "The next track in that device's zone"),
+    ("who is this / what's playing", "Alexa says the track, artist and album"),
+    ("more like this / more of this", "Similar Tracks seeded from what's playing"),
+]
+CREDITS = [
+    ("Last.fm", "https://www.last.fm"),
+    ("ListenBrainz", "https://listenbrainz.org"),
+    ("MusicBrainz", "https://musicbrainz.org"),
+    ("Deezer", "https://www.deezer.com"),
+    ("YouTube Music (via ytmusicapi)", "https://github.com/sigma67/ytmusicapi"),
+    ("Discogs", "https://www.discogs.com"),
+    ("Anthropic (Claude)", "https://www.anthropic.com"),
+    ("JRiver Media Center", "https://jriver.com"),
+]
+
+
 # Listed alphabetically by display name
 SOURCE_NAMES = [("ai", "AI"), ("deezer", "Deezer"),
                 ("lastfm", "Last.fm"), ("listenbrainz", "ListenBrainz"),
@@ -457,6 +487,7 @@ class SettingsTab(tk.Frame):
         self._build_voice(nb)
         self._build_saved(nb)   # after Voice Commands: these settings only apply to playlists asked for by voice
         self._build_other(nb)
+        self._build_about(nb)
 
         self._loading = False
         self._refresh_key_marks()
@@ -1974,6 +2005,116 @@ class SettingsTab(tk.Frame):
                       "last track played when its Playing Now is empty, and plays to that zone. A zone with an "
                       "Alexa device that has Own settings uses that device's settings.")
         self._build_shortcuts(box)
+
+    # --- About -------------------------------------------------------------------
+
+    def _about_link(self, parent, text, target, row, blurb=None):
+        """An underlined link in the section-title colour, with an optional grey line after it."""
+        link = tk.Label(parent, text=text, fg=PALETTE["section_fg"], cursor="hand2",
+                        font=("Segoe UI", 10, "underline"))
+        link.grid(row=row, column=0, sticky="w", pady=2)
+        if callable(target):
+            link.bind("<Button-1>", lambda e: target())
+        else:
+            link.bind("<Button-1>", lambda e, u=target: webbrowser.open_new_tab(u))
+        if blurb:
+            tk.Label(parent, text=blurb, fg=PALETTE["help_fg"], font=HELP_FONT).grid(
+                row=row, column=1, sticky="w", padx=(12, 0))
+        return link
+
+    def _open_manual(self):
+        """The PDF beside the app if it's there, otherwise the manual on GitHub."""
+        path = os.path.join(engine.APP_DIR, MANUAL_PDF)
+        if os.path.exists(path):
+            try:
+                os.startfile(path)
+                return
+            except Exception:
+                pass
+        webbrowser.open_new_tab(REPO_URL + "/blob/main/docs/MANUAL.md")
+
+    def _build_about(self, nb):
+        """About: version, links, voice commands, credits and licence. Nothing here is saved."""
+        tab = self._scroll_tab(nb, "About")
+        packaged = getattr(sys, "frozen", False)
+        version = engine.VERSION
+        # The packaged app points at its own release; the dev copy at main, as it may be ahead
+        ref = f"v{version}" if packaged else "main"
+
+        # --- Logo, tagline, version ---
+        head = tk.Frame(tab)
+        head.grid(row=0, column=0, sticky="w", pady=(0, 4))
+        for part, colour in (("24", PALETTE["brand_blue"]), ("bit", PALETTE["brand_orange"]),
+                             ("7", PALETTE["brand_blue"])):
+            tk.Label(head, text=part, font=("Segoe UI", 18, "bold"), fg=colour).pack(side="left")
+        tk.Label(head, text="/", font=("Segoe UI", 10), fg=PALETTE["text_muted"]).pack(
+            side="left", anchor="s", padx=(12, 8), pady=(0, 5))
+        tk.Label(head, text="Smart Playlist Creator and Music Discovery Tool", font=("Segoe UI", 10),
+                 fg=PALETTE["text_muted"]).pack(side="left", anchor="s", pady=(0, 5))
+        tk.Label(tab, text=f"Version {version}", font=LABEL_FONT).grid(row=1, column=0, sticky="w")
+        tk.Label(tab, justify="left", wraplength=640, anchor="w",
+                 text=("Builds playlists from your own JRiver library around whatever is playing, using "
+                       "Last.fm, ListenBrainz, Deezer and YouTube Music. It runs without AI; the AI "
+                       "features are optional and need your own Anthropic key.")).grid(
+            row=2, column=0, sticky="w", pady=(6, 14))
+
+        # --- Links ---
+        box = section(tab, "Links")
+        links = [
+            ("User manual (PDF)", self._open_manual, "How everything in 24bit7 works."),
+            ("GitHub", REPO_URL, "The code, issues and every release."),
+            ("README", f"{REPO_URL}/blob/{ref}/README.md", "Overview, setup and what's new."),
+            ("Release notes" if packaged else "Releases",
+             f"{REPO_URL}/releases/tag/v{version}" if packaged else f"{REPO_URL}/releases",
+             f"What changed in {version}." if packaged else "Every published version."),
+            ("Reporting a problem", f"{REPO_URL}/blob/{ref}/README.md#reporting-a-problem",
+             "What to send when something goes wrong."),
+        ]
+        if FORUM_URL:
+            links.append(("JRiver forum thread", FORUM_URL, "Questions, ideas and feedback."))
+        for r, (text, target, blurb) in enumerate(links):
+            self._about_link(box, text, target, r, blurb)
+
+        # --- Voice Commands ---
+        box = section(tab, "Voice Commands")
+        note = tk.Frame(box)
+        note.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
+        tk.Label(note, justify="left", wraplength=640, anchor="w",
+                 text=("Voice commands only work with the needle drop Alexa skill, which you set up "
+                       "yourself under a free Amazon developer account.")).pack(anchor="w")
+        guide = tk.Frame(note)
+        guide.pack(anchor="w", pady=(2, 0))
+        tk.Label(guide, text="Full instructions:").pack(side="left")
+        g = tk.Label(guide, text="Setting up the Alexa skill", fg=PALETTE["section_fg"], cursor="hand2",
+                     font=("Segoe UI", 9, "underline"))
+        g.pack(side="left", padx=(6, 0))
+        g.bind("<Button-1>", lambda e: webbrowser.open_new_tab(f"{REPO_URL}/blob/{ref}/docs/VOICE_SETUP.md"))
+        tk.Label(box, text='Say "Alexa, open needle drop", then a command, or all in one breath: '
+                           '"Alexa, ask needle drop for music like Agnes Obel".',
+                 justify="left", wraplength=640, fg=PALETTE["help_fg"], font=HELP_FONT).grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=(0, 6))
+        for r, (say, get) in enumerate(VOICE_COMMAND_LIST, start=2):
+            tk.Label(box, text=say, font=LABEL_FONT, anchor="w").grid(row=r, column=0, sticky="w", pady=1)
+            tk.Label(box, text=get, anchor="w", justify="left", wraplength=420).grid(
+                row=r, column=1, sticky="w", padx=(16, 0), pady=1)
+        r = len(VOICE_COMMAND_LIST) + 2
+        tk.Label(box, text="No command starts with \"play\": Alexa hands those to a music service instead.",
+                 fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=r, column=0, columnspan=2, sticky="w", pady=(6, 2))
+        self._about_link(box, "How Voice Commands work", f"{REPO_URL}/blob/{ref}/docs/VOICE_COMMANDS.md",
+                         r + 1, "Every command, what you hear back, and settings per device.")
+
+        # --- Credits ---
+        box = section(tab, "Credits")
+        tk.Label(box, text="Recommendation data and playback come from:", anchor="w").grid(
+            row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        for r, (name, url) in enumerate(CREDITS, start=1):
+            self._about_link(box, name, url, r)
+
+        # --- Licence ---
+        box = section(tab, "Licence")
+        tk.Label(box, text="MIT Licence. Copyright (c) 2026 Ben Walker-Williams.", anchor="w").grid(
+            row=0, column=0, sticky="w")
+        self._about_link(box, "Read the licence", f"{REPO_URL}/blob/main/LICENSE", 1)
 
     # --- Keyboard Shortcuts ------------------------------------------------------
 
