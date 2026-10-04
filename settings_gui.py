@@ -2116,6 +2116,22 @@ class SettingsTab(tk.Frame):
             row=0, column=0, sticky="w")
         self._about_link(box, "Read the licence", f"{REPO_URL}/blob/main/LICENSE", 1)
 
+        # Wrapped text follows the window's width rather than a fixed number of pixels
+        wrapped, todo = [], [tab]
+        while todo:
+            w = todo.pop()
+            todo.extend(w.winfo_children())
+            if isinstance(w, tk.Label) and int(float(str(w.cget("wraplength")) or 0)) > 0:
+                wrapped.append(w)
+
+        def rewrap(_e=None):
+            right = tab.winfo_rootx() + tab.winfo_width()
+            for label in wrapped:
+                width = max(200, right - label.winfo_rootx() - 40)
+                if int(float(str(label.cget("wraplength")))) != width:
+                    label.config(wraplength=width)
+        tab.bind("<Configure>", rewrap, add="+")
+
     # --- Keyboard Shortcuts ------------------------------------------------------
 
     def _build_shortcuts(self, box):
