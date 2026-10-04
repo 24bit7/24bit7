@@ -118,3 +118,21 @@ The diagnostics build showed Claude Sonnet 5 spending about 2,400 of 2,999 outpu
 
 **3 Oct 2026: A new launch closes the old copy.**
 Two copies fight over the keyboard shortcuts and the tray, and the second always loses silently. Closing the old one outright is blunt, but asking it to quit would only send it to the tray.
+
+**4 Oct 2026: The manual is built from Markdown at release time.**
+A PDF written by hand goes stale the moment a setting changes. MANUAL.md lives in the repo beside the code, and build.bat turns it into a PDF stamped with the version, so the manual in the zip always matches the release. The Voice Commands guides became chapters of it, with their old pages left as pointers so posted links still work.
+
+**4 Oct 2026: Screenshots from a demo mode.**
+The manual's screenshots come from screenshots.py, which runs the real app against fake data around one Beatles track: no JRiver, no real library, no keys. The same data gives the same pictures every run, so only shots whose code changed are rewritten, and nothing private ends up on GitHub.
+
+**4 Oct 2026: The console's words carry the meaning, the colours follow.**
+Copy, Export to Log and Console Query all get plain text, so a warning can't rely on being amber. Every line that matters starts with `Note:` or `Problem:` and every build ends with `Done:`; the colours are read from those words. Lines that only confirm normal working, such as fast start, moved to debug.
+
+**4 Oct 2026: Debug is always recorded.**
+The Debug tick meant switching it on and running the build again before anything useful could be seen. Now every debug line is kept, Simple/Advanced only decides whether the console shows them, and Export to Log always includes them.
+
+**4 Oct 2026: One console, a tab per source, a Log of builds.**
+Voice and Non-stop builds used to land in the same console as your own, wiping whatever you were reading. Each source now keeps its own latest build, and the Log keeps the last 50 from each with their figures. Collapsible blocks per build were tried in the design and dropped: the plain text reads better.
+
+**4 Oct 2026: AI is magenta.**
+Anything that spends Anthropic credit is now marked in magenta rather than purple: bright in the dark theme and on the black console, deeper in the light theme so it stays readable on grey.

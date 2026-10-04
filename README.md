@@ -8,7 +8,7 @@ If you host your whole music library locally in JRiver, you get bit-perfect play
 
 **It works live.** Play any track in JRiver, press a button, and Playing Now is rebuilt around it while the music keeps going. There is nothing to export, no listening history to upload and no second app to keep in sync: whatever is playing right now is the seed. Run it mid-album, mid-track, whenever the mood shifts.
 
-**New in 1.9.0: steadier playlists without more AI.** The AI Moderator now has three levels, from removing only clear clashes to keeping only tracks close to the seed, and Drift can top a playlist up from sources of its own. Vibe Playlist is now AI Playlist, starting with More tracks like the song that's playing, and bracketed song titles match your library however they're tagged.
+**New in 1.11.0: a console that keeps everything, and a manual.** Every build is written the same way, with problems in red and notes in amber, and the console has a tab for the Main Window, each Alexa device and a Log of the last 50 builds from each. The zip now includes a user manual as a PDF, opened from the new Settings > About.
 
 You don't have to own the seed either. Type any artist and track into the Search tab and 24bit7 builds a playlist around it, from your library or, with Output set to YouTube, from YouTube. That second route needs no library, no keys and no JRiver.
 
@@ -270,7 +270,7 @@ JRiver is only needed for the Now Playing seed and for JRiver output. The Search
 
 ### Path A: download and run (Windows)
 
-1. Download `24bit7-v1.6.2-windows.zip` from the [Releases](../../releases) page. It's under **Assets** at the bottom of the release, below the two "Source code" downloads, which are only the Python files.
+1. Download the latest `24bit7-v...-windows.zip` from the [Releases](../../releases) page. It's under **Assets** at the bottom of the release, below the two "Source code" downloads, which are only the Python files.
 2. Unzip it anywhere you like and run `24bit7.exe`.
 3. Windows will most likely show a blue **"Windows protected your PC"** box the first time, because the exe isn't code-signed. Click **More info**, then **Run anyway**. It only asks once.
 4. On first run the app opens on Settings. Add keys for the sources you want; each field has a **?** button with instructions for getting that key. Deezer and YouTube Music work with no key at all, and they are the two sources a fresh install has ticked.
@@ -288,7 +288,16 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.10.0
+## What's new in 1.11.0
+
+- **A new console.** Every build is written the same way: time and heading, `Note:` (amber), `Problem:` (red), AI lines in magenta, and a closing `Done:` line. A small green arrow opens tabs for **All**, **Main Window**, each Alexa device and the **Log**, which keeps the last 50 builds from each source, with Non-stop top-ups numbered in their chain. See The console above.
+- **A user manual**, as a PDF in the zip, opened from **Settings > About**. The Voice Commands and Alexa setup guides are now chapters of it.
+- **Settings > About**: version, links, the voice commands at a glance and credits.
+- **Simple / Advanced** in the console strip replaces the Debug tick; debug lines are always recorded and always exported.
+- **Failed voice commands** now show in the console, with what Alexa said.
+- **AI is magenta** throughout, and the tagline is now Perfect Playlists and Music Discovery.
+
+### Earlier: 1.10.0
 
 - **Debug works in the app.** Every `[debug]` line and every source's result reach the console; before, they went to a stdout that doesn't exist under pythonw.
 - **Export to Log.** Click into the console: a dated file in `logs\` with versions, library size, settings (keys hidden) and the console, for reporting a problem (see Reporting a problem above).
