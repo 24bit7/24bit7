@@ -18,3 +18,5 @@ backups/
 # per-PC: exported logs and the running copy's id
 logs/
 24bit7.pid
+# the user manual PDF, rebuilt by build_manual.py
+24bit7_Manual.pdf

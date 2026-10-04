@@ -29,6 +29,21 @@ rem --- 3. Release zip, made from the clean build before anything is put back --
 for /f %%v in ('powershell -NoProfile -Command "(Select-String -Path engine.py -Pattern '^VERSION\s*=\s*.([0-9.]+)').Matches[0].Groups[1].Value"') do set VER=%%v
 set ZIP=releases\24bit7-v%VER%-windows.zip
 mkdir releases 2>nul
+
+rem --- 3a. User manual PDF, beside 24bit7.exe so it goes out in the zip ---
+python build_manual.py "dist\24bit7\24bit7_Manual.pdf"
+if errorlevel 1 (
+    echo.
+    echo The user manual PDF couldn't be made, so this release would go out without it.
+    choice /c SC /m "S to stop the release, C to carry on without the manual"
+    if errorlevel 2 (
+        echo Carrying on without the manual.
+    ) else (
+        if exist "%ZIP%" del "%ZIP%"
+        echo Stopped before the zip. Putting your settings and history back.
+        goto restore
+    )
+)
 powershell -NoProfile -Command "$ok = $false; for ($i = 1; $i -le 6 -and -not $ok; $i++) { try { Compress-Archive -Path 'dist\24bit7' -DestinationPath '%ZIP%' -Force -ErrorAction Stop; $ok = $true } catch { Write-Host ('  A file is busy, usually Windows Defender scanning the new build. Retrying in 5 seconds, try ' + $i + ' of 6'); Start-Sleep -Seconds 5 } }; if (-not $ok) { exit 2 }"
 if errorlevel 2 (
     if exist "%ZIP%" del "%ZIP%"
