@@ -89,12 +89,44 @@ Every playlist starts from a seed. The seed is whichever of the two small tabs i
 
 ### The console
 
-The black panel shows what each build did: which sources answered, what matched in your library, and where it was queued. Click into it for a strip of buttons:
+The black panel shows what each build did: which sources answered, what matched in your library, and where it went. Every build is written the same way, so it reads at a glance:
 
-- **Copy** copies the console text.
-- **Clear** empties it.
+- The first line has the time and what was built, such as `21:14  Similar Tracks: The Beatles - Here Comes The Sun`.
+- The steps are indented beneath it, in green.
+- `Note:` lines, in amber, are something to know. `Problem:` lines, in red, are something that went wrong. Where a setting would help, it's named at the end, such as `Settings > Playlist > Drift`.
+- AI lines, such as the AI Moderator's, are magenta.
+- Every build ends with one line: `Done: 30 tracks queued in Speakers, 62 not in library, 14 s.`
+
+Click into the console for a strip of buttons:
+
+- **Copy** copies what's on screen, or just what you've highlighted.
+- **Clear** empties the screen. Nothing kept in the Log is deleted.
 - **Export to Log** saves a report for when something goes wrong. See [Reporting a problem](#reporting-a-problem).
 - **Query** asks Claude why a playlist came out the way it did. It only shows once Console Query is switched on. See [Console Query](#console-query).
+- **Simple** or **Advanced**: Simple hides the debug lines, which are dim grey and start `[debug]`; Advanced shows them. They're always recorded, so switching works on the build already there, and Export to Log always includes them. Your choice is remembered.
+
+#### The console's tabs
+
+![The console's tabs, on a build loaded from the Log](images/console_tabs.png)
+
+The small green arrow at the top middle of the console opens a row of tabs:
+
+- **All**: the latest build from anywhere.
+- **Main Window**: the latest build from the Play tab or a keyboard shortcut.
+- **One per Alexa device**: that device's latest build, including commands that came to nothing. A device gets its tab after its first build.
+- **Log**: every build kept, below.
+
+A build only clears the screen when its own tab, or All, is showing, so a voice command in the kitchen won't wipe a build you're reading at the PC. With the tabs open, the strip sits at the top right. New lines don't pull you down while you're scrolled up. Open or closed is remembered.
+
+#### The Log
+
+![The console's Log](images/console_log.png)
+
+The Log lists the last 50 builds from each source, newest first: when, who asked (Main Window, Shortcut, an Alexa device, or Non-stop), the zone, the Play option, the sources used (hover for the full list), tracks queued and not in library, what the AI Moderator did, and how many problems and notes it had.
+
+A Non-stop playlist shows as a chain. The build that started it becomes Non-stop 001 and each top-up takes the next number, so you can see how long an evening ran and spot which top-up went wrong.
+
+Double-click a row, or click **Load to Console**, to open that build in its tab. A line at the top says it came from the Log, with **Back to Latest** to return. Copy, Query and Export to Log then work on that build.
 
 ### Adding your own playlists
 
@@ -209,7 +241,7 @@ How your own JRiver playlists and smartlists play when you ask for them by voice
 
 ![Settings, Other](images/settings_other.png)
 
-- **General**: how long answers from each service are kept (Cache days), the JRiver host if JRiver runs on another PC, the YouTube playlist length (up to 50), **Prefer official music videos**, the **Theme** (Light or Dark, applied on restart), **Debug**, and **Enable Console Query**.
+- **General**: how long answers from each service are kept (Cache days), the JRiver host if JRiver runs on another PC, the YouTube playlist length (up to 50), **Prefer official music videos**, the **Theme** (Light or Dark, applied on restart), and **Enable Console Query**.
 - **Zones**: which JRiver zones appear in the Zone and Output lists, which zone Now Playing opens on, and whether it follows JRiver's active zone. A DLNA speaker such as a Sonos only appears once DLNA Controller is ticked in JRiver (Tools > Options > Media Network > Advanced); press **Rescan** after ticking it.
 - **Windows**: **Start with Windows** launches 24bit7 when you sign in. **Start in the tray** keeps it hidden when Windows starts it. **Close to tray** makes the window's close button hide 24bit7 instead of quitting, so voice keeps listening; quit from the tray icon.
 - **Keyboard Shortcuts**: a key each for Similar Tracks, Similar Artists, Artist's Top Tracks and Shuffle Songs by Artist. They work anywhere in Windows, even with 24bit7 in the tray, so a remote that sends key presses (a Flirc, a Harmony, a phone app) can start a playlist from the sofa. Click a box and press the keys; Esc cancels. Letters and numbers need Ctrl, Alt, Shift or Win; F-keys and media keys work on their own. If another program already owns a combination, 24bit7 says so.
@@ -365,7 +397,7 @@ Two speakers make it easy to compare two sets of settings: the same command in t
 
 - Voice only works while 24bit7 and JRiver are running. **Settings > Other > Windows** can start 24bit7 with Windows, hidden in the tray.
 - Playlists are built one at a time, from the app or from voice.
-- Every playlist a voice command builds shows in the Play tab's console, with the device's name.
+- Every playlist a voice command builds shows in the console, under the device's own tab and in All. A command that comes to nothing shows there too, with what Alexa said.
 
 ---
 
@@ -471,6 +503,8 @@ Restart the PC and try a command without opening anything. If the music plays, y
 
 ### Troubleshooting voice
 
+Every command that comes to nothing also appears in the console, under the device's tab and in the Log, with exactly what Alexa said back.
+
 | Alexa says or does | What it means | What to try |
 |---|---|---|
 | "24bit7 isn't answering. Is it running on the media PC?" | The skill couldn't reach 24bit7. | Check 24bit7 is running and Settings > Voice Commands says it's listening. Run `tailscale funnel status`. Check `BIT7_URL` in `skill_settings.py` letter by letter. |
@@ -516,17 +550,16 @@ A reply with `ok: True` and 24bit7's version means everything on the PC side wor
 
 ### Console Query
 
-When a playlist comes out short or odd, you can ask why. Tick **Enable Console Query** under Settings > Other (it asks first, as it uses Anthropic credit), click into the console and press **Query**. Type a question and press Enter: "Why was this track included?", "Why was the playlist so short?", "What did the AI Moderator remove?". The answer appears in the console in lavender, and the box stays open for follow-ups.
+When a playlist comes out short or odd, you can ask why. Tick **Enable Console Query** under Settings > Other (it asks first, as it uses Anthropic credit), click into the console and press **Query**. Type a question and press Enter: "Why was this track included?", "Why was the playlist so short?", "What did the AI Moderator remove?". The answer appears in the console in magenta, and the box stays open for follow-ups.
 
-Claude is sent the console, your settings with every key and password left out, what's playing, and 24bit7's own code and README, so it knows the rules and the names of the settings. It suggests up to three changes, named as they appear in Settings. Ticking **Debug** as well gives it more to go on. The first question costs a few pence; follow-ups soon after cost much less.
+Claude is sent the build on screen, your settings with every key and password left out, what's playing, and 24bit7's own code and README, so it knows the rules and the names of the settings. It suggests up to three changes, named as they appear in Settings. The build on screen can be any of the last 50, opened from the Log. Switch the console to **Advanced** first and Claude gets the debug lines too. The first question costs a few pence; follow-ups soon after cost much less.
 
 ### Reporting a problem
 
-1. Tick **Debug** under Settings > Other.
-2. Do the thing that went wrong.
-3. Click into the console and press **Export to Log**.
+1. Do the thing that went wrong. For a build that happened earlier, open it from the Log instead.
+2. Click into the console and press **Export to Log**. With the console's tabs open, it's at the top right.
 
-24bit7 writes a dated file to the `logs` folder beside it, with the version, Windows and JRiver details, library size, your settings with every key and password hidden, and the console. The folder opens with the file selected. Attach it when you report the problem on [GitHub](https://github.com/24bit7/24bit7/issues).
+24bit7 writes a dated file to the `logs` folder beside it, with the version, Windows and JRiver details, library size, your settings with every key and password hidden, and the build on screen, debug lines included. The folder opens with the file selected. Attach it when you report the problem on [GitHub](https://github.com/24bit7/24bit7/issues).
 
 ---
 
