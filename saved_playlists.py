@@ -230,7 +230,7 @@ def play(found, zone, device_id=None, report=print):
     try:
         keys = playlist_keys(pid)
     except Exception as e:
-        report(f"[Saved Playlists] Couldn't read {name} ({e}), so it plays as saved.")
+        report(f"  Problem: couldn't read {name} from JRiver ({e}), so it plays as saved.")
         keys = []
     if not keys:
         r = requests.get(f"{engine.JRIVER_BASE}/Playback/PlayPlaylist",
@@ -244,7 +244,7 @@ def play(found, zone, device_id=None, report=print):
         if fresh:
             keys = fresh
         else:   # the safety net: a voice command should never end in silence
-            report(f"[Saved Playlists] Everything in {name} was played in the last {days} "
+            report(f"  Note: everything in {name} was played in the last {days} "
                    f"day{'' if days == 1 else 's'}, so it plays in full.")
     if shuffle:
         random.shuffle(keys)

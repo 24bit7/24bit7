@@ -262,8 +262,8 @@ class Active:
                 import saved_playlists
                 keys = {str(k) for k in saved_playlists.playlist_keys(item["pick_from"])}
             except Exception as e:
-                report(f"  Filter {item['name']}: couldn't read {item.get('pick_name') or 'its playlist'} "
-                       f"from JRiver ({e}), so it's skipped this time.")
+                report(f"  Problem: the filter {item['name']} couldn't read {item.get('pick_name') or 'its playlist'} "
+                       f"from JRiver ({e}), so it was skipped this time.")
                 continue
             self.pools.append(keys)
         if self:

@@ -39,6 +39,8 @@ SHOTS = [
     ("play", ["Play", "Now Playing"], ["gui.pyw", "mix_gui.py"], "more_closed"),
     ("play_more_options", ["Play", "Now Playing"], ["gui.pyw", "mix_gui.py"], "more_open"),
     ("play_search", ["Play", "Search"], ["gui.pyw"], "more_closed"),
+    ("console_tabs", ["Play", "Now Playing"], ["gui.pyw", "buildlog.py"], "tabs_kitchen"),
+    ("console_log", ["Play", "Now Playing"], ["gui.pyw", "buildlog.py"], "tabs_log"),
     ("discover", ["Discover"], ["discover_gui.py"], None),
     ("settings_sources_similar_artists", ["Settings", "Sources", "Similar Artists"], ["settings_gui.py"], None),
     ("settings_sources_similar_tracks", ["Settings", "Sources", "Similar Tracks"], ["settings_gui.py"], None),
@@ -64,7 +66,8 @@ DEMO_PLAYING = {"Artist": "The Beatles", "Album": "Abbey Road", "Name": "Here Co
 DEMO_KEYS = {"LASTFM_API_KEY": "demo" * 8, "LISTENBRAINZ_TOKEN": "demo" * 9, "DISCOGS_TOKEN": "demo" * 10,
              "ANTHROPIC_API_KEY": "demo" * 12, "JRIVER_USER": "demo", "JRIVER_PASS": "demo" * 3,
              "VOICE_KEY": "demo" * 8}
-DEMO_ENV = {"HIDDEN_ZONES": "", "DEFAULT_ZONE": "Speakers", "FOLLOW_ACTIVE_ZONE": "0", "VOICE_ENABLED": "1"}
+DEMO_ENV = {"HIDDEN_ZONES": "", "DEFAULT_ZONE": "Speakers", "FOLLOW_ACTIVE_ZONE": "0", "VOICE_ENABLED": "1",
+            "CONSOLE_MODE": "simple", "CONSOLE_TABS": "0"}
 DEMO_DEVICES = [("demo-kitchen", "Kitchen Echo", "Kitchen", 0, "2026-10-04 10:41"),
                 ("demo-lounge", "Lounge Dot", "Speakers", 0, "2026-10-04 09:15")]
 DEMO_PLAYLISTS = [
@@ -96,21 +99,66 @@ DEMO_DISCOVERIES = [
 # Fixed times, so Discover and the device list come out the same on every run
 DEMO_SESSION_TIME = "2026-10-04 10:30"
 DEMO_CONSOLE = [
-    "Tracks like: The Beatles - Here Comes The Sun  (target 30, at most 2 per artist)",
+    "21:14  Similar Tracks: The Beatles - Here Comes The Sun  (target 30, at most 2 per artist)",
     "  Last.fm: 50 similar tracks",
     "  ListenBrainz: 40 similar tracks (from cache)",
     "  YouTube: 25 similar tracks",
+    "    In library: The Kinks - Waterloo Sunset  (Last.fm, ListenBrainz)",
+    "    In library: The Hollies - Bus Stop  (Last.fm, YouTube)",
+    "    Not in library: The Zombies - Time Of The Season",
+    "    In library: George Harrison - What Is Life  (Last.fm, ListenBrainz, YouTube)",
+    "    In library: The Byrds - Mr. Tambourine Man  (ListenBrainz)",
+    "    Not in library: Harry Nilsson - Everybody's Talkin'",
+    "    ...",
     "  Suggested 96, checked 96, in library 34.",
-    "  The Kinks - Waterloo Sunset",
-    "  The Hollies - Bus Stop",
-    "  George Harrison - What Is Life",
-    "  The Byrds - Mr. Tambourine Man",
-    "  Badfinger - Baby Blue",
-    "  Simon & Garfunkel - Mrs. Robinson",
-    "  The Beach Boys - God Only Knows",
-    "  ...",
+    "  AI Moderator (Balanced): checking 34 tracks against the seed...",
+    "    Removed The Who - Won't Get Fooled Again: louder and harder than the seed.",
+    "  AI Moderator: 1 removed.",
+    "  Sending 30 tracks...",
     "  Queued in Speakers after the current track.",
-    "Session 12 saved (30 tracks queued, 62 not in library).",
+    "Done: 30 tracks queued in Speakers, 62 not in library, 14 s.",
+]
+
+# The console's Log: kept builds, with fixed times so the shots repeat. (at, tab, from, zone, zone ID, kind,
+# sources, queued, misses, moderator, problems, notes, chain ID, chain position, text); chain IDs are row numbers.
+KITCHEN_TEXT = """21:20  Voice, Kitchen Echo: tracks like Here Comes The Sun by The Beatles, to Kitchen
+Similar Tracks: The Beatles - Here Comes The Sun  (target 30, at most 2 per artist)
+  Last.fm: 50 similar tracks
+  Problem: Deezer didn't answer for similar tracks (timed out).
+  ListenBrainz: 40 similar tracks (from cache)
+  YouTube: 25 similar tracks
+    In library: The Kinks - Waterloo Sunset  (Last.fm, ListenBrainz)
+    Not in library: The Zombies - Time Of The Season
+    ...
+  Suggested 96, checked 96, in library 34.
+  AI Moderator (Balanced): checking 34 tracks against the seed...
+    Removed The Who - Won't Get Fooled Again: louder and harder than the seed.
+    Removed Queen - We Will Rock You: stadium energy, breaks the mood.
+  AI Moderator: 2 removed.
+  Note: Drift is off, so the playlist stops at 30 tracks. Settings > Playlist > Drift
+  Sending 30 tracks...
+  Queued in Kitchen after the current track.
+Done: 30 tracks queued in Kitchen, 62 not in library, 14 s."""
+DEMO_BUILDS = [
+    ("2026-10-04 19:12:40", "main", "Main Window", "Speakers", "10001", "AI Playlist", "AI", 22, 0, "", 0, 1,
+     None, None, "19:12  AI Playlist: rainy Sunday morning  (target 25 tracks)\nDone: 22 tracks queued in Speakers, "
+     "0 not in library, 11 s."),
+    ("2026-10-04 20:40:12", "main", "Shortcut", "Speakers", "10001", "Similar Tracks", "Last.fm, ListenBrainz", 30,
+     47, "Relaxed, 0 removed", 0, 0, None, None, "20:40  Shortcut: Similar Tracks\nDone: 30 tracks queued in "
+     "Speakers, 47 not in library, 12 s."),
+    ("2026-10-04 20:51:03", "demo-lounge", "Lounge Dot", "", "", "Album", "", None, None, "", 1, 0, None, None,
+     "20:51  Voice, Lounge Dot: album Abbey Raod\n  Problem: Alexa said \"I couldn't find an album called "
+     "Abbey Raod.\""),
+    ("2026-10-04 21:14:22", "main", "Main Window", "Speakers", "10001", "Similar Tracks",
+     "Last.fm, ListenBrainz, YouTube", 30, 62, "Balanced, 1 removed", 0, 0, None, None, "\n".join(DEMO_CONSOLE)),
+    ("2026-10-04 21:20:05", "demo-kitchen", "Kitchen Echo", "Kitchen", "10002", "Similar Tracks",
+     "Last.fm, ListenBrainz, YouTube", 30, 62, "Balanced, 2 removed", 1, 1, 5, 1, KITCHEN_TEXT),
+    ("2026-10-04 21:31:47", "demo-kitchen", "Non-stop", "Kitchen", "10002", "Similar Tracks",
+     "Last.fm, ListenBrainz, YouTube", 30, 55, "Balanced, 3 removed", 0, 0, 5, 2,
+     "21:31  Non-stop: Kitchen reached its last track\nDone: 30 tracks queued in Kitchen, 55 not in library, 12 s."),
+    ("2026-10-04 21:42:09", "demo-kitchen", "Non-stop", "Kitchen", "10002", "Similar Tracks",
+     "Last.fm, ListenBrainz, YouTube", 28, 41, "Balanced, 1 removed", 0, 0, 5, 3,
+     "21:42  Non-stop: Kitchen reached its last track\nDone: 28 tracks queued in Kitchen, 41 not in library, 13 s."),
 ]
 
 
@@ -227,6 +275,15 @@ def start_demo(gui, temp):
         con.execute("INSERT INTO voice_devices (device_id, name, zone, last_heard, own_settings) VALUES (?,?,?,?,?)",
                     (device_id, name, zone, heard, own))
     con.commit()
+    try:   # the console's Log (1.11.0 and later)
+        import buildlog
+        buildlog._table(con)
+        cols = ["at", "tab", "from_label", "zone", "zone_id", "kind", "sources", "queued", "misses", "moderator",
+                "problems", "notes", "chain_id", "chain_pos", "text"]
+        for values in DEMO_BUILDS:
+            buildlog._insert(con, dict(zip(cols, values)))
+    except ImportError:
+        pass
 
 
 def build_window(gui):
@@ -271,6 +328,7 @@ def build_window(gui):
 
     # The console: no greeting, just the demo build
     play._greeting_active = False
+    play._stamp_next = False
     play._clear_log()
     for line in DEMO_CONSOLE:
         play._append_log(line)
@@ -419,10 +477,20 @@ def main():
         settle(root, 1.5)   # Now Playing's first read happens just after the window appears
         for name, path, _deps, action in shots:
             page = go_to(root, path, gui.TabbedPane)
+            tabs = hasattr(play, "_set_tabs_open")   # the console's tabs (1.11.0 and later)
+            if tabs and play.tabs_open and action not in ("tabs_kitchen", "tabs_log"):
+                play._set_tabs_open(False, save=False)
             if action == "more_open":
                 play._show_more(True, save=False)
-            elif action == "more_closed":
+            elif action in ("more_closed", "tabs_kitchen", "tabs_log"):
                 play._show_more(False, save=False)
+            if tabs and action in ("tabs_kitchen", "tabs_log"):
+                play._set_tabs_open(True, save=False)
+                if action == "tabs_log":
+                    play._select_view("log")
+                else:   # the Kitchen Echo build that started its Non-stop chain, opened from the Log
+                    import buildlog
+                    play._load_build(next(r for r in buildlog.recent("demo-kitchen") if r["chain_pos"] == 1))
             settle(root, 1.0 if name == "settings_jriver_playlists" else 0.5)
             (written if save_if_changed(capture(root, page), name) else same).append(name)
             print(f"  {name}: {'saved' if name in written else 'unchanged'}")

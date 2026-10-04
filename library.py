@@ -452,13 +452,13 @@ def find_track_key(artist, title):
         # way round): compare the first-named acts, the title having matched already
         matches = [e for e in entries if _primary_match(artist, e[1])]
         if matches:
-            print(f"  Matched on primary artist: {artist} - {title} (as {matches[0][1]})")
+            engine.debug(f"Matched on primary artist: {artist} - {title} (as {matches[0][1]})")
     if not matches:
         # 'Jimi Hendrix' against a tag of 'The Jimi Hendrix Experience': the source's
         # artist as whole words inside the tag, the title having matched already
         matches = [e for e in entries if _band_match(artist, e[1])]
         if matches:
-            print(f"  Matched on band name: {artist} - {title} (as {matches[0][1]})")
+            engine.debug(f"Matched on band name: {artist} - {title} (as {matches[0][1]})")
     if not matches:
         return None
     return sorted(matches, key=lambda e: _album_version_first(e, norm(e[1])))[0][2]

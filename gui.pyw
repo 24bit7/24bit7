@@ -102,12 +102,12 @@ class PlayTab(tk.Frame):
 
         # The seed area: two small tabs. Whichever is showing when a button is
         # pressed is the seed - what JRiver is playing, or a typed artist and track.
-        outer = tk.Frame(self, padx=16, pady=8)
+        outer = tk.Frame(self, pady=8)   # no side margin: the line under the two tabs spans the window
         outer.pack(fill="x")
-        self.seed_nb = TabbedPane(outer, font=("Segoe UI", 9, "bold"), pad=(14, 4), box=True, indent=6)
+        self.seed_nb = TabbedPane(outer, font=("Segoe UI", 9, "bold"), pad=(14, 4), indent=22)
         self.seed_nb.pack(fill="x")
 
-        frame = tk.Frame(self.seed_nb, padx=10, pady=8)
+        frame = tk.Frame(self.seed_nb, padx=26, pady=8)
         self.seed_nb.add(frame, text="Now Playing")
         # Zone first: which JRiver zone Now Playing reads and seeds from. Not saved,
         # so every launch starts on the active zone. The list rescans when opened.
@@ -146,7 +146,7 @@ class PlayTab(tk.Frame):
             widget.config(cursor="hand2")
         self.seed_nb._tabs[0].bind("<Button-1>", refresh_now, add="+")   # the Now Playing tab
 
-        self.search_tab = tk.Frame(self.seed_nb, padx=10, pady=8)
+        self.search_tab = tk.Frame(self.seed_nb, padx=26, pady=8)
         self.seed_nb.add(self.search_tab, text="Search")
         tk.Label(self.search_tab, text="Artist", font=("Segoe UI", 10)).grid(row=0, column=0, sticky="w")
         self.search_artist = tk.Entry(self.search_tab, width=34, font=("Segoe UI", 11))
@@ -234,7 +234,8 @@ class PlayTab(tk.Frame):
             ("AI Playlist", self.on_vibe),
         ]:
             b = FlatButton(frame, text=text, command=handler, width=18, height=2,
-                           accent=PALETTE["ai_purple"] if handler == self.on_vibe else None)   # purple: uses AI credits
+                           accent=PALETTE["ai_purple"] if handler == self.on_vibe else None,   # magenta: AI credits
+                           text_fg=PALETTE["ai_purple"] if handler == self.on_vibe else None)
             b.pack(side="left", padx=(0, 8))
             self.buttons.append(b)
         # More options: the quieter button. Opens the row below; stays usable during a build.
