@@ -27,7 +27,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.11.1"
+VERSION = "1.12.0"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
