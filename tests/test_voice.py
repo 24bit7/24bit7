@@ -147,10 +147,59 @@ def test_list_commands_reads_once_then_listens(app, alexa):
     assert not r.reprompt and r.ends is False, r
 
 
-def test_keep_going_says_coming_soon(app, alexa):
+# --- keep it going ----------------------------------------------------------------------
+
+def test_keep_going_tops_up_music_started_in_jriver(app, alexa):
+    import nonstop
+    j, e = app.jriver, app.engine
+    album = [r["Key"] for r in j.tracks if r["Album"] == "Help!"]
+    j.play("Kitchen", album)                              # started in JRiver, not by 24bit7
     r = alexa.say("KeepGoingIntent")
-    assert "next update" in r.ssml and r.ends is True, r
-    assert not app.printed.has("Problem"), "not logged as a failed command"
+    assert r.started, r
+    assert e.NONSTOP_ZONES["10002"]["saved_cfg"]["using"] == "tracks", "the Similar Tracks Non-stop settings"
+    r = alexa.say("KeepGoingIntent")
+    assert "already on" in r.ssml, r
+    z = j.zone("Kitchen")
+    z.pos = len(album) - 1                                 # the last track starts
+    jobs = []
+    nonstop.attach(lambda job, heading, origin=None: jobs.append(job))
+    nonstop._check_zones()
+    assert jobs, "the last track should trigger a top-up"
+    lines = app.Lines()
+    jobs[0](lines)
+    assert len(z.playlist) > len(album) and z.playlist[:len(album)] == album, lines.text()
+
+
+def test_keep_going_uses_settings_even_when_nonstop_is_off(app, alexa):
+    app.set_env(NONSTOP_TRACKS="0", NONSTOP_TRACKS_USING="artists", NONSTOP_TRACKS_RESEED="second")
+    j = app.jriver
+    j.play("Kitchen", j.playlists[0]["keys"])
+    alexa.say("KeepGoingIntent")
+    assert app.engine.NONSTOP_ZONES["10002"]["saved_cfg"] == {"using": "artists", "reseed": "second"}
+
+
+def test_keep_going_nothing_playing(app, alexa):
+    r = alexa.say("KeepGoingIntent")
+    assert "Nothing's playing on Kitchen" in r.ssml, r
+
+
+def test_keep_going_ends_when_music_is_replaced(app, alexa):
+    j = app.jriver
+    j.play("Kitchen", j.playlists[0]["keys"])
+    alexa.say("KeepGoingIntent")
+    alexa.say("AlbumIntent", "abbey road")
+    assert "10002" not in app.engine.NONSTOP_ZONES
+
+
+def test_keep_going_shortcut(app, alexa):
+    import hotkeys
+    j = app.jriver
+    j.play("Speakers", j.playlists[0]["keys"])
+    app.set_env(HOTKEY_ZONE="Speakers")
+    lines = app.Lines()
+    hotkeys._job("KEEP_GOING")(lines)
+    assert lines.has("Non-stop is on for Speakers"), lines.text()
+    assert "10001" in app.engine.NONSTOP_ZONES
 
 
 # --- stop, pause, resume ---------------------------------------------------------------

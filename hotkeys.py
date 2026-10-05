@@ -30,6 +30,7 @@ ACTIONS = [   # (code, label): the order they appear in Settings
     ("TOP_TRACKS", "Artist's Top Tracks"),
     ("SHUFFLE_ARTIST", "Shuffle Songs by Artist"),
     ("SWITCH_ZONES", "Switch Zones"),
+    ("KEEP_GOING", "Keep It Going"),
 ]
 LABELS = dict(ACTIONS)
 NOW_PLAYING_ZONE = "Zone shown in Now Playing"
@@ -265,6 +266,11 @@ def _job(code):
         if code == "SWITCH_ZONES":   # the zones ticked under Enable Switch To, in turn
             import voice
             report(voice.switch_step(zone_name))
+            return
+        if code == "KEEP_GOING":   # Non-stop, once, for whatever this zone is playing
+            import voice
+            status, speech, _ = voice.keep_going(zone_name)
+            report(f"  Problem: {speech}" if status == "problem" else f"  {speech}")
             return
         seed = engine.seed_or_last_played(zid, report)
         if not seed:

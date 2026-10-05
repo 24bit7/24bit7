@@ -54,8 +54,9 @@ def _takes_over(zone):
 
 INTENTS = ("songs_by", "music_like", "genre", "tracks_like", "album", "song", "playlist", "shuffle",
            "skip", "who_is_this", "more_like", "switch_zones", "keep_going", "stop", "pause", "resume")
-COMING = ("keep_going",)   # in the skill already; built in the next update
-ZONE_INTENTS = ("skip", "who_is_this", "more_like", "stop", "pause", "resume")   # act on what the zone is playing
+COMING = ()   # intents in the skill whose 24bit7 side isn't built yet
+ZONE_INTENTS = ("skip", "who_is_this", "more_like", "stop", "pause", "resume",
+                "keep_going")   # act on what the zone is playing
 THIS_WORDS = ("this", "this one", "this song", "this track", "it")   # "tracks like this" = more like this
 INSTANT = ("album", "song", "playlist", "shuffle")   # played straight away, nothing to build
 SHUFFLE_CAP = 400                            # most tracks a shuffle sends to JRiver
@@ -409,6 +410,9 @@ def _zone_command(intent, device, body):
     if pos < 0 or count == 0 or state == 0:
         return "problem", f"Nothing's playing on {zone}.", {}
 
+    if intent == "keep_going":
+        return keep_going(zone)
+
     if intent in ("stop", "pause", "resume"):
         if intent == "pause" and state == 1:
             return "said", f"{zone} is already paused.", {}
@@ -579,6 +583,40 @@ def _switch(device, value, body):
     if not _move(source, target):
         return "problem", "JRiver didn't switch it. Is JRiver running on the media PC?", {}
     return "started", f"Switching to {target}.", {}
+
+
+def keep_going(zone):
+    """
+    Keep It Going: Non-stop, once, for whatever is playing on a zone, even music
+    started in JRiver itself. It tops up with the zone's Similar Tracks Non-stop
+    settings (Using, Reseed from; a device's own if it has them), whether or not
+    Non-stop is switched on there, and ends when something else replaces the music.
+    Returns (status, speech, extra) like the other voice commands.
+    """
+    import hotkeys
+    import nonstop
+    zid = engine.zone_id(zone)
+    if zid is None:
+        return "problem", f"I can't find the {zone} zone in JRiver.", {}
+    if not _playing(zid):
+        return "problem", f"Nothing's playing on {zone}.", {}
+    _, _, profile = hotkeys._device_for_zone(zone)
+    settings = engine.nonstop_settings(nonstop._settings_for(profile).get)
+    with engine._nonstop_lock:
+        entry = engine.NONSTOP_ZONES.get(zid)
+    if entry:
+        origin = entry.get("origin") or entry.get("kind")
+        on = bool(entry.get("saved_cfg")) if origin == "saved" else settings.get(origin, {}).get("on")
+        if on:
+            return "said", f"Non-stop is already on for {zone}.", {}
+    keys = [r["Key"] for r in engine.playing_now_rows(zid) if r.get("Key")]
+    if not keys:
+        return "problem", f"Nothing's playing on {zone}.", {}
+    cfg = settings["tracks"]
+    engine.nonstop_record(zid, keys, kind="saved", stage="after", vibe=None,
+                          saved_cfg={"using": cfg["using"], "reseed": cfg["reseed"]})
+    print(f"[Voice] Keep It Going: Non-stop on for {zone}")
+    return "started", f"Non-stop is on for {zone}.", {}
 
 
 def switch_step(preferred):
