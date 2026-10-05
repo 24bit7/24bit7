@@ -52,6 +52,10 @@ VOICE_COMMAND_LIST = [
     ("skip / next / next song", "The next track in that device's zone"),
     ("who is this / what's playing", "Alexa says the track, artist and album"),
     ("more like this / more of this", "Similar Tracks seeded from what's playing"),
+    ("switch / switch to <zone>", "Moves what's playing to another zone (Enable Switch To)"),
+    ("stop / pause / resume the music", "On that device's zone"),
+    ("keep it going / non stop / go continuous", "Non-stop, once, for whatever is playing"),
+    ("list commands / help", "Alexa reads the commands once"),
 ]
 CREDITS = [
     ("Last.fm", "https://www.last.fm"),

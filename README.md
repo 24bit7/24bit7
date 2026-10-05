@@ -105,6 +105,8 @@ Claude Haiku is sent what's in the console, your settings with every key, token,
 
 Do the thing that went wrong (or open the build from the console's Log), then click into the console and press **Export to Log**; with the console's tabs open, it's at the top right. 24bit7 writes a dated file to the `logs` folder beside it (version, Python, Windows and JRiver versions, library size, your settings with every key and password hidden, and the build on screen, debug lines included) and opens the folder with the file selected. Attach that file, or paste it, when you report the problem. Keys never appear in it.
 
+Running from source, `py -m pytest tests` runs 24bit7's test suite against a fake JRiver, fake music services and a mock Alexa, without touching your library, settings or keys; tests\README.md explains it.
+
 ### Hidden tracks
 
 Some albums end on a track that runs on after a long silence into a hidden bonus track, which feels completely out of place in a playlist. The sources can't help, because they report the long album version too. So the Hidden Tracks section on each Play option's tab under Settings > Playlist skips the last track on an album when it runs longer than a set number of minutes, 6 by default, and each Play option can set its own. Albums, songs and playlists you ask for by name always play in full.
@@ -135,7 +137,7 @@ A track with no value for a field (no year, say) passes that rule, and the log c
 
 ### Keyboard shortcuts
 
-Settings > Other > Keyboard Shortcuts gives Similar Tracks, Similar Artists, Artist's Top Tracks and Shuffle Songs by Artist a key each. They work anywhere in Windows, even with 24bit7 in the tray, so a remote that sends key presses (a Flirc, a Harmony, a phone app) can start a playlist from the sofa. Nothing is assigned until you choose; letters and numbers need Ctrl, Alt, Shift or Win, and F-keys and media keys can be used on their own. If another program already owns a combination, 24bit7 says so beside it.
+Settings > Other > Keyboard Shortcuts gives Similar Tracks, Similar Artists, Artist's Top Tracks, Shuffle Songs by Artist, Switch Zones and Keep It Going a key each. They work anywhere in Windows, even with 24bit7 in the tray, so a remote that sends key presses (a Flirc, a Harmony, a phone app) can start a playlist from the sofa. Nothing is assigned until you choose; letters and numbers need Ctrl, Alt, Shift or Win, and F-keys and media keys can be used on their own. If another program already owns a combination, 24bit7 says so beside it.
 
 Shortcuts act on one zone (**Shortcuts apply to which zone**: the zone shown in Now Playing, or one you pick) and seed from its current track. If its Playing Now is empty, they seed from the last track JRiver played, and so do the Play tab buttons.
 
@@ -223,10 +225,14 @@ Once it is set up, each device plays to its own zone:
 | "skip", "next" | The next track in that device's zone |
 | "who is this", "what's playing" | Alexa says the track, artist and album playing there |
 | "more like this" | Similar Tracks from what's playing, queued after the current track |
+| "switch", "switch to *zone*" | Moves what's playing to another zone, at the same song |
+| "stop", "pause", "resume the music" | On that device's zone |
+| "keep it going" | Non-stop, once, for whatever is playing there |
+| "list commands" | Alexa reads the commands once |
 
 When a command is accepted, Alexa plays a short tone rather than talking over the music, which with fast start follows almost at once. When several albums or songs share a title, Alexa asks which artist, and you answer "by *artist*". When two playlists share a name, she asks which one, and you answer "by smartlist", "by playlist" or "by" and the folder.
 
-**Settings > JRiver Playlists** decides how your own playlists play when you ask for them: **Shuffle**, **Non-stop** (No, Similar artists or Similar tracks), **Reseed from** and **Skip recent**, either one row for every playlist or a row each. The table shows each playlist's folder and whether it's a smartlist, sorts by folder or name, and can show one folder at a time. A playlist with nothing changed plays exactly as JRiver has it. No command starts with "play", because Alexa tends to hand anything starting "play" to a music service instead of the skill. The skill name is up to you; the one in this repository is "needle drop", chosen because Alexa kept mishearing the first one.
+**Settings > JRiver Playlists** decides how your own playlists play when you ask for them: **Shuffle**, **Blend** (new music woven through the playlist, one for one, from similar artists or similar tracks, up to 50 songs), **Non-stop** (No, Similar artists or Similar tracks), **Reseed from** and **Skip recent**, either one row for every playlist or a row each. The table shows each playlist's folder and whether it's a smartlist, sorts by folder or name, and can show one folder at a time. A playlist with nothing changed plays exactly as JRiver has it. No command starts with "play", because Alexa tends to hand anything starting "play" to a music service instead of the skill. The skill name is up to you; the one in this repository is "needle drop", chosen because Alexa kept mishearing the first one.
 
 ### Start with Windows and the tray
 
@@ -288,7 +294,18 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.11.0
+## What's new in 1.12.0
+
+- **Switch zones by voice**: "Alexa, ask needle drop to switch" moves what's playing to another zone at the same song (and point, on local zones). Pick the zones under Settings > Voice Commands > **Enable Switch To**.
+- **Stop, pause and resume** by voice, on the speaker's own zone.
+- **Keep it going**: Non-stop, once, for anything playing, even an album you started in JRiver.
+- **Blend** for JRiver playlists: new music woven through, one for one, up to 50 songs.
+- Alexa no longer reads every command when it doesn't understand; say "list commands".
+- New shortcuts: Switch Zones and Keep It Going.
+- Long album closers are skipped while a playlist is built, so it reaches its full length.
+- A test suite in `tests`.
+
+### Earlier: 1.11.0
 
 - **A new console.** Every build is written the same way: time and heading, `Note:` (amber), `Problem:` (red), AI lines in magenta, and a closing `Done:` line. A small green arrow opens tabs for **All**, **Main Window**, each Alexa device and the **Log**, which keeps the last 50 builds from each source, with Non-stop top-ups numbered in their chain. See The console above.
 - **A user manual**, as a PDF in the zip, opened from **Settings > About**. The Voice Commands and Alexa setup guides are now chapters of it.

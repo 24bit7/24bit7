@@ -42,7 +42,7 @@ To run from source instead, you need Python 3.10 or newer. Run `pip install -r r
 
 ### Upgrading
 
-Your settings and history live in two files next to the app: `.env` (settings and keys) and `24bit7.db` (cache and Discover history). Copy both into the new version's folder and everything carries over. Settings from older versions are converted automatically.
+Your settings and history live in two files next to the app: `.env` (settings and keys) and `24bit7.db` (cache and Discover history). Copy both into the new version's folder and everything carries over. Settings from older versions are converted automatically. When a release changes the Alexa skill, as 1.12.0 does, paste the new `alexa\interaction_model.json` and `alexa\lambda_function.py` into the Alexa developer console as in [Steps 4 and 5](#step-4-add-the-interaction-model), then Build and Deploy.
 
 ---
 
@@ -229,13 +229,13 @@ Keys never leave your PC except to the service they belong to, and they never ap
 
 ![Settings, Voice Commands](images/settings_voice_commands.png)
 
-Switches voice on, holds the key the Alexa skill sends, and lists each Alexa device with the zone it plays to. **Test** sends a pretend command, as if a device had heard it. See [Voice Commands](#voice-commands) and [Setting up the Alexa skill](#setting-up-the-alexa-skill).
+Switches voice on, holds the key the Alexa skill sends, and lists each Alexa device with the zone it plays to. **Enable Switch To** picks which zones "switch" can move the music to; two devices on the same zone share one tick, and a zone no device plays to isn't offered. **Test** sends a pretend command, as if a device had heard it. See [Voice Commands](#voice-commands) and [Setting up the Alexa skill](#setting-up-the-alexa-skill).
 
 ### JRiver Playlists
 
 ![Settings, JRiver Playlists](images/settings_jriver_playlists.png)
 
-How your own JRiver playlists and smartlists play when you ask for them by voice: **Shuffle**, **Non-stop**, **Reseed from** and **Skip recent**. Tick **Use global playlist settings** to set them all at once, or untick it and give each playlist its own row. The table shows each playlist's folder and type, sorts by folder or name, and can show one folder at a time. A playlist with nothing changed plays exactly as JRiver has it.
+How your own JRiver playlists and smartlists play when you ask for them by voice: **Shuffle**, **Blend**, **Non-stop**, **Reseed from** and **Skip recent**. **Blend** weaves new music into the playlist, one of yours then one new, from similar artists or similar tracks, up to 50 new songs: the playlist starts at once and the new songs join a few seconds later. The **?** beside Blend and Non-stop explains each. Tick **Use global playlist settings** to set them all at once, or untick it and give each playlist its own row. The table shows each playlist's folder and type, sorts by folder or name, and can show one folder at a time. A playlist with nothing changed plays exactly as JRiver has it.
 
 ### Other
 
@@ -244,7 +244,7 @@ How your own JRiver playlists and smartlists play when you ask for them by voice
 - **General**: how long answers from each service are kept (Cache days), the JRiver host if JRiver runs on another PC, the YouTube playlist length (up to 50), **Prefer official music videos**, the **Theme** (Light or Dark, applied on restart), and **Enable Console Query**.
 - **Zones**: which JRiver zones appear in the Zone and Output lists, which zone Now Playing opens on, and whether it follows JRiver's active zone. A DLNA speaker such as a Sonos only appears once DLNA Controller is ticked in JRiver (Tools > Options > Media Network > Advanced); press **Rescan** after ticking it.
 - **Windows**: **Start with Windows** launches 24bit7 when you sign in. **Start in the tray** keeps it hidden when Windows starts it. **Close to tray** makes the window's close button hide 24bit7 instead of quitting, so voice keeps listening; quit from the tray icon.
-- **Keyboard Shortcuts**: a key each for Similar Tracks, Similar Artists, Artist's Top Tracks and Shuffle Songs by Artist. They work anywhere in Windows, even with 24bit7 in the tray, so a remote that sends key presses (a Flirc, a Harmony, a phone app) can start a playlist from the sofa. Click a box and press the keys; Esc cancels. Letters and numbers need Ctrl, Alt, Shift or Win; F-keys and media keys work on their own. If another program already owns a combination, 24bit7 says so.
+- **Keyboard Shortcuts**: a key each for Similar Tracks, Similar Artists, Artist's Top Tracks, Shuffle Songs by Artist, **Switch Zones** (moves what's playing to the next zone ticked under Enable Switch To) and **Keep It Going** (Non-stop, once, for whatever the shortcut zone is playing). They work anywhere in Windows, even with 24bit7 in the tray, so a remote that sends key presses (a Flirc, a Harmony, a phone app) can start a playlist from the sofa. Click a box and press the keys; Esc cancels. Letters and numbers need Ctrl, Alt, Shift or Win; F-keys and media keys work on their own. If another program already owns a combination, 24bit7 says so.
 
 ### About
 
@@ -355,6 +355,12 @@ Open the skill first ("Alexa, open needle drop"), then say the command, or say i
 | "skip", "next" or "next song" | The next track in that device's zone |
 | "who is this" or "what's playing" | Alexa says the track, artist and album playing in that device's zone |
 | "more like this" or "more of this" | Similar Tracks from what's playing. The current track carries on and the new playlist replaces what was queued after it |
+| "switch", or "switch to *zone*" | Moves what's playing to another zone, at the same song and point; the zone it left stops |
+| "stop the music", "pause the music" or "resume the music" | Stops, pauses or resumes that device's zone |
+| "keep it going", "non stop" or "go continuous" | Turns on Non-stop for whatever is playing in that device's zone, once |
+| "list commands" or "help" | Alexa reads the commands once |
+
+**Switch** moves the music from the zone that's playing (the asking device's own, if it is) to another zone ticked under **Enable Switch To**. With two zones it goes straight to the other one; with three or more, Alexa asks which and you answer "to the kitchen", or say it up front: "switch to the kitchen". It carries on from the same song and point, a paused zone arrives paused, and Non-stop follows the music. Local zones carry on from the same point; a Sonos or other DLNA zone starts the song from the beginning, as it needs a moment to start before it can jump. A plain "Alexa, stop" goes to the speaker itself, so stopping a JRiver zone needs "ask needle drop to stop the music".
 
 When several albums or songs share a title, Alexa asks which artist, and you answer "by *artist*". When two playlists share a name, she asks which, and you answer "by smartlist", "by playlist" or "by" and the folder. To skip the question, say it up front: "playlist vocal jazz smartlist".
 
@@ -367,6 +373,8 @@ The skill name is up to you. This one is "needle drop" because Alexa kept mishea
 ### What you hear
 
 - **"Ready."** when the skill opens and is waiting.
+- **"Sorry, I didn't catch that. Say list commands to hear them."** once, when a command isn't recognised. The full list is only read when you ask for it.
+- **"Which zone?"** after "switch" when three or more zones are ticked.
 - **A short tone** when a command is accepted. The music follows almost at once.
 - **"Please wait, request pending."** if another playlist is still building. Yours runs as soon as it finishes.
 - **"That's *track* by *artist*, from *album*."** after "who is this".
@@ -377,7 +385,9 @@ Albums, songs, playlists and shuffles need no building, so they replace whatever
 
 ### Keeping it going
 
-With **Non-stop** ticked for a Play option, a playlist a voice command built carries on when it reaches its last track. "Shuffle songs by" carries on the same way once the shuffle runs out. Your own JRiver playlists can keep going too, set per playlist under Settings > JRiver Playlists. Albums and songs end as normal.
+With **Non-stop** ticked for a Play option, a playlist a voice command built carries on when it reaches its last track. "Shuffle songs by" carries on the same way once the shuffle runs out. Your own JRiver playlists can keep going too, set per playlist under Settings > JRiver Playlists. Albums and songs end as normal, unless you say **"keep it going"**: that turns on Non-stop once for whatever the zone is playing, even an album you started in JRiver, using the zone's Similar Tracks Non-stop settings whether or not Non-stop is ticked there. It ends when something else replaces the music.
+
+A JRiver playlist with **Blend** set doesn't wait for its end: new songs are woven through it from the start, one of yours then one new, until up to 50 new songs run out.
 
 ### Devices and their settings
 

@@ -136,3 +136,27 @@ Voice and Non-stop builds used to land in the same console as your own, wiping w
 
 **4 Oct 2026: AI is magenta.**
 Anything that spends Anthropic credit is now marked in magenta rather than purple: bright in the dark theme and on the black console, deeper in the light theme so it stays readable on grey.
+
+**5 Oct 2026: Long closers are skipped while a playlist is found.**
+The hidden-track check ran on the finished playlist, after it had been cut to its target, so each long closer it dropped left a gap while the Done line still showed the target. It now works like Skip recent, as tracks are found, so the next one takes the place. The QA suite found it.
+
+**5 Oct 2026: A test suite against a fake world.**
+24bit7 talks to JRiver, five music services, an AI and Alexa, none of which can be used in a test. tests\ fakes all of them, runs the real Alexa skill code through the real listener, and changes every setting then reopens Settings to check each one kept, which would have caught the 1.11.1 bug before release.
+
+**5 Oct 2026: Alexa never reads the whole list unless asked.**
+A misheard command made Alexa read every command, then read them again. Now it says one short line pointing at "list commands", once.
+
+**5 Oct 2026: Switch targets are zones a device plays to.**
+"Switch" moves the music to a room you can talk to, so only zones an Alexa device plays to can be ticked. The ticks are kept by zone name, so a zone with no device (a TuneBlade "Whole House" zone, say) can be added later without a redesign.
+
+**5 Oct 2026: Switching to a DLNA zone restarts the song.**
+A Sonos needs a moment to start before JRiver can jump within a track, and Alexa can't be kept waiting for it. Waiting in the background and then seeking was offered and turned down: the restart is the simpler behaviour, and local zones still carry on from the same point.
+
+**5 Oct 2026: Stop the music, not stop.**
+Amazon keeps a bare "stop" for itself, so the skill's stop is "stop the music", with pause and resume alongside, all acting on the asking device's zone.
+
+**5 Oct 2026: Keep It Going borrows Similar Tracks.**
+Music started in JRiver belongs to no Play option, so a one-off Non-stop needs settings from somewhere. It takes the zone's Similar Tracks Non-stop settings, whether or not Non-stop is switched on there, because saying the command is the switch.
+
+**5 Oct 2026: Blend has no round limit, but a cap.**
+Blend aims for one new song per playlist song, so it keeps searching, seeding from what it finds, until it gets there, stops when a round finds nothing new, and never adds more than 50. Seeds are the first, middle and last songs, and what several seeds suggest ranks first.
