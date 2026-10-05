@@ -23,7 +23,7 @@ import requests
 
 import engine
 
-DEFAULT_ROW = {"shuffle": "0", "nonstop": "no", "reseed": "last", "skip": "0"}   # new playlists: as saved
+DEFAULT_ROW = {"shuffle": "0", "blend": "no", "nonstop": "no", "reseed": "last", "skip": "0"}   # new playlists: as saved
 SEND_CHUNK = 400   # keys per JRiver call, so a long playlist doesn't make an over-long address
 META_KEY = "saved_playlists"
 
@@ -48,6 +48,10 @@ def tidy(data):
         out["all_row_smart"] = dict(out["all_row"], shuffle=old_smart or out["all_row"]["shuffle"])
     out["all_row_smart"] = {**DEFAULT_ROW, **(out.get("all_row_smart") or {})}
     out["rows"] = {str(pid): {**DEFAULT_ROW, **(row or {})} for pid, row in (out.get("rows") or {}).items()}
+    for row in [out["all_row"], out["all_row_smart"], *out["rows"].values()]:   # Blend was a tick at first
+        row["blend"] = {"1": "tracks", "0": "no"}.get(str(row.get("blend")), row.get("blend"))
+        if row["blend"] not in ("no", "artists", "tracks"):
+            row["blend"] = "no"
     return out
 
 
@@ -220,8 +224,9 @@ def play(found, zone, device_id=None, report=print):
     shuffle = row.get("shuffle") == "1"
     days = int(row["skip"]) if str(row.get("skip", "0")).isdigit() else 0
     nonstop = row.get("nonstop", "no") if row.get("nonstop") in ("artists", "tracks") else "no"
-    what = f"playlist {name}" + (", shuffled" if shuffle else "")
-    if not shuffle and not days and nonstop == "no":
+    blend = row.get("blend") if row.get("blend") in ("artists", "tracks") else None
+    what = f"playlist {name}" + (", shuffled" if shuffle else "") + (", with new tracks blended in" if blend else "")
+    if not shuffle and not days and nonstop == "no" and not blend:
         # nothing to change: JRiver plays it itself, exactly as saved
         r = requests.get(f"{engine.JRIVER_BASE}/Playback/PlayPlaylist",
                          params={"Playlist": pid, "PlaylistType": "ID", "Zone": zone}, auth=engine.AUTH, timeout=10)
@@ -250,6 +255,16 @@ def play(found, zone, device_id=None, report=print):
         random.shuffle(keys)
     if not _send(keys, zone):
         return False, what
+    if blend:   # the playlist is playing; the new tracks are found on the Play tab and woven in
+        try:
+            import voice
+            import blend as blender
+            if voice._submit is not None:
+                voice._submit(blender.job(zone, keys, name, device_id, blend),
+                              f"Blend: {name} on {engine.zone_label(zone)}",
+                              {"from": "voice", "device": device_id} if device_id else None)
+        except Exception as e:
+            report(f"  Problem: the blend didn't start ({e}), so {name} plays as saved.")
     if nonstop == "no":
         engine.nonstop_forget(zone)
     else:

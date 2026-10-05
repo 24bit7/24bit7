@@ -24,7 +24,7 @@ _lock = threading.Lock()
 
 KINDS = {"similar": "Similar Artists", "youtube_queue": "Similar Artists", "similar_tracks": "Similar Tracks",
          "top_tracks": "Artist's Top Tracks", "vibe": "AI Playlist"}
-HEADINGS = ("Similar Artists", "Similar Tracks", "Artist's Top Tracks", "AI Playlist", "Show Credits")
+HEADINGS = ("Similar Artists", "Similar Tracks", "Artist's Top Tracks", "AI Playlist", "Show Credits", "Blend")
 INSTANT = {"songs_by": "Artist's Top Tracks", "music_like": "Similar Artists", "tracks_like": "Similar Tracks",
            "genre": "AI Playlist", "album": "Album", "song": "Song", "playlist": "Playlist",
            "shuffle": "Shuffle Songs by Artist", "skip": "Skip", "who_is_this": "Who Is This",

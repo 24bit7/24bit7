@@ -1084,31 +1084,37 @@ class SettingsTab(tk.Frame):
         def row_controls(parent, r, bg, row, on_change, col=3):
             """Shuffle, Non-stop, Reseed from and Skip for one row; writes back into row as they change."""
             sh = tk.BooleanVar(value=row.get("shuffle") == "1")
+            bl = tk.StringVar(value=option_label(SAVED_NONSTOP_OPTIONS, row.get("blend", "no")))
             ns = tk.StringVar(value=option_label(SAVED_NONSTOP_OPTIONS, row.get("nonstop", "no")))
             rs = tk.StringVar(value=option_label(NONSTOP_RESEED_OPTIONS, row.get("reseed", "last")))
             sk = tk.StringVar(value=option_label(SAVED_SKIP_OPTIONS, str(row.get("skip", "0"))))
-            p.keep += [sh, ns, rs, sk]
+            p.keep += [sh, bl, ns, rs, sk]
             cell = tk.Frame(parent, bg=bg)
             cell.grid(row=r, column=col, sticky="nsew")
             ttk.Checkbutton(cell, variable=sh).pack(padx=20, pady=2)
             cell = tk.Frame(parent, bg=bg)
             cell.grid(row=r, column=col + 1, sticky="nsew")
+            ttk.Combobox(cell, textvariable=bl, values=[s for _, s in SAVED_NONSTOP_OPTIONS],
+                         state="readonly", width=15).pack(anchor="w", padx=6, pady=2)
+            cell = tk.Frame(parent, bg=bg)
+            cell.grid(row=r, column=col + 2, sticky="nsew")
             ns_cb = ttk.Combobox(cell, textvariable=ns, values=[s for _, s in SAVED_NONSTOP_OPTIONS],
                                  state="readonly", width=15)
             ns_cb.pack(anchor="w", padx=6, pady=2)
             cell = tk.Frame(parent, bg=bg)
-            cell.grid(row=r, column=col + 2, sticky="nsew")
+            cell.grid(row=r, column=col + 3, sticky="nsew")
             rs_cb = ttk.Combobox(cell, textvariable=rs, values=[s for _, s in NONSTOP_RESEED_OPTIONS],
                                  state="readonly", width=10)
             rs_cb.pack(anchor="w", padx=6, pady=2)
             cell = tk.Frame(parent, bg=bg)
-            cell.grid(row=r, column=col + 3, sticky="nsew")
+            cell.grid(row=r, column=col + 4, sticky="nsew")
             sk_cb = ttk.Combobox(cell, textvariable=sk, values=[s for _, s in SAVED_SKIP_OPTIONS],
                                  state="readonly", width=9)
             sk_cb.pack(anchor="w", padx=6, pady=2)
 
             def store(*_):
                 row["shuffle"] = "1" if sh.get() else "0"
+                row["blend"] = option_code(SAVED_NONSTOP_OPTIONS, bl.get())
                 row["nonstop"] = option_code(SAVED_NONSTOP_OPTIONS, ns.get())
                 row["reseed"] = option_code(NONSTOP_RESEED_OPTIONS, rs.get())
                 row["skip"] = option_code(SAVED_SKIP_OPTIONS, sk.get())
@@ -1118,16 +1124,24 @@ class SettingsTab(tk.Frame):
             def sync_reseed():
                 live = "disabled" not in ns_cb.state()
                 rs_cb.state(["!disabled"] if live and row.get("nonstop", "no") != "no" else ["disabled"])
-            for var in (sh, ns, rs, sk):
+            for var in (sh, bl, ns, rs, sk):
                 var.trace_add("write", store)
             p.reseed_syncs.append(sync_reseed)
 
         def header(parent, labels, clicks=None):
             """A heading row; clicks maps a column to what clicking its heading does."""
             for c, text in enumerate(labels):
-                lab = tk.Label(parent, text=text, font=LABEL_FONT, anchor="w", bg=table_colours()[0],
+                holder = parent
+                if text in HEAD_HELP:   # a heading with a ? beside it
+                    holder = tk.Frame(parent, bg=table_colours()[0])
+                    holder.grid(row=0, column=c, sticky="we", ipadx=8, ipady=4)
+                lab = tk.Label(holder, text=text, font=LABEL_FONT, anchor="w", bg=table_colours()[0],
                                width=WIDTHS[c] if c < 3 else 0)
-                lab.grid(row=0, column=c, sticky="we", ipadx=8, ipady=4)
+                if text in HEAD_HELP:
+                    lab.pack(side="left")
+                    help_mark(holder, HEAD_HELP[text]).pack(side="left", padx=(4, 0))
+                else:
+                    lab.grid(row=0, column=c, sticky="we", ipadx=8, ipady=4)
                 if clicks and c in clicks:
                     lab.config(cursor="hand2")
                     lab.bind("<Button-1>", lambda e, f=clicks[c]: f())
@@ -1138,7 +1152,19 @@ class SettingsTab(tk.Frame):
                 row=r, column=c, sticky="we", ipadx=8, ipady=2)
 
         p.keep, p.reseed_syncs = [], []
-        CONTROLS = ["Shuffle", "Non-stop", "Reseed from", "Skip recent"]   # short, so headings fit their dropdowns
+        HEAD_HELP = {
+            "Blend": ("Weaves new music into a playlist asked for by voice: one of yours, then one new, until "
+                      "the new tracks run out, up to 50. Similar artists adds top tracks by artists like the "
+                      "ones in the playlist; Similar tracks adds songs like its tracks. The playlist starts "
+                      "straight away and the new tracks join a few seconds later, after the song that's "
+                      "playing. It uses the Sources and Playlist settings of the option you pick, and never "
+                      "adds a song already in the playlist."),
+            "Non-stop": ("Keeps the music going after a playlist asked for by voice: when its last song "
+                         "starts, more are added, Similar artists or Similar tracks, seeded from the song "
+                         "chosen under Reseed from. It carries on until something else is played on that "
+                         "zone."),
+        }
+        CONTROLS = ["Shuffle", "Blend", "Non-stop", "Reseed from", "Skip recent"]   # short, so headings fit their dropdowns
 
         # --- All playlists ---
         box = section(tab, "All playlists",
@@ -1170,7 +1196,8 @@ class SettingsTab(tk.Frame):
                       "Your JRiver playlists and smartlists. These settings apply when you ask for a playlist by "
                       "voice. Playlists you start in JRiver itself aren't changed. Click Folder or Playlist to "
                       "sort by it; click again for Z-A. Root (the top level) always comes first.\n"
-                      "Skip recent leaves out tracks played in the last few days, but never empties a playlist.")
+                      "Skip recent leaves out tracks played in the last few days, but never empties a playlist.\n"
+                      "Blend and Non-stop are explained by the ? beside each heading.")
         bar = tk.Frame(box)
         bar.grid(row=0, column=0, sticky="we", pady=(0, 8))
         tk.Label(bar, text="Folder").pack(side="left")
