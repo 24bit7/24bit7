@@ -1261,7 +1261,9 @@ class SettingsTab(tk.Frame):
                 if loud:
                     messagebox.showerror("Rescan", f"Couldn't read your playlists from JRiver.\n\n{e}", parent=self)
                 return
-            p.data = saved_playlists.merge_scan(p.data, found)
+            # refresh the playlist list only: the global rows' controls write into p.data's own
+            # all_row and all_row_smart, so p.data must stay the same object
+            p.data["rows"] = saved_playlists.merge_scan(p.data, found)["rows"]
             fill_folders()
             build_table()
             changed()
