@@ -66,6 +66,36 @@
           "slots": [{"name": "query", "type": "AMAZON.SearchQuery"}],
           "samples": ["by {query}", "the one by {query}", "it's by {query}"]
         },
+        {
+          "name": "ListCommandsIntent",
+          "samples": ["list commands", "list my commands", "what are my commands", "what can i say"]
+        },
+        {
+          "name": "SwitchZonesIntent",
+          "samples": ["switch", "switch zones", "switch zone", "switch rooms", "switch room"]
+        },
+        {
+          "name": "SwitchToIntent",
+          "slots": [{"name": "query", "type": "AMAZON.SearchQuery"}],
+          "samples": ["switch to {query}", "to {query}", "move to {query}", "move it to {query}"]
+        },
+        {
+          "name": "KeepGoingIntent",
+          "samples": ["keep it going", "keep going", "non stop", "nonstop", "go non stop", "continuous",
+                      "go continuous"]
+        },
+        {
+          "name": "StopMusicIntent",
+          "samples": ["stop the music", "stop playing", "stop the music playing", "stop music"]
+        },
+        {
+          "name": "PauseMusicIntent",
+          "samples": ["pause the music", "pause playing", "pause music", "pause it"]
+        },
+        {
+          "name": "ResumeMusicIntent",
+          "samples": ["resume the music", "resume playing", "resume music", "carry on playing", "unpause"]
+        },
         {"name": "AMAZON.CancelIntent", "samples": []},
         {"name": "AMAZON.HelpIntent", "samples": []},
         {"name": "AMAZON.StopIntent", "samples": ["close", "finish", "never mind"]},

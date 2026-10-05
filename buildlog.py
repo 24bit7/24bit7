@@ -28,7 +28,8 @@ HEADINGS = ("Similar Artists", "Similar Tracks", "Artist's Top Tracks", "AI Play
 INSTANT = {"songs_by": "Artist's Top Tracks", "music_like": "Similar Artists", "tracks_like": "Similar Tracks",
            "genre": "AI Playlist", "album": "Album", "song": "Song", "playlist": "Playlist",
            "shuffle": "Shuffle Songs by Artist", "skip": "Skip", "who_is_this": "Who Is This",
-           "more_like": "More Like This"}
+           "more_like": "More Like This", "switch_zones": "Switch", "stop": "Stop", "pause": "Pause",
+           "resume": "Resume", "keep_going": "Keep It Going"}
 _TIME = re.compile(r"^\d\d:\d\d  ")
 
 

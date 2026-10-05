@@ -147,6 +147,7 @@ class Zone:
         self.playlist = []      # Playing Now keys
         self.pos = -1
         self.state = 0          # 0 stopped, 1 paused, 2 playing
+        self.position_ms = 0    # how far into the current track
 
 
 class FakeJRiver:
@@ -221,7 +222,7 @@ class FakeJRiver:
             z = self._zone_for(params)
             if z is None:
                 return Resp(text=_response({}, "Failure"))
-            items = {"ZoneID": z.id, "ZoneName": z.name, "State": z.state,
+            items = {"ZoneID": z.id, "ZoneName": z.name, "State": z.state, "PositionMS": z.position_ms,
                      "PlayingNowPosition": z.pos, "PlayingNowTracks": len(z.playlist)}
             if 0 <= z.pos < len(z.playlist):
                 row = self.by_key[z.playlist[z.pos]]
@@ -240,8 +241,26 @@ class FakeJRiver:
             elif loc == "Next":
                 z.playlist[z.pos + 1:z.pos + 1] = keys
             else:
-                z.playlist, z.pos, z.state = keys, 0, 2
+                z.playlist, z.pos, z.state, z.position_ms = keys, 0, 2, 0
             return Resp(text=_response({}))
+        if path == "Playback/Stop":
+            self._zone_for(params).state = 0
+            return Resp(text=_response({}))
+        if path == "Playback/Pause":
+            z = self._zone_for(params)
+            if z.playlist:
+                want = str(params.get("State", "-1"))
+                z.state = 1 if want == "1" or (want == "-1" and z.state == 2) else 2
+            return Resp(text=_response({}))
+        if path == "Playback/PlayByIndex":
+            z = self._zone_for(params)
+            z.pos, z.state, z.position_ms = int(params.get("Index", 0)), 2, 0
+            return Resp(text=_response({}))
+        if path == "Playback/Position":
+            z = self._zone_for(params)
+            if "Position" in params:
+                z.position_ms = int(params["Position"])
+            return Resp(text=_response({"Position": z.position_ms}))
         if path == "Playback/EditPlaylist":
             z = self._zone_for(params)
             if params.get("Action") == "Remove":

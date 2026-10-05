@@ -125,10 +125,161 @@ def test_listener_down_is_explained(app, alexa):
 def test_launch_and_help(app, alexa):
     r = alexa.launch()
     assert "Ready" in r.ssml and r.ends is not True
+    assert "list commands" in r.reprompt.lower() and "songs by" not in r.reprompt.lower(), r.reprompt
     r = alexa.say("AMAZON.HelpIntent")
     assert "songs by" in r.ssml.lower()
     r = alexa.say("AMAZON.StopIntent")
     assert r.ends is True
+
+
+def test_not_caught_says_short_line_once(app, alexa):
+    r = alexa.say("AMAZON.FallbackIntent")
+    assert "didn't catch that" in r.ssml and "list commands" in r.ssml.lower(), r
+    assert "songs by" not in r.ssml.lower(), "the list is never read unless asked for"
+    assert not r.reprompt, "no second reading"
+    assert r.ends is False, "listens once more"
+
+
+def test_list_commands_reads_once_then_listens(app, alexa):
+    r = alexa.say("ListCommandsIntent")
+    for words in ("songs by", "album", "skip", "keep it going", "pause", "switch"):
+        assert words in r.ssml.lower(), words
+    assert not r.reprompt and r.ends is False, r
+
+
+def test_keep_going_says_coming_soon(app, alexa):
+    r = alexa.say("KeepGoingIntent")
+    assert "next update" in r.ssml and r.ends is True, r
+    assert not app.printed.has("Problem"), "not logged as a failed command"
+
+
+# --- stop, pause, resume ---------------------------------------------------------------
+
+def test_stop_pause_resume_act_on_the_device_zone(app, alexa):
+    j = app.jriver
+    j.play("Speakers", j.playlists[0]["keys"])          # the Lounge Dot's zone
+    j.play("Kitchen", j.playlists[1]["keys"])
+    r = alexa.say("PauseMusicIntent", device=LOUNGE)
+    assert r.started and j.zone("Speakers").state == 1 and j.zone("Kitchen").state == 2, r
+    r = alexa.say("PauseMusicIntent", device=LOUNGE)
+    assert "already paused" in r.ssml, r
+    r = alexa.say("ResumeMusicIntent", device=LOUNGE)
+    assert r.started and j.zone("Speakers").state == 2, r
+    r = alexa.say("StopMusicIntent", device=LOUNGE)
+    assert r.started and j.zone("Speakers").state == 0 and j.zone("Kitchen").state == 2, r
+    r = alexa.say("StopMusicIntent", device=LOUNGE)
+    assert "Nothing's playing" in r.ssml, r
+
+
+def test_pause_keeps_the_place(app, alexa):
+    j = app.jriver
+    j.play("Kitchen", j.playlists[0]["keys"], pos=2)
+    j.zone("Kitchen").position_ms = 61000
+    alexa.say("PauseMusicIntent")
+    alexa.say("ResumeMusicIntent")
+    z = j.zone("Kitchen")
+    assert (z.pos, z.position_ms, z.state) == (2, 61000, 2)
+
+
+# --- switch -----------------------------------------------------------------------------
+
+def test_switch_with_two_zones_goes_straight_there(app, alexa):
+    j = app.jriver
+    keys = j.playlists[1]["keys"]
+    j.play("Kitchen", keys, pos=3)
+    j.zone("Kitchen").position_ms = 95000
+    r = alexa.say("SwitchZonesIntent")                     # from the Kitchen Echo
+    assert r.started, r
+    k, s = j.zone("Kitchen"), j.zone("Speakers")
+    assert s.playlist == keys and s.pos == 3 and s.position_ms == 95000 and s.state == 2
+    assert k.state == 0, "the zone it left stops"
+
+
+def test_switch_from_a_room_with_nothing_playing(app, alexa):
+    j = app.jriver
+    j.play("Kitchen", j.playlists[1]["keys"])
+    r = alexa.say("SwitchZonesIntent", device=LOUNGE)       # the only zone playing is Kitchen
+    assert r.started and j.zone("Speakers").state == 2 and j.zone("Kitchen").state == 0, r
+
+
+def test_switch_keeps_pause_and_moves_nonstop(app, alexa):
+    j, e = app.jriver, app.engine
+    j.play("Kitchen", j.playlists[1]["keys"], state=1)
+    e.nonstop_record("10002", j.playlists[1]["keys"], kind="tracks")
+    alexa.say("SwitchZonesIntent")
+    assert j.zone("Speakers").state == 1, "a paused zone arrives paused"
+    assert "10001" in e.NONSTOP_ZONES and "10002" not in e.NONSTOP_ZONES
+
+
+def sonos_device(app):
+    v = app.voice
+    v._hear_device("amzn1.ask.device.SONOS")
+    v.update_device("amzn1.ask.device.SONOS", name="Sonos One", zone="Sonos")
+
+
+def test_switch_with_three_zones_asks_then_answer(app, alexa):
+    j = app.jriver
+    sonos_device(app)
+    j.play("Kitchen", j.playlists[1]["keys"])
+    r = alexa.say("SwitchZonesIntent")
+    assert "Which zone?" in r.ssml and "Speakers" in r.ssml and "Sonos" in r.ssml and r.ends is not True, r
+    assert "to, then the zone" in r.reprompt, r.reprompt
+    r = alexa.say("SwitchToIntent", "the sonos", new=False)
+    assert r.started and j.zone("Sonos").state == 2 and j.zone("Kitchen").state == 0, r
+
+
+def test_switch_to_named_zone(app, alexa):
+    j = app.jriver
+    sonos_device(app)
+    j.play("Kitchen", j.playlists[1]["keys"])
+    r = alexa.say("SwitchToIntent", "speakers")
+    assert r.started and j.zone("Speakers").state == 2, r
+
+
+def test_switch_respects_enable_switch_to(app, alexa):
+    j = app.jriver
+    sonos_device(app)
+    app.voice.set_switch_enabled("Sonos", False)
+    j.play("Kitchen", j.playlists[1]["keys"])
+    r = alexa.say("SwitchToIntent", "sonos")
+    assert "isn't ticked" in r.ssml, r
+    r = alexa.say("SwitchZonesIntent")                     # only Speakers left, so straight there
+    assert r.started and j.zone("Speakers").state == 2, r
+
+
+def test_switch_ignores_zones_without_a_device(app, alexa):
+    assert "Sonos" not in app.voice.switch_targets()
+
+
+def test_switch_nothing_playing(app, alexa):
+    r = alexa.say("SwitchZonesIntent")
+    assert "Nothing's playing" in r.ssml, r
+
+
+def test_switch_shortcut_steps_through_zones(app, alexa):
+    j = app.jriver
+    sonos_device(app)
+    j.play("Kitchen", j.playlists[1]["keys"])
+    order = []
+    for _ in range(3):
+        playing = [z for z in ("Speakers", "Kitchen", "Sonos") if j.zone(z).state == 2]
+        line = app.voice.switch_step(playing[0])
+        order.append(line)
+    assert order[0].endswith("from Kitchen to Sonos.") and order[1].endswith("from Sonos to Speakers.") \
+        and order[2].endswith("from Speakers to Kitchen."), order
+
+
+def test_model_has_every_intent_the_skill_handles(app, alexa):
+    import json
+    model = json.load(open(app.folder / "alexa" / "interaction_model.json", encoding="utf-8"))
+    names = {i["name"] for i in model["interactionModel"]["languageModel"]["intents"]}
+    handled = set(alexa.skill.INTENTS) | set(alexa.skill.ZONE_INTENTS) | {
+        "ByArtistIntent", "SwitchToIntent", "ListCommandsIntent", "AMAZON.HelpIntent", "AMAZON.FallbackIntent",
+        "AMAZON.StopIntent", "AMAZON.CancelIntent"}
+    assert handled <= names, handled - names
+    for intent in model["interactionModel"]["languageModel"]["intents"]:
+        for sample in intent.get("samples", []):
+            assert "-" not in sample and not sample.lower().startswith("play "), sample
 
 
 # --- devices ------------------------------------------------------------------------
@@ -232,7 +383,6 @@ def test_playlist_shared_name_asks_by_folder(app, alexa):
     assert app.jriver.zone("Kitchen").playlist == app.jriver.playlists[4]["keys"]
 
 
-@pytest.mark.xfail(strict=True, reason="QA finding: fixed in the skill update (lambda_function.py)")
 def test_playlist_reprompt_matches_question(app, alexa):
     """After "Say by, then the folder", the reprompt should not ask for an artist."""
     r = alexa.say("PlaylistIntent", "road trip")

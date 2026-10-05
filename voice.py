@@ -25,6 +25,7 @@ Each Alexa device is remembered in the database with the zone it plays to.
 import hmac
 import json
 import random
+import re
 import secrets
 import threading
 from datetime import datetime
@@ -52,8 +53,9 @@ def _takes_over(zone):
         return _running[0] == zone and not any(n > 0 for z, n in _open.items() if z != zone)
 
 INTENTS = ("songs_by", "music_like", "genre", "tracks_like", "album", "song", "playlist", "shuffle",
-           "skip", "who_is_this", "more_like")
-ZONE_INTENTS = ("skip", "who_is_this", "more_like")   # no value: they act on what the zone is playing
+           "skip", "who_is_this", "more_like", "switch_zones", "keep_going", "stop", "pause", "resume")
+COMING = ("keep_going",)   # in the skill already; built in the next update
+ZONE_INTENTS = ("skip", "who_is_this", "more_like", "stop", "pause", "resume")   # act on what the zone is playing
 THIS_WORDS = ("this", "this one", "this song", "this track", "it")   # "tracks like this" = more like this
 INSTANT = ("album", "song", "playlist", "shuffle")   # played straight away, nothing to build
 SHUFFLE_CAP = 400                            # most tracks a shuffle sends to JRiver
@@ -403,8 +405,26 @@ def _zone_command(intent, device, body):
         pos, count = int(info.get("PlayingNowPosition") or -1), int(info.get("PlayingNowTracks") or 0)
     except ValueError:
         pos, count = -1, 0
-    if pos < 0 or count == 0 or engine.zone_state(zid) == 0:
+    state = engine.zone_state(zid)
+    if pos < 0 or count == 0 or state == 0:
         return "problem", f"Nothing's playing on {zone}.", {}
+
+    if intent in ("stop", "pause", "resume"):
+        if intent == "pause" and state == 1:
+            return "said", f"{zone} is already paused.", {}
+        if intent == "resume" and state == 2:
+            return "said", f"{zone} is already playing.", {}
+        if intent == "stop":
+            r = requests.get(f"{engine.JRIVER_BASE}/Playback/Stop", params={"Zone": zid},
+                             auth=engine.AUTH, timeout=10)
+        else:
+            r = requests.get(f"{engine.JRIVER_BASE}/Playback/Pause",
+                             params={"State": 1 if intent == "pause" else 0, "Zone": zid},
+                             auth=engine.AUTH, timeout=10)
+        if r.status_code != 200:
+            return "problem", f"JRiver didn't {intent}. Is it running on the media PC?", {}
+        print(f"[Voice] {name}: {intent} on {zone}")
+        return "started", f"{intent.title()}.", {}
 
     if intent == "skip":
         if pos + 1 >= count:
@@ -440,6 +460,140 @@ def _zone_command(intent, device, body):
     if _is_busy() and not _takes_over(zone):
         return "pending", "Please wait, request pending.", {}
     return "started", f"More like {shown}, coming up on {zone}.", {}
+
+
+# --- switch, stop, pause, resume ------------------------------------------------
+# Switch moves whatever is playing to another zone: the same Playing Now, from the
+# same track and point, and the zone it left stops. The zones it can move to are
+# the ones ticked under Enable Switch To (Settings > Voice Commands), kept by zone
+# name so a zone with no device can be added later; a zone is ticked unless unticked.
+
+SWITCH_META = "switch_off"   # zone names unticked under Enable Switch To
+
+
+def switch_unticked():
+    try:
+        row = engine.db().execute("SELECT value FROM meta WHERE key=?", (SWITCH_META,)).fetchone()
+        return set(json.loads(row[0])) if row and row[0] else set()
+    except Exception:
+        return set()
+
+
+def set_switch_enabled(zone, on):
+    off = switch_unticked()
+    (off.discard if on else off.add)(zone)
+    con = engine.db()
+    con.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (SWITCH_META, json.dumps(sorted(off))))
+    con.commit()
+
+
+def switch_targets():
+    """Zones that can be switched to, in JRiver's order: zones a device plays to, minus those unticked."""
+    off = switch_unticked()
+    with_device = {zone for _, _, zone, _, _ in devices() if zone}
+    return [z for z in engine.zone_names(include_hidden=True) if z in with_device and z not in off]
+
+
+def _info_items(zid):
+    r = requests.get(f"{engine.JRIVER_BASE}/Playback/Info", params={"Zone": zid}, auth=engine.AUTH, timeout=10)
+    import xml.etree.ElementTree as ET
+    return {i.get("Name"): (i.text or "").strip() for i in ET.fromstring(r.text).findall("Item")}
+
+
+def _playing(zid):
+    """True when the zone has a Playing Now and is playing or paused."""
+    try:
+        items = _info_items(zid)
+        return items.get("State") in ("1", "2") and int(items.get("PlayingNowTracks") or 0) > 0
+    except Exception:
+        return False
+
+
+def _mcws(path, **params):
+    return requests.get(f"{engine.JRIVER_BASE}/{path}", params=params, auth=engine.AUTH, timeout=10)
+
+
+def _move(source, target):
+    """Moves source's Playing Now to target at the same track and point; source stops. Non-stop follows."""
+    sid, tid = engine.zone_id(source), engine.zone_id(target)
+    items = _info_items(sid)
+    pos = int(items.get("PlayingNowPosition") or 0)
+    ms = int(float(items.get("PositionMS") or 0))
+    paused = items.get("State") == "1"
+    keys = [r["Key"] for r in engine.playing_now_rows(sid) if r.get("Key")]
+    if not keys or not saved_playlists._send(keys, tid):
+        return False
+    if pos > 0:
+        _mcws("Playback/PlayByIndex", Index=pos, Zone=tid)
+    if ms > 1000:
+        _mcws("Playback/Position", Position=ms, Zone=tid)
+    if paused:
+        _mcws("Playback/Pause", State=1, Zone=tid)
+    _mcws("Playback/Stop", Zone=sid)
+    with engine._nonstop_lock:
+        entry = engine.NONSTOP_ZONES.pop(sid, None)
+        if entry is not None:
+            entry.pop("fired", None)
+            engine.NONSTOP_ZONES[tid] = entry
+    print(f"[Voice] Switched from {source} to {target}")
+    return True
+
+
+def _source_zone(preferred):
+    """The zone to move from: preferred if it's playing, else the only zone playing. (zone, problem)"""
+    if preferred and engine.zone_id(preferred) and _playing(engine.zone_id(preferred)):
+        return preferred, None
+    playing = [z for z in engine.zone_names(include_hidden=True) if _playing(engine.zone_id(z))]
+    if not playing:
+        return None, "Nothing's playing to switch."
+    if len(playing) > 1:
+        return None, "More than one zone is playing. Ask from a speaker in the room you're moving from."
+    return playing[0], None
+
+
+def _switch(device, value, body):
+    """Switch, switch zones, switch to <zone>: by voice."""
+    name, zone = _hear_device(device or "unknown device")
+    zone = (body.get("zone") or "").strip() or zone
+    source, problem = _source_zone(zone)
+    if problem:
+        return "problem", problem, {}
+    others = [z for z in switch_targets() if z != source]
+    heard = library.norm(re.sub(r"^(to\s+)?(the\s+)?", "", value.strip(), flags=re.I)) if value else ""
+    if heard:
+        best = max(others, key=lambda z: library.score(heard, z), default=None)
+        if best is None or library.score(heard, best) < library.GOOD:
+            if engine.zone_id(value) is None and heard not in [library.norm(z) for z in engine.zone_names(True)]:
+                return "problem", f"I can't find a zone called {value}.", {}
+            return "problem", (f"{value} isn't ticked to switch to. Tick it under Enable Switch To, "
+                               f"in 24bit7's Voice Commands settings."), {}
+        target = best
+    elif not others:
+        return "problem", ("There's no other zone to switch to. Tick zones under Enable Switch To, "
+                           "in 24bit7's Voice Commands settings."), {}
+    elif len(others) == 1:
+        target = others[0]
+    else:
+        listed = ", ".join(others[:-1]) + " or " + others[-1]
+        return "ask", f"Which zone? {listed}.", {"ask": "zone", "title": ""}
+    if not _move(source, target):
+        return "problem", "JRiver didn't switch it. Is JRiver running on the media PC?", {}
+    return "started", f"Switching to {target}.", {}
+
+
+def switch_step(preferred):
+    """The Switch Zones shortcut: moves what's playing to the next ticked zone. Returns a line for the console."""
+    source, problem = _source_zone(preferred)
+    if problem:
+        return f"  Problem: {problem}"
+    targets = switch_targets()
+    others = [z for z in targets if z != source]
+    if not others:
+        return "  Problem: there's no other zone to switch to. Tick zones under Enable Switch To, in Voice Commands."
+    after = [z for z in targets if targets.index(z) > targets.index(source)] if source in targets else []
+    target = (after or others)[0]
+    return f"  Switched from {source} to {target}." if _move(source, target) else \
+        "  Problem: JRiver didn't switch it. Is JRiver running?"
 
 
 ARTIST_CLOSE = 0.85   # how close a heard artist must be to a library artist to use the library's spelling
@@ -482,6 +636,14 @@ def handle_command(body, busy=False):
         intent, value = "songs_by", value[3:].strip()
     if intent in ("tracks_like", "music_like") and value.lower() in THIS_WORDS:   # "songs like this"
         intent, value = "more_like", ""
+    if intent == "switch_zones":
+        try:
+            return _switch(device, value, body)
+        except Exception as e:
+            print(f"[Voice] switch failed: {e}")
+            return "problem", "I couldn't reach JRiver. Is it running on the media PC?", {}
+    if intent in COMING:
+        return "said", "That's coming in the next update of 24bit7.", {}
     if intent in ZONE_INTENTS:
         try:
             return _zone_command(intent, device, body)
@@ -580,7 +742,9 @@ class _Handler(BaseHTTPRequestHandler):
 
 SAID = {"songs_by": "songs by", "music_like": "music like", "tracks_like": "tracks like", "genre": "genre",
         "album": "album", "song": "song", "playlist": "playlist", "shuffle": "shuffle songs by", "skip": "skip",
-        "who_is_this": "who is this", "more_like": "more like this"}
+        "who_is_this": "who is this", "more_like": "more like this", "switch_zones": "switch zones",
+        "keep_going": "keep it going", "stop": "stop the music", "pause": "pause the music",
+        "resume": "resume the music"}
 
 
 def _log_problem(body, speech):

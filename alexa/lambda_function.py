@@ -48,14 +48,22 @@ except ImportError:
     ACK_TONE = "soundbank://soundlibrary/musical/amzn_sfx_electronic_beep_02"
 
 TIMEOUT = 6   # seconds; Alexa gives the whole skill about eight
-HELP = ("Say songs by, music like, or shuffle songs by, then an artist. Genre, then any style you like. "
-        "Tracks like, then a song. Or album, song, or playlist, then its name. "
-        "Or skip, who is this, or more like this.")
+SHORT = "Say list commands to hear them."
+NOT_CAUGHT = "Sorry, I didn't catch that. " + SHORT
+COMMANDS = ("To build a playlist: songs by, music like, or tracks like, then an artist or a song, "
+            "or genre, then any style. "
+            "To play now: album, song, or playlist, then its name, or shuffle songs by, then an artist. "
+            "For what's playing: skip, who is this, more like this, keep it going, "
+            "or stop, pause or resume the music. "
+            "And switch, or switch to, then a zone.")
+REPROMPT = {"playlist": "Say by, then the folder.", "zone": "Say to, then the zone."}
 INTENTS = {"SongsByIntent": "songs_by", "MusicLikeIntent": "music_like", "GenreIntent": "genre",
            "TracksLikeIntent": "tracks_like",
            "AlbumIntent": "album", "SongIntent": "song", "PlaylistIntent": "playlist",
            "ShuffleIntent": "shuffle"}
-ZONE_INTENTS = {"SkipIntent": "skip", "WhoIsThisIntent": "who_is_this", "MoreLikeThisIntent": "more_like"}
+ZONE_INTENTS = {"SkipIntent": "skip", "WhoIsThisIntent": "who_is_this", "MoreLikeThisIntent": "more_like",
+                "SwitchZonesIntent": "switch_zones", "KeepGoingIntent": "keep_going",
+                "StopMusicIntent": "stop", "PauseMusicIntent": "pause", "ResumeMusicIntent": "resume"}
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -92,7 +100,7 @@ def respond(handler_input, status, speech, reply):
     if status == "ask":
         session = handler_input.attributes_manager.session_attributes
         session["ask"], session["title"] = reply.get("ask", "album"), reply.get("title", "")
-        return builder.speak(escape(speech)).ask("Say by, then the artist.").response
+        return builder.speak(escape(speech)).ask(REPROMPT.get(reply.get("ask"), "Say by, then the artist.")).response
     speech = f'<audio src="{ACK_TONE}"/>' if status == "started" else escape(speech)
     return builder.speak(speech).set_should_end_session(True).response
 
@@ -104,7 +112,7 @@ class LaunchHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         return (handler_input.response_builder
                 .speak(chimes(1, "Ready."))
-                .ask(HELP)
+                .ask(SHORT)
                 .response)
 
 
@@ -140,18 +148,39 @@ class ByArtistHandler(AbstractRequestHandler):
         kind, title = session.get("ask", "album"), session.get("title")
         artist = ask_utils.get_slot_value(handler_input, "query") or ""
         if not title:
-            return handler_input.response_builder.speak(HELP).ask(HELP).response
+            return handler_input.response_builder.speak(NOT_CAUGHT).set_should_end_session(False).response
         device = handler_input.request_envelope.context.system.device.device_id
         return respond(handler_input, *send(kind, f"{title} by {artist}", device))
 
 
-class HelpHandler(AbstractRequestHandler):
+class SwitchToHandler(AbstractRequestHandler):
+    """"Switch to <zone>", or "to the <zone>" as the answer to "Which zone?"."""
     def can_handle(self, handler_input):
-        return (ask_utils.is_intent_name("AMAZON.HelpIntent")(handler_input)
-                or ask_utils.is_intent_name("AMAZON.FallbackIntent")(handler_input))
+        return ask_utils.is_intent_name("SwitchToIntent")(handler_input)
 
     def handle(self, handler_input):
-        return handler_input.response_builder.speak(HELP).ask(HELP).response
+        zone = ask_utils.get_slot_value(handler_input, "query") or ""
+        device = handler_input.request_envelope.context.system.device.device_id
+        return respond(handler_input, *send("switch_zones", zone, device))
+
+
+class HelpHandler(AbstractRequestHandler):
+    """List commands and Help: the list once, then one more listen with no reprompt."""
+    def can_handle(self, handler_input):
+        return (ask_utils.is_intent_name("AMAZON.HelpIntent")(handler_input)
+                or ask_utils.is_intent_name("ListCommandsIntent")(handler_input))
+
+    def handle(self, handler_input):
+        return handler_input.response_builder.speak(COMMANDS).set_should_end_session(False).response
+
+
+class FallbackHandler(AbstractRequestHandler):
+    """Not a command: one short line, never the whole list, never repeated."""
+    def can_handle(self, handler_input):
+        return ask_utils.is_intent_name("AMAZON.FallbackIntent")(handler_input)
+
+    def handle(self, handler_input):
+        return handler_input.response_builder.speak(NOT_CAUGHT).set_should_end_session(False).response
 
 
 class StopHandler(AbstractRequestHandler):
@@ -184,8 +213,8 @@ class ErrorHandler(AbstractExceptionHandler):
 
 
 sb = SkillBuilder()
-for handler in (LaunchHandler(), CommandHandler(), ZoneHandler(), ByArtistHandler(), HelpHandler(), StopHandler(),
-                SessionEndedHandler()):
+for handler in (LaunchHandler(), CommandHandler(), ZoneHandler(), ByArtistHandler(), SwitchToHandler(),
+                HelpHandler(), FallbackHandler(), StopHandler(), SessionEndedHandler()):
     sb.add_request_handler(handler)
 sb.add_exception_handler(ErrorHandler())
 

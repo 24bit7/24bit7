@@ -2430,6 +2430,17 @@ class SettingsTab(tk.Frame):
                 row=0, column=c, sticky="w", padx=(0, 12))
         own_head = tk.Frame(self.voice_dev_frame)
         own_head.grid(row=0, column=4, sticky="w", padx=(12, 0))
+        switch_head = tk.Frame(self.voice_dev_frame)
+        switch_head.grid(row=0, column=5, sticky="w", padx=(12, 0))
+        tk.Label(switch_head, text="Enable Switch To", fg=PALETTE["help_fg"], font=HELP_FONT).pack(side="left")
+        help_mark(switch_head, "Ticked, this device's zone is one you can switch the music to, with \"Alexa, ask "
+                               "needle drop to switch\" or the Switch Zones keyboard shortcut. With two zones "
+                               "ticked, switching moves the music straight to the other one. With three or more, "
+                               "Alexa asks which zone, or you can say \"switch to\" and the zone name; the "
+                               "shortcut steps through them in turn. The music carries on from the same track, "
+                               "and the zone it left stops. Two devices on the same zone share one tick.").pack(
+            side="left", padx=(6, 0))
+        switch_off = voice.switch_unticked()
         tk.Label(own_head, text="Own settings", fg=PALETTE["help_fg"], font=HELP_FONT).pack(side="left")
         help_mark(own_head, "Tick a device to give it its own tab under Settings > Sources and Settings > "
                             "Playlist. Each tab starts with Copy Windows (Main) ticked, following the Windows "
@@ -2457,6 +2468,13 @@ class SettingsTab(tk.Frame):
             ttk.Checkbutton(self.voice_dev_frame, variable=own_var,
                             command=lambda d=device_id, v=own_var: voice.set_own_settings(d, v.get())).grid(
                 row=r, column=4, sticky="w", padx=(12, 0))
+            switch_var = tk.BooleanVar(value=bool(zone) and zone not in switch_off)
+            box = ttk.Checkbutton(self.voice_dev_frame, variable=switch_var,
+                                  command=lambda z=zone, v=switch_var: (voice.set_switch_enabled(z, v.get()),
+                                                                       self._fill_voice_devices()))
+            box.grid(row=r, column=5, sticky="w", padx=(12, 0))
+            if not zone:   # no zone yet: nothing to switch to
+                box.state(["disabled"])
 
     def _voice_test(self):
         if not voice.status().startswith("Listening"):

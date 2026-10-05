@@ -29,6 +29,7 @@ ACTIONS = [   # (code, label): the order they appear in Settings
     ("SIMILAR_ARTISTS", "Similar Artists"),
     ("TOP_TRACKS", "Artist's Top Tracks"),
     ("SHUFFLE_ARTIST", "Shuffle Songs by Artist"),
+    ("SWITCH_ZONES", "Switch Zones"),
 ]
 LABELS = dict(ACTIONS)
 NOW_PLAYING_ZONE = "Zone shown in Now Playing"
@@ -261,6 +262,10 @@ def _job(code):
             if zid == engine.ACTIVE_ZONE:
                 zid = engine.zone_id()
         zone_name = engine.zone_label(zid)
+        if code == "SWITCH_ZONES":   # the zones ticked under Enable Switch To, in turn
+            import voice
+            report(voice.switch_step(zone_name))
+            return
         seed = engine.seed_or_last_played(zid, report)
         if not seed:
             return
