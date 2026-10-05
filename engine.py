@@ -436,7 +436,7 @@ TOP_TRACK_SOURCES=deezer
 LISTENBRAINZ_ALGORITHM=alltime
 # How many similar-artist sources must agree on an artist (1 = off, up to 5)
 SIMILAR_MIN_AGREEMENT=1
-# Similar Tracks sources (lastfm, listenbrainz, youtube) and how many must agree on a track
+# Similar Tracks sources (lastfm, listenbrainz, youtube, ai) and how many must agree on a track
 SIMILAR_TRACK_SOURCES=listenbrainz,youtube
 SIMILAR_TRACK_MIN_AGREEMENT=2
 LISTENBRAINZ_TRACK_ALGORITHM=alltime
@@ -808,10 +808,12 @@ BUILD_STARTED = None   # set by the GUI as each build starts, for the Done line'
 LAST_OUTPUT = None     # where the build's tracks went: a zone name, or "YouTube"
 LAST_OUTPUT_ID = None  # ...and that zone's JRiver ID, for Non-stop's chain in the console's Log
 LAST_BUILD = None      # the finished build's mode, sources, tracks queued and misses, for buildlog
+CLOSERS_DROPPED = 0    # tracks the hidden-track check left out when sending, so the Done line counts what went
 _SESSION_STARTED = {}
 
 
 def session_start(mode, seed_info, sources=""):
+    globals()["CLOSERS_DROPPED"] = 0
     nonstop_begin(mode, seed_info)
     if output_is_youtube() and not OUTPUT_OVERRIDE:
         globals()["LAST_OUTPUT"] = "YouTube"
@@ -835,6 +837,7 @@ def session_log(session_id, artist, track, sources, found):
 
 def session_finish(session_id, queued, sources=None, report=print):
     save_new_mbids()   # MusicBrainz IDs learnt during this run
+    queued = max(0, queued - CLOSERS_DROPPED)   # anything the final hidden-track check left out
     if sources is not None:
         db().execute("UPDATE sessions SET sources=? WHERE id=?", (sources, session_id))
     db().execute("UPDATE sessions SET queued=? WHERE id=?", (queued, session_id))
@@ -2764,6 +2767,7 @@ def drop_long_closers(keys, keep=(), report=print, group=None):
             seconds, name, artist = closer
             length = f"{int(seconds) // 60}:{int(seconds) % 60:02d}"
             report(f"  Skipped {name} by {artist}: last on its album and {length} long.")
+            globals()["CLOSERS_DROPPED"] = CLOSERS_DROPPED + 1
             continue
         kept.append(key)
     return kept
@@ -3079,6 +3083,17 @@ class PlayedFilter:
         self.keep = {str(k) for k in keep if k}
         self.report, self.skipped = report, 0
         self.filters = None
+        self.closer_limit, self.closers_seen = None, set()
+        if filters:   # the playlists 24bit7 builds: the hidden-track check as tracks are found, so
+            # a skipped closer never takes a place in the playlist and the next track fills it
+            on, minutes = LONG_CLOSERS.get(group, (SKIP_LONG_CLOSERS, LONG_CLOSER_MINUTES))
+            if on:
+                try:
+                    import library   # here rather than at the top: library imports engine
+                    library.ensure_loaded()
+                    self.closer_library, self.closer_limit = library, minutes * 60
+                except Exception as e:
+                    report(f"  Note: the hidden track check didn't run, as the library couldn't be read ({e}).")
         if filters:   # Settings > Filters, for the playlists 24bit7 builds
             try:
                 import filters as filter_settings
@@ -3104,6 +3119,15 @@ class PlayedFilter:
         """False (and counted) for a track played within the set number of days."""
         if str(key) in self.keep:
             return True
+        if self.closer_limit is not None:
+            closer = self.closer_library.closer_info(key)
+            if closer and closer[0] > self.closer_limit:
+                if str(key) not in self.closers_seen:
+                    self.closers_seen.add(str(key))
+                    seconds, name, artist = closer
+                    self.report(f"  Skipped {name} by {artist}: last on its album and "
+                                f"{int(seconds) // 60}:{int(seconds) % 60:02d} long.")
+                return False
         if self.filters is not None and not self.filters.allows(key):
             return False
         if not self.on:
