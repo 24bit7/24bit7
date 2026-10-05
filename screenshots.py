@@ -67,7 +67,9 @@ DEMO_KEYS = {"LASTFM_API_KEY": "demo" * 8, "LISTENBRAINZ_TOKEN": "demo" * 9, "DI
              "ANTHROPIC_API_KEY": "demo" * 12, "JRIVER_USER": "demo", "JRIVER_PASS": "demo" * 3,
              "VOICE_KEY": "demo" * 8}
 DEMO_ENV = {"HIDDEN_ZONES": "", "DEFAULT_ZONE": "Speakers", "FOLLOW_ACTIVE_ZONE": "0", "VOICE_ENABLED": "1",
-            "CONSOLE_MODE": "simple", "CONSOLE_TABS": "0"}
+            "CONSOLE_MODE": "simple", "CONSOLE_TABS": "0", "HOTKEY_SWITCH_ZONES": "Ctrl+Alt+5"}
+# JRiver Playlists: one playlist blended and one with Non-stop, so the shot shows both
+DEMO_SAVED_ROWS = {"201": {"blend": "tracks"}, "202": {"nonstop": "artists"}}
 DEMO_DEVICES = [("demo-kitchen", "Kitchen Echo", "Kitchen", 0, "2026-10-04 10:41"),
                 ("demo-lounge", "Lounge Dot", "Speakers", 0, "2026-10-04 09:15")]
 DEMO_PLAYLISTS = [
@@ -275,6 +277,7 @@ def start_demo(gui, temp):
         con.execute("INSERT INTO voice_devices (device_id, name, zone, last_heard, own_settings) VALUES (?,?,?,?,?)",
                     (device_id, name, zone, heard, own))
     con.commit()
+    saved_playlists.set_main_settings({"rows": {pid: dict(row) for pid, row in DEMO_SAVED_ROWS.items()}})
     try:   # the console's Log (1.11.0 and later)
         import buildlog
         buildlog._table(con)
