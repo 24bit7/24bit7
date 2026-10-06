@@ -3119,6 +3119,28 @@ def moderator_pick(tracks, item):
     return None
 
 
+def moderator_reply(text):
+    """
+    The remove list from the moderator's reply: the first JSON object in it with a
+    "remove" list, ignoring any text before or after (a code fence, a note of its own).
+    Raises ValueError when the reply has no such JSON.
+    """
+    text = str(text or "")
+    decoder = json.JSONDecoder()
+    for m in re.finditer(r"\{", text):
+        try:
+            obj, end = decoder.raw_decode(text, m.start())
+        except ValueError:
+            continue
+        if isinstance(obj, dict) and "remove" in obj:
+            extra = re.sub(r"```(?:json)?", "", text[:m.start()] + " " + text[end:]).strip()
+            if extra:
+                debug(f"AI Moderator: ignored text around the reply: {' '.join(extra.split())[:200]}")
+            flagged = obj.get("remove") or []
+            return flagged if isinstance(flagged, list) else []
+    raise ValueError("no JSON in the reply")
+
+
 def moderate(tracks, seed, report=print, level=None, reference=None):
     """
     Asks the moderator which tracks clash with the seed. tracks: [(key, artist, title)];
@@ -3153,8 +3175,7 @@ def moderate(tracks, seed, report=print, level=None, reference=None):
             messages=[{"role": "user", "content": f"{seed_line}{ref_text}\n\nCandidates:\n{listing}"}])
         record_ai("AI Moderator", MODERATOR_MODEL, message)
         text = "".join(b.text for b in message.content if getattr(b, "type", "") == "text")
-        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
-        flagged = json.loads(text).get("remove") or []
+        flagged = moderator_reply(text)
     except ImportError:
         report("  Problem: AI Moderator didn't run, as the anthropic package isn't installed.")
         return set()

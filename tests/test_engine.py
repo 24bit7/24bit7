@@ -642,3 +642,29 @@ def test_moderator_bare_number_keeps_everything(app):
     _mod_on(app)   # the old reply shape, number only: not trusted
     _mod_reply(app, [{"index": 2, "reason": "too abrasive"}])
     assert app.engine.moderate(MOD_TRACKS, "The Rolling Stones - Beast of Burden", report=app.Lines()) == set()
+
+
+# --- AI Moderator: a note around the JSON doesn't break the check (issue #3) ----------------
+
+def test_moderator_ignores_note_after_json(app):
+    _mod_on(app)
+    app.ai.script.append(('{"remove": []}\nAll four tracks fit the seed well.', "end_turn"))
+    r = app.Lines()
+    assert app.engine.moderate(MOD_TRACKS, "Tom Petty - Wildflowers", report=r) == set()
+    assert not r.has("Problem"), r.text()
+    assert r.has("nothing clashed"), r.text()
+
+
+def test_moderator_note_and_fence_keep_removals(app):
+    _mod_on(app)
+    app.ai.script.append(('Here you go:\n```json\n{"remove": [{"number": 2, "artist": "ZZ Top", "title": "Tush", '
+                          '"reason": "too abrasive"}]}\n```\nThe rest fit.', "end_turn"))
+    assert app.engine.moderate(MOD_TRACKS, "The Rolling Stones - Beast of Burden", report=app.Lines()) == {"k2"}
+
+
+def test_moderator_no_json_reports_problem(app):
+    _mod_on(app)
+    app.ai.script.append(("Everything fits nicely.", "end_turn"))
+    r = app.Lines()
+    assert app.engine.moderate(MOD_TRACKS, "Tom Petty - Wildflowers", report=r) == set()
+    assert r.has("didn't come back (no JSON in the reply)"), r.text()
