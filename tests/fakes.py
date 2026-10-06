@@ -148,6 +148,8 @@ class Zone:
         self.pos = -1
         self.state = 0          # 0 stopped, 1 paused, 2 playing
         self.position_ms = 0    # how far into the current track
+        self.dlna = False       # JRiver's ZoneDLNA flag
+        self.volume = 1.0
 
 
 class FakeJRiver:
@@ -217,6 +219,7 @@ class FakeJRiver:
                      "CurrentZoneIndex": self.zone_order.index(self.current)}
             for n, zid in enumerate(self.zone_order):
                 items[f"ZoneID{n}"], items[f"ZoneName{n}"] = zid, self.zones[zid].name
+                items[f"ZoneDLNA{n}"] = "1" if self.zones[zid].dlna else "0"
             return Resp(text=_response(items))
         if path == "Playback/Info":
             z = self._zone_for(params)
@@ -252,6 +255,11 @@ class FakeJRiver:
                 want = str(params.get("State", "-1"))
                 z.state = 1 if want == "1" or (want == "-1" and z.state == 2) else 2
             return Resp(text=_response({}))
+        if path == "Playback/Volume":
+            z = self._zone_for(params)
+            if "Level" in params:
+                z.volume = float(params["Level"])
+            return Resp(text=_response({"Level": z.volume}))
         if path == "Playback/PlayByIndex":
             z = self._zone_for(params)
             z.pos, z.state, z.position_ms = int(params.get("Index", 0)), 2, 0

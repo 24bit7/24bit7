@@ -155,6 +155,7 @@ def ask(question, console_text, playing, on_done):
                 system=[{"type": "text", "text": SYSTEM},
                         {"type": "text", "text": code, "cache_control": {"type": "ephemeral"}}],
                 messages=[{"role": "user", "content": user}])
+            engine.record_ai("Console Query", QUERY_MODEL, message)
             answer = "".join(b.text for b in message.content if getattr(b, "type", "") == "text").strip()
             answer = plain(answer)
             on_done(answer or "(no answer came back)", None)

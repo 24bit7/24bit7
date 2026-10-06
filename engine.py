@@ -302,6 +302,11 @@ def load_settings():
             on = False
         ok = ("artists", "tracks", "ai") if group == "vibe" else ("artists", "tracks")   # AI only for vibe
         DRIFT[group] = {"on": on, "using": using if using in ok else own, "rounds": rounds}
+        # Drift From (where each round seeds from) and its own AI Moderator level
+        frm = os.getenv(f"{name}_FROM", "last").strip().lower()
+        DRIFT[group]["from"] = frm if frm in ("last", "close", "spread") else "last"
+        mod = os.getenv(f"{name}_MODERATOR", "same").strip().lower()
+        DRIFT[group]["moderator"] = mod if mod in ("same",) + MODERATOR_LEVELS else "same"
         # Drift sources: the same as Settings > Sources, or Custom Sources of its own
         DRIFT[group]["custom"] = os.getenv(f"{name}_SOURCES_MODE", "same").strip().lower() == "custom"
         for kind, most in (("artist", 5), ("track", 3)):
@@ -1708,7 +1713,16 @@ def _salvage_json_array(text):
 _AI_THINKING_OFF_OK = True   # cleared for the session if the model rejects thinking: disabled
 
 
-def _ai_create(client, **kwargs):
+def record_ai(feature, model, message):
+    """Notes the tokens an AI request used, for Settings > Keys > AI Usage. Never stops a build."""
+    try:
+        import ai_usage
+        ai_usage.record(feature, model, message)
+    except Exception as e:
+        debug(f"AI usage not recorded ({e})")
+
+
+def _ai_create(client, feature="AI", **kwargs):
     """
     One request to Claude with thinking switched off: these calls recall lists
     of names, which thinking doesn't improve and which it was crowding out of
@@ -1720,21 +1734,25 @@ def _ai_create(client, **kwargs):
     print("  Asking the AI...")
     started = time.time()
     try:
+        message = None
         if _AI_THINKING_OFF_OK:
             try:
-                return client.messages.create(thinking={"type": "disabled"}, **kwargs)
+                message = client.messages.create(thinking={"type": "disabled"}, **kwargs)
             except Exception as e:
                 if getattr(e, "status_code", None) == 400 and "thinking" in str(e).lower():
                     _AI_THINKING_OFF_OK = False
                     debug(f"{kwargs.get('model')} won't run with thinking off, asking again with it on")
                 else:
                     raise
-        return client.messages.create(**kwargs)
+        if message is None:
+            message = client.messages.create(**kwargs)
+        record_ai(feature, kwargs.get("model"), message)
+        return message
     finally:
         debug(f"AI replied in {time.time() - started:.1f} s")
 
 
-def ai_ask_list(prompt):
+def ai_ask_list(prompt, feature="AI"):
     """Sends a prompt expecting a JSON array of strings; returns the list or []."""
     global AI_LAST_ERROR
     AI_LAST_ERROR = "no API key"
@@ -1748,7 +1766,7 @@ def ai_ask_list(prompt):
         return []
     try:
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        message = _ai_create(client, model=AI_MODEL, max_tokens=1500,
+        message = _ai_create(client, feature, model=AI_MODEL, max_tokens=1500,
                              messages=[{"role": "user", "content": prompt}])
         text = "".join(block.text for block in message.content if getattr(block, "type", "") == "text")
         text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
@@ -1795,7 +1813,7 @@ def _json_body(text):
     return text[start:end + 1] if end > start else text[start:]
 
 
-def ai_ask_json(prompt, max_tokens=4000):
+def ai_ask_json(prompt, max_tokens=4000, feature="AI"):
     """Sends a prompt expecting JSON; returns the parsed value, what could be salvaged, or None."""
     global AI_LAST_ERROR
     AI_LAST_ERROR = "no API key"
@@ -1812,7 +1830,7 @@ def ai_ask_json(prompt, max_tokens=4000):
         text, stop = "", ""
         try:
             client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-            message = _ai_create(client, model=AI_MODEL, max_tokens=max_tokens,
+            message = _ai_create(client, feature, model=AI_MODEL, max_tokens=max_tokens,
                                  messages=[{"role": "user", "content": prompt}])
             text = "".join(b.text for b in message.content if getattr(b, "type", "") == "text")
             stop = getattr(message, "stop_reason", "")
@@ -1846,7 +1864,7 @@ def ai_ask_json(prompt, max_tokens=4000):
 
 def ai_vibe_suggestions():
     """Three random playlist moods for the vibe dialog. Returns a list of strings (may be empty)."""
-    data = ai_ask_json(AI_VIBE_SUGGESTIONS_PROMPT, max_tokens=200)
+    data = ai_ask_json(AI_VIBE_SUGGESTIONS_PROMPT, max_tokens=200, feature="AI Playlist ideas")
     if isinstance(data, list):
         return [str(x).strip() for x in data if str(x).strip()][:3]
     return []
@@ -1858,7 +1876,7 @@ def ai_vibe_tracks(vibe, count, avoid=()):
     if avoid:
         prompt += ("\n\nDon't include any of these, which have already been used or tried:\n"
                    + "\n".join(list(avoid)[-150:]))
-    data = ai_ask_json(prompt)
+    data = ai_ask_json(prompt, feature="AI Playlist")
     pairs = []
     if isinstance(data, list):
         for item in data:
@@ -1869,14 +1887,16 @@ def ai_vibe_tracks(vibe, count, avoid=()):
 
 
 def ai_similar(artist_name, limit=20):
-    names = ai_ask_list(AI_SIMILAR_PROMPT.format(artist=artist_name, limit=limit))
+    names = ai_ask_list(AI_SIMILAR_PROMPT.format(artist=artist_name, limit=limit),
+                        feature="Similar Artists (AI source)")
     names = [canonicalise_conjunction(n) for n in names
              if strip_accents(n).lower() != strip_accents(artist_name).lower()]
     return names[:limit]
 
 
 def ai_top_tracks(artist_name, limit=10):
-    return ai_ask_list(AI_TOP_TRACKS_PROMPT.format(artist=artist_name, limit=limit))[:limit]
+    return ai_ask_list(AI_TOP_TRACKS_PROMPT.format(artist=artist_name, limit=limit),
+                       feature="Top Tracks (AI source)")[:limit]
 
 
 def deezer_artist_exists(artist_name):
@@ -3019,14 +3039,18 @@ def moderator_extra(target):
     return max(1, int(target * MODERATOR_EXTRA[level])) if level != "off" else 0
 
 
-def moderate(tracks, seed, report=print):
+def moderate(tracks, seed, report=print, level=None, reference=None):
     """
     Asks the moderator which tracks clash with the seed. tracks: [(key, artist, title)];
     seed: "Artist - Title", or "vibe: <description>". Returns the set of keys to
     remove, each logged with its reason. Any failure removes nothing, so a
     playlist is never lost to the moderator: it builds unmoderated, with a log line.
+    level: a level for this check only (Drift's own); None uses the build's.
+    reference: [(key, artist, title)] already in the playlist, shown as what fits.
     """
-    level = moderator_level()
+    level = level or moderator_level()
+    if not ANTHROPIC_API_KEY or level not in MODERATOR_LEVELS:
+        level = "off"
     if level == "off" or len(tracks) < 2:
         return set()
     cap = max(1, int(len(tracks) * MODERATOR_CAP[level]))
@@ -3034,14 +3058,20 @@ def moderate(tracks, seed, report=print):
                   else f"Flag no more than {cap} tracks.")
     seed_line = f"Seed vibe: {seed[5:].strip()}" if seed.startswith("vibe:") else f"Seed: {seed}"
     listing = "\n".join(f"{n}. {artist} - {title}" for n, (_, artist, title) in enumerate(tracks, 1))
-    report(f"  AI Moderator ({level.title()}): checking {len(tracks)} tracks against the seed...")
+    ref_text = ""
+    if reference:   # what's already passed: the playlist's sound, not just the seed's
+        ref_text = ("\n\nAlready in the playlist, and they fit, so judge the candidates against these as "
+                    "well as the seed:\n" + "\n".join(f"- {artist} - {title}" for _, artist, title in reference[:15]))
+    report(f"  AI Moderator ({level.title()}): checking {len(tracks)} tracks against the seed"
+           + (" and the playlist so far..." if reference else "..."))
     try:
         import anthropic
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         message = client.messages.create(
             model=MODERATOR_MODEL, max_tokens=1000,
             system=MODERATOR_PROMPT.format(level_rules=MODERATOR_RULES[level], limit_rule=limit_rule),
-            messages=[{"role": "user", "content": f"{seed_line}\n\nCandidates:\n{listing}"}])
+            messages=[{"role": "user", "content": f"{seed_line}{ref_text}\n\nCandidates:\n{listing}"}])
+        record_ai("AI Moderator", MODERATOR_MODEL, message)
         text = "".join(b.text for b in message.content if getattr(b, "type", "") == "text")
         text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
         flagged = json.loads(text).get("remove") or []
@@ -3271,6 +3301,12 @@ class Drift:
         self.finds = []           # (artist, title, key, score) in the order found
         self.per = {}             # artist key -> tracks of theirs in the playlist
         self.seen_artists = set() # artists already asked for their top tracks
+        self.drift_from = cfg.get("from", "last")       # Last Round, Close to Seed or Spread
+        self.mod_choice = cfg.get("moderator", "same")  # Drift's own AI Moderator level, or the build's
+        self.parent = {}          # Drift track key -> the key of the track it was seeded from
+        self.blocked = set()      # keys of chains the moderator found going off course
+        self.base = None          # the first round's keys, set when Drift starts
+        self.base_set = set()
         self.checked = set()      # (artist key, title) already looked up
         self.used = set()         # seeds already drifted from
 
@@ -3286,8 +3322,10 @@ class Drift:
             self.used.add(ident)
             self.checked.add(ident)
 
-    def note(self, artist, title, key, score=1):
-        """A track that made the playlist, so a later round can seed from it."""
+    def note(self, artist, title, key, score=1, parent=None):
+        """A track that made the playlist, so a later round can seed from it (parent: the seed it came from)."""
+        if parent:
+            self.parent[str(key)] = str(parent)
         a = artist_key(artist)
         self.finds.append((artist, title, str(key), score))
         owner = owner_key(artist, key)   # counted as tagged in the library
@@ -3310,9 +3348,24 @@ class Drift:
         self.finds = [f for f in self.finds if f[2] not in keys]
         self.exclude |= keys
 
-    def moderate(self, keys, candidates, report=None):
-        """Runs the AI Moderator over candidates (a slice of keys) and removes what it flags from keys."""
-        removed = moderate(self.tracks(candidates), self.seed, report or self.report)
+    def moderate(self, keys, candidates, report=None, drift_round=False):
+        """
+        Runs the AI Moderator over candidates (a slice of keys) and removes what it flags from keys.
+        For a Drift round: Drift's own level if one is set, the first round's tracks as reference,
+        and chains that went off course dropped.
+        """
+        level, reference = None, None
+        if drift_round:
+            if self.group != "vibe" and self.mod_choice != "same":
+                level = self.mod_choice
+                if level == "off":
+                    return set()
+            cand = {str(k) for k in candidates}
+            reference = [t for t in self.tracks(self.base or []) if str(t[0]) not in cand]
+        removed = moderate(self.tracks(candidates), self.seed, report or self.report, level=level,
+                           reference=reference)
+        if drift_round and removed:
+            removed = set(removed) | self._drop_chains(candidates, removed, level)
         if removed:
             keys[:] = [k for k in keys if str(k) not in removed]
             self.discard(removed)
@@ -3339,18 +3392,73 @@ class Drift:
         return self.per_artist - self.per.get(who, 0)
 
     def _seeds(self):
-        ranked = sorted(enumerate(self.finds), key=lambda x: (-x[1][3], x[0]))
-        out, idents = [], set()
-        for _, (artist, title, _, _) in ranked:
+        """
+        The next round's seeds as (artist, title, key). Last Round: the best finds so far.
+        Close to Seed: the best of the first round's tracks only. Spread: evenly across the
+        playlist. Never a seed already used, or one in a chain the moderator dropped.
+        """
+        pool = [(i, f) for i, f in enumerate(self.finds) if f[2] not in self.blocked]
+        if self.drift_from == "close" and self.base is not None:
+            pool = [(i, f) for i, f in pool if f[2] in self.base_set]
+        if self.drift_from != "spread":
+            pool = sorted(pool, key=lambda x: (-x[1][3], x[0]))
+        picks, idents = [], set()
+        for _, (artist, title, key, _) in pool:
             ident = artist_key(artist) if self.using == "artists" else (artist_key(artist), clean_name(title))
             if ident in self.used or ident in idents:
                 continue
             idents.add(ident)
-            out.append((artist, title))
-            if len(out) == DRIFT_SEEDS_PER_ROUND:
-                break
-        self.used |= idents
-        return out
+            picks.append((artist, title, key, ident))
+        if self.drift_from == "spread" and len(picks) > DRIFT_SEEDS_PER_ROUND:
+            step = len(picks) / DRIFT_SEEDS_PER_ROUND
+            picks = [picks[int(n * step)] for n in range(DRIFT_SEEDS_PER_ROUND)]
+        else:
+            picks = picks[:DRIFT_SEEDS_PER_ROUND]
+        self.used |= {p[3] for p in picks}
+        return [(a, t, k) for a, t, k, _ in picks]
+
+    def _chain(self, key):
+        """A key and everything Drift seeded from it, however many rounds down."""
+        chain, todo = set(), [str(key)]
+        while todo:
+            k = todo.pop()
+            if k not in chain:
+                chain.add(k)
+                todo += [child for child, parent in self.parent.items() if parent == k]
+        return chain
+
+    def _drop_chains(self, candidates, removed, level):
+        """
+        After a Drift round's check: where the moderator flagged at least half of what one
+        seed brought in, the rest of that batch goes too (within the level's cap), and Drift
+        never seeds from that chain again. Returns the extra keys to remove.
+        """
+        level = level or moderator_level()
+        removed = {str(k) for k in removed}
+        groups = {}
+        for k in candidates:
+            parent = self.parent.get(str(k))
+            if parent:
+                groups.setdefault(parent, []).append(str(k))
+        room = None if level == "strict" else max(
+            0, int(len(candidates) * MODERATOR_CAP.get(level, 0)) - len(removed))
+        info = {f[2]: (f[0], f[1]) for f in self.finds}
+        extra = set()
+        for parent, batch in groups.items():
+            flagged = [k for k in batch if k in removed]
+            if len(batch) < 2 or len(flagged) * 2 < len(batch):
+                continue
+            rest = [k for k in batch if k not in removed]
+            if room is not None:
+                rest, room = rest[:room], room - len(rest[:room])
+            extra |= set(rest)
+            self.blocked |= self._chain(parent)
+            artist, title = info.get(parent, ("a Drift seed", ""))
+            source = f"{artist} - {title}" if title else artist
+            self.report(f"  AI Moderator: most of what came from {source} went off course"
+                        + (f", so the other {len(rest)} went too" if rest else "")
+                        + ". Drift won't seed from that chain again.")
+        return extra
 
     def run(self, keys, on_round=None):
         """
@@ -3360,6 +3468,9 @@ class Drift:
         """
         if not self.on or len(keys) >= self.target:
             return []
+        if self.base is None:   # the first round, as it stands: Close to Seed seeds from it, the moderator compares with it
+            self.base = [f[2] for f in self.finds]
+            self.base_set = set(self.base)
         added = []
         for n in range(1, self.rounds + 1):
             if len(keys) >= self.target:
@@ -3374,7 +3485,7 @@ class Drift:
                 if not seeds:
                     self.report("  Note: Drift has nothing left to seed from.")
                     break
-                names = ", ".join(a if self.using == "artists" else f"{a} - {t}" for a, t in seeds)
+                names = ", ".join(a if self.using == "artists" else f"{a} - {t}" for a, t, _ in seeds)
                 self.report(f"  Drift round {n} of {self.rounds}: {len(keys)} of {self.target}, "
                             f"using {self.using} similar to {names}{self._from_label()}...")
                 before = len(keys)
@@ -3384,7 +3495,7 @@ class Drift:
                     else:
                         self._round_tracks(seeds, keys)
             if self.using != "ai":   # the AI's own picks are never moderated
-                self.moderate(keys, keys[before:])
+                self.moderate(keys, keys[before:], drift_round=True)
             new = keys[before:]
             self.report(f"  Drift round {n}: {len(new)} added.")
             if self.using == "ai" and not new:
@@ -3397,17 +3508,17 @@ class Drift:
             self.report(f"  Note: Drift finished short, {len(keys)} of {self.target}.")
         return added
 
-    def _take(self, keys, artist, title, key, score):
+    def _take(self, keys, artist, title, key, score, parent=None):
         if not key or str(key) in self.exclude or key in keys or self._room(artist, key) <= 0:
             return False
         if self.played and not self.played.fresh(key):
             return False
         keys.append(key)
-        self.note(artist, title, key, score)
+        self.note(artist, title, key, score, parent=parent)
         return True
 
     def _round_artists(self, seeds, keys):
-        for seed, _ in seeds:
+        for seed, _, seed_key in seeds:
             if len(keys) >= self.target:
                 return
             similar, _ = blended_similar_artists(seed, limit=SIMILAR_ARTIST_LIMIT)
@@ -3427,7 +3538,7 @@ class Drift:
                 for a, t, k in found:
                     if len(keys) >= self.target:
                         return
-                    self._take(keys, a, t, k, len(suggested_by))
+                    self._take(keys, a, t, k, len(suggested_by), parent=seed_key)
 
     def _round_ai(self, keys):
         """A vibe round: the same description to the AI, told what's already been found or tried."""
@@ -3453,7 +3564,7 @@ class Drift:
     def _round_tracks(self, seeds, keys):
         import library   # here rather than at the top: library imports engine
         use_youtube = output_is_youtube()
-        for artist, title in seeds:
+        for artist, title, seed_key in seeds:
             if len(keys) >= self.target:
                 return
             candidates, responding = similar_track_candidates([artist], title, self.report)
@@ -3470,7 +3581,7 @@ class Drift:
                 self.checked.add(ident)
                 key = find_jriver_key_by_track(a, t) if use_youtube else library.find_track_key(a, t)
                 session_log(self.session_id, a, t, sources, found=bool(key))
-                if self._take(keys, a, t, key, len(sources)):
+                if self._take(keys, a, t, key, len(sources), parent=seed_key):
                     self.report(f"    In library: {a} - {t}  ({', '.join(sources)})")
 
 
@@ -3796,7 +3907,8 @@ AI_SIMILAR_TRACKS_PROMPT = (
 def ai_similar_tracks(artist, track, limit=SIMILAR_TRACK_FETCH):
     """Claude's songs like the seed track: [[artist, title], ...], most similar first. A made-up
     song simply isn't found in the library, so no separate check is needed."""
-    data = ai_ask_json(AI_SIMILAR_TRACKS_PROMPT.format(artist=artist, track=track, limit=min(limit, 40)))
+    data = ai_ask_json(AI_SIMILAR_TRACKS_PROMPT.format(artist=artist, track=track, limit=min(limit, 40)),
+                       feature="Similar Tracks (AI source)")
     out = []
     for item in data if isinstance(data, list) else []:
         if isinstance(item, dict) and item.get("artist") and item.get("track"):

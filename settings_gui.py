@@ -24,6 +24,7 @@ import voice
 import hotkeys
 import saved_playlists
 import filters
+import ai_usage
 from tabs import TabbedPane, PALETTE
 
 ENV_FILE = engine.ENV_FILE   # single source of truth for where .env lives
@@ -275,6 +276,10 @@ class ProfilePage:
                     agree = v[f"{name}_{kind}_AGREE"].get()
                     out[f"{name}_{kind}_AGREE"] = "1" if agree == "Off" else agree
             out[f"{name}_ROUNDS"] = rounds.get()
+            if f"{name}_FROM" in v:
+                out[f"{name}_FROM"] = option_code(DRIFT_FROM_OPTIONS, v[f"{name}_FROM"].get())
+            if f"{name}_MODERATOR" in v:
+                out[f"{name}_MODERATOR"] = option_code(DRIFT_MODERATOR_OPTIONS, v[f"{name}_MODERATOR"].get())
         if "AI_MODERATOR_VIBE" in v:
             out["AI_MODERATOR_VIBE"] = v["AI_MODERATOR_VIBE"].get().lower()
         for group in engine.PLAYED_GROUPS:
@@ -307,6 +312,17 @@ DRIFT_USING_OPTIONS = [("artists", "Similar artists"), ("tracks", "Similar track
 VIBE_DRIFT_USING_OPTIONS = [("artists", "Similar artists (no AI)"), ("tracks", "Similar tracks (no AI)"),
                             ("ai", "AI (uses credits)")]
 DRIFT_SOURCE_MODES = [("same", "Same as Settings > Sources"), ("custom", "Custom Sources")]
+# Drift From: where each round seeds from
+DRIFT_FROM_OPTIONS = [("last", "Last Round"), ("close", "Close to Seed"), ("spread", "Spread")]
+DRIFT_FROM_HELP = ("Last Round: each round seeds from the best tracks found so far, so the playlist can "
+                   "wander further from where it started with every round.\n"
+                   "Close to Seed: every round seeds only from the first round's tracks, so nothing is "
+                   "more than two steps from the seed.\n"
+                   "Spread: seeds are taken evenly across the playlist, each starting its own chain, "
+                   "for more variety.")
+# AI Moderator on Drift tracks, for Similar Artists and Similar Tracks
+DRIFT_MODERATOR_OPTIONS = [("same", "Same as build"), ("off", "Off"), ("relaxed", "Relaxed"),
+                           ("balanced", "Balanced"), ("strict", "Strict")]
 DRIFT_ARTIST_SOURCE_NAMES = [s for s in SOURCE_NAMES if s[0] != "ai"]   # Drift from the sources never uses the AI
 DRIFT_SOURCES_HELP = ("Same as Settings > Sources uses the sources you picked for this Play option. Custom "
                       "Sources lets the top-up rounds use different ones, for example steadier sources first "
@@ -1177,7 +1193,9 @@ class SettingsTab(tk.Frame):
                       "row in the table.\n"
                       "JRiver can randomise a smartlist itself, for example with a random album sort, "
                       "and shuffling it here would break those albums up, so you may want Shuffle off "
-                      "on the smartlist row.")
+                      "on the smartlist row.\n"
+                      "Set as Default copies a row into the table rows of its type that are shown "
+                      "below, replacing their own settings. New playlists start with their type's row.")
         p.all_var = tk.BooleanVar(value=p.data["all"] == "1")
 
         def all_toggled():
@@ -1186,14 +1204,39 @@ class SettingsTab(tk.Frame):
             changed()
         ttk.Checkbutton(box, text="Use global playlist settings", variable=p.all_var,
                         command=all_toggled).grid(row=0, column=0, sticky="w", pady=(0, 6))
-        p.all_row = header(tk.Frame(box, bd=1, relief="solid"), ["Folder", "Playlist", "Type"] + CONTROLS)
+        p.all_row = header(tk.Frame(box, bd=1, relief="solid"), ["Folder", "Playlist", "Type"] + CONTROLS
+                           + ["Defaults"])
         p.all_row.grid(row=1, column=0, sticky="w")
         bg = p.all_row.cget("bg")
+        def set_default(kind):
+            """Set as Default: the type's global row into the table rows of that type now shown."""
+            word = kind.lower()
+            shown = [pid for pid, row in getattr(p, "shown", []) if (row.get("type") or "Playlist") == kind]
+            if not shown:
+                messagebox.showinfo("Set as Default", f"No {word}s are shown in the table below.", parent=self)
+                return
+            total = sum(1 for row in p.data["rows"].values() if (row.get("type") or "Playlist") == kind)
+            n = len(shown)
+            if n == 1:
+                target, own = (f"your one {word}" if total == 1 else f"the 1 {word} shown"), "Its own settings"
+            else:
+                target, own = (f"all {n} {word}s" if n == total else f"the {n} {word}s shown"), "Their own settings"
+            if not messagebox.askyesno("Set as Default", f"Copy the {word} defaults to {target}? "
+                                                         f"{own} will be replaced.", parent=self):
+                return
+            saved_playlists.copy_defaults(p.data, shown, kind)
+            build_table()
+            changed()
+
         for r, (name, kind, key) in enumerate((("All playlists", "Playlist", "all_row"),
                                                ("All smartlists", "Smartlist", "all_row_smart")), start=1):
             for c, text in enumerate(("All folders", name, kind)):
                 cell(p.all_row, r, c, text, bg)
             row_controls(p.all_row, r, bg, p.data[key], changed)
+            holder = tk.Frame(p.all_row, bg=bg)
+            holder.grid(row=r, column=3 + len(CONTROLS), sticky="nsew")
+            tk.Button(holder, text="Set as Default", command=lambda k=kind: set_default(k)).pack(
+                anchor="w", padx=8, pady=2)
 
         # --- Playlists ---
         box = section(tab, "Playlists",
@@ -1217,7 +1260,7 @@ class SettingsTab(tk.Frame):
         p.rescan_btn.pack(side="right", padx=(24, 0))
         p.table_holder = tk.Frame(box)
         p.table_holder.grid(row=1, column=0, sticky="w")
-        tk.Label(box, text="New playlists arrive with Shuffle off, Non-stop No and Skip Off.",
+        tk.Label(box, text="New playlists arrive with the settings of their type's row under All playlists.",
                  fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=2, column=0, sticky="w", pady=(6, 0))
 
         def text_key(text):
@@ -1263,6 +1306,7 @@ class SettingsTab(tk.Frame):
             shown = [(pid, row) for pid, row in rows
                      if (folder == ALL_FOLDERS or (row.get("folder") or saved_playlists.ROOT) == folder)
                      and (wanted in (row.get("name") or "").lower() or wanted in (row.get("folder") or "").lower())]
+            p.shown = shown
             total = len(rows)
             p.count_label.config(text=f"{total} playlist{'' if total == 1 else 's'}"
                                  + (f", {len(shown)} shown" if len(shown) != total else ""))
@@ -1304,7 +1348,7 @@ class SettingsTab(tk.Frame):
 
         def resync():
             together = p.all_var.get()
-            set_enabled(p.all_row, together)
+            set_enabled(p.all_row, True)   # the global rows are the defaults too, so always editable
             if getattr(p, "table", None) is not None and p.table.winfo_exists():
                 set_enabled(p.table, not together)
             for sync in p.reseed_syncs:
@@ -1632,6 +1676,42 @@ class SettingsTab(tk.Frame):
             for cb in (using_cb, rounds_cb):
                 cb.bind("<<ComboboxSelected>>", p.save)
             place(row, pady=(0, 4))
+            # Drift From: where each round seeds from
+            name = f"DRIFT_{group.upper()}"
+            from_row = tk.Frame(box)
+            tk.Label(from_row, text="Drift from").pack(side="left")
+            p.vars[f"{name}_FROM"] = tk.StringVar(value=option_label(
+                DRIFT_FROM_OPTIONS, p.env.get(f"{name}_FROM", "last").strip().lower()))
+            from_cb = ttk.Combobox(from_row, textvariable=p.vars[f"{name}_FROM"],
+                                   values=[s for _, s in DRIFT_FROM_OPTIONS], state="readonly", width=14)
+            from_cb.pack(side="left", padx=(6, 0))
+            from_cb.bind("<<ComboboxSelected>>", lambda e, cb=from_cb: (cb.selection_clear(), p.save()))
+            help_mark(from_row, DRIFT_FROM_HELP).pack(side="left", padx=(8, 0))
+            place(from_row, pady=(0, 4))
+            drift_mod_cb = None
+            if group != "vibe":   # AI Playlist has its own, below
+                dm_row = tk.Frame(box)
+                tk.Label(dm_row, text="AI Moderator on Drift tracks", fg=PALETTE["ai_purple"]).pack(side="left")
+                p.vars[f"{name}_MODERATOR"] = tk.StringVar(value=option_label(
+                    DRIFT_MODERATOR_OPTIONS, p.env.get(f"{name}_MODERATOR", "same").strip().lower()))
+                drift_mod_cb = ttk.Combobox(dm_row, textvariable=p.vars[f"{name}_MODERATOR"],
+                                            values=[s for _, s in DRIFT_MODERATOR_OPTIONS], state="readonly",
+                                            width=14)
+                drift_mod_cb.pack(side="left", padx=(6, 0))
+
+                def dm_chosen(e, cb=drift_mod_cb, key=f"{name}_MODERATOR"):
+                    cb.selection_clear()
+                    if option_code(DRIFT_MODERATOR_OPTIONS, p.vars[key].get()) not in ("same", "off"):
+                        warn_moderator_once(self)
+                    p.save()
+                drift_mod_cb.bind("<<ComboboxSelected>>", dm_chosen)
+                help_mark(dm_row, "Checks the tracks each Drift round adds. Same as build uses the AI Moderator "
+                                  "level of the build itself; a stronger level here checks Drift harder than the "
+                                  "first round. When most of what one seed brought in is off course, the rest of "
+                                  "it goes too and Drift doesn't seed from that chain again.\n"
+                                  + MODERATOR_LEVELS_HELP).pack(side="left", padx=(8, 0))
+                Tooltip(drift_mod_cb, NO_KEY_TEXT, when=lambda: not self._anthropic_key())
+                place(dm_row, pady=(0, 4))
             # Drift sources: the same as Settings > Sources, or Custom Sources of its own
             name = f"DRIFT_{group.upper()}"
             mode = tk.StringVar(value=option_label(
@@ -1679,7 +1759,8 @@ class SettingsTab(tk.Frame):
                 frames[kind] = frame
             place(panel, pady=(0, 4))
             panel.grid_configure(padx=(16, 0))
-            p.drift[group] = (on, using, rounds, (using_cb, rounds_cb, mode_cb))
+            p.drift[group] = (on, using, rounds, tuple(cb for cb in (using_cb, rounds_cb, mode_cb, from_cb,
+                                                                      drift_mod_cb) if cb is not None))
             p.drift_src[group] = (mode, mode_row, panel, frames)
 
             def sources_changed(*_):
@@ -1893,20 +1974,141 @@ class SettingsTab(tk.Frame):
     def _build_keys(self, nb):
         tab = self._scroll_tab(nb, "Keys")
         box = section(tab, "Keys and passwords")
-        for r, key in enumerate(KEY_FIELDS):
-            tk.Label(box, text=key, anchor="w",
-                     **({"fg": PALETTE["ai_purple"]} if key == "ANTHROPIC_API_KEY" else {})
-                     ).grid(row=r, column=0, sticky="w", pady=4)
-            var = tk.StringVar(value=self.env.get(key, ""))
-            self.vars[key] = var
-            entry = tk.Entry(box, textvariable=var, show="\u2022", width=32)
-            entry.grid(row=r, column=1, padx=(8, 4))
-            entry.bind("<FocusOut>", self._save)   # save when leaving the field
-            self._add_show_toggle(box, entry, r)
-            if key in KEY_HELP:
-                button = tk.Button(box, text="?", width=2, command=lambda k=key: self._show_help(k))
-                button.grid(row=r, column=3, padx=(4, 0))
-                Tooltip(button, KEY_HELP[key][1].replace("\n", " ") + "\nClick for these steps in a window.")
+        for r, key in enumerate(k for k in KEY_FIELDS if k != "ANTHROPIC_API_KEY"):
+            self._key_row(box, r, key)
+
+        # --- Anthropic: the key last, in its own box, with what the AI has used under it ---
+        box = section(tab, "Anthropic",
+                      "Your Anthropic key, and the tokens 24bit7's AI features have used since you last "
+                      "cleared the count, with an estimated cost. Anthropic bills by tokens, and output "
+                      "tokens cost several times more than input. Answers reused from the cache cost "
+                      "nothing and aren't counted. Anthropic's console (platform.claude.com) has your "
+                      "actual bill.",
+                      title_fg=PALETTE["ai_purple"])
+        self._key_row(box, 0, "ANTHROPIC_API_KEY")
+        usage = tk.Frame(box)
+        usage.grid(row=1, column=0, columnspan=4, sticky="w", pady=(14, 0))
+        tk.Label(usage, text="AI Usage", font=LABEL_FONT, fg=PALETTE["ai_purple"]).grid(row=0, column=0, sticky="w")
+        self.usage_total = tk.Label(usage, text="", anchor="w", justify="left", wraplength=680)
+        self.usage_total.grid(row=1, column=0, sticky="w", pady=(4, 6))
+        self.usage_table = tk.Frame(usage)
+        self.usage_table.grid(row=2, column=0, sticky="w")
+        buttons = tk.Frame(usage)
+        buttons.grid(row=3, column=0, sticky="w", pady=(10, 0))
+        tk.Button(buttons, text="Clear", width=8, command=self._usage_clear).pack(side="left")
+        tk.Button(buttons, text="Query", width=8, command=self._usage_query).pack(side="left", padx=(8, 0))
+        self.usage_note = tk.Label(buttons, text="", fg=PALETTE["help_fg"], font=HELP_FONT)
+        self.usage_note.pack(side="left", padx=(12, 0))
+        show = tk.Frame(usage)
+        show.grid(row=4, column=0, sticky="w", pady=(10, 0))
+        self.usage_np_var = tk.BooleanVar(value=self.env.get("AI_USAGE_NOW_PLAYING", "0") == "1")
+        ttk.Checkbutton(show, text="Show in Now Playing", variable=self.usage_np_var,
+                        command=self._usage_np_toggled).pack(side="left")
+        tk.Label(show, text="as").pack(side="left", padx=(12, 6))
+        unit = self.env.get("AI_USAGE_NP_UNIT", "dollars").strip().lower()
+        self.usage_unit_var = tk.StringVar(value="Tokens" if unit == "tokens" else "Dollars")
+        unit_cb = ttk.Combobox(show, textvariable=self.usage_unit_var, values=["Dollars", "Tokens"],
+                               state="readonly", width=9)
+        unit_cb.pack(side="left")
+        unit_cb.bind("<<ComboboxSelected>>", lambda e: (unit_cb.selection_clear(), self._usage_unit_chosen()))
+        help_mark(show, "Clicking the total in Now Playing also switches between dollars and tokens.").pack(
+            side="left", padx=(8, 0))
+
+        tk.Label(usage, text="Guide", font=LABEL_FONT, fg=PALETTE["ai_purple"]).grid(
+            row=5, column=0, sticky="w", pady=(18, 0))
+        self.usage_dollar = tk.Label(usage, text="", anchor="w", justify="left", wraplength=680)
+        self.usage_dollar.grid(row=6, column=0, sticky="w", pady=(4, 6))
+        self.usage_guide = tk.Frame(usage)
+        self.usage_guide.grid(row=7, column=0, sticky="w")
+        tk.Label(usage, text=ai_usage.rates_line(), fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w",
+                 justify="left", wraplength=680).grid(row=8, column=0, sticky="w", pady=(10, 0))
+        link = tk.Label(usage, text="Anthropic's pricing page", fg=PALETTE.get("link", PALETTE["section_fg"]),
+                        cursor="hand2", font=("Segoe UI", 9, "underline"))
+        link.grid(row=9, column=0, sticky="w", pady=(2, 0))
+        link.bind("<Button-1>", lambda e: webbrowser.open_new_tab(ai_usage.PRICES_URL))
+        tab.bind("<<Shown>>", lambda e: self._fill_usage(), add="+")
+        self._fill_usage()
+
+    def _key_row(self, box, r, key):
+        """One key: its name, the hidden entry, Show, and the ? with where to get it."""
+        tk.Label(box, text=key, anchor="w",
+                 **({"fg": PALETTE["ai_purple"]} if key == "ANTHROPIC_API_KEY" else {})
+                 ).grid(row=r, column=0, sticky="w", pady=4)
+        var = tk.StringVar(value=self.env.get(key, ""))
+        self.vars[key] = var
+        entry = tk.Entry(box, textvariable=var, show="\u2022", width=32)
+        entry.grid(row=r, column=1, padx=(8, 4))
+        entry.bind("<FocusOut>", self._save)   # save when leaving the field
+        self._add_show_toggle(box, entry, r)
+        if key in KEY_HELP:
+            button = tk.Button(box, text="?", width=2, command=lambda k=key: self._show_help(k))
+            button.grid(row=r, column=3, padx=(4, 0))
+            Tooltip(button, KEY_HELP[key][1].replace("\n", " ") + "\nClick for these steps in a window.")
+
+    def _usage_grid(self, frame, headings, rows):
+        """A small table: headings in grey, then rows; the first column on the left, the rest right-aligned."""
+        for child in frame.winfo_children():
+            child.destroy()
+        for c, heading in enumerate(headings):
+            tk.Label(frame, text=heading, fg=PALETTE["help_fg"], font=HELP_FONT).grid(
+                row=0, column=c, sticky="w" if c in (0, len(headings) - 1) and heading == "Note" or c == 0 else "e",
+                padx=(0, 18))
+        for r, row in enumerate(rows, start=1):
+            for c, (text, grey) in enumerate(row):
+                tk.Label(frame, text=text, **({"fg": PALETTE["help_fg"], "font": HELP_FONT} if grey else {})).grid(
+                    row=r, column=c, sticky="w" if c == 0 or grey else "e", padx=(0, 18))
+
+    def _fill_usage(self):
+        """The AI Usage total and breakdown (heaviest first), then the per-run guide."""
+        t = ai_usage.totals()
+        self.usage_total.config(text=ai_usage.headline(t))
+        rows = [((f, False), (f"{n:,}", False), (f"{i:,}", False), (f"{o:,}", False),
+                 (f"about {ai_usage.money(c)}", False)) for f, n, i, o, c in t["by_feature"]]
+        if rows:
+            self._usage_grid(self.usage_table, ("Feature", "Requests", "Input tokens", "Output tokens", "Est. cost"),
+                             rows)
+        else:
+            for child in self.usage_table.winfo_children():
+                child.destroy()
+        guide = ai_usage.guide()
+        self.usage_dollar.config(text=ai_usage.dollar_line(guide))
+        self._usage_grid(self.usage_guide, ("Feature", "Tokens per run", "Cost per run", "Note"),
+                         [((f, False), (f"about {tokens:,}", False), (f"about {ai_usage.money(c)}", False),
+                           ("; ".join(x for x in (note, "your own average" if yours else "") if x), True))
+                          for f, tokens, c, note, yours in guide])
+
+    def _usage_clear(self):
+        if messagebox.askyesno("Clear AI Usage", "Clear the token count? It starts again from now.", parent=self):
+            ai_usage.clear()
+            self._fill_usage()
+            self.usage_note.config(text="")
+            ai_usage.refresh_panel()
+
+    def _usage_query(self):
+        self._save()   # a key just typed counts
+        engine.refresh_settings_if_changed()
+        if not engine.ANTHROPIC_API_KEY:
+            messagebox.showinfo("AI Usage", NO_KEY_TEXT, parent=self)
+            return
+        if ai_usage.query():
+            self.usage_note.config(text="The answer is in the console on the Play tab.")
+        else:
+            ai_usage.ask(lambda answer, error: self.after(0, lambda: messagebox.showinfo(
+                "AI Usage", answer or f"Query didn't come back: {error}", parent=self)))
+
+    def _usage_np_toggled(self):
+        try:
+            write_env({"AI_USAGE_NOW_PLAYING": "1" if self.usage_np_var.get() else "0"})
+            ai_usage.refresh_panel()
+        except Exception as e:
+            messagebox.showerror("Save failed", str(e), parent=self)
+
+    def _usage_unit_chosen(self):
+        try:
+            write_env({"AI_USAGE_NP_UNIT": self.usage_unit_var.get().lower()})
+            ai_usage.refresh_panel()
+        except Exception as e:
+            messagebox.showerror("Save failed", str(e), parent=self)
 
     def _add_show_toggle(self, parent, entry, row):
         show = tk.BooleanVar(value=False)
@@ -2390,6 +2592,21 @@ class SettingsTab(tk.Frame):
         self.voice_dev_frame.grid(row=0, column=0, sticky="w")
         tk.Button(box, text="Refresh", width=10, command=self._fill_voice_devices).grid(
             row=1, column=0, sticky="w", pady=(8, 0))
+        timing = tk.Frame(box)
+        timing.grid(row=2, column=0, sticky="w", pady=(12, 0))
+        tk.Label(timing, text="Switch Timing Adjustment").pack(side="left")
+        self.switch_timing_var = tk.StringVar()
+        spin = tk.Spinbox(timing, from_=-3.0, to=3.0, increment=0.25, format="%.2f", width=6,
+                          textvariable=self.switch_timing_var, command=self._save_switch_timing)
+        spin.pack(side="left", padx=(8, 4))
+        self.switch_timing_var.set(f"{voice.switch_adjust_ms() / 1000:.2f}")
+        spin.bind("<FocusOut>", self._save_switch_timing)
+        spin.bind("<Return>", self._save_switch_timing)
+        tk.Label(timing, text="seconds").pack(side="left")
+        help_mark(timing, "Fine-tunes switching to a networked (DLNA) speaker such as a Sonos, which holds a "
+                          "second or so of music before you hear it. If it repeats the last moment you heard in "
+                          "the other room, move this towards minus; if it skips a little, towards plus. Switching "
+                          "to a zone on this PC ignores it.").pack(side="left", padx=(8, 0))
 
         # --- Test ---
         box = section(tab, "Test", "Sends a pretend command, as if a device had heard it. "
@@ -2445,6 +2662,19 @@ class SettingsTab(tk.Frame):
         except Exception as e:
             messagebox.showerror("Save failed", str(e), parent=self)
         self._voice_restart()
+
+    def _save_switch_timing(self, *_):
+        """Saves the Switch Timing Adjustment, kept to quarter seconds between -3 and 3."""
+        try:
+            value = float(self.switch_timing_var.get())
+        except ValueError:
+            value = voice.switch_adjust_ms() / 1000
+        value = max(-3.0, min(3.0, round(value * 4) / 4))
+        self.switch_timing_var.set(f"{value:.2f}")
+        try:
+            write_env({"SWITCH_TIMING": f"{value:.2f}"})
+        except Exception as e:
+            messagebox.showerror("Save failed", str(e), parent=self)
 
     def _fill_voice_devices(self):
         """One row per Alexa device heard: its name, the zone it plays to, when it was last heard."""

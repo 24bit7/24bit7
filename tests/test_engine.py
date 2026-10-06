@@ -377,3 +377,154 @@ def test_export_log_redacts_keys(app):
 def test_diagnostics_reach_jriver(app):
     text = app.engine.diagnostics_text()
     assert "34.0.20" in text, text
+
+
+def test_dropped_g_titles_match(app):
+    lib = app.library
+    assert "smokestack lightning" in lib.title_keys("Smokestack - Lightnin'")
+    assert "smokestack lightning" in lib.title_keys("Smokestack Lightnin\u2019")
+    assert lib.title_keys("Smokestack Lightning") == ["smokestack lightning"]
+    assert "rambling man" in lib.title_keys("Ramblin' Man")
+    assert "cabin" in lib.title_keys("'Cabin'"), "a quoted word keeps its plain key too"
+
+
+# --- AI Usage --------------------------------------------------------------------------------
+
+def test_ai_usage_counts_by_feature_and_clears(app):
+    import ai_usage
+    e = app.engine
+    e.ai_similar("Radiohead")
+    e.ai_top_tracks("Radiohead")
+    t = ai_usage.totals()
+    feats = {f: (n, i, o) for f, n, i, o, _ in t["by_feature"]}
+    assert feats["Similar Artists (AI source)"][:2] == (1, 100), feats
+    assert "Top Tracks (AI source)" in feats and t["requests"] == 2
+    assert "2 requests" in ai_usage.headline() and "tokens" in ai_usage.short(unit="tokens")
+    ai_usage.clear()
+    assert ai_usage.totals()["requests"] == 0 and "no AI requests" in ai_usage.headline()
+
+
+def test_ai_moderator_usage_is_counted(app, monkeypatch):
+    import ai_usage
+    monkeypatch.setattr(app.engine, "MODERATOR_OVERRIDE", "balanced")
+    app.engine.moderate([("1", "A", "x"), ("2", "B", "y")], "Seed - Song", report=lambda *a: None)
+    assert [f for f, *_ in ai_usage.totals()["by_feature"]] == ["AI Moderator"]
+
+
+def test_usage_query_answers_and_counts_itself(app):
+    import threading
+    import ai_usage
+    app.engine.ai_similar("Radiohead")
+    got, ready = [], threading.Event()
+    ai_usage.ask(lambda answer, error: (got.append((answer, error)), ready.set()))
+    assert ready.wait(10)
+    assert got[0][1] is None and got[0][0], got
+    assert "Usage Query" in [f for f, *_ in ai_usage.totals()["by_feature"]]
+    sent = app.ai.sent[-1]
+    assert "Similar Artists (AI source)" in sent and "KEY" not in sent.upper().replace("KEYS", "")
+
+
+def test_ai_usage_costs_and_guide(app):
+    import ai_usage
+    assert ai_usage.price_for("claude-haiku-4-5-20251001") == (1.00, 5.00)
+    assert ai_usage.price_for("claude-sonnet-5") == (2.00, 10.00)
+    assert abs(ai_usage.cost("claude-sonnet-5", 1_000_000, 0, 0, 1_000_000) - 12.0) < 1e-9
+    assert ai_usage.money(0.31) == "31 cents" and ai_usage.money(1.5) == "$1.50" and ai_usage.money(0.011) == "1.1 cents"
+    rows = {f: (tokens, c, yours) for f, tokens, c, _, yours in ai_usage.guide()}
+    assert rows["Similar Tracks (AI source)"][2] is False, "typical figures until there are three runs"
+    for _ in range(3):
+        app.engine.ai_similar("Radiohead")
+    rows = {f: (tokens, c, yours) for f, tokens, c, _, yours in ai_usage.guide()}
+    assert rows["Similar Artists (AI source)"][2] is True, "then your own average"
+    assert "$1 buys about" in ai_usage.dollar_line()
+    assert "may have changed" in ai_usage.rates_line() and ai_usage.PRICES_CHECKED in ai_usage.rates_line()
+    t = ai_usage.totals()
+    assert t["cost"] > 0 and "about" in ai_usage.headline(t)
+    assert "tokens" in ai_usage.short(t, unit="tokens") and "about" in ai_usage.short(t)
+
+
+# --- Drift From, Drift's own moderator, chain dropping, the moderator's reference ------------------
+
+def _drift(app, **env):
+    app.set_env(DRIFT_TRACKS="1", **env)
+    d = app.engine.Drift("tracks", 30, None, report=app.Lines())
+    for n in range(6):   # the first round: six tracks, best first
+        d.note(f"Artist {n}", f"Song {n}", f"k{n}", score=6 - n)
+    d.base = [f"k{n}" for n in range(6)]
+    d.base_set = set(d.base)
+    return d
+
+
+def test_drift_from_last_round_follows_the_best_finds(app):
+    d = _drift(app, DRIFT_TRACKS_FROM="last")
+    d.note("Artist X", "Song X", "kx", score=9, parent="k0")   # a Drift find that scored highest
+    assert [k for _, _, k in d._seeds()][0] == "kx"
+
+
+def test_drift_from_close_to_seed_stays_on_the_first_round(app):
+    d = _drift(app, DRIFT_TRACKS_FROM="close")
+    d.note("Artist X", "Song X", "kx", score=9, parent="k0")
+    picked = [k for _, _, k in d._seeds()] + [k for _, _, k in d._seeds()]
+    assert "kx" not in picked and set(picked) <= d.base_set
+
+
+def test_drift_from_spread_takes_seeds_across_the_playlist(app):
+    d = _drift(app, DRIFT_TRACKS_FROM="spread")
+    assert [k for _, _, k in d._seeds()] == ["k0", "k2", "k4"]
+
+
+def test_drift_moderator_level_and_reference(app, monkeypatch):
+    d = _drift(app, DRIFT_TRACKS_MODERATOR="strict")
+    seen = {}
+
+    def fake(tracks, seed, report=print, level=None, reference=None):
+        seen.update(level=level, reference=[k for k, _, _ in reference or []])
+        return set()
+    monkeypatch.setattr(app.engine, "moderate", fake)
+    d.note("Artist X", "Song X", "kx", parent="k0")
+    keys = d.base + ["kx"]
+    d.moderate(keys, ["kx"], drift_round=True)
+    assert seen["level"] == "strict" and seen["reference"] == d.base
+    d.moderate(keys, ["kx"])   # the first round itself: the build's level, no reference
+    assert seen["level"] is None and seen["reference"] == []
+
+
+def test_drift_moderator_off_skips_the_check(app, monkeypatch):
+    d = _drift(app, DRIFT_TRACKS_MODERATOR="off")
+    monkeypatch.setattr(app.engine, "moderate", lambda *a, **k: (_ for _ in ()).throw(AssertionError("asked")))
+    d.note("Artist X", "Song X", "kx", parent="k0")
+    assert d.moderate(d.base + ["kx"], ["kx"], drift_round=True) == set()
+
+
+def test_chain_dropped_when_mostly_off_course(app, monkeypatch):
+    d = _drift(app, DRIFT_TRACKS_MODERATOR="strict")
+    for n in range(3):   # k0 brought in three tracks, k1 brought in two
+        d.note(f"Rock {n}", f"Loud {n}", f"r{n}", parent="k0")
+    for n in range(2):
+        d.note(f"Soft {n}", f"Gentle {n}", f"s{n}", parent="k1")
+    monkeypatch.setattr(app.engine, "moderate", lambda *a, **k: {"r0", "r1"})
+    new = ["r0", "r1", "r2", "s0", "s1"]
+    keys = d.base + new
+    removed = d.moderate(keys, new, drift_round=True)
+    assert removed == {"r0", "r1", "r2"}, "two of k0's three flagged, so the third goes too"
+    assert "s0" in keys and "s1" in keys
+    assert "k0" in d.blocked and "k0" not in [k for _, _, k in d._seeds()]
+    assert d.report.has("off course")
+
+
+def test_chain_drop_respects_the_cap(app, monkeypatch):
+    d = _drift(app, DRIFT_TRACKS_MODERATOR="relaxed")   # at most a fifth of what's checked
+    for n in range(10):
+        d.note(f"Rock {n}", f"Loud {n}", f"r{n}", parent="k0")
+    monkeypatch.setattr(app.engine, "moderate", lambda *a, **k: {"r0", "r1"})
+    new = [f"r{n}" for n in range(4)]
+    removed = d.moderate(d.base + new, new, drift_round=True)
+    assert len(removed) <= max(2, int(len(new) * 0.2)), removed
+
+
+def test_drift_settings_read_with_defaults(app):
+    e = app.engine
+    assert e.DRIFT["tracks"]["from"] == "last" and e.DRIFT["tracks"]["moderator"] == "same"
+    app.set_env(DRIFT_ARTISTS_FROM="spread", DRIFT_ARTISTS_MODERATOR="balanced", DRIFT_TRACKS_FROM="nonsense")
+    assert e.DRIFT["artists"]["from"] == "spread" and e.DRIFT["artists"]["moderator"] == "balanced"
+    assert e.DRIFT["tracks"]["from"] == "last"

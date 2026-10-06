@@ -37,6 +37,7 @@ from mix_gui import MixRows
 import console_query
 import playmix
 import buildlog
+import ai_usage
 
 
 REFRESH_MS = 10000   # Now Playing panel; paused while minimised or in the tray
@@ -77,6 +78,8 @@ class PlayTab(tk.Frame):
         self._build_buttons()
         self._build_log()
         self.sync_moderator()
+        ai_usage.set_query_handler(self._usage_query)
+        ai_usage.set_panel_refresh(self._sync_usage_box)
 
         # First Now Playing read happens just after the window appears, not
         # during construction, so a slow JRiver never delays startup.
@@ -136,6 +139,20 @@ class PlayTab(tk.Frame):
         self.np_detail = InfoLine(info, font=("Segoe UI", 10), fg=PALETTE["text_secondary"], prefix_font=prefix_font, tab=tab)
         self.np_detail.pack(anchor="w", fill="x")
         self.np_track.show(("...", None))
+
+        # AI Usage at the far right, while "Show in Now Playing" is ticked in Settings > Keys
+        self.usage_box = tk.Frame(frame)
+        self.usage_label = tk.Label(self.usage_box, text="", font=("Segoe UI", 9), fg=PALETTE["ai_purple"])
+        self.usage_label.pack(side="left", padx=(0, 10))
+        self.usage_label.config(cursor="hand2")
+        self.usage_label.bind("<Button-1>", self._usage_flip)   # dollars or tokens
+        FlatButton(self.usage_box, text="Clear", command=self._usage_clear, width=6, height=1,
+                   quiet=True).pack(side="left")
+        FlatButton(self.usage_box, text="Query", command=self._usage_query, width=6, height=1,
+                   quiet=True).pack(side="left", padx=(6, 0))
+        self._usage_shown = False
+        self._usage_info = info
+        self._sync_usage_box()
 
         # Clicking the Now Playing tab, or anywhere in its panel, reads JRiver straight away
         def refresh_now(_e=None):
@@ -474,6 +491,76 @@ class PlayTab(tk.Frame):
         if event.widget is self.root and not self.running:
             self._update_now_playing()
 
+    def _sync_usage_box(self):
+        """
+        Shows the AI Usage total pinned to the right edge of Now Playing while it's ticked
+        in Settings > Keys. The track text stops short of it, so the two never overlap.
+        """
+        try:
+            engine.refresh_settings_if_changed()
+            want = os.getenv("AI_USAGE_NOW_PLAYING", "0").strip() == "1"
+            if want:
+                self.usage_label.config(text=ai_usage.short(unit=self._usage_unit()))
+                self.usage_box.place(relx=1.0, rely=0.5, anchor="e", x=-12)
+                self.usage_box.lift()
+                self.update_idletasks()
+                self._usage_info.pack_configure(padx=(0, self.usage_box.winfo_reqwidth() + 36))
+            elif self._usage_shown:
+                self.usage_box.place_forget()
+                self._usage_info.pack_configure(padx=0)
+            self._usage_shown = want
+        except Exception as e:
+            if not getattr(self, "_usage_error_said", False):
+                self._usage_error_said = True
+                print(f"  Problem: the AI Usage total couldn't show in Now Playing ({e}).")
+
+    def _usage_unit(self):
+        unit = os.getenv("AI_USAGE_NP_UNIT", "dollars").strip().lower()
+        return unit if unit in ("dollars", "tokens") else "dollars"
+
+    def _usage_flip(self, _e=None):
+        """Clicking the Now Playing total switches it between dollars and tokens, and remembers it."""
+        unit = "tokens" if self._usage_unit() == "dollars" else "dollars"
+        try:
+            write_env({"AI_USAGE_NP_UNIT": unit})
+        except Exception as e:
+            print(f"  Problem: couldn't save the AI Usage display choice ({e}).")
+            return
+        self._sync_usage_box()
+        if self.settings is not None and hasattr(self.settings, "usage_unit_var"):
+            self.settings.usage_unit_var.set(unit.title())
+
+    def _usage_clear(self):
+        if messagebox.askyesno("Clear AI Usage", "Clear the token count? It starts again from now.", parent=self):
+            ai_usage.clear()
+            self._sync_usage_box()
+            if self.settings is not None and hasattr(self.settings, "_fill_usage"):
+                self.settings._fill_usage()
+
+    def _usage_query(self):
+        """Query: Claude reads the token counts and settings, and answers in the console."""
+        if getattr(self, "_query_busy", False):
+            return
+        engine.refresh_settings_if_changed()
+        if not engine.ANTHROPIC_API_KEY:
+            messagebox.showinfo("AI Usage", NO_KEY_TEXT, parent=self)
+            return
+        try:
+            self.master.select(self)   # asked from Settings: show the console
+        except Exception:
+            pass
+        self._greeting_active = False
+        self._query_busy = True
+        self._append_query(f"\nYou asked: {ai_usage.QUESTION}\n", bold=True)
+
+        def done(answer, error):
+            self._query_busy = False
+            self._append_query(f"AI Usage Query didn't come back: {error}\n" if error else answer + "\n")
+            self._sync_usage_box()
+            if self.settings is not None and hasattr(self.settings, "_fill_usage"):
+                self.settings._fill_usage()
+        ai_usage.ask(lambda answer, error: self.after(0, lambda: done(answer, error)))
+
     def _refresh_now_playing(self):
         # Nobody can see the panel while 24bit7 is minimised or in the tray, so JRiver
         # isn't asked. The Play buttons and shortcuts read the zone fresh when pressed.
@@ -482,6 +569,7 @@ class PlayTab(tk.Frame):
         self.after(REFRESH_MS, self._refresh_now_playing)
 
     def _update_now_playing(self):
+        self._sync_usage_box()
         self._follow_active_zone()
         info = engine.get_playing_info()
         if info and info.get("PlayingNowPosition", "-1") != "-1":

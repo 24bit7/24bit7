@@ -27,7 +27,9 @@ import json
 import random
 import re
 import secrets
+import os
 import threading
+import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -517,15 +519,156 @@ def _mcws(path, **params):
     return requests.get(f"{engine.JRIVER_BASE}/{path}", params=params, auth=engine.AUTH, timeout=10)
 
 
+SWITCH_START_TIMEOUT = 8   # seconds for a DLNA zone to start playing before the track starts from the top
+SWITCH_SEEK_CHECK = 4      # seconds to watch for the jump taking effect
+SWITCH_RETRY_S = 1.0       # pause before the one retry of a refused jump
+SWITCH_BUFFER_S = 1.5      # wait after the jump before the volume comes back, so the speaker's buffer clears
+SWITCH_POLL = 0.25
+HANDOVER_BACKGROUND = True   # the handover runs in the background so Alexa answers straight away (tests run it inline)
+
+
+def switch_adjust_ms():
+    """The Switch Timing Adjustment in ms (minus means the DLNA zone jumps further into the track). Default -1 s."""
+    engine.refresh_settings_if_changed()
+    raw = os.getenv("SWITCH_TIMING", "").strip()
+    try:
+        value = float(raw) if raw else -1.0
+    except ValueError:
+        value = -1.0
+    return int(round(max(-3.0, min(3.0, value)) * 1000))
+
+
+def _ms(items):
+    return int(float(items.get("PositionMS") or 0))
+
+
+def _is_dlna(zid):
+    """True when JRiver marks the zone as a DLNA renderer (ZoneDLNA=1). False if it can't tell."""
+    try:
+        import xml.etree.ElementTree as ET
+        r = _mcws("Playback/Zones")
+        items = {i.get("Name"): (i.text or "").strip() for i in ET.fromstring(r.text).findall("Item")}
+        for n in range(int(items.get("NumberZones") or 0)):
+            if items.get(f"ZoneID{n}") == str(zid):
+                return items.get(f"ZoneDLNA{n}") == "1"
+    except Exception:
+        pass
+    return False
+
+
+def _volume(zid):
+    """A zone's volume level (0 to 1), or None if JRiver doesn't say."""
+    try:
+        import xml.etree.ElementTree as ET
+        r = _mcws("Playback/Volume", Zone=zid)
+        items = {i.get("Name"): (i.text or "").strip() for i in ET.fromstring(r.text).findall("Item")}
+        return float(items["Level"])
+    except Exception:
+        return None
+
+
+def _wait_started(tid):
+    """Seconds until the zone is playing with its clock moving, or None if it hasn't within SWITCH_START_TIMEOUT."""
+    t0, last = time.time(), None
+    while time.time() - t0 < SWITCH_START_TIMEOUT:
+        items = _info_items(tid)
+        playing = items.get("State") == "2"
+        if playing and last is not None and _ms(items) > last:
+            return time.time() - t0
+        last = _ms(items) if playing else None
+        time.sleep(SWITCH_POLL)
+    return None
+
+
+def _jump_took(tid, want):
+    """True once the zone's position has reached the jump (give or take 1.5 s)."""
+    t0 = time.time()
+    while True:
+        if _ms(_info_items(tid)) >= want - 1500:
+            return True
+        if time.time() - t0 >= SWITCH_SEEK_CHECK:
+            return False
+        time.sleep(SWITCH_POLL)
+
+
+def _leave(sid, tid):
+    """The zone left stops, and Non-stop follows the music."""
+    _mcws("Playback/Stop", Zone=sid)
+    with engine._nonstop_lock:
+        entry = engine.NONSTOP_ZONES.pop(sid, None)
+        if entry is not None:
+            entry.pop("fired", None)
+            engine.NONSTOP_ZONES[tid] = entry
+
+
+def _handover(sid, tid, target, level):
+    """
+    The rest of a switch onto a DLNA zone, which is already muted and starting the track:
+    wait for it to play, jump to where the old zone has reached, let its buffer clear,
+    then bring the volume back and stop the old zone. Any failure leaves the track
+    playing from the top there, as before. The volume is always restored.
+    """
+    t0 = time.time()
+    try:
+        started = _wait_started(tid)
+        if started is None:
+            print(f"  {target} didn't start within {SWITCH_START_TIMEOUT} s, so the track starts from the top there.")
+            return
+        adjust = switch_adjust_ms()
+        took = False
+        for attempt in (1, 2):
+            want = max(0, _ms(_info_items(sid)) - adjust)
+            _mcws("Playback/Position", Position=want, Zone=tid)
+            if _jump_took(tid, want):
+                took = True
+                break
+            if attempt == 1:
+                time.sleep(SWITCH_RETRY_S)
+        if not took:
+            print(f"  {target} didn't accept the jump, so the track starts from the top there.")
+            return
+        time.sleep(SWITCH_BUFFER_S)
+        engine.debug(f"Switch to {target}: started in {started:.2f} s, adjustment {adjust / 1000:.2f} s, "
+                     f"jump on try {attempt}, handover {time.time() - t0:.2f} s")
+    except Exception as e:
+        print(f"  Problem: the switch to {target} hit an error ({e}), so the track starts from the top there.")
+    finally:
+        try:
+            _mcws("Playback/Volume", Level=level, Zone=tid)
+        except Exception as e:
+            print(f"  Problem: couldn't put {target}'s volume back ({e}). Set it to {round(level * 100)}% in JRiver.")
+        _leave(sid, tid)
+
+
 def _move(source, target):
-    """Moves source's Playing Now to target at the same track and point; source stops. Non-stop follows."""
+    """
+    Moves source's Playing Now to target at the same track and point; source stops. Non-stop follows.
+    Onto a DLNA zone (the Sonos) it hands over: see _handover, which carries on in the background.
+    """
     sid, tid = engine.zone_id(source), engine.zone_id(target)
     items = _info_items(sid)
     pos = int(items.get("PlayingNowPosition") or 0)
     ms = int(float(items.get("PositionMS") or 0))
     paused = items.get("State") == "1"
     keys = [r["Key"] for r in engine.playing_now_rows(sid) if r.get("Key")]
-    if not keys or not saved_playlists._send(keys, tid):
+    if not keys:
+        return False
+    level = _volume(tid) if not paused and ms > 1000 and _is_dlna(tid) else None
+    if level is not None:
+        _mcws("Playback/Volume", Level=0, Zone=tid)
+        if not saved_playlists._send(keys, tid):
+            _mcws("Playback/Volume", Level=level, Zone=tid)
+            return False
+        if pos > 0:
+            _mcws("Playback/PlayByIndex", Index=pos, Zone=tid)
+        job = lambda: _handover(sid, tid, target, level)
+        if HANDOVER_BACKGROUND:
+            threading.Thread(target=job, daemon=True, name="switch-handover").start()
+        else:
+            job()
+        print(f"[Voice] Switched from {source} to {target}")
+        return True
+    if not saved_playlists._send(keys, tid):
         return False
     if pos > 0:
         _mcws("Playback/PlayByIndex", Index=pos, Zone=tid)
@@ -533,12 +676,7 @@ def _move(source, target):
         _mcws("Playback/Position", Position=ms, Zone=tid)
     if paused:
         _mcws("Playback/Pause", State=1, Zone=tid)
-    _mcws("Playback/Stop", Zone=sid)
-    with engine._nonstop_lock:
-        entry = engine.NONSTOP_ZONES.pop(sid, None)
-        if entry is not None:
-            entry.pop("fired", None)
-            engine.NONSTOP_ZONES[tid] = entry
+    _leave(sid, tid)
     print(f"[Voice] Switched from {source} to {target}")
     return True
 

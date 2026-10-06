@@ -450,3 +450,84 @@ def test_every_setting_survives_reopening(app, ui):
     print(report)
     assert not ui.errors, ui.errors[:2]
     assert not lost, report
+
+
+# --- JRiver Playlists page: Set as Default ------------------------------------------------
+
+def find_buttons(widget, text):
+    out = []
+    for child in widget.winfo_children():
+        if isinstance(child, tk.Button) and child.cget("text") == text:
+            out.append(child)
+        out += find_buttons(child, text)
+    return out
+
+
+def test_set_as_default_copies_to_smartlists_shown(app, ui, monkeypatch):
+    from tkinter import messagebox
+    asked = []
+    monkeypatch.setattr(messagebox, "askyesno", lambda title, text, **k: asked.append(text) or True)
+    s = ui.settings
+    s._layout_device_pane("saved")
+    holder = s._panes["saved"]["outer"]
+    ui.pump(1.6)   # the page fills, then the rescan 200 ms later
+    skips = [c for c in find_saved_global_combos(holder) if "1 day" in c.cget("values")]
+    skips[1].set("14 days")   # the All smartlists row
+    skips[1].event_generate("<<ComboboxSelected>>")
+    ui.pump(0.3)
+    buttons = find_buttons(holder, "Set as Default")
+    assert len(buttons) == 2
+    assert "disabled" not in str(buttons[1].cget("state")), "usable with Use global playlist settings unticked"
+    buttons[1].invoke()
+    ui.pump(0.5)
+    assert asked and "smartlist defaults" in asked[0], asked
+    rows = app.saved_playlists.main_settings()["rows"]
+    smart = [r for r in rows.values() if r.get("type") == "Smartlist"]
+    plain = [r for r in rows.values() if r.get("type") == "Playlist"]
+    assert smart and all(r["skip"] == "14" for r in smart), smart
+    assert plain and all(r["skip"] == "0" for r in plain), plain
+
+
+# --- AI Usage in Now Playing and Settings > Keys ---------------------------------------------
+
+def test_ai_usage_shows_in_now_playing_when_ticked(app, ui):
+    app.engine.ai_similar("Radiohead")
+    ui.play._sync_usage_box()
+    assert not ui.play.usage_box.winfo_ismapped()
+    app.set_env(AI_USAGE_NOW_PLAYING="1")
+    ui.play._sync_usage_box()
+    ui.pump(0.3)
+    assert ui.play.usage_box.winfo_ismapped(), "visible at the right of Now Playing"
+    assert "AI:" in ui.play.usage_label.cget("text")
+    ui.settings._fill_usage()
+    assert "1 request" in ui.settings.usage_total.cget("text")
+
+
+def test_ai_usage_tick_shows_it_straight_away(app, ui):
+    ui.nb.select(ui.settings)
+    ui.pump(0.5)
+    ui.settings.usage_np_var.set(True)
+    ui.settings._usage_np_toggled()
+    ui.nb.select(ui.play)
+    ui.pump(0.3)
+    assert ui.play.usage_box.winfo_ismapped() and "AI:" in ui.play.usage_label.cget("text")
+    ui.nb.select(ui.settings)
+    ui.settings.usage_np_var.set(False)
+    ui.settings._usage_np_toggled()
+    ui.nb.select(ui.play)
+    ui.pump(0.3)
+    assert not ui.play.usage_box.winfo_ismapped()
+
+
+def test_ai_usage_click_switches_dollars_and_tokens(app, ui):
+    app.engine.ai_similar("Radiohead")
+    app.set_env(AI_USAGE_NOW_PLAYING="1", AI_USAGE_NP_UNIT="dollars")
+    ui.play._sync_usage_box()
+    ui.pump(0.3)
+    assert "about" in ui.play.usage_label.cget("text")
+    ui.play._usage_flip()
+    ui.pump(0.3)
+    assert "tokens" in ui.play.usage_label.cget("text")
+    assert ui.settings.usage_unit_var.get() == "Tokens", "Settings follows the click"
+    ui.settings._fill_usage()
+    assert "$1 buys about" in ui.settings.usage_dollar.cget("text")

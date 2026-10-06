@@ -130,16 +130,22 @@ def _unwrap_brackets(title):
     return re.sub(r"\(.*?\)|\[.*?\]", keep, title or "")
 
 
+# A dropped "g" at the end of a word, straight or curly apostrophe: Lightnin', Lovin', Ramblin'
+_DROPPED_G = re.compile(r"(?<=[a-z])in['\u2019\u2018`](?![a-z])", re.I)
+
+
 def title_keys(title):
     """
     Every form a title is filed and looked up under: brackets removed (as
     always), and brackets unwrapped with their words kept when they're part of
     the title. Most titles have no brackets and give one key.
+    Each form is also filed with a dropped "g" restored (Lightnin' -> Lightning).
     """
     keys = []
-    for k in (norm(title), norm(_unwrap_brackets(title))):
-        if k and k not in keys:
-            keys.append(k)
+    for form in (title, _unwrap_brackets(title)):
+        for k in (norm(form), norm(_DROPPED_G.sub("ing", form or ""))):
+            if k and k not in keys:
+                keys.append(k)
     return keys
 
 

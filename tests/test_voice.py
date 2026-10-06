@@ -586,3 +586,78 @@ def test_jriver_down(app, alexa):
     app.engine._ZONE_CACHE = None if hasattr(app.engine, "_ZONE_CACHE") else None
     r = alexa.say("WhoIsThisIntent")
     assert "JRiver" in r.ssml, r
+
+
+# --- switch onto a DLNA zone: the handover ----------------------------------------------
+
+def _dlna_speakers(app, monkeypatch, started=0.5):
+    v = app.voice
+    monkeypatch.setattr(v, "HANDOVER_BACKGROUND", False)
+    monkeypatch.setattr(v, "SWITCH_BUFFER_S", 0)
+    monkeypatch.setattr(v, "SWITCH_RETRY_S", 0)
+    monkeypatch.setattr(v, "SWITCH_POLL", 0)
+    monkeypatch.setattr(v, "SWITCH_SEEK_CHECK", 0.01)
+    monkeypatch.setattr(v, "_wait_started", lambda tid: started)
+    s = app.jriver.zone("Speakers")
+    s.dlna, s.volume = True, 0.69
+    return s
+
+
+def test_switch_to_dlna_zone_hands_over(app, alexa, monkeypatch):
+    j = app.jriver
+    s = _dlna_speakers(app, monkeypatch)
+    keys = j.playlists[1]["keys"]
+    j.play("Kitchen", keys, pos=3)
+    j.zone("Kitchen").position_ms = 95000
+    r = alexa.say("SwitchZonesIntent")
+    assert r.started, r
+    assert s.playlist == keys and s.pos == 3 and s.state == 2
+    assert s.position_ms == 96000, "the default adjustment jumps one second further in"
+    assert s.volume == 0.69, "the volume comes back"
+    assert any(str(p.get("Level")) == "0" for p in j.calls_to("Playback/Volume")), "muted while it starts"
+    assert j.zone("Kitchen").state == 0, "the zone it left stops"
+
+
+def test_switch_timing_adjustment_is_used(app, alexa, monkeypatch):
+    j = app.jriver
+    s = _dlna_speakers(app, monkeypatch)
+    monkeypatch.setenv("SWITCH_TIMING", "0.5")
+    j.play("Kitchen", j.playlists[1]["keys"], pos=2)
+    j.zone("Kitchen").position_ms = 95000
+    alexa.say("SwitchZonesIntent")
+    assert s.position_ms == 94500
+
+
+def test_switch_to_dlna_zone_that_never_starts_falls_back(app, alexa, monkeypatch):
+    j = app.jriver
+    s = _dlna_speakers(app, monkeypatch, started=None)
+    j.play("Kitchen", j.playlists[1]["keys"], pos=2)
+    j.zone("Kitchen").position_ms = 95000
+    r = alexa.say("SwitchZonesIntent")
+    assert r.started, r
+    assert s.state == 2 and s.pos == 2 and s.position_ms == 0, "the track starts from the top"
+    assert s.volume == 0.69 and j.zone("Kitchen").state == 0
+
+
+# --- Set as Default -----------------------------------------------------------------------
+
+def test_new_playlists_start_with_their_types_row(app):
+    sp = app.saved_playlists
+    data = sp.blank()
+    data["all_row"].update(skip="7", shuffle="1")
+    data["all_row_smart"].update(nonstop="tracks")
+    data = sp.merge_scan(data, [{"ID": "1", "Name": "A", "Folder": "Root", "Type": "Playlist"},
+                                {"ID": "2", "Name": "B", "Folder": "Root", "Type": "Smartlist"}])
+    assert data["rows"]["1"]["skip"] == "7" and data["rows"]["1"]["shuffle"] == "1"
+    assert data["rows"]["2"]["nonstop"] == "tracks" and data["rows"]["2"]["skip"] == "0"
+
+
+def test_copy_defaults_only_touches_its_type(app):
+    sp = app.saved_playlists
+    data = sp.merge_scan(sp.blank(), [{"ID": "1", "Name": "A", "Folder": "Root", "Type": "Playlist"},
+                                      {"ID": "2", "Name": "B", "Folder": "Root", "Type": "Smartlist"}])
+    data["all_row_smart"].update(skip="14", blend="artists")
+    assert sp.copy_defaults(data, ["1", "2"], "Smartlist") == 1
+    assert data["rows"]["2"]["skip"] == "14" and data["rows"]["2"]["blend"] == "artists"
+    assert data["rows"]["1"]["skip"] == "0", "a playlist keeps its own row"
+    assert data["rows"]["2"]["name"] == "B", "names, folders and types are kept"

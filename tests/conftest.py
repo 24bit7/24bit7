@@ -23,7 +23,7 @@ sys.path.insert(0, HERE)
 import fakes  # noqa: E402
 
 APP_MODULES = ["engine", "library", "voice", "saved_playlists", "nonstop", "playmix", "filters", "buildlog", "blend",
-               "console_query", "hotkeys", "tray", "tabs", "mix_gui", "discover_gui", "settings_gui", "gui"]
+               "console_query", "ai_usage", "hotkeys", "tray", "tabs", "mix_gui", "discover_gui", "settings_gui", "gui"]
 
 BASE_ENV = {
     "JRIVER_HOST": fakes.JRIVER_HOST, "JRIVER_USER": "", "JRIVER_PASS": "",
@@ -82,7 +82,7 @@ def app(tmp_path, monkeypatch):
     monkeypatch.syspath_prepend(str(folder))
     monkeypatch.chdir(folder)
     for k in list(os.environ):
-        if k in env or k.startswith(("SKIP_", "DRIFT_", "NONSTOP", "RUN_AFTER", "AI_", "SIMILAR_", "TOP_")):
+        if k in env or k.startswith(("SKIP_", "DRIFT_", "NONSTOP", "RUN_AFTER", "AI_", "SIMILAR_", "TOP_", "SWITCH_")):
             monkeypatch.delenv(k, raising=False)
 
     jriver = fakes.FakeJRiver()
@@ -97,6 +97,11 @@ def app(tmp_path, monkeypatch):
 
     engine = importlib.import_module("engine")
     monkeypatch.setattr(engine, "MUSICBRAINZ_INTERVAL", 0)
+    tray = importlib.import_module("tray")   # Start with Windows: never the real registry
+    startup = {"command": None}
+    monkeypatch.setattr(tray, "startup_command", lambda: startup["command"])
+    monkeypatch.setattr(tray, "set_startup",
+                        lambda on: startup.update(command=tray.launch_command() if on else None))
     printed = Lines()
     engine.OUTPUT_HOOK = printed
     library = importlib.import_module("library")

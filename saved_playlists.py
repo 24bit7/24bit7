@@ -89,7 +89,25 @@ def row_for(data, playlist_id, kind=None):
     kind is "Playlist" or "Smartlist": with global settings on, each type has its own row."""
     if str(data.get("all", "0")) == "1":
         return dict(data["all_row_smart"] if kind == "Smartlist" else data["all_row"])
-    return dict(data["rows"].get(str(playlist_id)) or DEFAULT_ROW)
+    return dict(data["rows"].get(str(playlist_id)) or defaults_for(data, kind))
+
+
+def defaults_for(data, kind=None):
+    """The default settings for a playlist type: the All smartlists row for smartlists, else All playlists."""
+    source = data.get("all_row_smart" if kind == "Smartlist" else "all_row") or {}
+    return {k: source.get(k, v) for k, v in DEFAULT_ROW.items()}
+
+
+def copy_defaults(data, playlist_ids, kind):
+    """Set as Default: copies a type's default row into the given playlists of that type. Returns how many."""
+    new = defaults_for(data, kind)
+    done = 0
+    for pid in playlist_ids:
+        row = data["rows"].get(str(pid))
+        if row is not None and (row.get("type") or "Playlist") == kind:
+            row.update(new)
+            done += 1
+    return done
 
 
 def folder_of(playlist):
@@ -118,11 +136,11 @@ def scan():
 
 
 def merge_scan(data, found):
-    """Adds new playlists (with the defaults), drops deleted ones, and keeps names, folders and types current."""
+    """Adds new playlists (with their type's global row), drops deleted ones, and keeps names, folders and types current."""
     data = tidy(data)
     rows = {}
     for p in found:
-        row = data["rows"].get(p["ID"]) or dict(DEFAULT_ROW)
+        row = data["rows"].get(p["ID"]) or defaults_for(data, p.get("Type"))
         row.update(name=p["Name"], folder=p.get("Folder") or ROOT, type=p.get("Type") or "Playlist")
         rows[p["ID"]] = row
     data["rows"] = rows
