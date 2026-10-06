@@ -62,6 +62,7 @@ WELCOME_TEXT = (
 DRIFT_GROUPS = ("artists", "tracks", "vibe")            # Top Tracks has no Drift
 NONSTOP_GROUPS = ("artists", "tracks", "top", "vibe")
 PLAY_RESEED = [("last", "Last track"), ("second", "2nd track")]
+PLAY_NONSTOP = [("off", "Off"), ("tight", "Keep It Tight"), ("journey", "Let's See Where This Goes")]
 PLAY_DRIFT = [("off", "Off"), ("close", "Keep It Tight"), ("spread", "Spread")]   # as Settings > Playlist shows them   # as Settings > Playlist shows them
 
 
@@ -310,18 +311,19 @@ class PlayTab(tk.Frame):
                                    "own keep theirs.").pack(side="left", padx=(8, 0))
         tk.Label(self.extras_row, text="Non-stop", font=("Segoe UI", 9, "bold"),
                  fg=PALETTE["text_secondary"]).pack(side="left", padx=(24, 6))
-        self.nonstop_var = tk.StringVar(value="No")
+        self.nonstop_var = tk.StringVar(value="Off")
         self.nonstop_cb = ttk.Combobox(self.extras_row, textvariable=self.nonstop_var,
-                                       values=["No"] + [shown for _, shown in PLAY_RESEED],
-                                       state="readonly", width=10)
+                                       values=[shown for _, shown in PLAY_NONSTOP],
+                                       state="readonly", width=24)
         self.nonstop_cb.pack(side="left")
         self.nonstop_cb.bind("<<ComboboxSelected>>", self._on_nonstop_changed)
         help_mark(self.extras_row, "Keeps the music going: when the last track of a playlist 24bit7 built "
-                                   "starts, more are added, reseeded from the track chosen here. Applies to "
-                                   "all four Play options. The rest of the Non-stop settings are in "
-                                   "Settings > Playlist, and changing Non-stop here changes it there too. "
-                                   "Shows a track only when all four are on and set the same way. Voice "
-                                   "devices with settings of their own keep theirs.").pack(side="left", padx=(8, 0))
+                                   "starts, more are added. Keep It Tight reseeds from the original playlist's "
+                                   "tracks, so the evening stays close to where it started; Let's See Where This "
+                                   "Goes follows the music wherever it leads. Applies to all four Play options. "
+                                   "The rest of the Non-stop settings are in Settings > Playlist, and changing "
+                                   "Non-stop here changes it there too. Shows a mode only when all four agree. "
+                                   "Voice devices with settings of their own keep theirs.").pack(side="left", padx=(8, 0))
         self.credits_button = FlatButton(self.extras_row, text="Show Credits", command=self.on_credits,
                                          quiet=True, width=14, height=1)
         self.credits_button.pack(side="left", padx=(24, 0))
@@ -393,9 +395,8 @@ class PlayTab(tk.Frame):
                  for g in DRIFT_GROUPS if g in engine.DRIFT}
         self.drift_var.set(dict(PLAY_DRIFT).get(drift.pop() if len(drift) == 1 else "off", "Off"))
         by = engine.NONSTOP_BY
-        states = {(by[g]["reseed"] if by[g]["on"] else "no") for g in NONSTOP_GROUPS if g in by}
-        state = states.pop() if len(states) == 1 else "no"
-        self.nonstop_var.set(dict(PLAY_RESEED).get(state, "No"))
+        states = {(by[g].get("mode", "journey") if by[g]["on"] else "off") for g in NONSTOP_GROUPS if g in by}
+        self.nonstop_var.set(dict(PLAY_NONSTOP).get(states.pop() if len(states) == 1 else "off", "Off"))
 
     def _save_play_switches(self, updates, apply):
         """
@@ -436,22 +437,24 @@ class PlayTab(tk.Frame):
         self._save_play_switches(updates, apply)
 
     def _on_nonstop_changed(self, *_):
-        choice = self.nonstop_var.get()
-        reseed = {shown: code for code, shown in PLAY_RESEED}.get(choice)
+        code = {shown: c for c, shown in PLAY_NONSTOP}.get(self.nonstop_var.get(), "off")
+        on = code != "off"
         updates = {}
         for g in NONSTOP_GROUPS:
-            updates[f"NONSTOP_{g.upper()}"] = "1" if reseed else "0"
-            if reseed:
-                updates[f"NONSTOP_{g.upper()}_RESEED"] = reseed
+            updates[f"NONSTOP_{g.upper()}"] = "1" if on else "0"
+            if on:
+                updates[f"NONSTOP_{g.upper()}_MODE"] = code
 
         def apply(page):
             from settings_gui import sync_nonstop
             for g in NONSTOP_GROUPS:
-                on_key, rs_key = f"NONSTOP_{g.upper()}", f"NONSTOP_{g.upper()}_RESEED"
-                if on_key in page.vars:
-                    page.vars[on_key].set(bool(reseed))
-                if reseed and rs_key in page.vars:
-                    page.vars[rs_key].set(choice)
+                G = g.upper()
+                if f"NONSTOP_{G}" in page.vars:
+                    page.vars[f"NONSTOP_{G}"].set(on)
+                if on and f"NONSTOP_{G}_MODE" in page.vars:
+                    page.vars[f"NONSTOP_{G}_MODE"].set(code)
+                if G in getattr(page, "nonstop_modes", {}):
+                    page.nonstop_modes[G].set(self.nonstop_var.get())
             if getattr(page, "nonstop_parts", None):
                 sync_nonstop(page)
         self.nonstop_cb.selection_clear()

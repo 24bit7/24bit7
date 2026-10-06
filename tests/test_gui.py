@@ -241,7 +241,7 @@ def test_play_tab_switches_write_settings(app, ui):
     p = ui.play
     if not hasattr(p, "nonstop_var"):
         pytest.skip("Play tab switches not found by name")
-    p.nonstop_cb.set("Last track")
+    p.nonstop_cb.set("Let's See Where This Goes")
     p.nonstop_cb.event_generate("<<ComboboxSelected>>")
     ui.pump(0.5)
     from dotenv import dotenv_values
@@ -568,3 +568,18 @@ def test_support_window(app, ui):
     assert "Donate with PayPal" in joined and "GitHub Issues" in joined
     assert support_gui.show(ui.root) is win, "a second click brings the same window forward"
     win.destroy()
+
+
+def test_play_tab_nonstop_modes_write_settings(app, ui):
+    play = ui.play
+    play.nonstop_var.set("Keep It Tight")
+    play._on_nonstop_changed()
+    ui.pump(0.3)
+    by = app.engine.NONSTOP_BY
+    assert all(by[g]["on"] and by[g]["mode"] == "tight" for g in ("artists", "tracks", "top", "vibe"))
+    play.nonstop_var.set("Off")
+    play._on_nonstop_changed()
+    ui.pump(0.3)
+    assert not any(app.engine.NONSTOP_BY[g]["on"] for g in ("artists", "tracks", "top", "vibe"))
+    play._sync_play_switches()
+    assert play.nonstop_var.get() == "Off"

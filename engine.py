@@ -152,8 +152,10 @@ def nonstop_settings(get):
         on = raw in YES if raw in YES + NO else legacy_on
         using = (get(f"{name}_USING", "") or legacy_using or own).strip().lower()
         reseed = (get(f"{name}_RESEED", "") or legacy_reseed or "last").strip().lower()
+        mode = (get(f"{name}_MODE", "") or "").strip().lower()
         out[group] = {"on": on, "using": using if using in ("artists", "tracks") else own,
-                      "reseed": "second" if reseed == "second" else "last"}
+                      "reseed": "second" if reseed == "second" else "last",
+                      "mode": "tight" if mode == "tight" else "journey"}   # Keep It Tight / Let's See Where This Goes
     with_ = (get("NONSTOP_VIBE_WITH", "") or "").strip().lower()
     legacy_with = (get("NONSTOP_VIBE", "") or "").strip().lower()
     if not with_ and legacy_with in ("vibe", "artists", "tracks"):
@@ -767,7 +769,7 @@ def nonstop_record(zone, keys, append=False, **fields):
         if fresh:
             entry = {"keys": set(), "build": ctx.get("build"), "kind": ctx.get("kind"), "vibe": ctx.get("vibe"),
                      "top_artist": ctx.get("top_artist"), "top_first": ctx.get("top_first"),
-                     "stage": "first", "fired": None}
+                     "stage": "first", "fired": None, "original": set(), "seeded": set()}
             entry.update(fields)
             entry["origin"] = entry.get("kind")   # its Non-stop settings come from the option it started as
             NONSTOP_ZONES[zone] = entry
@@ -776,6 +778,8 @@ def nonstop_record(zone, keys, append=False, **fields):
             entry.update(build=ctx["build"], kind=ctx["kind"], vibe=ctx.get("vibe") or entry.get("vibe"),
                          stage="after")
         entry["keys"] |= keys
+        if not NONSTOP_APPEND:   # the original playlist (and its Drift), for Non-stop's Keep It Tight
+            entry.setdefault("original", set()).update(keys)
 
 
 def nonstop_sent(zone):

@@ -13,6 +13,10 @@ playlist follows the Non-stop settings of the option it started as, all evening.
   Vibe Playlist: more of the same vibe (asks the AI again), or Similar Artists /
       Similar Tracks like the others.
 
+Keep It Tight reseeds each top-up from a track of the original playlist instead, a
+different one each time, then carries on as Let's See Where This Goes when they've all
+been used. A JRiver playlist row set to Reseed from "Whole playlist" does the same.
+
 Only playlists 24bit7 sent are topped up (engine.NONSTOP_ZONES remembers them);
 anything you start in JRiver yourself ends as normal. Each last track triggers
 one top-up. Top-ups are queued on the Play tab like voice commands, with the
@@ -157,6 +161,30 @@ def _top_seed(zone, entry, info):
     return dict(info, ZoneID=zone)
 
 
+def _tight_seed(zone, entry, report):
+    """
+    Keep It Tight: a track of the original playlist not used as a seed yet, picked at random.
+    None once they've all been used (said once in the console).
+    """
+    import library
+    library.ensure_loaded()
+    seeded = entry.setdefault("seeded", set())
+    pool = sorted(k for k in entry.get("original", ()) if k not in seeded)
+    random.shuffle(pool)
+    for key in pool:
+        seeded.add(key)
+        with library._lock:
+            row = library._by_key.get(str(key))
+        if row:
+            report("  Keep It Tight: reseeding from a track of the original playlist.")
+            return engine.seed_from_row(row, zone)
+    if not entry.get("tight_done"):
+        entry["tight_done"] = True
+        report("  Keep It Tight has used every track of the original playlist as a seed, "
+               "so carrying on as Let's See Where This Goes.")
+    return None
+
+
 def _job(zone, zone_name, profile, info):
     def run(report):
         try:
@@ -176,6 +204,7 @@ def _job(zone, zone_name, profile, info):
                 cfg = entry.get("saved_cfg") or {"using": "tracks", "reseed": "last"}
             else:
                 cfg = engine.NONSTOP_BY.get(origin) or engine.NONSTOP_BY["artists"]
+            tight = (cfg.get("reseed") == "whole") if origin == "saved" else cfg.get("mode") == "tight"
             report(f"  {zone_name} is on its last track, so adding more."
                    + (" (with its device's own settings)" if profile else ""))
             if kind == "top" and entry.get("stage") == "first":
@@ -184,7 +213,7 @@ def _job(zone, zone_name, profile, info):
                     return
             if kind == "top":
                 entry["stage"] = "after"
-                seed = _top_seed(zone, entry, info)
+                seed = (_tight_seed(zone, entry, report) if tight else None) or _top_seed(zone, entry, info)
                 report(f"  Carrying on from {seed['Artist']}, {seed['Name']}.")
                 _build(cfg["using"], seed, report)
                 return
@@ -196,7 +225,9 @@ def _job(zone, zone_name, profile, info):
                 mode = cfg.get("with") if cfg.get("with") in ("artists", "tracks") else "artists"
             else:
                 mode = cfg["using"]
-            seed = dict(info, ZoneID=zone) if cfg["reseed"] == "last" else _second_track_seed(zone, info)
+            seed = _tight_seed(zone, entry, report) if tight else None
+            if seed is None:
+                seed = _second_track_seed(zone, info) if cfg.get("reseed") == "second" else dict(info, ZoneID=zone)
             report(f"  Reseeding from {seed['Artist']}, {seed['Name']}.")
             _build(mode, seed, report)
         finally:

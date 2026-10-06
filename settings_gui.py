@@ -289,6 +289,8 @@ class ProfilePage:
             out[f"LONG_CLOSER_MINUTES_{g}"] = v[f"LONG_CLOSER_MINUTES_{g}"].get().strip()
             out[f"NONSTOP_{g}"] = "1" if v[f"NONSTOP_{g}"].get() else "0"
             out[f"NONSTOP_{g}_RESEED"] = option_code(NONSTOP_RESEED_OPTIONS, v[f"NONSTOP_{g}_RESEED"].get())
+            if f"NONSTOP_{g}_MODE" in v:
+                out[f"NONSTOP_{g}_MODE"] = v[f"NONSTOP_{g}_MODE"].get()
             out[f"RUN_AFTER_{g}"] = "1" if v[f"RUN_AFTER_{g}"].get() else "0"
             out[f"RUN_AFTER_{g}_PATH"] = v[f"RUN_AFTER_{g}_PATH"].get().strip()
             if group != "vibe":
@@ -340,6 +342,14 @@ PLAY_OPTIONS = [("artists", "Similar Artists"), ("tracks", "Similar Tracks"),
 # Non-stop dropdowns: (saved value, label shown)
 NONSTOP_USING_OPTIONS = [("artists", "Similar artists"), ("tracks", "Similar tracks")]
 NONSTOP_RESEED_OPTIONS = [("last", "Last track"), ("second", "2nd track")]
+SAVED_RESEED_OPTIONS = NONSTOP_RESEED_OPTIONS + [("whole", "Whole playlist")]   # JRiver Playlists rows only
+NONSTOP_MODE_OPTIONS = [("off", "Off"), ("tight", "Keep It Tight"), ("journey", "Let's See Where This Goes")]
+NONSTOP_MODE_HELP = ("When the last track of a playlist 24bit7 built starts, more are added so the music keeps going.\n"
+                     "Keep It Tight: each top-up reseeds from a track of the original playlist, a different one "
+                     "each time, so the evening stays close to where it started. When every track has been used "
+                     "as a seed, it carries on as Let's See Where This Goes, and the console says so.\n"
+                     "Let's See Where This Goes: each top-up reseeds from where the music has got to (Reseed "
+                     "from), so the evening travels.")
 NONSTOP_WITH_OPTIONS = [("vibe", "More from the AI"), ("artists", "Similar artists"), ("tracks", "Similar tracks")]
 # Saved Playlists dropdowns
 SAVED_NONSTOP_OPTIONS = [("no", "No"), ("artists", "Similar artists"), ("tracks", "Similar tracks")]
@@ -465,6 +475,9 @@ def sync_nonstop(p):
     for g, (body, rest_cb) in p.nonstop_parts.items():
         on = p.vars[f"NONSTOP_{g}"].get()
         set_enabled(body, on)
+        reseed_cb, mode = getattr(p, "nonstop_reseed", {}).get(g), p.vars.get(f"NONSTOP_{g}_MODE")
+        if reseed_cb is not None and on and mode is not None and mode.get() == "tight":
+            reseed_cb.state(["disabled"])   # Keep It Tight reseeds from the original playlist instead
         if rest_cb is not None:
             rest_cb.state(["!disabled"] if on and p.vars["NONSTOP_TOP_REST"].get() else ["disabled"])
 
@@ -1106,7 +1119,7 @@ class SettingsTab(tk.Frame):
             sh = tk.BooleanVar(value=row.get("shuffle") == "1")
             bl = tk.StringVar(value=option_label(SAVED_NONSTOP_OPTIONS, row.get("blend", "no")))
             ns = tk.StringVar(value=option_label(SAVED_NONSTOP_OPTIONS, row.get("nonstop", "no")))
-            rs = tk.StringVar(value=option_label(NONSTOP_RESEED_OPTIONS, row.get("reseed", "last")))
+            rs = tk.StringVar(value=option_label(SAVED_RESEED_OPTIONS, row.get("reseed", "last")))
             sk = tk.StringVar(value=option_label(SAVED_SKIP_OPTIONS, str(row.get("skip", "0"))))
             p.keep += [sh, bl, ns, rs, sk]
             cell = tk.Frame(parent, bg=bg)
@@ -1123,8 +1136,8 @@ class SettingsTab(tk.Frame):
             ns_cb.pack(anchor="w", padx=6, pady=2)
             cell = tk.Frame(parent, bg=bg)
             cell.grid(row=r, column=col + 3, sticky="nsew")
-            rs_cb = ttk.Combobox(cell, textvariable=rs, values=[s for _, s in NONSTOP_RESEED_OPTIONS],
-                                 state="readonly", width=10)
+            rs_cb = ttk.Combobox(cell, textvariable=rs, values=[s for _, s in SAVED_RESEED_OPTIONS],
+                                 state="readonly", width=14)
             rs_cb.pack(anchor="w", padx=6, pady=2)
             cell = tk.Frame(parent, bg=bg)
             cell.grid(row=r, column=col + 4, sticky="nsew")
@@ -1136,7 +1149,7 @@ class SettingsTab(tk.Frame):
                 row["shuffle"] = "1" if sh.get() else "0"
                 row["blend"] = option_code(SAVED_NONSTOP_OPTIONS, bl.get())
                 row["nonstop"] = option_code(SAVED_NONSTOP_OPTIONS, ns.get())
-                row["reseed"] = option_code(NONSTOP_RESEED_OPTIONS, rs.get())
+                row["reseed"] = option_code(SAVED_RESEED_OPTIONS, rs.get())
                 row["skip"] = option_code(SAVED_SKIP_OPTIONS, sk.get())
                 sync_reseed()
                 on_change()
@@ -1183,6 +1196,10 @@ class SettingsTab(tk.Frame):
                          "starts, more are added, Similar artists or Similar tracks, seeded from the song "
                          "chosen under Reseed from. It carries on until something else is played on that "
                          "zone."),
+            "Reseed from": ("Where each Non-stop top-up seeds from. Last track and 2nd track follow on from the "
+                            "music, so the evening travels. Whole playlist is Keep It Tight: each top-up seeds "
+                            "from one of the playlist's own tracks, a different one each time, and carries on "
+                            "from the last track once they've all been used."),
         }
         CONTROLS = ["Shuffle", "Blend", "Non-stop", "Reseed from", "Skip recent"]   # short, so headings fit their dropdowns
 
@@ -1813,12 +1830,33 @@ class SettingsTab(tk.Frame):
                   "topped up: an album or playlist you start in JRiver yourself ends as normal.")
             box = where["box"]
             p.vars[f"NONSTOP_{g}"] = tk.BooleanVar(value=cfg["on"])
+            p.vars[f"NONSTOP_{g}_MODE"] = tk.StringVar(value=cfg.get("mode", "journey"))
 
             def toggled():
                 sync_nonstop(p)
                 p.save()
-            place(ttk.Checkbutton(box, text="Keep going when the playlist reaches its last track",
-                                  variable=p.vars[f"NONSTOP_{g}"], command=toggled), pady=(0, 2))
+            # One dropdown: Off, Keep It Tight or Let's See Where This Goes
+            ns_var = tk.StringVar(value=option_label(NONSTOP_MODE_OPTIONS,
+                                                     cfg.get("mode", "journey") if cfg["on"] else "off"))
+            top_row = tk.Frame(box)
+            tk.Label(top_row, text="Non-stop").pack(side="left")
+            ns_cb = ttk.Combobox(top_row, textvariable=ns_var, values=[s for _, s in NONSTOP_MODE_OPTIONS],
+                                 state="readonly", width=24)
+            ns_cb.pack(side="left", padx=(6, 0))
+
+            def ns_chosen(_e=None, cb=ns_cb, var=ns_var, g=g):
+                cb.selection_clear()
+                code = option_code(NONSTOP_MODE_OPTIONS, var.get())
+                p.vars[f"NONSTOP_{g}"].set(code != "off")
+                if code != "off":
+                    p.vars[f"NONSTOP_{g}_MODE"].set(code)
+                toggled()
+            ns_cb.bind("<<ComboboxSelected>>", ns_chosen)
+            help_mark(top_row, NONSTOP_MODE_HELP).pack(side="left", padx=(8, 0))
+            place(top_row, pady=(0, 2))
+            if not hasattr(p, "nonstop_modes"):
+                p.nonstop_modes = {}
+            p.nonstop_modes[g] = ns_var
             body = tk.Frame(box)
             place(body, pady=(0, 4))
             rows = {"r": 0}
@@ -1835,6 +1873,7 @@ class SettingsTab(tk.Frame):
                 cb.bind("<<ComboboxSelected>>", p.save)
                 help_mark(cell, help_text).pack(side="left", padx=(8, 0))
                 rows["r"] += 1
+                return cb
 
             rest_cb = None
             if group == "top":
@@ -1869,11 +1908,15 @@ class SettingsTab(tk.Frame):
             else:
                 option("Then play using" if group == "top" else "Play using", f"NONSTOP_{g}_USING",
                        NONSTOP_USING_OPTIONS, cfg["using"], "What each top-up is built with.")
-            option("Reseed from", f"NONSTOP_{g}_RESEED", NONSTOP_RESEED_OPTIONS, cfg["reseed"],
-                   "Last track: each top-up follows on from where the music has got to, so it wanders as "
-                   "the evening goes on.\nSecond track: each top-up seeds from the first pick after the "
-                   "original seed, so the music stays close to how it started.")
+            reseed_cb = option("Reseed from", f"NONSTOP_{g}_RESEED", NONSTOP_RESEED_OPTIONS, cfg["reseed"],
+                               "For Let's See Where This Goes. Last track: each top-up follows on from where "
+                               "the music has got to, so it wanders as the evening goes on.\nSecond track: each "
+                               "top-up seeds from the first pick after the original seed, so it stays closer to "
+                               "how it started. Keep It Tight doesn't use this.")
             p.nonstop_parts[g] = (body, rest_cb)
+            if not hasattr(p, "nonstop_reseed"):
+                p.nonstop_reseed = {}
+            p.nonstop_reseed[g] = reseed_cb
 
         def hidden(group):
             """The Hidden Tracks section for one Play option."""

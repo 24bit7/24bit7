@@ -287,6 +287,6 @@ def play(found, zone, device_id=None, report=print):
         engine.nonstop_forget(zone)
     else:
         engine.nonstop_record(zone, keys, kind="saved", stage="after", vibe=None,
-                              saved_cfg={"using": nonstop, "reseed": "second" if row.get("reseed") == "second"
-                                         else "last"})
+                              saved_cfg={"using": nonstop,
+                                         "reseed": {"second": "second", "whole": "whole"}.get(row.get("reseed"), "last")})
     return True, what

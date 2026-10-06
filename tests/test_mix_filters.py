@@ -226,3 +226,39 @@ def test_saved_playlist_nonstop_tops_up(app):
     assert len(z.playlist) > n and z.playlist[:n] == j.playlists[0]["keys"], r.text()
     nonstop._check_zones()
     assert len(jobs) == 1, "one top-up per last track"
+
+
+def test_nonstop_mode_settings(app):
+    by = app.engine.nonstop_settings({"NONSTOP_TRACKS": "1", "NONSTOP_TRACKS_MODE": "tight"}.get)
+    assert by["tracks"]["mode"] == "tight" and by["artists"]["mode"] == "journey"
+
+
+def test_saved_playlist_whole_playlist_keeps_it_tight(app):
+    import nonstop
+    sp, j = app.saved_playlists, app.jriver
+    data = sp.main_settings()
+    data["rows"] = {"201": dict(sp.DEFAULT_ROW, nonstop="tracks", reseed="whole")}
+    sp.set_main_settings(data)
+    sp.play({"ID": "201", "Name": "Sunday Morning", "Type": "Playlist"}, "10001", report=app.Lines())
+    z = j.zone("Speakers")
+    original = list(z.playlist)
+    entry = app.engine.NONSTOP_ZONES["10001"]
+    assert entry["saved_cfg"]["reseed"] == "whole" and entry["original"] == set(original)
+    z.pos = len(z.playlist) - 1
+    jobs = []
+    nonstop.attach(lambda job, heading, origin=None: jobs.append(job))
+    nonstop._check_zones()
+    r = app.Lines()
+    jobs[0](r)
+    assert r.has("Keep It Tight: reseeding"), r.text()
+    assert entry["seeded"] and entry["seeded"] <= set(original), "seeds come from the original playlist"
+    assert entry["original"] == set(original), "top-ups never join the original"
+
+
+def test_keep_it_tight_runs_out_then_carries_on(app):
+    import nonstop
+    e = app.engine
+    entry = {"original": {"k-missing"}, "seeded": set()}
+    r = app.Lines()
+    assert nonstop._tight_seed("10001", entry, r) is None
+    assert r.has("carrying on as Let's See Where This Goes")

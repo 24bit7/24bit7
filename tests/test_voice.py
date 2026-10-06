@@ -661,3 +661,19 @@ def test_copy_defaults_only_touches_its_type(app):
     assert data["rows"]["2"]["skip"] == "14" and data["rows"]["2"]["blend"] == "artists"
     assert data["rows"]["1"]["skip"] == "0", "a playlist keeps its own row"
     assert data["rows"]["2"]["name"] == "B", "names, folders and types are kept"
+
+
+def test_keep_going_keep_it_tight_when_chosen(app, alexa):
+    app.set_env(NONSTOP_TRACKS="1", NONSTOP_TRACKS_MODE="tight")
+    j = app.jriver
+    j.play("Kitchen", j.playlists[0]["keys"])
+    alexa.say("KeepGoingIntent")
+    assert app.engine.NONSTOP_ZONES["10002"]["saved_cfg"]["reseed"] == "whole"
+
+
+def test_keep_going_off_means_lets_see_where_this_goes(app, alexa):
+    app.set_env(NONSTOP_TRACKS="0", NONSTOP_TRACKS_MODE="tight", NONSTOP_TRACKS_RESEED="last")
+    j = app.jriver
+    j.play("Kitchen", j.playlists[0]["keys"])
+    alexa.say("KeepGoingIntent")
+    assert app.engine.NONSTOP_ZONES["10002"]["saved_cfg"]["reseed"] == "last"
