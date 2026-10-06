@@ -132,7 +132,7 @@ class DiscoverTab(tk.Frame):
 
     def _build_controls(self):
         bar = tk.Frame(self, padx=22, pady=8)
-        bar.pack(fill="x")
+        bar.pack(fill="x", pady=(14, 0))   # clear of the tabs above
 
         # Show: which discoveries the table lists (the value the rest of the tab reads)
         tk.Label(bar, text="Show:").pack(side="left")
@@ -153,15 +153,20 @@ class DiscoverTab(tk.Frame):
         self.session_menu = ttk.Combobox(bar, textvariable=self.session_var,
                                          state="readonly", width=SESSION_MENU_WIDTH)
         self.session_menu.pack(side="left", padx=(4, 12), fill="x", expand=True)
-        self.session_menu.bind("<<ComboboxSelected>>", lambda e: self.refresh())
+        self.session_menu.bind("<<ComboboxSelected>>", self._on_session_picked)
 
         search_bar = tk.Frame(self, padx=22)
-        search_bar.pack(fill="x")
+        search_bar.pack(fill="x", pady=(8, 2))
         tk.Label(search_bar, text="Search:").pack(side="left")
         self.search_var = tk.StringVar()
         self.search_var.trace_add("write", lambda *a: self._populate())
-        tk.Entry(search_bar, textvariable=self.search_var).pack(
-            side="left", fill="x", expand=True, padx=(4, 0))
+        tk.Entry(search_bar, textvariable=self.search_var, width=36).pack(side="left", padx=(4, 0))
+
+    def _on_session_picked(self, _event=None):
+        """A session picked by hand stays chosen; until then Discover follows the latest session."""
+        self._session_picked = True
+        self.session_menu.selection_clear()
+        self.refresh()
 
     def _on_filter_changed(self, _event=None):
         self.filter_var.set(self._filter_names.get(self.filter_menu.get(), "misses"))
@@ -215,13 +220,13 @@ class DiscoverTab(tk.Frame):
         self._bar_right.pack(side="right")
         tk.Button(self._bar_right, text="CSV", command=self.export_csv).pack(side="right")
         tk.Button(self._bar_right, text="Refresh", command=self.refresh).pack(side="right", padx=(0, 8))
-        tk.Button(self._bar_right, text="Select none", command=self.select_none).pack(side="right", padx=(0, 8))
-        self._select_all_button = tk.Button(self._bar_right, text="Select all", command=self.select_all)
+        tk.Button(self._bar_right, text="Select None", command=self.select_none).pack(side="right", padx=(0, 8))
+        self._select_all_button = tk.Button(self._bar_right, text="Select All", command=self.select_all)
         self._select_all_button.pack(side="right", padx=(0, 4))
         # Appears once a row is ticked; the status line beside it says how the last playlist went
         self._yt_button = tk.Button(self._bar_right, text="", command=self.create_youtube_playlist)
         # Clear all always shows, at the far left of the group; Clear selected appears with the ticks
-        tk.Button(self._bar_right, text="Clear all", command=self.clear_all).pack(side="right", padx=(0, 16))
+        tk.Button(self._bar_right, text="Clear All", command=self.clear_all).pack(side="right", padx=(0, 16))
         self._clear_sel_button = tk.Button(self._bar_right, text="", command=self.clear_selected)
         self._yt_note = ""   # how the last YouTube playlist went, shown after the row count
         self._last_view = None
@@ -254,8 +259,9 @@ class DiscoverTab(tk.Frame):
             labels.append(f"{short_started(started)}  {seed}")
             self._session_ids.append(sid)
         self.session_menu.config(values=labels)
-        if self.session_var.get() not in labels:
-            self.session_var.set("All sessions")
+        # Until you pick one, Discover opens on the latest session (All sessions stays first in the list)
+        if not getattr(self, "_session_picked", False) or self.session_var.get() not in labels:
+            self.session_var.set(labels[1] if len(labels) > 1 else "All sessions")
 
     def refresh(self):
         self._reload_sessions()
@@ -398,7 +404,7 @@ class DiscoverTab(tk.Frame):
             self._clear_sel_button.pack(side="right", padx=(0, 8), after=self._yt_button)
         elif not count:
             self._clear_sel_button.pack_forget()
-        self._clear_sel_button.config(text=f"Clear selected ({count})")
+        self._clear_sel_button.config(text=f"Clear Selected ({count})")
         if str(self._yt_button.cget("state")) != "disabled":
             self._yt_button.config(text=f"Create YouTube playlist ({count})")
         self._place_site_buttons()
@@ -499,7 +505,9 @@ class DiscoverTab(tk.Frame):
     def _rebuild_site_buttons(self, force=False):
         """Rebuilds the site buttons when the ticked sites have changed (or the row they sit on has)."""
         sites = self._site_list()
-        signature = [(label, kind) for label, kind, _ in sites] + [s.get("url") for s in getattr(engine, "CUSTOM_SITES", [])]
+        show_label = os.getenv("DISCOVER_LABEL", "1").strip().lower() in ("1", "true", "yes")
+        signature = ([(label, kind) for label, kind, _ in sites] + [s.get("url") for s in getattr(engine, "CUSTOM_SITES", [])]
+                     + [show_label])
         if signature == self._site_signature and not force:
             self._sync_site_buttons()
             return
@@ -508,10 +516,12 @@ class DiscoverTab(tk.Frame):
             b.destroy()
         parent = self._sites_inline if self._site_mode == "inline" else self._sites_below
         self._site_buttons = []
-        self._label_button = tk.Button(parent, text="Finding label..." if self._label_busy else "Label",
-                                       command=self.find_label)
-        self._label_button.pack(side="left", padx=(0, 12))
-        self._site_buttons.append(self._label_button)
+        self._label_button = None
+        if show_label:   # Settings > Search Sites > Record Label
+            self._label_button = tk.Button(parent, text="Finding label..." if self._label_busy else "Label",
+                                           command=self.find_label)
+            self._label_button.pack(side="left", padx=(0, 12))
+            self._site_buttons.append(self._label_button)
         for label, kind, builder in sites:
             b = tk.Button(parent, text=label, command=lambda k=kind, f=builder: self.open_site(k, f))
             b.pack(side="left", padx=(0, 6))
@@ -574,7 +584,7 @@ class DiscoverTab(tk.Frame):
         self._label_busy = False
         try:
             self._label_button.config(text="Label")
-        except tk.TclError:
+        except (tk.TclError, AttributeError):   # gone, or switched off in Settings meanwhile
             pass
         self._sync_site_buttons()
         if error is not None:

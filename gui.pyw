@@ -38,6 +38,7 @@ import console_query
 import playmix
 import buildlog
 import support_gui
+import window_chrome
 import ai_usage
 
 
@@ -94,8 +95,11 @@ class PlayTab(tk.Frame):
     def _build_now_playing(self):
         header = tk.Frame(self, padx=16, pady=12)
         header.pack(fill="x")
+        # The version, on the right of the header line (the window has no title bar to show it)
+        tk.Label(header, text=f"v{engine.VERSION}", font=("Segoe UI", 9),
+                 fg=PALETTE["text_muted"]).pack(side="right", anchor="s", pady=(0, 5))
         title = tk.Frame(header)
-        title.pack(anchor="w")
+        title.pack(side="left", anchor="w")
         BLUE, ORANGE = PALETTE["brand_blue"], PALETTE["brand_orange"]
         for part, colour in (("24", BLUE), ("bit", ORANGE), ("7", BLUE)):
             tk.Label(title, text=part, font=("Segoe UI", 18, "bold"),
@@ -1420,8 +1424,8 @@ def main():
     root.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
     root.minsize(680, 480)
 
-    nb = TabbedPane(root, font=("Segoe UI", 11, "bold"), pad=(20, 8))
-    nb.pack(fill="both", expand=True, pady=(6, 0))
+    nb = TabbedPane(root, font=("Segoe UI", 11, "bold"), pad=(20, 8), strip=True)
+    nb.pack(fill="both", expand=True)
 
     play = PlayTab(nb, root)
     discover = DiscoverTab(nb)
@@ -1435,19 +1439,35 @@ def main():
     # Support window (support_gui.py). It is hidden if the window is too narrow for it
     # to sit clear of the tab buttons.
     donate = tk.Label(root, text="Support", font=("Segoe UI", 9, "underline"),
-                      fg=PALETTE["link"], cursor="hand2")
+                      fg=PALETTE.get("strip_fg") or PALETTE["link"], bg=PALETTE.get("strip_bg") or root.cget("bg"),
+                      cursor="hand2")
     donate.bind("<Button-1>", lambda e: support_gui.show(root))
+
+    chrome_room = {"w": 0}   # the built-in title bar's buttons, when it's on
 
     def place_donate(event=None):
         if event is not None and event.widget is not root:
             return
-        room = root.winfo_width() - nb.tabs_width() - donate.winfo_reqwidth() - 40
+        room = root.winfo_width() - nb.tabs_width() - donate.winfo_reqwidth() - 40 - chrome_room["w"]
         if room > 0:
-            donate.place(relx=1.0, x=-16, y=nb.winfo_y() + nb.strip_height() // 2, anchor="e")
+            strip = nb._strip
+            donate.place(relx=1.0, x=-16 - chrome_room["w"],
+                         y=nb.winfo_y() + strip.winfo_y() + strip.winfo_height() // 2, anchor="e")
+            donate.lift()
         else:
             donate.place_forget()
     root.bind("<Configure>", place_donate, add="+")
     root.after(100, place_donate)
+
+    # The built-in title bar (Windows): the strip runs to the top of the window, with its own
+    # minimise, maximise and close. Settings > Other > Use the Windows title bar turns it off.
+    if os.name == "nt" and os.getenv("WINDOWS_TITLE_BAR", "0").strip().lower() not in ("1", "true", "yes"):
+        try:
+            chrome_room["w"] = window_chrome.attach(root, nb).width
+            root.after(150, place_donate)
+        except Exception as e:
+            root.after(13000, lambda e=e: play.report(f"Note: the built-in title bar couldn't be set up ({e}), "
+                                                      f"so the Windows one is used."))
 
     def on_tab_changed(event):
         if nb.select() == str(discover):

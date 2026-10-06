@@ -171,20 +171,25 @@ def help_mark(parent, text):
 
 def section(parent, title, help_text=None, row=None, title_fg=None):
     """
-    A boxed section: a thin rectangle with its title (and optional ?) on the top
-    edge. Returns the box to build the section's controls in. Stacked with grid
-    in column 0 of parent, one under another, or at row if given.
+    A Settings section: a solid header bar with its title (and optional ?), black in
+    dark and grey in light, over a thin-edged box. Returns the box to build the
+    section's controls in. Stacked with grid in column 0 of parent, one under
+    another, or at row if given.
     """
-    box = tk.LabelFrame(parent, bd=0, padx=14, pady=10, highlightthickness=1,
-                        highlightbackground=PALETTE["section_edge"], highlightcolor=PALETTE["section_edge"])
-    head = tk.Frame(box)
-    tk.Label(head, text=title, font=HEADING_FONT, fg=title_fg or PALETTE["section_fg"]).pack(side="left")
+    edge = PALETTE["section_edge"]
+    outer = tk.Frame(parent, bd=0, highlightthickness=1, highlightbackground=edge, highlightcolor=edge)
+    head_bg = PALETTE.get("head_bg") or outer.cget("bg")
+    head = tk.Frame(outer, bg=head_bg)
+    head.pack(fill="x")
+    tk.Label(head, text=title, font=HEADING_FONT, fg=title_fg or PALETTE.get("head_fg") or PALETTE["section_fg"],
+             bg=head_bg).pack(side="left", padx=(10, 0), pady=4)
     if help_text:
         help_mark(head, help_text).pack(side="left", padx=(6, 0))
-    box.configure(labelwidget=head)
+    box = tk.Frame(outer, padx=14, pady=10)
+    box.pack(fill="both", expand=True)
     if row is None:
         row = parent.grid_size()[1]
-    box.grid(row=row, column=0, sticky="ew", pady=(0, 14))
+    outer.grid(row=row, column=0, sticky="ew", pady=(0, 14))
     parent.grid_columnconfigure(0, weight=1)
     return box
 
@@ -365,7 +370,7 @@ def table_colours():
     import tabs
     if tabs.THEME == "dark":
         return "#000000", "#1f2023", "#2a2c30"
-    return "#e4e4e4", "#ffffff", "#f4f4f4"
+    return "#bfc3c9", "#ffffff", "#f3f4f6"
 
 
 # The ? beside each Number of tracks
@@ -540,6 +545,8 @@ class SettingsTab(tk.Frame):
         for group in ("DIGITAL_STORES", "REFERENCE_SITES"):
             updates[group] = ",".join(code for code, v in self.vars[group].items() if v.get())
         updates["DIGITAL_STORE"] = None   # pre-1.1.0 single-store key, superseded
+        if "DISCOVER_LABEL" in self.vars:
+            updates["DISCOVER_LABEL"] = "1" if self.vars["DISCOVER_LABEL"].get() else "0"
         updates["LISTEN_SITES"] = ",".join(code for code, v in self.vars["LISTEN_SITES"].items() if v.get())
         for n in range(1, engine.CUSTOM_SITE_SLOTS + 1):
             name = self.vars[f"CUSTOM_SITE_{n}_NAME"].get().strip()
@@ -554,9 +561,16 @@ class SettingsTab(tk.Frame):
         updates["THEME"] = self.vars["THEME"].get().lower()
         updates["SIMILAR_REQUIRE_AGREEMENT"] = None   # old on/off key, superseded
         updates["SIMILAR_TRACK_TOPUP"] = None   # replaced by Drift in 1.4.0
-        for key in ("START_IN_TRAY", "CLOSE_TO_TRAY", "PREFER_OFFICIAL_VIDEOS"):
+        for key in ("START_IN_TRAY", "CLOSE_TO_TRAY", "PREFER_OFFICIAL_VIDEOS", "WINDOWS_TITLE_BAR"):
             updates[key] = "1" if self.vars[key].get() else "0"
         return updates
+
+    def _on_title_bar_toggled(self):
+        """Saves the title bar choice, then offers to restart so it takes effect."""
+        self._save()
+        which = "Windows'" if self.vars["WINDOWS_TITLE_BAR"].get() else "24bit7's own"
+        if messagebox.askyesno("Title bar", f"Restart 24bit7 now to use {which} title bar?", parent=self):
+            self.winfo_toplevel().event_generate("<<Restart24bit7>>")
 
     def _on_theme_changed(self, *_):
         """Saves the theme, then offers to restart so it takes effect."""
@@ -1173,6 +1187,7 @@ class SettingsTab(tk.Frame):
                     holder = tk.Frame(parent, bg=table_colours()[0])
                     holder.grid(row=0, column=c, sticky="we", ipadx=8, ipady=4)
                 lab = tk.Label(holder, text=text, font=LABEL_FONT, anchor="w", bg=table_colours()[0],
+                               fg=PALETTE.get("head_fg") or PALETTE["section_fg"],
                                width=WIDTHS[c] if c < 3 else 0)
                 if text in HEAD_HELP:
                     lab.pack(side="left")
@@ -2271,6 +2286,14 @@ class SettingsTab(tk.Frame):
         theme_cb.pack(side="left")
         help_mark(cell, 'Light or dark colours for the whole app. The theme is applied when 24bit7 starts, so changing it offers a restart straight away.').pack(side="left", padx=(8, 0))
         theme_cb.bind("<<ComboboxSelected>>", self._on_theme_changed)
+        self.vars["WINDOWS_TITLE_BAR"] = tk.BooleanVar(
+            value=self.env.get("WINDOWS_TITLE_BAR", "0").strip().lower() in ("1", "true", "yes"))
+        ttk.Checkbutton(cell, text="Use the Windows title bar", variable=self.vars["WINDOWS_TITLE_BAR"],
+                        command=self._on_title_bar_toggled).pack(side="left", padx=(24, 0))
+        help_mark(cell, "Unticked, 24bit7 draws its own title bar: the Play, Discover and Settings strip runs to "
+                        "the top of the window, with minimise, maximise and close at the right. Drag the strip to "
+                        "move the window, double-click it to maximise. Tick this for Windows' usual title bar "
+                        "instead. Either way takes effect when 24bit7 restarts.").pack(side="left", padx=(8, 0))
 
         row = tk.Frame(box)
         row.grid(row=5, column=0, columnspan=3, sticky="w", pady=(8, 0))
@@ -2881,6 +2904,14 @@ class SettingsTab(tk.Frame):
                 ttk.Checkbutton(box, text=label, variable=v, command=self._save,
                                 style="Big.TCheckbutton").grid(
                     row=i // cols, column=i % cols, sticky="w", padx=(0, 16), pady=2)
+
+        box = section(tab, "Record Label",
+                      "Adds a Label button to the Discover tab. It finds who released the selected track and "
+                      "opens the label on Bandcamp, so buying it supports the artist through their label.")
+        self.vars["DISCOVER_LABEL"] = tk.BooleanVar(
+            value=self.env.get("DISCOVER_LABEL", "1").strip().lower() in ("1", "true", "yes"))
+        ttk.Checkbutton(box, text="Label", variable=self.vars["DISCOVER_LABEL"], command=self._save,
+                        style="Big.TCheckbutton").grid(row=0, column=0, sticky="w", pady=2)
 
         # Carry over a pre-1.1.0 single DIGITAL_STORE if the new key isn't there yet.
         stores_raw = self.env.get("DIGITAL_STORES", self.env.get("DIGITAL_STORE", "bandcamp"))

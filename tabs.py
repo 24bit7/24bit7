@@ -52,6 +52,15 @@ PALETTE.update({
     "ai_purple":      "#b000b0",   # magenta: anything that uses AI credits
 })
 LIGHT = dict(PALETTE)
+LIGHT.update({   # the redesign: a blue strip, #BFC3C9 header bars and inactive tabs, blue ticks
+    "tab_selected_fg": "#1f4e8c", "tab_bg": "#bfc3c9", "tab_fg": "#1f4e8c", "line": "#c9ccd1",
+    "window_bg": "#f3f4f6", "text": "#1a1a1a", "field_bg": "#ffffff",
+    "text_secondary": "#4a4d52", "text_muted": "#5f6368", "text_faint": "#8a8f96",
+    "section_fg": "#1f4e8c", "section_edge": "#c9ccd1", "help_mark_bg": "#1f4e8c", "help_mark_fg": "#ffffff",
+    "strip_bg": "#1f4e8c", "strip_fg": "#ffffff", "head_bg": "#bfc3c9", "head_fg": "#1f4e8c",
+    "tick_fill": "#1f4e8c", "tick_mark": "#ffffff", "tick_edge": "#6f737a", "tick_inside": "#ffffff",
+    "field_fg": "#1a1a1a", "field_edge": "#9aa0a6", "select_bg": "#cfe0f5",
+})
 DARK = {
     "tab_selected_bg": None,
     "tab_selected_fg": "#00ff41",
@@ -83,6 +92,18 @@ DARK = {
     "tooltip_bg":      "#000000",
     "tooltip_fg":      "#00ff41",
     "ai_purple":       "#ff33ff",   # bright magenta, so it reads on charcoal
+    # the redesign: a black strip, black header bars, green ticks, dark grey fields
+    "strip_bg":        "#000000",
+    "strip_fg":        "#00ff41",
+    "head_bg":         "#000000",
+    "head_fg":         "#00ff41",
+    "tick_fill":       "#00ff41",
+    "tick_mark":       "#000000",
+    "tick_edge":       "#9aa0a6",
+    "tick_inside":     "#000000",
+    "field_fg":        "#e3e3e3",
+    "field_edge":      "#3a3d42",
+    "select_bg":       "#3a3d42",
 }
 THEME = "light"
 
@@ -90,36 +111,37 @@ THEME = "light"
 def apply_theme(root, name):
     """
     Picks the palette for "light" or "dark". Call straight after tk.Tk(), before
-    any widgets are made. Dark also sets default colours for every plain Tk widget
-    and darkens the Windows title bar.
+    any widgets are made. Sets default colours for every plain Tk widget and styles
+    the ttk widgets for the theme; dark also darkens the Windows title bar.
     """
     global THEME
     THEME = "dark" if str(name).strip().lower() == "dark" else "light"
     PALETTE.clear()
     PALETTE.update(DARK if THEME == "dark" else LIGHT)
-    if THEME != "dark":
-        return
     bg, fg, field = PALETTE["window_bg"], PALETTE["text"], PALETTE["field_bg"]
+    field_fg = PALETTE["field_fg"]
     root.configure(bg=bg)
     for key, value in (
             ("*Background", bg), ("*Foreground", fg),
             ("*activeBackground", field), ("*activeForeground", fg),
             ("*highlightBackground", bg), ("*highlightColor", PALETTE["line"]),
             ("*disabledForeground", PALETTE["text_faint"]),
-            ("*selectBackground", "#3d5a8a"), ("*selectForeground", fg),
+            ("*selectBackground", PALETTE["select_bg"]), ("*selectForeground", fg),
             ("*insertBackground", fg), ("*troughColor", field),
-            ("*Entry.Background", MATRIX_BG), ("*Entry.Foreground", MATRIX_FG),
-            ("*Entry.insertBackground", MATRIX_FG),
-            ("*Spinbox.Background", MATRIX_BG), ("*Spinbox.Foreground", MATRIX_FG),
-            ("*Spinbox.insertBackground", MATRIX_FG),
+            ("*Entry.Background", field), ("*Entry.Foreground", field_fg),
+            ("*Entry.insertBackground", field_fg),
+            ("*Spinbox.Background", field), ("*Spinbox.Foreground", field_fg),
+            ("*Spinbox.insertBackground", field_fg),
             ("*Spinbox.buttonBackground", field), ("*Listbox.Background", field),
-            ("*Text.Background", field), ("*Button.Background", field),
+            ("*Text.Background", field), ("*Button.Background", PALETTE["button_bg"]),
+            ("*Button.Foreground", PALETTE["button_fg"]),
             ("*Entry.readonlyBackground", bg), ("*Entry.disabledBackground", bg),
             ("*Spinbox.readonlyBackground", bg), ("*Spinbox.disabledBackground", bg),
             ("*Checkbutton.selectColor", field), ("*Radiobutton.selectColor", field)):
         root.option_add(key, value)
-    dark_title_bar(root)
-    matrix_dropdowns(root)
+    if THEME == "dark":
+        dark_title_bar(root)
+    themed_ttk(root)
 
 
 def dark_title_bar(window):
@@ -154,7 +176,10 @@ class TabbedPane(tk.Frame):
     on a high-resolution screen as on a normal one.
     """
 
-    def __init__(self, master, font, pad=(18, 8), box=False, indent=8, **kw):
+    def __init__(self, master, font, pad=(18, 8), box=False, indent=8, strip=False, **kw):
+        self._strip_mode = strip   # the main window's top strip: tabs on a black (or blue) band
+        if strip:
+            kw.setdefault("bg", PALETTE.get("strip_bg") or master.cget("bg"))
         super().__init__(master, **kw)
         try:
             scale = max(1.0, self.winfo_fpixels("1i") / 96.0)
@@ -167,10 +192,11 @@ class TabbedPane(tk.Frame):
         self._line = self._px(LINE_WIDTH)
         self._tabs, self._pages, self._current = [], [], None
 
-        self._strip = tk.Frame(self)
-        self._strip.pack(fill="x", padx=(self._px(indent), 0))
+        self._strip = tk.Frame(self, bg=self.cget("bg"))
+        self._strip.pack(fill="x", padx=(self._px(indent), 0), pady=(self._px(8), 0) if strip else 0)
         self._underline = tk.Frame(self, height=self._line, bg=PALETTE["line"])   # the line under the tabs
-        self._underline.pack(fill="x")
+        if not strip:   # on the strip the selected tab simply opens into the page
+            self._underline.pack(fill="x")
         self._underline.bind("<Configure>", lambda e: self._place_gap(), add="+")
         # A short piece in the window colour laid over that line under the active
         # tab, so the tab opens into the area below like a folder tab
@@ -246,12 +272,18 @@ class TabbedPane(tk.Frame):
         return self._strip.winfo_reqheight()
 
     def _paint(self):
-        selected_bg = PALETTE["tab_selected_bg"] or self.cget("bg")
+        selected_bg = PALETTE["tab_selected_bg"] or (PALETTE.get("window_bg") or self.master.cget("bg")
+                                                     if self._strip_mode else self.cget("bg"))
         line_h = self._tk_font.metrics("linespace")
         for label, page in zip(self._tabs, self._pages):
             on = page is self._current
             w = self._tk_font.measure(label.cget("text")) + 2 * self._pad[0] + 2 * self._line
             h = line_h + 2 * self._pad[1] + self._line + (self._px(SELECTED_RISE) if on else 0)
+            if self._strip_mode:   # no outlines on the strip: off tabs are the strip, the selected one is the page
+                fill = selected_bg if on else PALETTE["strip_bg"]
+                shape = rounded_shape(self, w, h, self._px(CORNER), fill, fill, self._line, open_bottom=True)
+                label.config(image=shape, fg=PALETTE["tab_selected_fg"] if on else PALETTE["strip_fg"])
+                continue
             shape = rounded_shape(self, w, h, self._px(CORNER), selected_bg if on else PALETTE["tab_bg"],
                                   PALETTE["line"], self._line, open_bottom=True)
             label.config(image=shape, fg=PALETTE["tab_selected_fg"] if on else PALETTE["tab_fg"])
@@ -260,7 +292,7 @@ class TabbedPane(tk.Frame):
 
     def _place_gap(self):
         """Lays the window-coloured piece over the underline, inside the active tab's outline."""
-        if self._current is None or self._current not in self._pages:
+        if self._strip_mode or self._current is None or self._current not in self._pages:
             self._gap.place_forget()
             return
         try:
@@ -503,11 +535,12 @@ MATRIX_FG = "#00ff41"      # the log's green
 MATRIX_HI = "#0d4d1c"      # a highlighted row in an open dropdown
 
 
-def matrix_dropdowns(root):
+def themed_ttk(root):
     """
-    Dark theme for ttk widgets (dropdowns, tick boxes, the Discover table, scrollbars).
-    Windows' own style ignores colours, so dark switches ttk to Tk's "clam" style,
-    which takes them, and paints it black and matrix green.
+    ttk widgets (dropdowns, tick boxes, the Discover table, scrollbars) in the theme's
+    colours. Windows' own style ignores colours, so this switches ttk to Tk's "clam"
+    style, which takes them. Tick boxes are drawn as images: filled with the theme's
+    colour and a tick when ticked.
     """
     style = ttk.Style(root)
     try:
@@ -516,100 +549,110 @@ def matrix_dropdowns(root):
         return
     bg, text, edge = PALETTE["window_bg"], PALETTE["text"], PALETTE["line"]
     faint, panel = PALETTE["text_faint"], PALETTE["button_bg"]
+    field, field_fg, field_edge = PALETTE["field_bg"], PALETTE["field_fg"], PALETTE["field_edge"]
+    accent, hi = PALETTE["tab_fg"], PALETTE["select_bg"]
     style.configure(".", background=bg, foreground=text, bordercolor=edge, lightcolor=bg, darkcolor=bg,
-                    troughcolor=bg, fieldbackground=MATRIX_BG, selectbackground=MATRIX_HI,
-                    selectforeground=MATRIX_FG, insertcolor=MATRIX_FG, focuscolor=bg)
+                    troughcolor=bg, fieldbackground=field, selectbackground=hi,
+                    selectforeground=text, insertcolor=field_fg, focuscolor=bg)
     style.map(".", foreground=[("disabled", faint)])
     # dropdowns
-    style.configure("TCombobox", fieldbackground=MATRIX_BG, background=MATRIX_BG, foreground=MATRIX_FG,
-                    arrowcolor=MATRIX_FG, bordercolor=edge, lightcolor=MATRIX_BG, darkcolor=MATRIX_BG,
-                    selectbackground=MATRIX_BG, selectforeground=MATRIX_FG)
+    style.configure("TCombobox", fieldbackground=field, background=field, foreground=field_fg,
+                    arrowcolor=accent, bordercolor=field_edge, lightcolor=field, darkcolor=field,
+                    selectbackground=field, selectforeground=field_fg)
     style.map("TCombobox",
-              fieldbackground=[("readonly", MATRIX_BG), ("disabled", MATRIX_BG)],
-              foreground=[("disabled", faint), ("readonly", MATRIX_FG)],
-              selectbackground=[("readonly", MATRIX_BG)],
-              selectforeground=[("readonly", MATRIX_FG)],
-              background=[("pressed", MATRIX_HI), ("active", MATRIX_HI)],
+              fieldbackground=[("readonly", field), ("disabled", bg)],
+              foreground=[("disabled", faint), ("readonly", field_fg)],
+              selectbackground=[("readonly", field)],
+              selectforeground=[("readonly", field_fg)],
+              background=[("pressed", hi), ("active", hi)],
               arrowcolor=[("disabled", faint)])
-    # tick boxes and round buttons: black box, green border and tick, green label
-    # tick boxes and round buttons: white label, white border, black inside, green tick,
-    # sized to the display scaling (the default is a fixed 10 pixels)
     try:
         scale = max(1.0, root.winfo_fpixels("1i") / 96.0)
     except tk.TclError:
         scale = 1.0
+    size = int(round(15 * scale))
     for kind in ("TCheckbutton", "TRadiobutton"):
-        style.configure(kind, background=bg, foreground=text, indicatorbackground=MATRIX_BG,
-                        indicatorforeground=MATRIX_FG, upperbordercolor=text, lowerbordercolor=text,
-                        indicatorsize=int(round(13 * scale)), indicatormargin=(0, 0, int(round(6 * scale)), 0))
+        style.configure(kind, background=bg, foreground=text, indicatorbackground=PALETTE["tick_inside"],
+                        indicatorforeground=PALETTE["tick_fill"], upperbordercolor=PALETTE["tick_edge"],
+                        lowerbordercolor=PALETTE["tick_edge"], indicatorsize=size,
+                        indicatormargin=(0, 0, int(round(6 * scale)), 0))
         style.map(kind, background=[("active", bg)], foreground=[("disabled", faint)],
-                  indicatorbackground=[("pressed", MATRIX_HI), ("disabled", bg)],
+                  indicatorbackground=[("selected", PALETTE["tick_fill"]), ("disabled", bg)],
                   indicatorforeground=[("disabled", faint)],
                   upperbordercolor=[("disabled", faint)], lowerbordercolor=[("disabled", faint)])
-    # a real tick instead of clam's cross: the tick box is drawn from images
-    try:
-        off, on, off_dim, on_dim = _tick_images(root, int(round(13 * scale)), scale, text, faint)
+    try:   # a filled box with a real tick, instead of clam's cross
+        off, on, off_dim, on_dim = _tick_images(root, size, scale, PALETTE["tick_edge"], faint)
         gap = int(round(6 * scale))
-        style.element_create("Matrix.Checkbutton.indicator", "image", off,
+        style.element_create("Themed.Checkbutton.indicator", "image", off,
                              ("disabled selected", on_dim), ("disabled", off_dim), ("selected", on),
                              width=off.width() + gap, sticky="w")
         style.layout("TCheckbutton", [
             ("Checkbutton.padding", {"sticky": "nswe", "children": [
-                ("Matrix.Checkbutton.indicator", {"side": "left", "sticky": ""}),
+                ("Themed.Checkbutton.indicator", {"side": "left", "sticky": ""}),
                 ("Checkbutton.focus", {"side": "left", "sticky": "w", "children": [
                     ("Checkbutton.label", {"sticky": "nswe"})]})]})])
     except tk.TclError:
-        pass   # keep the drawn cross
-    # the Discover table
-    style.configure("Treeview", background=MATRIX_BG, fieldbackground=MATRIX_BG, foreground=MATRIX_FG,
-                    bordercolor=edge, lightcolor=MATRIX_BG, darkcolor=MATRIX_BG)
-    style.map("Treeview", background=[("selected", MATRIX_HI)], foreground=[("selected", MATRIX_FG)])
-    style.configure("Treeview.Heading", background=MATRIX_BG, foreground=MATRIX_FG, bordercolor=edge,
-                    lightcolor=MATRIX_BG, darkcolor=edge, relief="flat")
-    style.map("Treeview.Heading", background=[("active", "#0a1f0f")])
+        pass   # keep clam's own box
+    # the Discover table: rows like the page, the heading like a Settings header bar
+    style.configure("Treeview", background=bg, fieldbackground=bg, foreground=text,
+                    bordercolor=edge, lightcolor=bg, darkcolor=bg)
+    style.map("Treeview", background=[("selected", hi)], foreground=[("selected", text)])
+    style.configure("Treeview.Heading", background=PALETTE["head_bg"], foreground=PALETTE["head_fg"],
+                    bordercolor=edge, lightcolor=PALETTE["head_bg"], darkcolor=PALETTE["head_bg"], relief="flat")
+    style.map("Treeview.Heading", background=[("active", PALETTE["head_bg"])],
+              foreground=[("active", PALETTE["head_fg"])])
     # scrollbars, entry boxes, spin boxes, buttons
-    style.configure("TScrollbar", background=panel, troughcolor=bg, arrowcolor=MATRIX_FG,
+    style.configure("TScrollbar", background=panel, troughcolor=bg, arrowcolor=accent,
                     bordercolor=edge, lightcolor=panel, darkcolor=panel)
     style.map("TScrollbar", background=[("active", PALETTE["tab_bg"])])
-    style.configure("TEntry", fieldbackground=MATRIX_BG, foreground=MATRIX_FG)
-    style.configure("TSpinbox", fieldbackground=MATRIX_BG, foreground=MATRIX_FG, arrowcolor=MATRIX_FG,
-                    background=panel)
-    style.configure("TButton", background=panel, foreground=MATRIX_FG)
+    style.configure("TEntry", fieldbackground=field, foreground=field_fg, bordercolor=field_edge)
+    style.configure("TSpinbox", fieldbackground=field, foreground=field_fg, arrowcolor=accent,
+                    background=panel, bordercolor=field_edge)
+    style.configure("TButton", background=panel, foreground=PALETTE["button_fg"])
     style.map("TButton", background=[("active", PALETTE["button_hover"])])
     # the list that drops down from a dropdown
-    for key, value in (("*TCombobox*Listbox.background", MATRIX_BG),
-                       ("*TCombobox*Listbox.foreground", MATRIX_FG),
-                       ("*TCombobox*Listbox.selectBackground", MATRIX_HI),
-                       ("*TCombobox*Listbox.selectForeground", MATRIX_FG)):
+    for key, value in (("*TCombobox*Listbox.background", field),
+                       ("*TCombobox*Listbox.foreground", field_fg),
+                       ("*TCombobox*Listbox.selectBackground", hi),
+                       ("*TCombobox*Listbox.selectForeground", accent)):
         root.option_add(key, value)
+
+
+def matrix_dropdowns(root):
+    """Kept for anything that still calls it: the theme's ttk styling."""
+    themed_ttk(root)
 
 
 def _tick_images(root, size, scale, edge, dim):
     """
-    Four tick box images (unticked, ticked, and both greyed out) at the given size:
-    a square border, black inside, and a matrix green tick with a thick stroke.
+    Four tick box images (unticked, ticked, and both greyed out), drawn smooth with
+    Pillow: unticked is a rounded square outline; ticked is filled with the theme's
+    colour (green in dark, blue in light) with a bold tick in black or white.
     Kept on root so Tk doesn't lose them.
     """
-    border = max(1, int(round(scale)))
-    stroke = max(2, int(round(1.8 * scale)))
+    from PIL import Image, ImageDraw, ImageTk
+    s = 4
+    big = size * s
+    radius = max(1, int(round(2.5 * scale))) * s
+    line = max(1, int(round(scale))) * s
+    stroke = max(2, int(round(2.2 * scale))) * s
 
-    def box(edge_colour, tick_colour):
-        img = tk.PhotoImage(width=size, height=size)
-        img.put(edge_colour, to=(0, 0, size, size))
-        img.put(MATRIX_BG, to=(border, border, size - border, size - border))
-        if tick_colour:
-            points = [(0.22, 0.52), (0.42, 0.72), (0.80, 0.28)]
-            for (x1, y1), (x2, y2) in zip(points, points[1:]):
-                steps = size * 2
-                for i in range(steps + 1):
-                    x = (x1 + (x2 - x1) * i / steps) * size
-                    y = (y1 + (y2 - y1) * i / steps) * size
-                    half = stroke / 2
-                    img.put(tick_colour, to=(max(border, int(x - half)), max(border, int(y - half)),
-                                             min(size - border, int(x + half) + 1),
-                                             min(size - border, int(y + half) + 1)))
-        return img
+    def rgb(colour):
+        r, g, b = root.winfo_rgb(colour)
+        return (r >> 8, g >> 8, b >> 8, 255)
 
-    images = (box(edge, None), box(edge, MATRIX_FG), box(dim, None), box(dim, dim))
+    def box(outline, inside, tick):
+        img = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        d.rounded_rectangle((0, 0, big - 1, big - 1), radius=radius, fill=rgb(outline))
+        d.rounded_rectangle((line, line, big - 1 - line, big - 1 - line), radius=max(0, radius - line),
+                            fill=rgb(inside))
+        if tick:
+            points = [(0.24 * big, 0.52 * big), (0.43 * big, 0.71 * big), (0.78 * big, 0.30 * big)]
+            d.line(points, fill=rgb(tick), width=stroke, joint="curve")
+        return ImageTk.PhotoImage(img.resize((size, size), Image.LANCZOS), master=root)
+
+    fill, mark, inside = PALETTE["tick_fill"], PALETTE["tick_mark"], PALETTE["tick_inside"]
+    images = (box(edge, inside, None), box(fill, fill, mark), box(dim, inside, None), box(dim, dim, inside))
     root._tick_images = images
     return images

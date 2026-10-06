@@ -303,8 +303,8 @@ def build_window(gui):
     root.geometry(f"{w}x{h}+40+40")
     root.attributes("-topmost", True)
 
-    nb = gui.TabbedPane(root, font=("Segoe UI", 11, "bold"), pad=(20, 8))
-    nb.pack(fill="both", expand=True, pady=(6, 0))
+    nb = gui.TabbedPane(root, font=("Segoe UI", 11, "bold"), pad=(20, 8), strip=True)
+    nb.pack(fill="both", expand=True)
     play = gui.PlayTab(nb, root)
     discover = gui.DiscoverTab(nb)
     settings = gui.SettingsTab(nb)
@@ -313,7 +313,8 @@ def build_window(gui):
     nb.add(discover, text="Discover")
     nb.add(settings, text="Settings")
 
-    donate = tk.Label(root, text="Support", font=("Segoe UI", 9, "underline"), fg=PALETTE["link"])
+    donate = tk.Label(root, text="Support", font=("Segoe UI", 9, "underline"),
+                      fg=PALETTE.get("strip_fg") or PALETTE["link"], bg=PALETTE.get("strip_bg") or root.cget("bg"))
 
     def place_donate(event=None):
         if event is not None and event.widget is not root:

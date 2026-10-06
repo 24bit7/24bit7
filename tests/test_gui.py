@@ -583,3 +583,34 @@ def test_play_tab_nonstop_modes_write_settings(app, ui):
     assert not any(app.engine.NONSTOP_BY[g]["on"] for g in ("artists", "tracks", "top", "vibe"))
     play._sync_play_switches()
     assert play.nonstop_var.get() == "Off"
+
+
+# --- Discover: the latest session first, and Label as an option ---------------------------------
+
+def test_discover_opens_on_the_latest_session(app, ui):
+    e = app.engine
+    e.session_start("similar_tracks", {"Artist": "The Beatles", "Name": "Something", "Album": ""})
+    e.session_start("similar_tracks", {"Artist": "The Kinks", "Name": "Waterloo Sunset", "Album": ""})
+    d = ui.discover
+    d.refresh()
+    ui.pump(0.3)
+    values = list(d.session_menu.cget("values"))
+    assert values[0] == "All sessions" and "Kinks" in values[1] and "Beatles" in values[2]
+    assert "Kinks" in d.session_var.get(), "the latest session until one is picked"
+    d.session_var.set("All sessions")
+    d._on_session_picked()
+    e.session_start("similar_tracks", {"Artist": "Blur", "Name": "Tender", "Album": ""})
+    d.refresh()
+    assert d.session_var.get() == "All sessions", "a session picked by hand stays chosen"
+
+
+def test_discover_label_button_is_optional(app, ui):
+    d = ui.discover
+    d.refresh()
+    ui.pump(0.3)
+    assert d._label_button is not None
+    app.set_env(DISCOVER_LABEL="0")
+    d.refresh()
+    ui.pump(0.3)
+    assert d._label_button is None
+    assert "Label" not in [b.cget("text") for b in d._site_buttons]
