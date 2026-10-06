@@ -313,7 +313,7 @@ def build_window(gui):
     nb.add(discover, text="Discover")
     nb.add(settings, text="Settings")
 
-    donate = tk.Label(root, text="Buy me a coffee \u2615", font=("Segoe UI", 9, "underline"), fg=PALETTE["link"])
+    donate = tk.Label(root, text="Support", font=("Segoe UI", 9, "underline"), fg=PALETTE["link"])
 
     def place_donate(event=None):
         if event is not None and event.widget is not root:

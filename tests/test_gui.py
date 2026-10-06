@@ -547,3 +547,24 @@ def test_play_tab_drift_modes_write_settings(app, ui):
     assert all(e.DRIFT[g]["from"] == "close" for g in ("artists", "tracks", "vibe")), "the mode is kept for next time"
     play._sync_play_switches()
     assert play.drift_var.get() == "Off"
+
+
+def test_support_window(app, ui):
+    import support_gui
+    win = support_gui.show(ui.root)
+    ui.pump(0.3)
+    texts = []
+
+    def walk(w):
+        for c in w.winfo_children():
+            try:
+                texts.append(str(c.cget("text")))
+            except Exception:
+                pass
+            walk(c)
+    walk(win)
+    joined = " ".join(texts)
+    assert "Support 24bit7" in joined and "free, and it always will be" in joined
+    assert "Donate with PayPal" in joined and "GitHub Issues" in joined
+    assert support_gui.show(ui.root) is win, "a second click brings the same window forward"
+    win.destroy()

@@ -37,6 +37,7 @@ from mix_gui import MixRows
 import console_query
 import playmix
 import buildlog
+import support_gui
 import ai_usage
 
 
@@ -1427,11 +1428,12 @@ def main():
     nb.add(discover, text="Discover")
     nb.add(settings, text="Settings")
 
-    # Donate link: top right of the tab row, so it shows from every tab. It is hidden
-    # if the window is too narrow for it to sit clear of the tab buttons.
-    donate = tk.Label(root, text="Buy me a coffee \u2615", font=("Segoe UI", 9, "underline"),
+    # Support link: top right of the tab row, so it shows from every tab. It opens the
+    # Support window (support_gui.py). It is hidden if the window is too narrow for it
+    # to sit clear of the tab buttons.
+    donate = tk.Label(root, text="Support", font=("Segoe UI", 9, "underline"),
                       fg=PALETTE["link"], cursor="hand2")
-    donate.bind("<Button-1>", lambda e: webbrowser.open(DONATE_URL))
+    donate.bind("<Button-1>", lambda e: support_gui.show(root))
 
     def place_donate(event=None):
         if event is not None and event.widget is not root:
