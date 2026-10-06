@@ -71,7 +71,7 @@ With nothing playing on the output zone, a playlist used to arrive all at once w
 
 ### Drift
 
-Similar Artists, Similar Tracks and AI Playlist each have a target length, and a library doesn't always have enough to reach it. With **Drift** ticked (on each Play option's tab under Settings > Playlist, off by default), 24bit7 searches again from what it has already found: each round seeds from the three best finds not used yet, most agreed on first, and looks up either their similar tracks or their similar artists, whichever **Drift using** is set to. **Rounds** sets how many times it tries, from 1 to 6. More rounds fill more gaps but wander further from where you started, which is why it stops at 6 regardless. With JRiver output the first pass is queued straight away and each round is added to the end as it is found, so the music never waits for Drift.
+Similar Artists, Similar Tracks and AI Playlist each have a target length, and a library doesn't always have enough to reach it. With **Drift** switched on (on each Play option's tab under Settings > Playlist, Off by default), 24bit7 searches again from what it has already found, three seeds a round, looking up either their similar tracks or their similar artists, whichever **Drift using** is set to. **Keep It Tight** seeds only from the first round's tracks, so nothing strays more than two steps from your seed (it can finish short, and says so). **Spread** seeds from across the whole playlist, Drift's own finds included, so it travels further while branching in several directions. **Rounds** sets how many times it tries, from 1 to 6. More rounds fill more gaps but wander further from where you started, which is why it stops at 6 regardless. With JRiver output the first pass is queued straight away and each round is added to the end as it is found, so the music never waits for Drift.
 
 **Drift sources** sets where those rounds look. **Same as Settings > Sources**, the default, uses the sources you picked for that Play option. **Custom Sources** gives Drift its own source ticks and its own **Sources that must agree**, so the first pass can stay steady and the top-up can be more adventurous: Last.fm alone for Similar Artists, say, with Deezer and ListenBrainz agreeing on 2 to fill the gaps. The ticks follow Drift using, similar-artist or similar-track sources, and each set is kept separately. The log names the sources each round used.
 
@@ -117,9 +117,9 @@ Each Play option's tab under Settings > Playlist can leave out anything JRiver h
 
 ### Non-stop
 
-A playlist used to end. With **Non-stop** ticked on a Play option's tab under Settings > Playlist, 24bit7 watches the zone, and when the last track of a playlist it built starts playing, it adds more to the end. Each Play option sets how it carries on:
+A playlist used to end. With **Non-stop** switched on for a Play option under Settings > Playlist, 24bit7 watches the zone, and when the last track of a playlist it built starts playing, it adds more to the end. **Keep It Tight** reseeds each top-up from a track of the original playlist, a different one each time, so the evening stays close to where it started; once every track has been used it carries on as **Let's See Where This Goes**, which follows the music wherever it leads. Each Play option sets how it carries on:
 
-- **Similar Artists and Similar Tracks** top up using similar artists or similar tracks (**Play using**), seeded from the **last track**, so the music wanders as the evening goes on, or the **2nd track**, the first pick after the original seed, so it stays close to how it started.
+- **Similar Artists and Similar Tracks** top up using similar artists or similar tracks (**Play using**). Let's See Where This Goes seeds from the **last track**, so the music wanders as the evening goes on, or the **2nd track**, the first pick after the original seed, so it stays closer to how it started.
 - **Artist's Top Tracks** can first play the rest of the artist's songs in your library, shuffled (up to 20 by default, or unlimited), then carries on from their most popular track.
 - **AI Playlist** can ask the AI for more (More from the AI), or carry on with similar artists or similar tracks, which use no credit.
 
@@ -294,7 +294,18 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.12.0
+## What's new in 1.13.0
+
+- **A new look**: black and green in the dark theme, blue and grey in the light, with header bars on every Settings section and table, and new tick boxes.
+- **A built-in title bar**: the tabs run to the top of the window, with minimise, maximise and close. Settings > Other > **Use the Windows title bar** brings Windows' own back.
+- **Switch to a Sonos without starting again**: a DLNA zone now carries on from the same point, fine-tuned with **Switch Timing Adjustment**.
+- **Keep It Tight**: Drift is Off, Keep It Tight or Spread; Non-stop is Off, Keep It Tight or Let's See Where This Goes; JRiver playlists can reseed from the **Whole playlist**.
+- **AI Moderator on Drift tracks** for Similar Artists and Similar Tracks, a moderator that compares with the playlist so far, and chains that went off course dropped.
+- **AI Usage** in Settings > Keys: tokens per feature, estimated costs, a per-run guide and a Query, with an optional total in Now Playing.
+- **More variety** from Similar Tracks.
+- **Set as Default** on JRiver Playlists; dropped-g titles match; the cache can be kept for a month, a year or permanently, and cleared by age; Discover opens on the latest session; Label is an option; **Support** replaces Buy me a coffee.
+
+### Earlier: 1.12.0
 
 - **Switch zones by voice**: "Alexa, ask needle drop to switch" moves what's playing to another zone at the same song (and point, on local zones). Pick the zones under Settings > Voice Commands > **Enable Switch To**.
 - **Stop, pause and resume** by voice, on the speaker's own zone.
@@ -469,4 +480,4 @@ Released under the MIT Licence. See LICENSE. Provided as is, without warranty of
 
 ## Support the project
 
-24bit7 is free and always will be. If it has found you music you'd have missed, you can buy me a coffee (or a Beer!): https://paypal.me/24bit7
+24bit7 is free and always will be. If it has found you music you'd have missed, you can buy me a coffee, a beer, or a pair of PMC Prodigy speakers: https://paypal.me/24bit7. The **Support** link at the top right of 24bit7 says more.

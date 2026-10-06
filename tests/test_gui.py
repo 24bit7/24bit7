@@ -614,3 +614,13 @@ def test_discover_label_button_is_optional(app, ui):
     ui.pump(0.3)
     assert d._label_button is None
     assert "Label" not in [b.cget("text") for b in d._site_buttons]
+
+
+def test_discover_is_laid_out_before_its_first_load(app, ui):
+    d = ui.discover
+    assert not d._loaded
+    assert d.session_var.get() == "Loading sessions..." and d.count_label.cget("text") == "Loading..."
+    assert [b.cget("text") for b in d._site_buttons], "the site buttons are there from the start"
+    d.ensure_loaded()
+    ui.pump(0.5)
+    assert d.session_var.get() != "Loading sessions..." and d.count_label.cget("text") != "Loading..."

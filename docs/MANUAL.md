@@ -83,7 +83,7 @@ Every playlist starts from a seed. The seed is whichever of the two small tabs i
 ![More Options open](images/play_more_options.png)
 
 - **AI Moderator** checks each playlist for tracks that clash with the seed's mood. See [AI Moderator](#ai-moderator).
-- **Drift** and **Non-stop** switch those settings on or off for every Play option at once. See [Drift](#drift) and [Non-stop](#non-stop).
+- **Drift** (Off, Keep It Tight or Spread) and **Non-stop** (Off, Keep It Tight or Let's See Where This Goes) set those settings for every Play option at once. See [Drift](#drift) and [Non-stop](#non-stop).
 - **Show Credits** lists the producer, engineer and other credits for the album that's playing, from Discogs. It needs a Discogs token.
 - **+ Add Playlist** joins one of your JRiver playlists to the next build. See [Adding your own playlists](#adding-your-own-playlists).
 
@@ -151,11 +151,11 @@ They are for the Play tab only, with JRiver output. Voice, keyboard shortcuts an
 Discover lists every track a build looked for and whether you own it.
 
 - **Show** picks Misses (tracks you don't own), Hits, or All.
-- **Session** narrows it to one build. **Search** looks across every column.
+- **Session** narrows it to one build. It opens on the latest build until you pick one yourself, with **All sessions** first in the list and the rest newest first. **Search** looks across every column.
 - Select a row and each site you've ticked under Settings > Search has a button along the bottom. Stores and YouTube search for the artist and track; reference sites such as Wikipedia and Discogs search for the artist, for the discography.
-- **Label** finds who released the selected track and opens the label on Bandcamp, so you can buy from the people who put the record out. It asks MusicBrainz first, then Discogs if you have a token. A self-released track opens the artist on Bandcamp. Each answer is remembered, so a second click is instant.
-- Tick rows, or **Select all**, and **Create YouTube playlist** opens them in your browser as one playlist, so you can hear the misses before you buy.
-- **Clear all** empties the history and **Clear selected** removes just the ticked rows. Both ask first.
+- **Label** finds who released the selected track and opens the label on Bandcamp, so you can buy from the people who put the record out. It asks MusicBrainz first, then Discogs if you have a token. A self-released track opens the artist on Bandcamp. Each answer is remembered, so a second click is instant. Untick it under Settings > Search > Record Label if you don't want it.
+- Tick rows, or **Select All**, and **Create YouTube playlist** opens them in your browser as one playlist, so you can hear the misses before you buy.
+- **Clear All** empties the history and **Clear Selected** removes just the ticked rows. Both ask first.
 - **CSV** saves the list as a spreadsheet file. **Font size** sets the size of the table text.
 
 ---
@@ -185,8 +185,8 @@ How each Play option builds its playlist, with a tab for each option.
 
 - **Playlist**: how many tracks, how many artists, how many of each artist's top tracks to draw from, and how many to pick per artist. Similar Tracks sets the most tracks any one artist gets and the order. Artist's Top Tracks sets shuffled or popular order.
 - **Skip tracks played in the last ... days** leaves out anything JRiver has played recently, so a favourite doesn't come round again the same evening. The seed track is never left out. Off by default.
-- **Drift** searches again when your library falls short of the target length. See [Drift](#drift).
-- **Non-stop** keeps a playlist going when it reaches its last track. See [Non-stop](#non-stop).
+- **Drift** (Off, Keep It Tight or Spread) searches again when your library falls short of the target length. Similar Artists and Similar Tracks also have **AI Moderator on Drift tracks**. See [Drift](#drift).
+- **Non-stop** (Off, Keep It Tight or Let's See Where This Goes) keeps a playlist going when it reaches its last track. See [Non-stop](#non-stop).
 - **Hidden Tracks** skips the last track on an album when it's longer than a set number of minutes (6 by default). Those are often a long silence and a hidden bonus track, which feel out of place in a playlist. Albums, songs and playlists you ask for by name always play in full.
 - **Run After Building** runs a file of your choice once a playlist is in JRiver: a .bat, an .exe, or a PowerShell or Python script. It's told nothing about the playlist, so it can do whatever you like. Non-stop top-ups don't run it.
 
@@ -210,7 +210,7 @@ A track with no value for a field passes that rule. The seed track is never filt
 
 ![Settings, Search](images/settings_search_sites.png)
 
-The sites that get a button on the Discover tab: **Stores** (at least one stays ticked), **Reference** sites for discographies, and **Listen** sites. **Custom sites** adds up to three of your own: search for anything on the site, copy the address from your browser, and replace your search words with `{query}`.
+The sites that get a button on the Discover tab: **Record Label** (the Label button, ticked by default), **Stores** (at least one stays ticked), **Reference** sites for discographies, and **Listen** sites. **Custom sites** adds up to three of your own: search for anything on the site, copy the address from your browser, and replace your search words with `{query}`.
 
 ### Keys
 
@@ -220,7 +220,7 @@ Keys and passwords for each service, hidden until you tick **Show**. Each **?** 
 
 - **Last.fm** and **ListenBrainz**: free, and well worth adding.
 - **Discogs**: free, for album credits and a second source for Label.
-- **Anthropic**: paid, a few pence at most per build. Needed for AI Playlist, AI as a source, the AI Moderator and Console Query.
+- **Anthropic**: paid, a few pence at most per build. Needed for AI Playlist, AI as a source, the AI Moderator and Console Query. It sits last, in its own box, with **AI Usage** underneath: the tokens each AI feature has used since you last cleared the count, with estimated costs, and a **Guide** to what $1 buys and what each feature costs per run (your own average once you've used it three times). **Query** asks Claude where the tokens go and which settings would use fewer, and answers in the console. **Show in Now Playing** puts the total at the right of Now Playing, in dollars or tokens; click it to switch. The costs are estimates from Anthropic's standard rates on the date shown, which may have changed since; Anthropic's console has your actual bill.
 - **JRiver** user name and password: only if you set them in JRiver under Tools > Options > Media Network > Authentication.
 
 Keys never leave your PC except to the service they belong to, and they never appear in a log.
@@ -229,19 +229,19 @@ Keys never leave your PC except to the service they belong to, and they never ap
 
 ![Settings, Voice Commands](images/settings_voice_commands.png)
 
-Switches voice on, holds the key the Alexa skill sends, and lists each Alexa device with the zone it plays to. **Enable Switch To** picks which zones "switch" can move the music to; two devices on the same zone share one tick, and a zone no device plays to isn't offered. **Test** sends a pretend command, as if a device had heard it. See [Voice Commands](#voice-commands) and [Setting up the Alexa skill](#setting-up-the-alexa-skill).
+Switches voice on, holds the key the Alexa skill sends, and lists each Alexa device with the zone it plays to. **Enable Switch To** picks which zones "switch" can move the music to; two devices on the same zone share one tick, and a zone no device plays to isn't offered. **Switch Timing Adjustment** fine-tunes switching to a Sonos or other DLNA speaker: if it repeats the last moment you heard in the other room, move it towards minus; if it skips a little, towards plus. **Test** sends a pretend command, as if a device had heard it. See [Voice Commands](#voice-commands) and [Setting up the Alexa skill](#setting-up-the-alexa-skill).
 
 ### JRiver Playlists
 
 ![Settings, JRiver Playlists](images/settings_jriver_playlists.png)
 
-How your own JRiver playlists and smartlists play when you ask for them by voice: **Shuffle**, **Blend**, **Non-stop**, **Reseed from** and **Skip recent**. **Blend** weaves new music into the playlist, one of yours then one new, from similar artists or similar tracks, up to 50 new songs: the playlist starts at once and the new songs join a few seconds later. The **?** beside Blend and Non-stop explains each. Tick **Use global playlist settings** to set them all at once, or untick it and give each playlist its own row. The table shows each playlist's folder and type, sorts by folder or name, and can show one folder at a time. A playlist with nothing changed plays exactly as JRiver has it.
+How your own JRiver playlists and smartlists play when you ask for them by voice: **Shuffle**, **Blend**, **Non-stop**, **Reseed from** (Last track, 2nd track, or **Whole playlist**, which is Keep It Tight: each top-up seeds from one of the playlist's own tracks) and **Skip recent**. **Set as Default** on the All playlists and All smartlists rows copies that row into the playlists of its type shown in the table (filter by folder first to set just one folder), and new playlists start with it. **Blend** weaves new music into the playlist, one of yours then one new, from similar artists or similar tracks, up to 50 new songs: the playlist starts at once and the new songs join a few seconds later. The **?** beside Blend and Non-stop explains each. Tick **Use global playlist settings** to set them all at once, or untick it and give each playlist its own row. The table shows each playlist's folder and type, sorts by folder or name, and can show one folder at a time. A playlist with nothing changed plays exactly as JRiver has it.
 
 ### Other
 
 ![Settings, Other](images/settings_other.png)
 
-- **General**: how long answers from each service are kept (Cache days), the JRiver host if JRiver runs on another PC, the YouTube playlist length (up to 50), **Prefer official music videos**, the **Theme** (Light or Dark, applied on restart), and **Enable Console Query**.
+- **General**: **Keep Cache For** (1 Month, 1 Year or Permanent) with **Clear Cache...** (older than a month, older than a year, or everything), the JRiver host if JRiver runs on another PC, the YouTube playlist length (up to 50), **Prefer official music videos**, the **Theme** (Light or Dark, applied on restart), **Use the Windows title bar** (unticked, the tabs run to the top of the window with their own minimise, maximise and close), and **Enable Console Query**.
 - **Zones**: which JRiver zones appear in the Zone and Output lists, which zone Now Playing opens on, and whether it follows JRiver's active zone. A DLNA speaker such as a Sonos only appears once DLNA Controller is ticked in JRiver (Tools > Options > Media Network > Advanced); press **Rescan** after ticking it.
 - **Windows**: **Start with Windows** launches 24bit7 when you sign in. **Start in the tray** keeps it hidden when Windows starts it. **Close to tray** makes the window's close button hide 24bit7 instead of quitting, so voice keeps listening; quit from the tray icon.
 - **Keyboard Shortcuts**: a key each for Similar Tracks, Similar Artists, Artist's Top Tracks, Shuffle Songs by Artist, **Switch Zones** (moves what's playing to the next zone ticked under Enable Switch To) and **Keep It Going** (Non-stop, once, for whatever the shortcut zone is playing). They work anywhere in Windows, even with 24bit7 in the tray, so a remote that sends key presses (a Flirc, a Harmony, a phone app) can start a playlist from the sofa. Click a box and press the keys; Esc cancels. Letters and numbers need Ctrl, Alt, Shift or Win; F-keys and media keys work on their own. If another program already owns a combination, 24bit7 says so.
@@ -264,7 +264,7 @@ Each ticked source returns a ranked list. 24bit7 merges them with position weigh
 
 ### Similar Tracks
 
-Similar Artists asks "who sounds like this artist?". Similar Tracks asks "what sounds like this song?", which follows the mood of the seed far more closely: two songs by the same artist lead to different places. Its sources are Last.fm, ListenBrainz, YouTube Music and, if ticked, AI. A track two or three sources agree on ranks above one only a single source suggests.
+Similar Artists asks "who sounds like this artist?". Similar Tracks asks "what sounds like this song?", which follows the mood of the seed far more closely: two songs by the same artist lead to different places. Its sources are Last.fm, ListenBrainz, YouTube Music and, if ticked, AI. A track two or three sources agree on ranks above one only a single source suggests. It collects up to twice as many matches as it needs and picks at random, the closest the most likely, so the same seed gives a different playlist each time.
 
 ### YouTube Music as a source
 
@@ -285,7 +285,10 @@ New tracks are queued around the current one: the rest of Playing Now is cleared
 
 ### Drift
 
-A library doesn't always have enough to reach the target length. With **Drift** ticked, 24bit7 searches again from what it has already found: each round seeds from the three best finds not used yet and looks up their similar tracks or similar artists, whichever **Drift using** says. **Rounds** sets how many times it tries, from 1 to 6. More rounds fill more gaps but wander further from the seed. With JRiver output, the first pass is queued straight away and each round is added as it's found.
+A library doesn't always have enough to reach the target length. With **Drift** on, 24bit7 searches again from what it has already found, three seeds a round, looking up their similar tracks or similar artists, whichever **Drift using** says.
+
+- **Keep It Tight** seeds only from the first round's tracks, so nothing strays more than two steps from your seed. If the first round was short it can run out of seeds and finish short; the console says when.
+- **Spread** seeds from across the whole playlist, Drift's own finds included, so it can travel further while branching in several directions. **Rounds** sets how many times it tries, from 1 to 6. More rounds fill more gaps but wander further from the seed. With JRiver output, the first pass is queued straight away and each round is added as it's found.
 
 **Drift sources** can follow Settings > Sources, or use **Custom Sources** with their own **Sources that must agree**, so the first pass stays steady and the top-up is more adventurous.
 
@@ -301,11 +304,13 @@ Most playlists are right apart from one track: the stadium anthem in the middle 
 
 A few extra tracks are found up front so removals are replaced. It costs a fraction of a penny per playlist. If the check fails, the playlist builds as normal and the console says why.
 
+Drift rounds are checked against the playlist so far as well as the seed, which makes an odd one out much easier to spot. **AI Moderator on Drift tracks** (Similar Artists and Similar Tracks) can check Drift harder than the first round, or not at all; Same as build follows the build's own level. When most of what one seed brought in is off course, the rest of it goes too and Drift doesn't seed from that chain again, within the level's limit.
+
 ### Non-stop
 
-With **Non-stop** ticked, 24bit7 watches the zone, and when the last track of a playlist it built starts playing, it adds more:
+With **Non-stop** on, 24bit7 watches the zone, and when the last track of a playlist it built starts playing, it adds more. **Keep It Tight** reseeds each top-up from a track of the original playlist, a different one each time, so the evening stays close to where it started; when every one has been used, it carries on as **Let's See Where This Goes** and the console says so. Let's See Where This Goes follows the music:
 
-- **Similar Artists and Similar Tracks** carry on using similar artists or similar tracks, seeded from the **last track** (so the music wanders as the evening goes on) or the **2nd track** (so it stays close to where it started).
+- **Similar Artists and Similar Tracks** carry on using similar artists or similar tracks, seeded from the **last track** (so the music wanders as the evening goes on) or the **2nd track** (so it stays closer to where it started).
 - **Artist's Top Tracks** can first play the rest of the artist's songs in your library, shuffled, then carry on from their most popular track.
 - **AI Playlist** can ask the AI for more, or carry on with similar artists or similar tracks, which use no credit.
 
@@ -313,7 +318,7 @@ Every top-up passes through your filters and skips anything the zone already had
 
 ### Library matching
 
-Recommendations arrive as names, and names are messy. 24bit7 handles accents, look-alike punctuation, version tags such as "(Remastered)", "&" against "and", bracketed words either way round, dotted initials (UNKLE and U.N.K.L.E.), sort names ("XX, The"), JRiver's multi-value artists, and band credits ("The Jimi Hendrix Experience" finds "Jimi Hendrix"). The whole library is held in memory when 24bit7 starts, so matching is instant.
+Recommendations arrive as names, and names are messy. 24bit7 handles accents, look-alike punctuation, version tags such as "(Remastered)", "&" against "and", bracketed words either way round, dotted initials (UNKLE and U.N.K.L.E.), sort names ("XX, The"), JRiver's multi-value artists, band credits ("The Jimi Hendrix Experience" finds "Jimi Hendrix"), and a dropped "g" ("Smokestack Lightnin'" finds "Smokestack Lightning"). The whole library is held in memory when 24bit7 starts, so matching is instant.
 
 ### YouTube output
 
@@ -321,7 +326,7 @@ With Output set to YouTube, the playlist is built as usual, then each track's vi
 
 ### Cache and history
 
-Every answer from every service is kept in a local database for 30 days by default (Cache days, under Settings > Other), so a repeat build on the same seed costs nothing. The same database records every build and every hit and miss, which is what Discover shows.
+Every answer from every service is kept in a local database for a month by default (Keep Cache For, under Settings > Other: 1 Month, 1 Year or Permanent), so a repeat build on the same seed costs nothing, AI credit included. **Clear Cache...** removes answers older than a month, older than a year, or all of them. An answer that MusicBrainz doesn't know an artist is always rechecked after a month. The same database records every build and every hit and miss, which is what Discover shows.
 
 ---
 
@@ -360,7 +365,7 @@ Open the skill first ("Alexa, open needle drop"), then say the command, or say i
 | "keep it going", "non stop" or "go continuous" | Turns on Non-stop for whatever is playing in that device's zone, once |
 | "list commands" or "help" | Alexa reads the commands once |
 
-**Switch** moves the music from the zone that's playing (the asking device's own, if it is) to another zone ticked under **Enable Switch To**. With two zones it goes straight to the other one; with three or more, Alexa asks which and you answer "to the kitchen", or say it up front: "switch to the kitchen". It carries on from the same song and point, a paused zone arrives paused, and Non-stop follows the music. Local zones carry on from the same point; a Sonos or other DLNA zone starts the song from the beginning, as it needs a moment to start before it can jump. A plain "Alexa, stop" goes to the speaker itself, so stopping a JRiver zone needs "ask needle drop to stop the music".
+**Switch** moves the music from the zone that's playing (the asking device's own, if it is) to another zone ticked under **Enable Switch To**. With two zones it goes straight to the other one; with three or more, Alexa asks which and you answer "to the kitchen", or say it up front: "switch to the kitchen". It carries on from the same song and point, a paused zone arrives paused, and Non-stop follows the music. A Sonos or other DLNA zone carries on from the same point too: it starts quietly, jumps to the right place once it's playing, and the room you left stops a moment later. Fine-tune it with Switch Timing Adjustment under Settings > Voice Commands. A plain "Alexa, stop" goes to the speaker itself, so stopping a JRiver zone needs "ask needle drop to stop the music".
 
 When several albums or songs share a title, Alexa asks which artist, and you answer "by *artist*". When two playlists share a name, she asks which, and you answer "by smartlist", "by playlist" or "by" and the folder. To skip the question, say it up front: "playlist vocal jazz smartlist".
 
@@ -385,7 +390,7 @@ Albums, songs, playlists and shuffles need no building, so they replace whatever
 
 ### Keeping it going
 
-With **Non-stop** ticked for a Play option, a playlist a voice command built carries on when it reaches its last track. "Shuffle songs by" carries on the same way once the shuffle runs out. Your own JRiver playlists can keep going too, set per playlist under Settings > JRiver Playlists. Albums and songs end as normal, unless you say **"keep it going"**: that turns on Non-stop once for whatever the zone is playing, even an album you started in JRiver, using the zone's Similar Tracks Non-stop settings whether or not Non-stop is ticked there. It ends when something else replaces the music.
+With **Non-stop** ticked for a Play option, a playlist a voice command built carries on when it reaches its last track. "Shuffle songs by" carries on the same way once the shuffle runs out. Your own JRiver playlists can keep going too, set per playlist under Settings > JRiver Playlists. Albums and songs end as normal, unless you say **"keep it going"**: that turns on Non-stop once for whatever the zone is playing, even an album you started in JRiver, using the zone's Similar Tracks Non-stop settings: Let's See Where This Goes if Non-stop is Off there, otherwise the mode chosen there. It ends when something else replaces the music.
 
 A JRiver playlist with **Blend** set doesn't wait for its end: new songs are woven through it from the start, one of yours then one new, until up to 50 new songs run out.
 

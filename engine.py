@@ -27,7 +27,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.12.0"
+VERSION = "1.13.0"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
@@ -1092,7 +1092,7 @@ def get_playing_info(zone=None):
         zone = zone or seed_zone()
         if zone is None:
             return None
-        r = requests.get(f"{JRIVER_BASE}/Playback/Info", params={"Zone": zone}, auth=AUTH)
+        r = requests.get(f"{JRIVER_BASE}/Playback/Info", params={"Zone": zone}, auth=AUTH, timeout=10)
         root = ET.fromstring(r.text)
         info = {"Artist": "Unknown", "Album": "Unknown", "Name": "Unknown",
                 "PlayingNowPosition": "-1", "PlayingNowTracks": "0", "FileKey": "", "ZoneID": ""}

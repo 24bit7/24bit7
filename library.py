@@ -171,9 +171,14 @@ def _get(path, **params):
 
 
 def _read_tracks():
+    started = time.time()
     r = _get("Files/Search", Query=AUDIO, Action="JSON", Fields=FIELDS)
+    answered = time.time()
     try:
-        return [{k: str(v) for k, v in row.items()} for row in json.loads(r.text)]
+        rows = [{k: str(v) for k, v in row.items()} for row in json.loads(r.text)]
+        engine.debug(f"Library: JRiver answered in {answered - started:.1f} s, "
+                     f"decoding {len(rows):,} tracks took {time.time() - answered:.1f} s")
+        return rows
     except ValueError:
         pass
     r = _get("Files/Search", Query=AUDIO, Action="MPL")
@@ -245,6 +250,7 @@ def load():
         _played, _played_unread = played, bool(seen and not played)
         _songs, _song_titles = songs, [t for t in songs if t]
         _loaded_at = time.time()
+    engine.debug(f"Library: {len(tracks):,} tracks read and indexed in {time.time() - started:.1f} s")
     return (f"Library read for voice: {len(albums)} albums, {len(playlists)} playlists "
             f"({time.time() - started:.1f} s)")
 

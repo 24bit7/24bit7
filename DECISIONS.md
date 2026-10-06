@@ -160,3 +160,18 @@ Music started in JRiver belongs to no Play option, so a one-off Non-stop needs s
 
 **5 Oct 2026: Blend has no round limit, but a cap.**
 Blend aims for one new song per playlist song, so it keeps searching, seeding from what it finds, until it gets there, stops when a round finds nothing new, and never adds more than 50. Seeds are the first, middle and last songs, and what several seeds suggest ranks first.
+
+**6 Oct 2026: Switching to a DLNA zone carries on after all.**
+A test on the Sonos showed it accepts a jump once it's playing, about a second after starting. The switch now starts it muted, waits, jumps to where the old room has got to, lets its buffer clear, then brings the volume back and stops the old room. If anything fails the song starts from the top, as before. Switch Timing Adjustment covers the Sonos's own delay, which JRiver can't see.
+
+**6 Oct 2026: Drift and Non-stop name what they do.**
+"Keep It Tight" stays anchored to where you started; "Spread" and "Let's See Where This Goes" travel. Drift's Last Round was dropped: Spread covers it, and two clearly different choices are easier to pick between. Each is one dropdown with Off first, so there's no separate tick.
+
+**6 Oct 2026: The moderator sees the playlist, not just the seed.**
+ZZ Top's Tush passed a Strict check against Beast of Burden alone. Judging a Drift track against the first round's tracks as well makes the odd one out obvious, for a few hundred extra input tokens.
+
+**6 Oct 2026: AI prices are built in and dated, not fetched.**
+Fetching prices online (a file on GitHub, or Claude with web search) would add a connection, a cost or a setting to switch on. The rates live in ai_usage.py with the date they were checked, are updated as releases are prepared, and every estimate says it may be out of date.
+
+**6 Oct 2026: The title bar is 24bit7's own, with a way back.**
+The tab strip runs to the top of the window, and Windows is told it's the title bar, so dragging, snapping and maximising still work. Because it can't be tested on every PC, Use the Windows title bar brings the normal one back after a restart.

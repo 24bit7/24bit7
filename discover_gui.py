@@ -13,6 +13,7 @@ supports the artist through their label.
 import csv
 import os
 import threading
+import time
 import urllib.parse
 import webbrowser
 import tkinter as tk
@@ -79,7 +80,12 @@ class DiscoverTab(tk.Frame):
         self._build_controls()
         self._build_table()
         # Rows are loaded the first time the tab is shown (see ensure_loaded),
-        # so app startup isn't slowed by inserting hundreds of table rows.
+        # so app startup isn't slowed by inserting hundreds of table rows. Everything
+        # else is in place from the start: the site buttons are drawn now, and
+        # Session says it's loading until the sessions arrive.
+        self.session_var.set("Loading sessions...")
+        self.count_label.config(text="Loading...")
+        self.after_idle(self._rebuild_site_buttons)
 
     def _apply_table_font(self):
         """
@@ -123,10 +129,17 @@ class DiscoverTab(tk.Frame):
         """Called by the main window when this tab becomes visible."""
         if not self._loaded:
             self._loaded = True
-            self.refresh()
+            # The tab shows straight away with "Loading..."; the table fills a moment later
+            self.count_label.config(text="Loading...")
+            self.after_idle(lambda: self.after(15, self._first_load))
         else:
             engine.refresh_settings_if_changed()   # a site ticked in Settings shows up straight away
             self._rebuild_site_buttons()
+
+    def _first_load(self):
+        started = time.time()
+        self.refresh()
+        engine.debug(f"Discover: {len(self._rows):,} rows in {time.time() - started:.2f} s")
 
     # --- layout ------------------------------------------------------------
 

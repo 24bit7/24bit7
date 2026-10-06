@@ -588,9 +588,66 @@ class PlayTab(tk.Frame):
         self.after(REFRESH_MS, self._refresh_now_playing)
 
     def _update_now_playing(self):
+        """
+        Asks JRiver what's playing, in the background, so the window never waits for JRiver
+        (it can be slow to answer while it sends the whole library at startup). The panel
+        updates when the answer arrives (_np_poll); until then it shows what it last knew.
+        """
         self._sync_usage_box()
-        self._follow_active_zone()
-        info = engine.get_playing_info()
+        if getattr(self, "_np_busy", False):
+            self._np_again = True   # ask once more as soon as this answer is in
+            return
+        self._np_busy, self._np_again, self._np_result = True, False, None
+        engine.refresh_settings_if_changed()
+        threading.Thread(target=self._np_fetch, daemon=True, name="now-playing").start()
+        self.after(40, self._np_poll)
+
+    def _np_fetch(self):
+        """In the background: the zone to follow (as _follow_active_zone decides it), then what's playing there."""
+        name = note = None
+        info = None
+        try:
+            if not self._zone_picked and (not self._zone_settled or engine.FOLLOW_ACTIVE_ZONE):
+                zones, current = engine._read_zones()
+                if zones:
+                    names = [n for _, n in zones]
+                    follow, pick = engine.FOLLOW_ACTIVE_ZONE, ""
+                    if engine.DEFAULT_ZONE and not follow and not self._zone_settled:
+                        if engine.DEFAULT_ZONE in names:
+                            pick = engine.DEFAULT_ZONE
+                        else:
+                            note = (f"Default zone '{engine.DEFAULT_ZONE}' wasn't found in JRiver, "
+                                    f"so Now Playing opened on the active zone.")
+                    if not pick:
+                        pick = next((n for i, n in zones if i == current), "")
+                    name = pick
+                    if not self._zone_picked:   # a zone picked by hand meanwhile wins
+                        engine.SEED_ZONE_NAME = pick or None
+            info = engine.get_playing_info()
+        except Exception as e:
+            engine.debug(f"Now Playing couldn't ask JRiver ({e})")
+        self._np_result = (name, note, info)
+
+    def _np_poll(self):
+        """On the window's worker: shows the background answer once it's in."""
+        result = self._np_result
+        if result is None:
+            self.after(40, self._np_poll)
+            return
+        self._np_result, self._np_busy = None, False
+        name, note, info = result
+        if name is not None and not self._zone_picked:
+            self._zone_settled = True
+            if self.zone_var.get() != name:
+                self.zone_var.set(name)
+        if note:   # after the greeting has cleared the log, so the note isn't wiped with it
+            self.after(13000 if self._greeting_active else 0, lambda: self.report(note))
+        self._show_playing(info)
+        if self._np_again:
+            self._np_again = False
+            self._update_now_playing()
+
+    def _show_playing(self, info):
         if info and info.get("PlayingNowPosition", "-1") != "-1":
             self.np_track.show(("Track:\t", "prefix"), (info.get("Name", "?"), None))
             self.np_detail.show(("Artist:\t", "prefix"), (info.get("Artist", "?"), None),
@@ -1415,6 +1472,7 @@ def main():
     _set_app_id()
     closed_other = _close_other_copy()
     root = tk.Tk()
+    root.withdraw()   # built out of sight and shown once it's ready, so it doesn't flash up small first
     _set_window_icon(root)
     apply_theme(root, engine.THEME)   # before any widgets, so they all pick it up
     root.title(f"24bit7  v{engine.VERSION}")
@@ -1531,9 +1589,12 @@ def main():
             quit_app()
 
     root.protocol("WM_DELETE_WINDOW", on_close)
+    hidden = False
     if engine.CLOSE_TO_TRAY or (tray.started_by_windows() and engine.START_IN_TRAY):
         if tray.start(root, show_window, quit_app) and tray.started_by_windows() and engine.START_IN_TRAY:
-            root.withdraw()
+            hidden = True   # started by Windows into the tray: stays out of sight
+    if not hidden:
+        root.deiconify()
 
     root.mainloop()
     if restart["on"]:
