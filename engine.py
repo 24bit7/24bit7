@@ -3049,9 +3049,11 @@ Rules:
 - If you don't know an artist or track well enough to judge its sound, keep it.
 - Judge the specific track, not the artist's general reputation.
 - {limit_rule}
+- For each track you flag, copy its number, artist and title exactly as they appear
+  in the list. The reason must be about that same track.
 
 Reply with JSON only, no other text:
-{{"remove": [{{"index": <number>, "reason": "<one short sentence>"}}]}}
+{{"remove": [{{"number": <its number in the list>, "artist": "<artist as listed>", "title": "<title as listed>", "reason": "<one short sentence>"}}]}}
 If nothing clashes, reply {{"remove": []}}."""
 
 
@@ -3075,6 +3077,46 @@ def moderator_extra(target):
     """How many extra tracks to find up front, so the moderator's removals are replaced."""
     level = moderator_level()
     return max(1, int(target * MODERATOR_EXTRA[level])) if level != "off" else 0
+
+
+def _name_key(text):
+    """A name for comparing: lower case, letters and digits only (any script)."""
+    return re.sub(r"[\W_]+", "", str(text or "").casefold())
+
+
+def moderator_pick(tracks, item):
+    """
+    Which track one moderator flag means, as an index into tracks, or None to keep everything.
+    The number is only trusted when the artist and title it points at match the ones named;
+    a wrong number with a name in the list goes by the name. Mix-ups are noted at debug.
+    """
+    if not isinstance(item, dict):
+        return None
+    title, artist = _name_key(item.get("title")), _name_key(item.get("artist"))
+
+    def same(track):
+        a, t = _name_key(track[1]), _name_key(track[2])
+        return bool(title) and t == title and (a == artist or (bool(artist) and (artist in a or a in artist)))
+
+    try:
+        n = int(item.get("number", item.get("index")))
+    except (TypeError, ValueError):
+        n = None
+    named = f"{item.get('artist')} - {item.get('title')}"
+    if not title:
+        debug(f"AI Moderator: flag with no title kept nothing (number {n})")
+        return None
+    if n is not None and 1 <= n <= len(tracks) and same(tracks[n - 1]):
+        return n - 1
+    hits = [i for i, track in enumerate(tracks) if same(track)]
+    pointed = (f"{tracks[n - 1][1]} - {tracks[n - 1][2]}" if n is not None and 1 <= n <= len(tracks)
+               else "nothing")
+    if len(hits) == 1:
+        debug(f"AI Moderator: number {n} pointed at {pointed}, went by the name {named}")
+        return hits[0]
+    debug(f"AI Moderator: {named} " + ("is in the list more than once" if hits else "isn't in the list")
+          + f" (number {n} pointed at {pointed}), so nothing was removed for it")
+    return None
 
 
 def moderate(tracks, seed, report=print, level=None, reference=None):
@@ -3106,7 +3148,7 @@ def moderate(tracks, seed, report=print, level=None, reference=None):
         import anthropic
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         message = client.messages.create(
-            model=MODERATOR_MODEL, max_tokens=1000,
+            model=MODERATOR_MODEL, max_tokens=2000,
             system=MODERATOR_PROMPT.format(level_rules=MODERATOR_RULES[level], limit_rule=limit_rule),
             messages=[{"role": "user", "content": f"{seed_line}{ref_text}\n\nCandidates:\n{listing}"}])
         record_ai("AI Moderator", MODERATOR_MODEL, message)
@@ -3124,15 +3166,15 @@ def moderate(tracks, seed, report=print, level=None, reference=None):
         return set()
     removed = set()
     for item in flagged:
-        try:
-            n = int(item.get("index"))
-        except (TypeError, ValueError, AttributeError):
+        if len(removed) >= cap:
+            break
+        i = moderator_pick(tracks, item)
+        if i is None:
             continue
-        if 1 <= n <= len(tracks) and len(removed) < cap:
-            key, artist, title = tracks[n - 1]
-            if key not in removed:
-                removed.add(key)
-                report(f"    Removed {artist} - {title}: {str(item.get('reason') or '').strip()}")
+        key, artist, title = tracks[i]
+        if key not in removed:
+            removed.add(key)
+            report(f"    Removed {artist} - {title}: {str(item.get('reason') or '').strip()}")
     report(f"  AI Moderator: {len(removed)} removed." if removed else "  AI Moderator: nothing clashed.")
     return removed
 

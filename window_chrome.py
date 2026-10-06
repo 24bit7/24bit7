@@ -33,6 +33,10 @@ class Chrome:
         self.user32 = ctypes.windll.user32
         root.update_idletasks()
         self.hwnd = self.user32.GetParent(root.winfo_id())
+        from ctypes import wintypes
+        self._post = ctypes.WinDLL("user32").PostMessageW   # its own copy, so the types set here stay here
+        self._post.argtypes = (wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
+        self._post.restype = wintypes.BOOL
         style = self.user32.GetWindowLongW(self.hwnd, GWL_STYLE)
         self.user32.SetWindowLongW(self.hwnd, GWL_STYLE, style & ~WS_CAPTION)
         self.user32.SetWindowPos(self.hwnd, 0, 0, 0, 0, 0, SWP_FRAME)
@@ -55,6 +59,7 @@ class Chrome:
             widget.bind("<Double-Button-1>", self._toggle_max, add="+")
         root.bind("<Configure>", self._on_configure, add="+")
         self._pad = 0
+        self._shape = None   # (width, height, state) at the last layout
         root.after(50, self._layout)
 
     # --- drawing -----------------------------------------------------------------------
@@ -106,7 +111,15 @@ class Chrome:
         self.frame.lift()
 
     def _on_configure(self, event):
-        if event.widget is self.root:
+        """Lays the buttons out again only when the size or maximised state changed (not on a move)."""
+        if event.widget is not self.root:
+            return
+        try:
+            shape = (event.width, event.height, self.root.state())
+        except tk.TclError:
+            return
+        if shape != self._shape:
+            self._shape = shape
             self._layout()
 
     # --- actions -----------------------------------------------------------------------
@@ -136,8 +149,11 @@ class Chrome:
         """Hands the press to Windows as a title-bar drag, so moving and snapping work as normal."""
         if event.widget not in (self.nb, self.nb._strip):
             return
+        # Posted, not sent: Windows starts its move loop once this handler has returned,
+        # as with its own title bar. Sending it ran the loop inside Tk's handler and crashed.
+        x, y = event.x_root & 0xFFFF, event.y_root & 0xFFFF
         self.user32.ReleaseCapture()
-        self.user32.SendMessageW(self.hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0)
+        self._post(self.hwnd, WM_NCLBUTTONDOWN, HTCAPTION, (y << 16) | x)
 
 
 def attach(root, nb):

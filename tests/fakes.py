@@ -468,7 +468,12 @@ class FakeAI:
 
     def _answer(self, prompt, system):
         if system and "playlist moderator" in system:
-            return json.dumps({"remove": [{"index": i, "reason": "too loud for the seed"} for i in self.remove]})
+            listed = dict(re.findall(r"^(\d+)\. (.+)$", prompt.split("Candidates:", 1)[-1], re.M))
+            out = []
+            for i in self.remove:
+                artist, _, title = listed.get(str(i), " - ").partition(" - ")
+                out.append({"number": i, "artist": artist, "title": title, "reason": "too loud for the seed"})
+            return json.dumps({"remove": out})
         m = re.search(r'most similar to "(.+?)", most similar first', prompt)
         if m:
             return json.dumps(self.web.similar_artists(m.group(1)))

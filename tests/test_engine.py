@@ -597,3 +597,48 @@ def test_permanent_cache_keeps_old_answers_and_clear_by_age(app):
     assert e.cache_get("Last.fm", "similar", "old") == ["A"]
     e.cache_clear("all")
     assert e.cache_counts()["all"] == 0
+
+
+# --- AI Moderator: number and name must agree (issue #2) -----------------------------------
+
+def _mod_reply(app, items):
+    import json as _json
+    app.ai.script.append((_json.dumps({"remove": items}), "end_turn"))
+
+
+MOD_TRACKS = [("k1", "Mott the Hoople", "All the Young Dudes"), ("k2", "ZZ Top", "Tush"),
+              ("k3", "Rod Stewart", "Maggie May"), ("k4", "Rod Stewart", "Mandolin Wind")]
+
+
+def _mod_on(app):
+    app.set_env(AI_MODERATOR_TRACKS="strict")
+    app.engine.NONSTOP_CONTEXT = {"kind": "tracks"}
+
+
+def test_moderator_number_and_name_agree(app):
+    _mod_on(app)
+    _mod_reply(app, [{"number": 2, "artist": "ZZ Top", "title": "Tush", "reason": "too abrasive"}])
+    r = app.Lines()
+    assert app.engine.moderate(MOD_TRACKS, "The Rolling Stones - Beast of Burden", report=r) == {"k2"}
+    assert r.has("Removed ZZ Top - Tush: too abrasive"), r.text()
+
+
+def test_moderator_wrong_number_goes_by_name(app):
+    _mod_on(app)   # counted from 0: number 1 for Tush, number 3 for Mandolin Wind
+    _mod_reply(app, [{"number": 1, "artist": "ZZ Top", "title": "Tush", "reason": "too abrasive"},
+                     {"number": 3, "artist": "Rod Stewart", "title": "Mandolin Wind", "reason": "too gentle"}])
+    r = app.Lines()
+    assert app.engine.moderate(MOD_TRACKS, "The Rolling Stones - Beast of Burden", report=r) == {"k2", "k4"}
+    assert not r.has("All the Young Dudes") and not r.has("Maggie May"), r.text()
+
+
+def test_moderator_name_not_listed_keeps_everything(app):
+    _mod_on(app)
+    _mod_reply(app, [{"number": 2, "artist": "Free", "title": "All Right Now", "reason": "too loud"}])
+    assert app.engine.moderate(MOD_TRACKS, "The Rolling Stones - Beast of Burden", report=app.Lines()) == set()
+
+
+def test_moderator_bare_number_keeps_everything(app):
+    _mod_on(app)   # the old reply shape, number only: not trusted
+    _mod_reply(app, [{"index": 2, "reason": "too abrasive"}])
+    assert app.engine.moderate(MOD_TRACKS, "The Rolling Stones - Beast of Burden", report=app.Lines()) == set()
