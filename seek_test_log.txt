@@ -1,0 +1,16 @@
+24bit7 Switch seek test, 2026-10-06 09:49:53
+
+Source: Speakers   Target: Sonos
+Track: Leo Sayer - You Make Me Feel Like Dancing, at 0:25
+Target volume noted (0.69) and set to zero.
+Start-up: 1.22 s from sending the track to it reporting playing.
+Seek: accepted on try 1, took effect in 0.27 s (to 0:26).
+Gap reported by JRiver straight after: target is 0.50 s ahead of the source.
+Whole handover: 1.55 s.
+Target volume restored.
+Heard: Sonos about 1 s behind
+Sonos stopped.
+
+Raw zone details (for DLNA detection):
+[Source] ZoneID=0, ZoneName=Speakers, State=2, FileKey=2441354, NextFileKey=989986, PositionMS=65509, DurationMS=221600, ElapsedTimeDisplay=1:05, RemainingTimeDisplay=-2:36, TotalTimeDisplay=3:41, PositionDisplay=1:05 / 3:41, PlayingNowPosition=23, PlayingNowTracks=26, PlayingNowPositionDisplay=24 of 26, PlayingNowChangeCounter=83, Bitrate=790, Bitdepth=16, SampleRate=44100, Channels=2, Chapter=0, Volume=0.99, VolumeDisplay=99%, ImageURL=MCWS/v1/File/GetImage?File=2441354, Artist=Leo Sayer, Album=Best Of, Name=You Make Me Feel Like Dancing, Status=Playing, LipSyncAdjustmentMS=0
+[Target] ZoneID=10009, ZoneName=Sonos, State=2, FileKey=2441354, NextFileKey=-1, PositionMS=0, DurationMS=221000, ElapsedTimeDisplay=1:05, RemainingTimeDisplay=-2:36, TotalTimeDisplay=3:41, PositionDisplay=1:05 / 3:41, PlayingNowPosition=0, PlayingNowTracks=1, PlayingNowPositionDisplay=1 of 1, PlayingNowChangeCounter=60, Bitrate=805, Bitdepth=16, SampleRate=44100, Channels=2, Chapter=0, Volume=0.69, VolumeDisplay=69%, ImageURL=MCWS/v1/File/GetImage?File=2441354, Artist=Leo Sayer, Album=Best Of, Name=You Make Me Feel Like Dancing, Status=Playing, LipSyncAdjustmentMS=0

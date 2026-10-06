@@ -173,7 +173,8 @@ class DiscoverTab(tk.Frame):
         tk.Label(search_bar, text="Search:").pack(side="left")
         self.search_var = tk.StringVar()
         self.search_var.trace_add("write", lambda *a: self._populate())
-        tk.Entry(search_bar, textvariable=self.search_var, width=36).pack(side="left", padx=(4, 0))
+        ttk.Entry(search_bar, textvariable=self.search_var, width=36,
+                  style="Field.TEntry").pack(side="left", padx=(4, 0))
 
     def _on_session_picked(self, _event=None):
         """A session picked by hand stays chosen; until then Discover follows the latest session."""

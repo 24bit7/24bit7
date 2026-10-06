@@ -173,10 +173,10 @@ class PlayTab(tk.Frame):
         self.search_tab = tk.Frame(self.seed_nb, padx=26, pady=8)
         self.seed_nb.add(self.search_tab, text="Search")
         tk.Label(self.search_tab, text="Artist", font=("Segoe UI", 10)).grid(row=0, column=0, sticky="w")
-        self.search_artist = tk.Entry(self.search_tab, width=34, font=("Segoe UI", 11))
+        self.search_artist = ttk.Entry(self.search_tab, width=34, font=("Segoe UI", 11), style="Field.TEntry")
         self.search_artist.grid(row=0, column=1, sticky="w", padx=(8, 20))
         tk.Label(self.search_tab, text="Track", font=("Segoe UI", 10)).grid(row=0, column=2, sticky="w")
-        self.search_track = tk.Entry(self.search_tab, width=34, font=("Segoe UI", 11))
+        self.search_track = ttk.Entry(self.search_tab, width=34, font=("Segoe UI", 11), style="Field.TEntry")
         self.search_track.grid(row=0, column=3, sticky="w", padx=(8, 0))
         tk.Label(self.search_tab, text="Build a playlist from any track, even one you don't own. "
                                        "Press Enter for Similar Artists.",

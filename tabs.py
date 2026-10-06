@@ -606,6 +606,16 @@ def themed_ttk(root):
                     bordercolor=edge, lightcolor=panel, darkcolor=panel)
     style.map("TScrollbar", background=[("active", PALETTE["tab_bg"])])
     style.configure("TEntry", fieldbackground=field, foreground=field_fg, bordercolor=field_edge)
+    # text boxes that match the dropdowns: thin flat border, no 3D shading,
+    # the border brightens a touch while you type in it
+    style.configure("Field.TEntry", fieldbackground=field, foreground=field_fg,
+                    bordercolor=field_edge, lightcolor=field, darkcolor=field,
+                    insertcolor=field_fg, selectbackground=hi, selectforeground=field_fg,
+                    padding=(4, 2))
+    style.map("Field.TEntry",
+              bordercolor=[("focus", faint)],
+              lightcolor=[("focus", field)], darkcolor=[("focus", field)],
+              fieldbackground=[("disabled", bg)], foreground=[("disabled", faint)])
     style.configure("TSpinbox", fieldbackground=field, foreground=field_fg, arrowcolor=accent,
                     background=panel, bordercolor=field_edge)
     style.configure("TButton", background=panel, foreground=PALETTE["button_fg"])
