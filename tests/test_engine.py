@@ -455,17 +455,19 @@ def _drift(app, **env):
     return d
 
 
-def test_drift_from_last_round_follows_the_best_finds(app):
+def test_drift_last_round_reads_as_spread(app):
     d = _drift(app, DRIFT_TRACKS_FROM="last")
-    d.note("Artist X", "Song X", "kx", score=9, parent="k0")   # a Drift find that scored highest
-    assert [k for _, _, k in d._seeds()][0] == "kx"
+    assert d.drift_from == "spread"
 
 
-def test_drift_from_close_to_seed_stays_on_the_first_round(app):
+def test_keep_it_tight_stays_on_the_first_round_and_spreads_its_seeds(app):
     d = _drift(app, DRIFT_TRACKS_FROM="close")
     d.note("Artist X", "Song X", "kx", score=9, parent="k0")
-    picked = [k for _, _, k in d._seeds()] + [k for _, _, k in d._seeds()]
+    first = [k for _, _, k in d._seeds()]
+    assert first == ["k0", "k2", "k4"], "evenly across the first round, not just its strongest"
+    picked = first + [k for _, _, k in d._seeds()]
     assert "kx" not in picked and set(picked) <= d.base_set
+    assert d._seeds() == [], "it can run out"
 
 
 def test_drift_from_spread_takes_seeds_across_the_playlist(app):
@@ -524,7 +526,42 @@ def test_chain_drop_respects_the_cap(app, monkeypatch):
 
 def test_drift_settings_read_with_defaults(app):
     e = app.engine
-    assert e.DRIFT["tracks"]["from"] == "last" and e.DRIFT["tracks"]["moderator"] == "same"
+    assert e.DRIFT["tracks"]["from"] == "spread" and e.DRIFT["tracks"]["moderator"] == "same"
     app.set_env(DRIFT_ARTISTS_FROM="spread", DRIFT_ARTISTS_MODERATOR="balanced", DRIFT_TRACKS_FROM="nonsense")
     assert e.DRIFT["artists"]["from"] == "spread" and e.DRIFT["artists"]["moderator"] == "balanced"
-    assert e.DRIFT["tracks"]["from"] == "last"
+    assert e.DRIFT["tracks"]["from"] == "spread"
+
+
+# --- Similar Tracks variety ------------------------------------------------------------------
+
+def _pool(n, artists=None):
+    return [(f"A{i % (artists or n)}", f"T{i}", f"k{i}", ["lastfm"], f"a{i % (artists or n)}") for i in range(n)]
+
+
+def test_pick_varied_keeps_everything_when_not_more_than_needed(app):
+    pool = _pool(10)
+    assert app.engine.pick_varied(pool, 10, {}, 3) == pool
+
+
+def test_pick_varied_varies_but_favours_the_closest(app):
+    import random
+    e, pool = app.engine, _pool(60)
+    random.seed(1)
+    first = [p[2] for p in e.pick_varied(pool, 30, {}, 3)]
+    random.seed(2)
+    second = [p[2] for p in e.pick_varied(pool, 30, {}, 3)]
+    assert first != second and len(first) == 30
+    assert first == sorted(first, key=lambda k: int(k[1:])), "picks stay in similarity order"
+    random.seed(3)
+    top = sum(1 for _ in range(200) for p in e.pick_varied(pool, 30, {}, 3) if int(p[2][1:]) < 30)
+    assert top > 200 * 30 * 0.55, "the closer half is picked more often"
+
+
+def test_pick_varied_keeps_fast_start_and_artist_limit(app):
+    e, pool = app.engine, _pool(40, artists=4)   # four artists, ten tracks each
+    picks = e.pick_varied(pool, 12, {"a0": 2}, 3, keep="k39")
+    assert "k39" in [p[2] for p in picks]
+    counts = {}
+    for p in picks:
+        counts[p[4]] = counts.get(p[4], 0) + 1
+    assert counts.get("a0", 0) <= 1 and max(counts.values()) <= 3

@@ -60,7 +60,8 @@ WELCOME_TEXT = (
 # The Play tab's Drift and Non-stop switches: which Play options each covers, and Non-stop's reseed choices
 DRIFT_GROUPS = ("artists", "tracks", "vibe")            # Top Tracks has no Drift
 NONSTOP_GROUPS = ("artists", "tracks", "top", "vibe")
-PLAY_RESEED = [("last", "Last track"), ("second", "2nd track")]   # as Settings > Playlist shows them
+PLAY_RESEED = [("last", "Last track"), ("second", "2nd track")]
+PLAY_DRIFT = [("off", "Off"), ("close", "Keep It Tight"), ("spread", "Spread")]   # as Settings > Playlist shows them   # as Settings > Playlist shows them
 
 
 class PlayTab(tk.Frame):
@@ -294,16 +295,18 @@ class PlayTab(tk.Frame):
         # Changing them here changes them there, for every Play option at once.
         tk.Label(self.extras_row, text="Drift", font=("Segoe UI", 9, "bold"),
                  fg=PALETTE["text_secondary"]).pack(side="left", padx=(24, 6))
-        self.drift_var = tk.StringVar(value="No")
+        self.drift_var = tk.StringVar(value="Off")
         self.drift_cb = ttk.Combobox(self.extras_row, textvariable=self.drift_var,
-                                     values=["No", "Yes"], state="readonly", width=5)
+                                     values=[shown for _, shown in PLAY_DRIFT], state="readonly", width=13)
         self.drift_cb.pack(side="left")
         self.drift_cb.bind("<<ComboboxSelected>>", self._on_drift_changed)
         help_mark(self.extras_row, "Searches again when a playlist comes up short, for Similar Artists, "
-                                   "Similar Tracks and AI Playlist. Drift using and Rounds are set for each in "
-                                   "Settings > Playlist, and changing Drift here changes it there too. "
-                                   "Shows Yes only when all three have it on. Voice devices with "
-                                   "settings of their own keep theirs.").pack(side="left", padx=(8, 0))
+                                   "Similar Tracks and AI Playlist. Keep It Tight seeds only from the first "
+                                   "round, so nothing strays far (it can finish short); Spread seeds from across "
+                                   "the whole playlist and can travel further. Drift using and Rounds are set for "
+                                   "each in Settings > Playlist, and changing Drift here changes it there too. "
+                                   "Shows a mode only when all three agree. Voice devices with settings of their "
+                                   "own keep theirs.").pack(side="left", padx=(8, 0))
         tk.Label(self.extras_row, text="Non-stop", font=("Segoe UI", 9, "bold"),
                  fg=PALETTE["text_secondary"]).pack(side="left", padx=(24, 6))
         self.nonstop_var = tk.StringVar(value="No")
@@ -385,8 +388,9 @@ class PlayTab(tk.Frame):
 
     def _sync_play_switches(self):
         """Drift and Non-stop as Settings > Playlist has them for Windows (Main): No unless every option agrees."""
-        drift = {bool(engine.DRIFT[g]["on"]) for g in DRIFT_GROUPS if g in engine.DRIFT}
-        self.drift_var.set("Yes" if drift == {True} else "No")
+        drift = {(engine.DRIFT[g].get("from", "spread") if engine.DRIFT[g]["on"] else "off")
+                 for g in DRIFT_GROUPS if g in engine.DRIFT}
+        self.drift_var.set(dict(PLAY_DRIFT).get(drift.pop() if len(drift) == 1 else "off", "Off"))
         by = engine.NONSTOP_BY
         states = {(by[g]["reseed"] if by[g]["on"] else "no") for g in NONSTOP_GROUPS if g in by}
         state = states.pop() if len(states) == 1 else "no"
@@ -410,14 +414,21 @@ class PlayTab(tk.Frame):
         self._update_more_label()
 
     def _on_drift_changed(self, *_):
-        on = self.drift_var.get() == "Yes"
+        code = {shown: code for code, shown in PLAY_DRIFT}.get(self.drift_var.get(), "off")
+        on = code != "off"
         updates = {f"DRIFT_{g.upper()}": "1" if on else "0" for g in DRIFT_GROUPS}
+        if on:
+            updates.update({f"DRIFT_{g.upper()}_FROM": code for g in DRIFT_GROUPS})
 
         def apply(page):
             from settings_gui import sync_drift
             for g in DRIFT_GROUPS:
                 if g in getattr(page, "drift", {}):
                     page.drift[g][0].set(on)
+                    if on and f"DRIFT_{g.upper()}_FROM" in page.vars:
+                        page.vars[f"DRIFT_{g.upper()}_FROM"].set(code)
+                    if g in getattr(page, "drift_modes", {}):
+                        page.drift_modes[g].set(self.drift_var.get())
             if getattr(page, "drift", None):
                 sync_drift(page)
         self.drift_cb.selection_clear()

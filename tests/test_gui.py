@@ -531,3 +531,19 @@ def test_ai_usage_click_switches_dollars_and_tokens(app, ui):
     assert ui.settings.usage_unit_var.get() == "Tokens", "Settings follows the click"
     ui.settings._fill_usage()
     assert "$1 buys about" in ui.settings.usage_dollar.cget("text")
+
+
+def test_play_tab_drift_modes_write_settings(app, ui):
+    play = ui.play
+    play.drift_var.set("Keep It Tight")
+    play._on_drift_changed()
+    ui.pump(0.3)
+    e = app.engine
+    assert all(e.DRIFT[g]["on"] and e.DRIFT[g]["from"] == "close" for g in ("artists", "tracks", "vibe"))
+    play.drift_var.set("Off")
+    play._on_drift_changed()
+    ui.pump(0.3)
+    assert not any(e.DRIFT[g]["on"] for g in ("artists", "tracks", "vibe"))
+    assert all(e.DRIFT[g]["from"] == "close" for g in ("artists", "tracks", "vibe")), "the mode is kept for next time"
+    play._sync_play_switches()
+    assert play.drift_var.get() == "Off"

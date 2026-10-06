@@ -277,7 +277,7 @@ class ProfilePage:
                     out[f"{name}_{kind}_AGREE"] = "1" if agree == "Off" else agree
             out[f"{name}_ROUNDS"] = rounds.get()
             if f"{name}_FROM" in v:
-                out[f"{name}_FROM"] = option_code(DRIFT_FROM_OPTIONS, v[f"{name}_FROM"].get())
+                out[f"{name}_FROM"] = v[f"{name}_FROM"].get()
             if f"{name}_MODERATOR" in v:
                 out[f"{name}_MODERATOR"] = option_code(DRIFT_MODERATOR_OPTIONS, v[f"{name}_MODERATOR"].get())
         if "AI_MODERATOR_VIBE" in v:
@@ -312,14 +312,14 @@ DRIFT_USING_OPTIONS = [("artists", "Similar artists"), ("tracks", "Similar track
 VIBE_DRIFT_USING_OPTIONS = [("artists", "Similar artists (no AI)"), ("tracks", "Similar tracks (no AI)"),
                             ("ai", "AI (uses credits)")]
 DRIFT_SOURCE_MODES = [("same", "Same as Settings > Sources"), ("custom", "Custom Sources")]
-# Drift From: where each round seeds from
-DRIFT_FROM_OPTIONS = [("last", "Last Round"), ("close", "Close to Seed"), ("spread", "Spread")]
-DRIFT_FROM_HELP = ("Last Round: each round seeds from the best tracks found so far, so the playlist can "
-                   "wander further from where it started with every round.\n"
-                   "Close to Seed: every round seeds only from the first round's tracks, so nothing is "
-                   "more than two steps from the seed.\n"
-                   "Spread: seeds are taken evenly across the playlist, each starting its own chain, "
-                   "for more variety.")
+# Drift: Off, or how each round picks its seeds
+DRIFT_MODE_OPTIONS = [("off", "Off"), ("close", "Keep It Tight"), ("spread", "Spread")]
+DRIFT_MODE_HELP = ("When a playlist comes up short, Drift searches again using what's already been found.\n"
+                   "Keep It Tight: seeds only from the first round's tracks, so nothing strays far from your "
+                   "seed. If the first round was short, Drift may run out of seeds and finish short; the "
+                   "console says when.\n"
+                   "Spread: seeds from across the whole playlist, including what Drift has added, so it "
+                   "can travel further while branching in several directions.")
 # AI Moderator on Drift tracks, for Similar Artists and Similar Tracks
 DRIFT_MODERATOR_OPTIONS = [("same", "Same as build"), ("off", "Off"), ("relaxed", "Relaxed"),
                            ("balanced", "Balanced"), ("strict", "Strict")]
@@ -1661,8 +1661,30 @@ class SettingsTab(tk.Frame):
             def toggled():
                 sync_drift(p)
                 p.save()
-            place(ttk.Checkbutton(box, text="Search again when a playlist comes up short", variable=on,
-                                  command=toggled), pady=(0, 2))
+            # One dropdown: Off, Keep It Tight or Spread. on and DRIFT_<G>_FROM follow it.
+            name = f"DRIFT_{group.upper()}"
+            frm = "close" if p.env.get(f"{name}_FROM", "spread").strip().lower() == "close" else "spread"
+            p.vars[f"{name}_FROM"] = tk.StringVar(value=frm)
+            drift_mode_var = tk.StringVar(value=option_label(DRIFT_MODE_OPTIONS, frm if cfg["on"] else "off"))
+            top = tk.Frame(box)
+            tk.Label(top, text="Drift").pack(side="left")
+            drift_mode_cb = ttk.Combobox(top, textvariable=drift_mode_var, state="readonly", width=14,
+                                         values=[s for _, s in DRIFT_MODE_OPTIONS])
+            drift_mode_cb.pack(side="left", padx=(6, 0))
+
+            def mode_chosen(_e=None, cb=drift_mode_cb, var=drift_mode_var, key=f"{name}_FROM", on=on):
+                cb.selection_clear()
+                code = option_code(DRIFT_MODE_OPTIONS, var.get())
+                on.set(code != "off")
+                if code != "off":
+                    p.vars[key].set(code)
+                toggled()
+            drift_mode_cb.bind("<<ComboboxSelected>>", mode_chosen)
+            help_mark(top, DRIFT_MODE_HELP).pack(side="left", padx=(8, 0))
+            place(top, pady=(0, 4))
+            if not hasattr(p, "drift_modes"):
+                p.drift_modes = {}
+            p.drift_modes[group] = drift_mode_var
             row = tk.Frame(box)
             tk.Label(row, text="Drift using").pack(side="left")
             choices = drift_using_options(group)
@@ -1676,18 +1698,6 @@ class SettingsTab(tk.Frame):
             for cb in (using_cb, rounds_cb):
                 cb.bind("<<ComboboxSelected>>", p.save)
             place(row, pady=(0, 4))
-            # Drift From: where each round seeds from
-            name = f"DRIFT_{group.upper()}"
-            from_row = tk.Frame(box)
-            tk.Label(from_row, text="Drift from").pack(side="left")
-            p.vars[f"{name}_FROM"] = tk.StringVar(value=option_label(
-                DRIFT_FROM_OPTIONS, p.env.get(f"{name}_FROM", "last").strip().lower()))
-            from_cb = ttk.Combobox(from_row, textvariable=p.vars[f"{name}_FROM"],
-                                   values=[s for _, s in DRIFT_FROM_OPTIONS], state="readonly", width=14)
-            from_cb.pack(side="left", padx=(6, 0))
-            from_cb.bind("<<ComboboxSelected>>", lambda e, cb=from_cb: (cb.selection_clear(), p.save()))
-            help_mark(from_row, DRIFT_FROM_HELP).pack(side="left", padx=(8, 0))
-            place(from_row, pady=(0, 4))
             drift_mod_cb = None
             if group != "vibe":   # AI Playlist has its own, below
                 dm_row = tk.Frame(box)
@@ -1759,8 +1769,8 @@ class SettingsTab(tk.Frame):
                 frames[kind] = frame
             place(panel, pady=(0, 4))
             panel.grid_configure(padx=(16, 0))
-            p.drift[group] = (on, using, rounds, tuple(cb for cb in (using_cb, rounds_cb, mode_cb, from_cb,
-                                                                      drift_mod_cb) if cb is not None))
+            p.drift[group] = (on, using, rounds, tuple(cb for cb in (using_cb, rounds_cb, mode_cb, drift_mod_cb)
+                                                                if cb is not None))
             p.drift_src[group] = (mode, mode_row, panel, frames)
 
             def sources_changed(*_):

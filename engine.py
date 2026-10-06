@@ -303,8 +303,8 @@ def load_settings():
         ok = ("artists", "tracks", "ai") if group == "vibe" else ("artists", "tracks")   # AI only for vibe
         DRIFT[group] = {"on": on, "using": using if using in ok else own, "rounds": rounds}
         # Drift From (where each round seeds from) and its own AI Moderator level
-        frm = os.getenv(f"{name}_FROM", "last").strip().lower()
-        DRIFT[group]["from"] = frm if frm in ("last", "close", "spread") else "last"
+        frm = os.getenv(f"{name}_FROM", "spread").strip().lower()
+        DRIFT[group]["from"] = "close" if frm == "close" else "spread"   # Keep It Tight; Last Round became Spread
         mod = os.getenv(f"{name}_MODERATOR", "same").strip().lower()
         DRIFT[group]["moderator"] = mod if mod in ("same",) + MODERATOR_LEVELS else "same"
         # Drift sources: the same as Settings > Sources, or Custom Sources of its own
@@ -3301,7 +3301,7 @@ class Drift:
         self.finds = []           # (artist, title, key, score) in the order found
         self.per = {}             # artist key -> tracks of theirs in the playlist
         self.seen_artists = set() # artists already asked for their top tracks
-        self.drift_from = cfg.get("from", "last")       # Last Round, Close to Seed or Spread
+        self.drift_from = cfg.get("from", "spread")     # Keep It Tight ("close") or Spread
         self.mod_choice = cfg.get("moderator", "same")  # Drift's own AI Moderator level, or the build's
         self.parent = {}          # Drift track key -> the key of the track it was seeded from
         self.blocked = set()      # keys of chains the moderator found going off course
@@ -3393,15 +3393,14 @@ class Drift:
 
     def _seeds(self):
         """
-        The next round's seeds as (artist, title, key). Last Round: the best finds so far.
-        Close to Seed: the best of the first round's tracks only. Spread: evenly across the
-        playlist. Never a seed already used, or one in a chain the moderator dropped.
+        The next round's seeds as (artist, title, key), picked evenly across what's left.
+        Keep It Tight: from the first round's tracks only. Spread: from the whole playlist,
+        Drift's own finds included. Never a seed already used, or one in a chain the
+        moderator dropped.
         """
         pool = [(i, f) for i, f in enumerate(self.finds) if f[2] not in self.blocked]
         if self.drift_from == "close" and self.base is not None:
             pool = [(i, f) for i, f in pool if f[2] in self.base_set]
-        if self.drift_from != "spread":
-            pool = sorted(pool, key=lambda x: (-x[1][3], x[0]))
         picks, idents = [], set()
         for _, (artist, title, key, _) in pool:
             ident = artist_key(artist) if self.using == "artists" else (artist_key(artist), clean_name(title))
@@ -3409,7 +3408,7 @@ class Drift:
                 continue
             idents.add(ident)
             picks.append((artist, title, key, ident))
-        if self.drift_from == "spread" and len(picks) > DRIFT_SEEDS_PER_ROUND:
+        if len(picks) > DRIFT_SEEDS_PER_ROUND:
             step = len(picks) / DRIFT_SEEDS_PER_ROUND
             picks = [picks[int(n * step)] for n in range(DRIFT_SEEDS_PER_ROUND)]
         else:
@@ -3483,7 +3482,9 @@ class Drift:
             else:
                 seeds = self._seeds()
                 if not seeds:
-                    self.report("  Note: Drift has nothing left to seed from.")
+                    self.report("  Note: Keep It Tight has used every track from the first round as a seed, "
+                                "so Drift stopped here." if self.drift_from == "close"
+                                else "  Note: Drift has nothing left to seed from.")
                     break
                 names = ", ".join(a if self.using == "artists" else f"{a} - {t}" for a, t, _ in seeds)
                 self.report(f"  Drift round {n} of {self.rounds}: {len(keys)} of {self.target}, "
@@ -3962,6 +3963,38 @@ def similar_track_candidates(seeds, track, report=print):
     return blended, [name for name, _ in results]
 
 
+VARIETY_POOL = 2   # Similar Tracks collects up to this many times the matches it needs, then picks at random
+
+
+def pick_varied(pool, n, per, per_artist, keep=None):
+    """
+    Similar Tracks' variety: n entries from pool (most similar first), drawn at random with
+    the closest the most likely (weights fall from 1 for the first to a third for the last),
+    at most per_artist per artist, counting per (what's already in). keep, the track already
+    playing from fast start, always stays. The picks come back in pool order.
+    pool entries: (artist, title, key, sources, owner).
+    """
+    per, chosen = dict(per), []
+    left = list(enumerate(pool))
+    if keep:
+        for item in left:
+            if str(item[1][2]) == str(keep):
+                chosen.append(item)
+                per[item[1][4]] = per.get(item[1][4], 0) + 1
+                left.remove(item)
+                break
+    size = max(1, len(pool))
+    while left and len(chosen) < n:
+        weights = [1.0 - (2.0 / 3.0) * i / size for i, _ in left]
+        item = random.choices(left, weights=weights)[0]
+        left.remove(item)
+        if per.get(item[1][4], 0) >= per_artist:
+            continue
+        per[item[1][4]] = per.get(item[1][4], 0) + 1
+        chosen.append(item)
+    return [p for _, p in sorted(chosen, key=lambda x: x[0])]
+
+
 def create_similar_tracks_playlist(report=print, seed_info=None):
     """
     Builds a playlist of tracks like the seed track, not just by similar artists:
@@ -4016,30 +4049,42 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
         per[artist_key(seeds[0])] = 1
         drift.per[artist_key(seeds[0])] = 1
     need = max(1, min(SIMILAR_TRACK_MIN_AGREEMENT, len(responding)))
+    # Variety: collect up to VARIETY_POOL times what's wanted (and per artist), then pick
+    # at random with the closest the most likely, so the same seed doesn't always give the same tracks
+    pool, pool_keys, pool_per = [], set(), dict(per)   # pool: (artist, title, key, sources, owner), best first
+    pool_size = wanted * VARIETY_POOL
     while candidates:
         for (artist, title), sources in candidates:
-            if len(keys) >= wanted:
+            if len(keys) + len(pool) >= pool_size:
                 break
             ident = (artist_key(artist), clean_name(title))
-            if ident in checked or len(sources) < need or per.get(ident[0], 0) >= per_artist:
+            if ident in checked or len(sources) < need or pool_per.get(ident[0], 0) >= per_artist * VARIETY_POOL:
                 continue
             checked.add(ident)
             key = find_jriver_key_by_track(artist, title) if use_youtube else library.find_track_key(artist, title)
             session_log(session_id, artist, title, sources, found=bool(key))
             owner = owner_key(artist, key) if key else ident[0]   # counted as tagged in the library
-            if key and key not in keys and played.fresh(key) and per.get(owner, 0) < per_artist:
-                keys.append(key)
-                per[owner] = per.get(owner, 0) + 1
-                drift.note(artist, title, key, len(sources))
+            if (key and key not in keys and str(key) not in pool_keys and played.fresh(key)
+                    and pool_per.get(owner, 0) < per_artist * VARIETY_POOL):
+                pool.append((artist, title, key, sources, owner))
+                pool_keys.add(str(key))
+                pool_per[owner] = pool_per.get(owner, 0) + 1
                 fast.play(key)
                 report(f"    In library: {artist} - {title}  ({', '.join(sources)})")
             elif not key:
                 report(f"    Not in library: {artist} - {title}")
-        if len(keys) >= wanted or need <= 1:
+        if len(keys) + len(pool) >= wanted or need <= 1:
             break
-        report(f"  {len(keys)} tracks with {need} or more sources agreeing, so relaxed to {need - 1}.")
+        report(f"  {len(keys) + len(pool)} tracks with {need} or more sources agreeing, so relaxed to {need - 1}.")
         need -= 1
-    report(f"  Suggested {len(candidates)}, checked {len(checked)}, in library {len(keys)}.")
+    picks = pick_varied(pool, wanted - len(keys), per, per_artist, keep=fast.key)
+    for artist, title, key, sources, owner in picks:
+        keys.append(key)
+        per[owner] = per.get(owner, 0) + 1
+        drift.note(artist, title, key, len(sources))
+    report(f"  Suggested {len(candidates)}, checked {len(checked)}, in library {len(keys) + len(pool) - len(picks)}.")
+    if len(picks) < len(pool):
+        report(f"  Picked {len(picks)} of those {len(pool)} at random, the closest the most likely, for variety.")
     drift.checked |= checked
     drift.moderate(keys, [k for k in keys if k != first_key and str(k) != fast.key])
 
