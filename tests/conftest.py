@@ -82,7 +82,7 @@ def app(tmp_path, monkeypatch):
     monkeypatch.syspath_prepend(str(folder))
     monkeypatch.chdir(folder)
     for k in list(os.environ):
-        if k in env or k.startswith(("SKIP_", "DRIFT_", "NONSTOP", "RUN_AFTER", "AI_", "SIMILAR_", "TOP_", "SWITCH_")):
+        if k in env or k.startswith(("SKIP_", "DRIFT_", "NONSTOP", "RUN_AFTER", "AI_", "SIMILAR_", "TOP_", "SWITCH_", "CACHE_")):
             monkeypatch.delenv(k, raising=False)
 
     jriver = fakes.FakeJRiver()

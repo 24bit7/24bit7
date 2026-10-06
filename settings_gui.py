@@ -355,6 +355,8 @@ NONSTOP_WITH_OPTIONS = [("vibe", "More from the AI"), ("artists", "Similar artis
 SAVED_NONSTOP_OPTIONS = [("no", "No"), ("artists", "Similar artists"), ("tracks", "Similar tracks")]
 SAVED_SKIP_OPTIONS = [("0", "Off"), ("1", "1 day"), ("2", "2 days"), ("3", "3 days"), ("7", "7 days"),
                       ("14", "14 days"), ("30", "30 days")]
+CACHE_KEEP_OPTIONS = [("month", "1 Month"), ("year", "1 Year"), ("permanent", "Permanent")]
+CLEAR_CACHE_OPTIONS = [("month", "Older Than 1 Month"), ("year", "Older Than 1 Year"), ("all", "Clear All")]
 ALL_FOLDERS = "All folders"   # the JRiver Playlists folder filter's first choice
 
 
@@ -531,7 +533,9 @@ class SettingsTab(tk.Frame):
         # Sources and Playlist come from their Windows (Main) tabs; devices save their own
         updates = dict(self._main_sources.values())
         updates.update(self._main_playlist.values())
-        for key in ["CACHE_DAYS", "JRIVER_HOST", "YOUTUBE_PLAYLIST_LENGTH"] + KEY_FIELDS:
+        updates["CACHE_KEEP"] = option_code(CACHE_KEEP_OPTIONS, self.vars["CACHE_KEEP"].get())
+        updates["CACHE_DAYS"] = None   # replaced by Keep Cache For
+        for key in ["JRIVER_HOST", "YOUTUBE_PLAYLIST_LENGTH"] + KEY_FIELDS:
             updates[key] = self.vars[key].get().strip()
         for group in ("DIGITAL_STORES", "REFERENCE_SITES"):
             updates[group] = ",".join(code for code, v in self.vars[group].items() if v.get())
@@ -2170,18 +2174,68 @@ class SettingsTab(tk.Frame):
         ttk.Checkbutton(parent, text="Show", variable=show, command=toggle).grid(
             row=row, column=2, sticky="w")
 
+    def _clear_cache(self):
+        """Clear Cache: older than a month, older than a year, or everything, each with its count."""
+        counts = engine.cache_counts()
+        win = tk.Toplevel(self)
+        win.withdraw()
+        win.title("Clear Cache")
+        win.transient(self.winfo_toplevel())
+        win.resizable(False, False)
+        body = tk.Frame(win, padx=20, pady=16)
+        body.pack(fill="both", expand=True)
+        tk.Label(body, text="Clear saved answers from the music sources and the AI:", anchor="w").pack(
+            anchor="w", pady=(0, 8))
+        choice = tk.StringVar(value="month")
+        for code, label in CLEAR_CACHE_OPTIONS:
+            ttk.Radiobutton(body, text=f"{label} ({counts[code]:,})", variable=choice, value=code).pack(
+                anchor="w", pady=2)
+        tk.Label(body, text="Anything cleared is fetched again next time it's needed, and AI answers use "
+                            "credits again.", fg=PALETTE["help_fg"], font=HELP_FONT, justify="left",
+                 wraplength=380).pack(anchor="w", pady=(10, 12))
+        buttons = tk.Frame(body)
+        buttons.pack(anchor="e")
+
+        def clear():
+            n = engine.cache_clear(choice.get())
+            win.destroy()
+            line = f"Cleared {n:,} cached answer{'' if n == 1 else 's'}."
+            self.cache_note.config(text=line)
+            print(line)
+        tk.Button(buttons, text="Clear", width=10, command=clear).pack(side="left")
+        tk.Button(buttons, text="Cancel", width=10, command=win.destroy).pack(side="left", padx=(8, 0))
+        win.bind("<Escape>", lambda e: win.destroy())
+        win.update_idletasks()
+        top = self.winfo_toplevel()
+        x = top.winfo_rootx() + max(0, (top.winfo_width() - win.winfo_reqwidth()) // 2)
+        y = top.winfo_rooty() + max(0, (top.winfo_height() - win.winfo_reqheight()) // 3)
+        win.geometry(f"+{x}+{y}")
+        win.deiconify()
+        win.focus_force()
+        self._clear_cache_win = win
+        return win
+
     def _build_other(self, nb):
         tab = self._scroll_tab(nb, "Other")
 
         # --- General ---
         box = section(tab, "General")
-        tk.Label(box, text="Cache days (reuse answers for)", anchor="w").grid(
-            row=0, column=0, sticky="w", pady=4)
-        self.vars["CACHE_DAYS"] = tk.StringVar(value=self.env.get("CACHE_DAYS", "30"))
-        sb = tk.Spinbox(box, from_=1, to=365, textvariable=self.vars["CACHE_DAYS"], width=6,
-                        command=self._save)
-        sb.grid(row=0, column=1, sticky="w", padx=(12, 0))
-        self.vars["CACHE_DAYS"].trace_add("write", self._save)
+        tk.Label(box, text="Keep Cache For", anchor="w").grid(row=0, column=0, sticky="w", pady=4)
+        self.vars["CACHE_KEEP"] = tk.StringVar(value=option_label(CACHE_KEEP_OPTIONS, engine.CACHE_KEEP))
+        cache_row = tk.Frame(box)
+        cache_row.grid(row=0, column=1, sticky="w", padx=(12, 0))
+        keep_cb = ttk.Combobox(cache_row, textvariable=self.vars["CACHE_KEEP"], state="readonly", width=10,
+                               values=[s for _, s in CACHE_KEEP_OPTIONS])
+        keep_cb.pack(side="left")
+        keep_cb.bind("<<ComboboxSelected>>", lambda e: (keep_cb.selection_clear(), self._save()))
+        tk.Button(cache_row, text="Clear Cache...", width=13, command=self._clear_cache).pack(
+            side="left", padx=(12, 0))
+        help_mark(cache_row, "How long answers from the music sources and the AI are reused before they're "
+                             "asked for again. Longer is quicker and saves AI credits; Permanent keeps them until "
+                             "you clear them. Answers that MusicBrainz doesn't know an artist are always "
+                             "rechecked after a month.").pack(side="left", padx=(8, 0))
+        self.cache_note = tk.Label(cache_row, text="", fg=PALETTE["help_fg"], font=HELP_FONT)
+        self.cache_note.pack(side="left", padx=(12, 0))
 
         tk.Label(box, text="JRiver host", anchor="w").grid(row=1, column=0, sticky="w", pady=4)
         self.vars["JRIVER_HOST"] = tk.StringVar(value=self.env.get("JRIVER_HOST", "127.0.0.1:52199"))

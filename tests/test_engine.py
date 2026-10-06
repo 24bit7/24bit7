@@ -565,3 +565,35 @@ def test_pick_varied_keeps_fast_start_and_artist_limit(app):
     for p in picks:
         counts[p[4]] = counts.get(p[4], 0) + 1
     assert counts.get("a0", 0) <= 1 and max(counts.values()) <= 3
+
+
+# --- cache options ----------------------------------------------------------------------------
+
+def test_cache_keep_settings_and_carry_over(app):
+    e = app.engine
+    assert e.CACHE_KEEP == "month" and e.CACHE_DAYS == 30, "CACHE_DAYS=30 reads as 1 Month"
+    app.set_env(CACHE_DAYS="90")
+    assert e.CACHE_KEEP == "year"
+    app.set_env(CACHE_KEEP="permanent")
+    assert e.CACHE_DAYS is None
+
+
+def test_permanent_cache_keeps_old_answers_and_clear_by_age(app):
+    import time
+    e = app.engine
+    e.cache_put("Last.fm", "similar", "old", ["A"])
+    e.cache_put("Last.fm", "similar", "older", ["B"])
+    e.cache_put("Last.fm", "similar", "new", ["C"])
+    con = e.db()
+    con.execute("UPDATE cache SET fetched_at=? WHERE key='old'", (time.time() - 60 * 86400,))
+    con.execute("UPDATE cache SET fetched_at=? WHERE key='older'", (time.time() - 400 * 86400,))
+    con.commit()
+    assert e.cache_get("Last.fm", "similar", "old") is None, "past a month on 1 Month"
+    app.set_env(CACHE_KEEP="permanent")
+    assert e.cache_get("Last.fm", "similar", "older") == ["B"], "kept on Permanent"
+    counts = e.cache_counts()
+    assert counts["month"] >= 2 and counts["year"] >= 1 and counts["all"] >= 3
+    assert e.cache_clear("year") >= 1 and e.cache_get("Last.fm", "similar", "older") is None
+    assert e.cache_get("Last.fm", "similar", "old") == ["A"]
+    e.cache_clear("all")
+    assert e.cache_counts()["all"] == 0

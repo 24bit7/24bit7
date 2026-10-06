@@ -218,7 +218,7 @@ def load_settings():
     global SIMILAR_TRACK_SOURCES, SIMILAR_TRACK_MIN_AGREEMENT, SIMILAR_TRACK_COUNT
     global SIMILAR_TRACK_PER_ARTIST, SIMILAR_TRACK_ORDER
     global LISTENBRAINZ_TRACK_ALGORITHM_SETTING
-    global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, CACHE_DAYS
+    global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, CACHE_DAYS, CACHE_KEEP
     global TABLE_FONT_SIZE, VIBE_TRACK_COUNT
     global OUTPUT_TARGET, YOUTUBE_PLAYLIST_LENGTH, HIDDEN_ZONES, DEFAULT_ZONE, FOLLOW_ACTIVE_ZONE
     global PREFER_OFFICIAL_VIDEOS, THEME
@@ -323,7 +323,11 @@ def load_settings():
     if TOP_TRACKS_ORDER not in ("popular", "reverse", "random"):
         print(f"Note: the setting TOP_TRACKS_ORDER='{TOP_TRACKS_ORDER}' isn't recognised, so 'popular' is used.")
         TOP_TRACKS_ORDER = "popular"
-    CACHE_DAYS = _int_setting("CACHE_DAYS", 30, 1, 365)
+    # How long answers are reused: 1 Month, 1 Year or Permanent (an older CACHE_DAYS carries over)
+    CACHE_KEEP = os.getenv("CACHE_KEEP", "").strip().lower()
+    if CACHE_KEEP not in ("month", "year", "permanent"):
+        CACHE_KEEP = "month" if _int_setting("CACHE_DAYS", 30, 1, 3650) <= 30 else "year"
+    CACHE_DAYS = {"month": 30, "year": 365}.get(CACHE_KEEP)   # None: kept until cleared
     TABLE_FONT_SIZE = _int_setting("TABLE_FONT_SIZE", 9, 6, 16)   # Discover table font
     VIBE_TRACK_COUNT = _int_setting("VIBE_TRACK_COUNT", 20, 5, 100)  # target size for vibe playlists
     # Hidden-track check: leave out an album's last track when it runs longer than this
@@ -522,7 +526,7 @@ START_IN_TRAY=1
 CLOSE_TO_TRAY=0
 
 # Other
-CACHE_DAYS=30
+CACHE_KEEP=month
 TABLE_FONT_SIZE=9
 CONSOLE_MODE=simple
 """
@@ -614,7 +618,8 @@ def diagnostics_text():
         lines.append("Library: not read")
     try:
         row = db().execute("SELECT COUNT(*) FROM cache").fetchone()
-        lines.append(f"Provider cache: {row[0]} entries, kept {CACHE_DAYS} days")
+        lines.append(f"Provider cache: {row[0]} entries, kept "
+                     + ("until cleared" if CACHE_DAYS is None else f"{CACHE_DAYS} days"))
     except Exception:
         pass
     lines.append("")
@@ -696,13 +701,42 @@ def db():
     return _db
 
 
+MB_UNKNOWN_DAYS = 30   # "MusicBrainz doesn't know them" is rechecked after this, even on Permanent
+CACHE_AGES = {"month": 30 * 86400, "year": 365 * 86400, "all": None}
+
+
+def cache_counts():
+    """Cached answers: {"month": older than a month, "year": older than a year, "all": every one}."""
+    now, con = time.time(), db()
+    out = {}
+    for which, age in CACHE_AGES.items():
+        if age is None:
+            out[which] = con.execute("SELECT COUNT(*) FROM cache").fetchone()[0]
+        else:
+            out[which] = con.execute("SELECT COUNT(*) FROM cache WHERE fetched_at < ?", (now - age,)).fetchone()[0]
+    return out
+
+
+def cache_clear(which):
+    """Clears cached answers: "month" (older than a month), "year" (older than a year) or "all". Returns how many."""
+    age, con = CACHE_AGES.get(which, 0), db()
+    if age is None:
+        cur = con.execute("DELETE FROM cache")
+    else:
+        cur = con.execute("DELETE FROM cache WHERE fetched_at < ?", (time.time() - age,))
+    con.commit()
+    if which == "all":
+        _mbid_cache.clear()
+    return cur.rowcount if cur.rowcount is not None and cur.rowcount >= 0 else 0
+
+
 def cache_get(source, kind, key):
-    """Returns the cached list for (source, kind, key) if younger than CACHE_DAYS, else None."""
+    """Returns the cached list for (source, kind, key) if younger than CACHE_DAYS (always, on Permanent), else None."""
     row = db().execute("SELECT payload, fetched_at FROM cache WHERE source=? AND kind=? AND key=?",
                        (source, kind, key)).fetchone()
     if not row:
         return None
-    if time.time() - row[1] > CACHE_DAYS * 86400:
+    if CACHE_DAYS is not None and time.time() - row[1] > CACHE_DAYS * 86400:
         return None
     return json.loads(row[0])
 
@@ -1508,8 +1542,8 @@ def load_known_mbids():
     """
     Reads the MusicBrainz IDs saved by earlier sessions into memory, once per
     app session. A found ID never expires (an artist's ID doesn't change). A
-    saved "MusicBrainz doesn't know them" is honoured for CACHE_DAYS and then
-    tried again, in case they've been added since.
+    saved "MusicBrainz doesn't know them" is honoured for CACHE_DAYS (a month at
+    most, whatever the setting) and then tried again, in case they've been added since.
     """
     if _mbids_loaded:
         return
@@ -1528,7 +1562,7 @@ def load_known_mbids():
             continue
         if mbid:
             _mbid_cache.setdefault(known, mbid)
-        elif now - fetched_at <= CACHE_DAYS * 86400:
+        elif now - fetched_at <= min(CACHE_DAYS or MB_UNKNOWN_DAYS, MB_UNKNOWN_DAYS) * 86400:
             _mbid_cache.setdefault(known, None)
     debug(f"MusicBrainz: {len(_mbid_cache)} saved artist IDs loaded")
 
