@@ -241,7 +241,7 @@ def test_play_tab_switches_write_settings(app, ui):
     p = ui.play
     if not hasattr(p, "nonstop_var"):
         pytest.skip("Play tab switches not found by name")
-    p.nonstop_cb.set("Let's See Where This Goes")
+    p.nonstop_cb.set("Wander")
     p.nonstop_cb.event_generate("<<ComboboxSelected>>")
     ui.pump(0.5)
     from dotenv import dotenv_values
@@ -626,26 +626,14 @@ def test_discover_is_laid_out_before_its_first_load(app, ui):
     assert d.session_var.get() != "Loading sessions..." and d.count_label.cget("text") != "Loading..."
 
 
-def test_play_tab_variety_writes_settings(app, ui):
-    play = ui.play
-    play.variety_var.set("No")
-    play._on_variety_changed()
-    ui.pump(0.3)
-    assert app.engine.SIMILAR_TRACK_VARIETY is False
-    assert ui.settings._main_playlist.vars["SIMILAR_TRACK_VARIETY"].get() == "no"
-    play.variety_var.set("Yes")
-    play._on_variety_changed()
-    ui.pump(0.3)
-    assert app.engine.SIMILAR_TRACK_VARIETY is True
-    app.set_env(SIMILAR_TRACK_VARIETY="no")
-    play._sync_play_switches()
-    assert play.variety_var.get() == "No"
+def test_variety_is_settings_only(app, ui):
+    assert not hasattr(ui.play, "variety_cb"), "Variety lives in Settings > Playlist only"
 
 
 def test_play_tab_behaviour_saves_and_greys_out_for_youtube(app, ui):
     play = ui.play
     assert play.behaviour_var.get() == "Play Instantly"
-    play.behaviour_var.set("Review Mode")
+    play.behaviour_var.set("Review")
     play._on_behaviour_changed()
     ui.pump(0.2)
     import settings_gui
@@ -657,10 +645,10 @@ def test_play_tab_behaviour_saves_and_greys_out_for_youtube(app, ui):
     assert not play._review_mode(), "YouTube output never reviews"
 
 
-def test_review_mode_is_for_search_builds_only(app, ui):
+def test_review_is_for_app_builds_only(app, ui):
     play = ui.play
-    assert str(play.behaviour_cb.master.master) == str(play.search_tab), "Behaviour sits on the Search tab"
-    play.behaviour_var.set("Review Mode")
+    assert str(play.behaviour_cb.master) == str(play.extras_row), "Behaviour sits on the More Options row"
+    play.behaviour_var.set("Review")
     seen = []
     for review in (False, True):
         play._run_job(lambda: seen.append(app.engine.REVIEW_MODE), needs_playing=False, review=review)
@@ -668,4 +656,4 @@ def test_review_mode_is_for_search_builds_only(app, ui):
             ui.pump(0.05)
             if not play.running:
                 break
-    assert seen == [False, True], "a Now Playing build ignores Review Mode; a Search build uses it"
+    assert seen == [False, True], "a voice-style build ignores Review; an app build uses it"

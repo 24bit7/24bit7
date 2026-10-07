@@ -752,7 +752,7 @@ def keep_going(zone):
         return "problem", f"Nothing's playing on {zone}.", {}
     cfg = settings["tracks"]
     engine.nonstop_record(zid, keys, kind="saved", stage="after", vibe=None,
-                          # Off there means Let's See Where This Goes; otherwise the mode chosen there
+                          # Off there means Wander; otherwise the mode chosen there
                           saved_cfg={"using": cfg["using"],
                                      "reseed": "whole" if cfg.get("on") and cfg.get("mode") == "tight" else cfg["reseed"]})
     print(f"[Voice] Keep It Going: Non-stop on for {zone}")

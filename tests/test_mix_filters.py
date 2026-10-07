@@ -261,4 +261,4 @@ def test_keep_it_tight_runs_out_then_carries_on(app):
     entry = {"original": {"k-missing"}, "seeded": set()}
     r = app.Lines()
     assert nonstop._tight_seed("10001", entry, r) is None
-    assert r.has("carrying on as Let's See Where This Goes")
+    assert r.has("carrying on as Wander")

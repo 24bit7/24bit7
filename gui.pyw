@@ -63,8 +63,8 @@ WELCOME_TEXT = (
 DRIFT_GROUPS = ("artists", "tracks", "vibe")            # Top Tracks has no Drift
 NONSTOP_GROUPS = ("artists", "tracks", "top", "vibe")
 PLAY_RESEED = [("last", "Last track"), ("second", "2nd track")]
-PLAY_NONSTOP = [("off", "Off"), ("tight", "Keep It Tight"), ("journey", "Let's See Where This Goes")]
-PLAY_BEHAVIOUR = [("instant", "Play Instantly"), ("review", "Review Mode")]   # the Search tab's builds only
+PLAY_NONSTOP = [("off", "Off"), ("tight", "Keep It Tight"), ("journey", "Wander")]
+PLAY_BEHAVIOUR = [("instant", "Play Instantly"), ("review", "Review")]   # every build from the app, not voice
 PLAY_DRIFT = [("off", "Off"), ("close", "Keep It Tight"), ("spread", "Spread")]   # as Settings > Playlist shows them   # as Settings > Playlist shows them
 
 
@@ -179,24 +179,6 @@ class PlayTab(tk.Frame):
         tk.Label(self.search_tab, text="Track", font=("Segoe UI", 10)).grid(row=0, column=2, sticky="w")
         self.search_track = ttk.Entry(self.search_tab, width=34, font=("Segoe UI", 11), style="Field.TEntry")
         self.search_track.grid(row=0, column=3, sticky="w", padx=(8, 0))
-        # Behaviour goes on the Search tab: play straight away, or load into Playing Now to edit in JRiver
-        cell = tk.Frame(self.search_tab)
-        cell.grid(row=0, column=4, sticky="w", padx=(20, 0))
-        tk.Label(cell, text="Behaviour", font=("Segoe UI", 10)).pack(side="left", padx=(0, 8))
-        saved = read_env().get("PLAY_BEHAVIOUR", "instant").strip().lower()
-        self.behaviour_var = tk.StringVar(value=dict(PLAY_BEHAVIOUR).get(saved, "Play Instantly"))
-        self.behaviour_cb = ttk.Combobox(cell, textvariable=self.behaviour_var, state="readonly", width=14,
-                                         values=[shown for _, shown in PLAY_BEHAVIOUR])
-        self.behaviour_cb.pack(side="left")
-        self.behaviour_cb.bind("<<ComboboxSelected>>", self._on_behaviour_changed)
-        help_mark(cell, "Play Instantly: the playlist starts as soon as it's found.\n"
-                        "Review Mode: the playlist is loaded into Playing Now and left stopped on track "
-                        "one, so you can remove tracks, change the order or add them to another playlist "
-                        "in JRiver, then press play. If the zone is already playing, the playlist is "
-                        "queued after the current track either way.\n"
-                        "For builds from this Search tab only. Now Playing, voice commands, keyboard "
-                        "shortcuts and Non-stop always play straight away. Not used when Output is "
-                        "YouTube.").pack(side="left", padx=(8, 0))
         tk.Label(self.search_tab, text="Build a playlist from any track, even one you don't own. "
                                        "Press Enter for Similar Artists.",
                  font=("Segoe UI", 8), fg=PALETTE["text_muted"]).grid(row=1, column=0, columnspan=4, sticky="w", pady=(6, 0))
@@ -302,9 +284,26 @@ class PlayTab(tk.Frame):
         self.more_box = tk.Frame(self)
         self.more_box.pack(fill="x")
         self.extras_row = tk.Frame(self.more_box, padx=16, pady=4)
+        # Behaviour: play straight away, or Review first. Every build from the app; voice always plays.
+        tk.Label(self.extras_row, text="Behaviour", font=("Segoe UI", 9, "bold"),
+                 fg=PALETTE["text_secondary"]).pack(side="left", padx=(0, 6))
+        saved = read_env().get("PLAY_BEHAVIOUR", "instant").strip().lower()
+        self.behaviour_var = tk.StringVar(value=dict(PLAY_BEHAVIOUR).get(saved, "Play Instantly"))
+        self.behaviour_cb = ttk.Combobox(self.extras_row, textvariable=self.behaviour_var, state="readonly",
+                                         width=13, values=[shown for _, shown in PLAY_BEHAVIOUR])
+        self.behaviour_cb.pack(side="left")
+        self.behaviour_cb.bind("<<ComboboxSelected>>", self._on_behaviour_changed)
+        help_mark(self.extras_row, "Play Instantly: the playlist starts as soon as it's found.\n"
+                                   "Review: the playlist is loaded into Playing Now and left stopped on track "
+                                   "one, so you can remove tracks, change the order or add them to another "
+                                   "playlist in JRiver, then press play. If the zone is already playing, the "
+                                   "playlist is queued after the current track either way.\n"
+                                   "For every build from the app, Now Playing and Search. Voice commands, "
+                                   "keyboard shortcuts and Non-stop always play straight away. Not used when "
+                                   "Output is YouTube.").pack(side="left", padx=(8, 0))
         # AI Moderator sets Windows (Main)'s moderator; devices with settings of their own keep theirs.
         tk.Label(self.extras_row, text="AI Moderator", font=("Segoe UI", 9, "bold"),
-                 fg=PALETTE["ai_purple"]).pack(side="left", padx=(0, 6))
+                 fg=PALETTE["ai_purple"]).pack(side="left", padx=(24, 6))
         self.moderator_var = tk.StringVar(value="Off")
         self.moderator_cb = ttk.Combobox(self.extras_row, textvariable=self.moderator_var,
                                          values=MODERATOR_CHOICES, state="readonly", width=9)
@@ -338,30 +337,16 @@ class PlayTab(tk.Frame):
         self.nonstop_var = tk.StringVar(value="Off")
         self.nonstop_cb = ttk.Combobox(self.extras_row, textvariable=self.nonstop_var,
                                        values=[shown for _, shown in PLAY_NONSTOP],
-                                       state="readonly", width=24)
+                                       state="readonly", width=14)
         self.nonstop_cb.pack(side="left")
         self.nonstop_cb.bind("<<ComboboxSelected>>", self._on_nonstop_changed)
         help_mark(self.extras_row, "Keeps the music going: when the last track of a playlist 24bit7 built "
                                    "starts, more are added. Keep It Tight reseeds from the original playlist's "
-                                   "tracks, so the evening stays close to where it started; Let's See Where This "
-                                   "Goes follows the music wherever it leads. Applies to all four Play options. "
+                                   "tracks, so the evening stays close to where it started; Wander "
+                                   "follows the music wherever it leads. Applies to all four Play options. "
                                    "The rest of the Non-stop settings are in Settings > Playlist, and changing "
                                    "Non-stop here changes it there too. Shows a mode only when all four agree. "
                                    "Voice devices with settings of their own keep theirs.").pack(side="left", padx=(8, 0))
-        # Variety: Similar Tracks only, a second door onto Windows (Main)'s Settings > Playlist value
-        tk.Label(self.extras_row, text="Variety", font=("Segoe UI", 9, "bold"),
-                 fg=PALETTE["text_secondary"]).pack(side="left", padx=(24, 6))
-        self.variety_var = tk.StringVar(value="No")
-        self.variety_cb = ttk.Combobox(self.extras_row, textvariable=self.variety_var,
-                                       values=["Yes", "No"], state="readonly", width=5)
-        self.variety_cb.pack(side="left")
-        self.variety_cb.bind("<<ComboboxSelected>>", self._on_variety_changed)
-        help_mark(self.extras_row, "Similar Tracks only. Yes gathers up to twice the matches it needs and "
-                                   "picks from them at random, the closest the most likely, so the same seed "
-                                   "gives a different playlist each run. No takes the closest matches in order "
-                                   "and stops at the number of tracks. Changing Variety here changes it in "
-                                   "Settings > Playlist too. Voice devices with settings of their own keep "
-                                   "theirs.").pack(side="left", padx=(8, 0))
         self.credits_button = FlatButton(self.extras_row, text="Show Credits", command=self.on_credits,
                                          quiet=True, width=14, height=1)
         self.credits_button.pack(side="left", padx=(24, 0))
@@ -432,7 +417,7 @@ class PlayTab(tk.Frame):
 
     def _review_mode(self):
         return (getattr(self, "behaviour_var", None) is not None
-                and self.behaviour_var.get() == "Review Mode" and self.output_var.get() != "YouTube")
+                and self.behaviour_var.get() == "Review" and self.output_var.get() != "YouTube")
 
     def sync_moderator(self):
         """Shows Windows (Main)'s moderator choice, greyed out until there's an Anthropic key."""
@@ -454,7 +439,6 @@ class PlayTab(tk.Frame):
         by = engine.NONSTOP_BY
         states = {(by[g].get("mode", "journey") if by[g]["on"] else "off") for g in NONSTOP_GROUPS if g in by}
         self.nonstop_var.set(dict(PLAY_NONSTOP).get(states.pop() if len(states) == 1 else "off", "Off"))
-        self.variety_var.set("Yes" if engine.SIMILAR_TRACK_VARIETY else "No")
 
     def _save_play_switches(self, updates, apply):
         """
@@ -517,15 +501,6 @@ class PlayTab(tk.Frame):
                 sync_nonstop(page)
         self.nonstop_cb.selection_clear()
         self._save_play_switches(updates, apply)
-
-    def _on_variety_changed(self, *_):
-        value = "no" if self.variety_var.get() == "No" else "yes"
-
-        def apply(page):
-            if "SIMILAR_TRACK_VARIETY" in page.vars:
-                page.vars["SIMILAR_TRACK_VARIETY"].set(value)
-        self.variety_cb.selection_clear()
-        self._save_play_switches({"SIMILAR_TRACK_VARIETY": value}, apply)
 
     def _on_moderator_changed(self, *_):
         value = self.moderator_var.get().lower()
@@ -1273,7 +1248,7 @@ class PlayTab(tk.Frame):
         self._stamp_next = True   # the build's first line gets the time
 
         rows = (playmix.rows() or None) if mix else None   # added playlists: app builds only
-        review = review and bool(mix) and self._review_mode()   # Review Mode: Search builds only
+        review = review and bool(mix) and self._review_mode()   # Review: app builds, never voice
 
         def worker():
             engine.MIX_ROWS, engine.MIX_KEEP, engine.MIX_FAST_KEY, engine.MIX_NOTED = rows, set(), None, False
@@ -1318,7 +1293,7 @@ class PlayTab(tk.Frame):
                 self._run_job(lambda: engine.create_similar_playlist(report=self.report, seed_info=seed),
                               needs_playing=False, review=True)
             return
-        self._run_job(lambda: self._seeded(engine.create_similar_playlist), needs_playing=False)
+        self._run_job(lambda: self._seeded(engine.create_similar_playlist), needs_playing=False, review=True)
 
     def on_similar_tracks(self):
         if self._seed_is_search():
@@ -1327,7 +1302,8 @@ class PlayTab(tk.Frame):
                 self._run_job(lambda: engine.create_similar_tracks_playlist(report=self.report, seed_info=seed),
                               needs_playing=False, review=True)
             return
-        self._run_job(lambda: self._seeded(engine.create_similar_tracks_playlist), needs_playing=False)
+        self._run_job(lambda: self._seeded(engine.create_similar_tracks_playlist), needs_playing=False,
+                      review=True)
 
     def on_top_tracks(self):
         if self._seed_is_search():
@@ -1336,7 +1312,7 @@ class PlayTab(tk.Frame):
                 self._run_job(lambda: engine.play_top_n(report=self.report, seed_info=seed),
                               needs_playing=False, review=True)
             return
-        self._run_job(lambda: self._seeded(engine.play_top_n), needs_playing=False)
+        self._run_job(lambda: self._seeded(engine.play_top_n), needs_playing=False, review=True)
 
     def _seeded(self, build):
         """Seeds from the Now Playing zone's track, or the last track played when its Playing Now is empty."""
@@ -1353,7 +1329,8 @@ class PlayTab(tk.Frame):
             self.report(problem)
             return
         VibeDialog(self.root, on_submit=lambda vibe: self._run_job(
-            lambda: engine.create_vibe_playlist(vibe, report=self.report), needs_playing=False))
+            lambda: engine.create_vibe_playlist(vibe, report=self.report), needs_playing=False,
+            review=True))
 
 
 class VibeDialog(tk.Toplevel):

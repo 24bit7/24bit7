@@ -351,12 +351,12 @@ PLAY_OPTIONS = [("artists", "Similar Artists"), ("tracks", "Similar Tracks"),
 NONSTOP_USING_OPTIONS = [("artists", "Similar artists"), ("tracks", "Similar tracks")]
 NONSTOP_RESEED_OPTIONS = [("last", "Last track"), ("second", "2nd track")]
 SAVED_RESEED_OPTIONS = NONSTOP_RESEED_OPTIONS + [("whole", "Whole playlist")]   # JRiver Playlists rows only
-NONSTOP_MODE_OPTIONS = [("off", "Off"), ("tight", "Keep It Tight"), ("journey", "Let's See Where This Goes")]
+NONSTOP_MODE_OPTIONS = [("off", "Off"), ("tight", "Keep It Tight"), ("journey", "Wander")]
 NONSTOP_MODE_HELP = ("When the last track of a playlist 24bit7 built starts, more are added so the music keeps going.\n"
                      "Keep It Tight: each top-up reseeds from a track of the original playlist, a different one "
                      "each time, so the evening stays close to where it started. When every track has been used "
-                     "as a seed, it carries on as Let's See Where This Goes, and the console says so.\n"
-                     "Let's See Where This Goes: each top-up reseeds from where the music has got to (Reseed "
+                     "as a seed, it carries on as Wander, and the console says so.\n"
+                     "Wander: each top-up reseeds from where the music has got to (Reseed "
                      "from), so the evening travels.")
 NONSTOP_WITH_OPTIONS = [("vibe", "More from the AI"), ("artists", "Similar artists"), ("tracks", "Similar tracks")]
 # Saved Playlists dropdowns
@@ -1858,7 +1858,7 @@ class SettingsTab(tk.Frame):
             def toggled():
                 sync_nonstop(p)
                 p.save()
-            # One dropdown: Off, Keep It Tight or Let's See Where This Goes
+            # One dropdown: Off, Keep It Tight or Wander
             ns_var = tk.StringVar(value=option_label(NONSTOP_MODE_OPTIONS,
                                                      cfg.get("mode", "journey") if cfg["on"] else "off"))
             top_row = tk.Frame(box)
@@ -1932,7 +1932,7 @@ class SettingsTab(tk.Frame):
                 option("Then play using" if group == "top" else "Play using", f"NONSTOP_{g}_USING",
                        NONSTOP_USING_OPTIONS, cfg["using"], "What each top-up is built with.")
             reseed_cb = option("Reseed from", f"NONSTOP_{g}_RESEED", NONSTOP_RESEED_OPTIONS, cfg["reseed"],
-                               "For Let's See Where This Goes. Last track: each top-up follows on from where "
+                               "For Wander. Last track: each top-up follows on from where "
                                "the music has got to, so it wanders as the evening goes on.\nSecond track: each "
                                "top-up seeds from the first pick after the original seed, so it stays closer to "
                                "how it started. Keep It Tight doesn't use this.")

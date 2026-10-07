@@ -14,7 +14,7 @@ playlist follows the Non-stop settings of the option it started as, all evening.
       Similar Tracks like the others.
 
 Keep It Tight reseeds each top-up from a track of the original playlist instead, a
-different one each time, then carries on as Let's See Where This Goes when they've all
+different one each time, then carries on as Wander when they've all
 been used. A JRiver playlist row set to Reseed from "Whole playlist" does the same.
 
 Only playlists 24bit7 sent are topped up (engine.NONSTOP_ZONES remembers them);
@@ -181,7 +181,7 @@ def _tight_seed(zone, entry, report):
     if not entry.get("tight_done"):
         entry["tight_done"] = True
         report("  Keep It Tight has used every track of the original playlist as a seed, "
-               "so carrying on as Let's See Where This Goes.")
+               "so carrying on as Wander.")
     return None
 
 

@@ -157,7 +157,7 @@ def nonstop_settings(get):
         mode = (get(f"{name}_MODE", "") or "").strip().lower()
         out[group] = {"on": on, "using": using if using in ("artists", "tracks") else own,
                       "reseed": "second" if reseed == "second" else "last",
-                      "mode": "tight" if mode == "tight" else "journey"}   # Keep It Tight / Let's See Where This Goes
+                      "mode": "tight" if mode == "tight" else "journey"}   # Keep It Tight / Wander
     with_ = (get("NONSTOP_VIBE_WITH", "") or "").strip().lower()
     legacy_with = (get("NONSTOP_VIBE", "") or "").strip().lower()
     if not with_ and legacy_with in ("vibe", "artists", "tracks"):
