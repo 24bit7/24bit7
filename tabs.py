@@ -108,6 +108,50 @@ DARK = {
 THEME = "light"
 
 
+def _button_enter(event):
+    """Old-style buttons light up under the pointer, like the newer ones."""
+    w = event.widget
+    try:
+        if str(w.cget("state")) != "disabled" and getattr(w, "_rest_bg", None) is None:
+            w._rest_bg = w.cget("background")
+            w.configure(background=PALETTE["button_hover"])
+    except (tk.TclError, AttributeError):
+        pass
+
+
+def _button_leave(event):
+    w = event.widget
+    rest = getattr(w, "_rest_bg", None)
+    if rest is None:
+        return
+    w._rest_bg = None
+    try:
+        w.configure(background=rest)
+    except tk.TclError:
+        pass
+
+
+def flat_classic_widgets(root):
+    """
+    Old-style Tk text boxes, number boxes, lists and buttons: a thin flat edge instead of
+    3D shading, set once here so every one gets it, including any added later. Widgets
+    that set their own relief or border keep it.
+    """
+    edge, faint = PALETTE["field_edge"], PALETTE["text_faint"]
+    for cls in ("Entry", "Spinbox", "Listbox"):
+        for key, value in (("relief", "flat"), ("highlightThickness", 1),
+                           ("highlightBackground", edge), ("highlightColor", faint)):
+            root.option_add(f"*{cls}.{key}", value)
+    for key in ("buttonUpRelief", "buttonDownRelief"):
+        root.option_add(f"*Spinbox.{key}", "flat")
+    for key, value in (("relief", "flat"), ("highlightThickness", 1),
+                       ("highlightBackground", edge), ("highlightColor", edge),
+                       ("activeBackground", PALETTE["button_hover"])):
+        root.option_add(f"*Button.{key}", value)
+    root.bind_class("Button", "<Enter>", _button_enter, add="+")
+    root.bind_class("Button", "<Leave>", _button_leave, add="+")
+
+
 def apply_theme(root, name):
     """
     Picks the palette for "light" or "dark". Call straight after tk.Tk(), before
@@ -139,6 +183,7 @@ def apply_theme(root, name):
             ("*Spinbox.readonlyBackground", bg), ("*Spinbox.disabledBackground", bg),
             ("*Checkbutton.selectColor", field), ("*Radiobutton.selectColor", field)):
         root.option_add(key, value)
+    flat_classic_widgets(root)
     if THEME == "dark":
         dark_title_bar(root)
     themed_ttk(root)
