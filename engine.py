@@ -4368,7 +4368,7 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
 # Mode 4: Vibe Playlist (AI-described mood)
 # ---------------------------------------------------------------------------
 
-def create_vibe_playlist(vibe, report=print):
+def create_vibe_playlist(vibe, report=print, count=None):
     """
     Builds a playlist from a text description of a mood.
     AI suggests artist/track pairs (always AI, regardless of source settings,
@@ -4386,7 +4386,7 @@ def create_vibe_playlist(vibe, report=print):
     if not ANTHROPIC_API_KEY:
         report("Problem: AI Playlist needs an Anthropic key. " + KEY_HELP_LINE)
         return
-    target = VIBE_TRACK_COUNT
+    target = VIBE_TRACK_COUNT if count is None else min(100, max(5, int(count)))
     report(f"AI Playlist: {vibe}  (target {target} tracks)")
 
     seed_info = {"Artist": "AI Playlist", "Name": vibe, "Album": ""}

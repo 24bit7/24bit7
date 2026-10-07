@@ -38,6 +38,7 @@ from review_gui import ReviewPanel
 import console_query
 import playmix
 import profiles
+from ai_dialog import AIPlaylistDialog
 import buildlog
 import support_gui
 import window_chrome
@@ -1355,99 +1356,9 @@ class PlayTab(tk.Frame):
         if problem:
             self.report(problem)
             return
-        VibeDialog(self.root, on_submit=lambda vibe: self._run_job(
-            lambda: engine.create_vibe_playlist(vibe, report=self.report), needs_playing=False,
+        AIPlaylistDialog(self.root, play=self, on_create=lambda theme, count: self._run_job(
+            lambda: engine.create_vibe_playlist(theme, count=count, report=self.report), needs_playing=False,
             review=True))
-
-
-class VibeDialog(tk.Toplevel):
-    """
-    Asks for a mood description. Three AI-suggested vibes load in the background
-    and appear as clickable buttons; click one to use it, or type your own.
-    """
-    def __init__(self, master, on_submit):
-        super().__init__(master)
-        self.title("AI Playlist")
-        self.resizable(False, False)
-        self.on_submit = on_submit
-        self.transient(master)
-
-        body = tk.Frame(self, padx=16, pady=14)
-        body.pack(fill="both", expand=True)
-        tk.Label(body, text="Describe the mood, era, activity or feeling:",
-                 font=("Segoe UI", 10)).pack(anchor="w")
-        self.entry = tk.Entry(body, width=48, font=("Segoe UI", 11))
-        self.entry.pack(fill="x", pady=(6, 10))
-        self.entry.focus_set()
-        self.entry.bind("<Return>", lambda e: self.submit())
-
-        tk.Label(body, text="Or try one of these:", fg=PALETTE["text_muted"]).pack(anchor="w")
-        # First suggestion: more like what's playing, greyed out until something is
-        self.like_text = None
-        self.like_button = tk.Button(body, text="More tracks like what's playing", anchor="w",
-                                     state="disabled", command=lambda: self._use(self.like_text))
-        self.like_button.pack(fill="x", pady=(4, 0))
-        self.suggest_frame = tk.Frame(body)
-        self.suggest_frame.pack(fill="x", pady=(4, 12))
-        self.loading = tk.Label(self.suggest_frame, text="Thinking...", fg=PALETTE["text_faint"])
-        self.loading.pack(anchor="w")
-
-        bar = tk.Frame(body)
-        bar.pack(fill="x")
-        tk.Button(bar, text="Create playlist", width=16, command=self.submit).pack(side="right")
-        tk.Button(bar, text="Cancel", width=10, command=self.destroy).pack(side="right", padx=(0, 8))
-
-        threading.Thread(target=self._load_suggestions, daemon=True).start()
-        threading.Thread(target=self._load_playing, daemon=True).start()
-
-    def _load_playing(self):
-        try:
-            info = engine.get_playing_info()
-        except Exception:
-            info = None
-        self.after(0, lambda: self._show_playing(info))
-
-    def _show_playing(self, info):
-        if not self.winfo_exists():
-            return
-        title = ((info or {}).get("Name") or "").strip()
-        artist = ((info or {}).get("Artist") or "").split(";")[0].strip()
-        if not info or info.get("PlayingNowPosition") == "-1" or not title or title == "Unknown":
-            return   # nothing playing: the button stays greyed out
-        shown = title if len(title) <= 45 else title[:42].rstrip() + "..."
-        by = f" by {engine.deinvert_the(artist)}" if artist and artist != "Unknown" else ""
-        self.like_text = f'More tracks like "{title}"{by}, with the same tone, energy and mood'
-        self.like_button.config(text=f'More tracks like "{shown}"', state="normal")
-
-    def _load_suggestions(self):
-        try:
-            ideas = engine.ai_vibe_suggestions()
-        except Exception:
-            ideas = []
-        self.after(0, lambda: self._show_suggestions(ideas))
-
-    def _show_suggestions(self, ideas):
-        if not self.winfo_exists():
-            return
-        self.loading.destroy()
-        if not ideas:
-            tk.Label(self.suggest_frame, text="(no suggestions right now)", fg=PALETTE["text_faint"]).pack(anchor="w")
-            return
-        for idea in ideas:
-            tk.Button(self.suggest_frame, text=idea, anchor="w",
-                      command=lambda t=idea: self._use(t)).pack(fill="x", pady=2)
-
-    def _use(self, text):
-        self.entry.delete(0, "end")
-        self.entry.insert(0, text)
-        self.entry.focus_set()
-
-    def submit(self):
-        vibe = self.entry.get().strip()
-        if not vibe:
-            return
-        self.destroy()
-        self.on_submit(vibe)
 
 
 def _enable_dpi_awareness():

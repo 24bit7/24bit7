@@ -1153,3 +1153,41 @@ def test_review_rows_alternate_shading(app, ui):
     assert shade(keys[1]) == p["row_on"], "a ticked row's shading wins over the stripe"
     panel.toggle(keys[1])
     assert shade(keys[1]) == p["stripe"]
+
+
+# --- AI Playlist window (Create) ---
+
+def test_ai_playlist_window_create(app, ui, monkeypatch):
+    import ai_dialog, settings_gui
+    monkeypatch.setattr(app.engine, "ai_vibe_suggestions", lambda: ["Late-night jazz", "Driving at night"])
+    got = {}
+    dlg = ai_dialog.AIPlaylistDialog(ui.play.root, play=ui.play, on_create=lambda t, n: got.update(theme=t, count=n))
+    ui.pump(0.6)
+    assert dlg.mode == "create"
+    texts = [c.cget("text") for c in dlg.idea_chips]
+    assert texts == ["Late-night jazz", "Driving at night"], "nothing is playing, so no More Tracks Like chip"
+    dlg.idea_chips[0].event_generate("<Button-1>")
+    ui.pump(0.1)
+    assert dlg.theme.get() == "Late-night jazz"
+    dlg.count.delete(0, "end"); dlg.count.insert(0, "12")
+    dlg.set_if_short("drift")
+    dlg.submit()
+    ui.pump(0.1)
+    assert got == {"theme": "Late-night jazz", "count": 12}
+    env = settings_gui.read_env()
+    assert env.get("AI_CREATE_THEME") == "Late-night jazz" and env.get("VIBE_TRACK_COUNT") == "12"
+    assert env.get("AI_IF_SHORT") == "drift" and env.get("AI_DIALOG_MODE", "create") == "create"
+    # next time: remembered
+    dlg2 = ai_dialog.AIPlaylistDialog(ui.play.root, play=ui.play, on_create=lambda t, n: None)
+    ui.pump(0.3)
+    assert dlg2.theme.get() == "Late-night jazz" and dlg2.count.get() == "12" and dlg2.if_short == "drift"
+    dlg2.destroy()
+
+
+def test_ai_playlist_steer_not_yet(app, ui):
+    import ai_dialog
+    dlg = ai_dialog.AIPlaylistDialog(ui.play.root, play=ui.play, on_create=lambda t, n: None)
+    ui.pump(0.3)
+    dlg.set_mode("steer")
+    assert dlg.mode == "create" and "next build" in dlg.mode_note.cget("text")
+    dlg.destroy()
