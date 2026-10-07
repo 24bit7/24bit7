@@ -27,7 +27,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.14.0"
+VERSION = "1.15.0"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
@@ -232,7 +232,7 @@ def load_settings():
     global AI_MODERATOR, MODERATOR_WARNED, SKIP_PLAYED
     global NONSTOP, NONSTOP_USING, NONSTOP_RESEED, NONSTOP_TOP_REST, NONSTOP_TOP_REST_COUNT, NONSTOP_VIBE
     global NONSTOP_BY, LONG_CLOSERS, AI_MODERATOR_BY, RUN_AFTER
-    global CONSOLE_QUERY
+    global CONSOLE_QUERY, USE_AI
 
     load_dotenv(ENV_FILE, override=True)
     os.environ.update(PROFILE)   # a device's own settings, for the voice command being built
@@ -265,6 +265,7 @@ def load_settings():
     CUSTOM_SITES = read_custom_sites()
     DEBUG = True   # always recorded since 1.11.0: the console's Simple/Advanced switch shows or hides them
     CONSOLE_QUERY = os.getenv("CONSOLE_QUERY", "0").strip().lower() in ("1", "true", "yes")   # off by default
+    USE_AI = os.getenv("USE_AI", "1").strip().lower() not in ("0", "false", "no", "off")   # Settings > Keys: Use AI
     # How many similar-artist sources must suggest an artist before it is used
     # (1 = off). Replaced the on/off SIMILAR_REQUIRE_AGREEMENT; an old .env
     # carries over as on -> 2, off -> 1.
@@ -407,6 +408,36 @@ def use_profile(values=None):
         os.environ.pop(key, None)   # .env's own value (if any) comes back with the reload
     PROFILE = {k: str(v) for k, v in (values or {}).items() if k in PROFILE_KEYS["sources"] + PROFILE_KEYS["playlist"]}
     load_settings()
+
+
+REVIEW_SETTINGS = {   # Settings > Playlist's Review column: group -> the Play keys it can override
+    "artists": ["SIMILAR_ARTIST_TRACK_COUNT", "SIMILAR_ARTIST_TRACK_LIMIT", "SIMILAR_ARTIST_LIMIT",
+                "TRACKS_PER_ARTIST_POOL", "TRACKS_PER_ARTIST_PICK"],
+    "tracks": ["SIMILAR_TRACK_COUNT"],
+    "top": ["TOP_TRACKS_COUNT"],
+}
+
+
+def review_overrides():
+    """
+    The Review column's figures as a profile to lay over .env for a Review build:
+    REVIEW_<key> for every section whose Same as Play is unticked. {} when none are.
+    """
+    from dotenv import dotenv_values
+    try:
+        env = {k: (v or "") for k, v in dotenv_values(ENV_FILE).items()}
+    except Exception:
+        return {}
+    out = {}
+    for group, keys in REVIEW_SETTINGS.items():
+        if env.get(f"REVIEW_SAME_{group.upper()}", "1").strip().lower() in ("0", "false", "no"):
+            for key in keys:
+                value = env.get(f"REVIEW_{key}", "").strip()
+                if not value and key == "SIMILAR_ARTIST_TRACK_LIMIT":
+                    value = "1"   # the Review column's Limit tick starts ticked
+                if value:
+                    out[key] = value
+    return out
 
 
 def profile_values(kind):
@@ -867,6 +898,7 @@ _SESSION_STARTED = {}
 
 def session_start(mode, seed_info, sources=""):
     globals()["CLOSERS_DROPPED"] = 0
+    ai_off_reset()
     nonstop_begin(mode, seed_info)
     if output_is_youtube() and not OUTPUT_OVERRIDE:
         globals()["LAST_OUTPUT"] = "YouTube"
@@ -1825,6 +1857,9 @@ def ai_ask_list(prompt, feature="AI"):
     if not ANTHROPIC_API_KEY:
         debug("AI: no Anthropic key")
         return []
+    if not USE_AI:
+        AI_LAST_ERROR = "Use AI is Off"
+        return []
     try:
         import anthropic
     except ImportError:
@@ -1885,6 +1920,9 @@ def ai_ask_text(prompt, max_tokens=200, feature="AI"):
     if not ANTHROPIC_API_KEY:
         AI_LAST_ERROR = "no API key"
         return ""
+    if not USE_AI:
+        AI_LAST_ERROR = "Use AI is Off"
+        return ""
     try:
         import anthropic
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -1906,6 +1944,10 @@ def ai_ask_json(prompt, max_tokens=4000, feature="AI"):
     AI_LAST_ERROR = "no API key"
     if not ANTHROPIC_API_KEY:
         debug("AI: no Anthropic key")
+        return None
+    if not USE_AI:
+        AI_LAST_ERROR = "Use AI is Off"
+        debug("AI: Use AI is Off")
         return None
     try:
         import anthropic
@@ -2161,7 +2203,7 @@ def source_has_key(code, purpose="similar"):
     if code == "lastfm":
         return bool(LASTFM_KEY)
     if code == "ai":
-        return bool(ANTHROPIC_API_KEY)
+        return ai_enabled()
     if code == "listenbrainz" and purpose == "top":
         return bool(LISTENBRAINZ_TOKEN)
     return True
@@ -2176,6 +2218,8 @@ def missing_key_notes(similar=False, top_tracks=False):
         notes.append("Last.fm is ticked but has no key, so it was skipped. " + KEY_HELP_LINE)
     if "ai" in (ticked_similar | ticked_top) and not ANTHROPIC_API_KEY:
         notes.append("AI is ticked but has no Anthropic key, so it was skipped. " + KEY_HELP_LINE)
+    elif "ai" in (ticked_similar | ticked_top) and not USE_AI:
+        notes.append("AI is ticked but Use AI is Off (Settings > Keys), so it was skipped.")
     if "listenbrainz" in ticked_top and not LISTENBRAINZ_TOKEN:
         notes.append("ListenBrainz is ticked for top tracks but has no user token, "
                      "so it was skipped there. " + KEY_HELP_LINE)
@@ -2187,11 +2231,33 @@ def report_missing_keys(report, similar=False, top_tracks=False):
         report("  Note: " + note)
 
 
+USE_AI = True            # Settings > Keys > Use AI: Off pauses every feature that spends AI credits
+_AI_OFF_NOTED = set()    # which features have had their "Use AI is Off" line this build
+
+
+def ai_enabled():
+    """True when the AI can be used: a key, and Use AI On."""
+    return bool(ANTHROPIC_API_KEY) and USE_AI
+
+
+def note_ai_off(report, feature):
+    """One console line per build when a feature stands down because Use AI is Off."""
+    if feature not in _AI_OFF_NOTED:
+        _AI_OFF_NOTED.add(feature)
+        report(f"  Note: {feature} skipped: Use AI is Off (Settings > Keys).")
+
+
+def ai_off_reset():
+    _AI_OFF_NOTED.clear()
+
+
 def vibe_blocker():
     """None if Vibe Playlist can run, otherwise the line to show the user."""
     refresh_settings_if_changed()
     if not ANTHROPIC_API_KEY:
         return "AI Playlist needs an Anthropic key. Add it under Settings > Keys."
+    if not USE_AI:
+        return "AI Playlist is paused: Use AI is Off under Settings > Keys."
     return None
 
 
@@ -3338,6 +3404,9 @@ def moderate(tracks, seed, report=print, level=None, reference=None):
     reference: [(key, artist, title)] already in the playlist, shown as what fits.
     """
     level = level or moderator_level()
+    if ANTHROPIC_API_KEY and not USE_AI and level in MODERATOR_LEVELS and level != "off":
+        note_ai_off(report, "AI Moderator")
+        level = "off"
     if not ANTHROPIC_API_KEY or level not in MODERATOR_LEVELS:
         level = "off"
     if level == "off" or len(tracks) < 2:
@@ -3591,6 +3660,8 @@ class Drift:
         self.finds = []           # (artist, title, key, score) in the order found
         self.per = {}             # artist key -> tracks of theirs in the playlist
         self.seen_artists = set() # artists already asked for their top tracks
+        if self.using == "ai" and not ai_enabled():
+            self.using = "tracks"                           # Use AI Off, or no key: the sources instead
         self.drift_from = cfg.get("from", "spread")     # Keep It Tight ("close") or Spread
         self.mod_choice = cfg.get("moderator", "same")  # Drift's own AI Moderator level, or the build's
         self.parent = {}          # Drift track key -> the key of the track it was seeded from
@@ -4580,7 +4651,7 @@ def create_vibe_playlist(vibe, report=print, count=None, prompt=None, if_short=N
                   played=played, vibe=vibe)
     drift.prompt, drift.check = prompt, check
     if if_short == "ask":        # the AI Playlist window's If Short: asked again, up to two more rounds
-        drift.on, drift.using, drift.rounds = True, "ai", 2
+        drift.on, drift.using, drift.rounds = True, "ai" if ai_enabled() else "tracks", 2
     elif if_short == "drift":    # topped up from the music sources with the Drift settings
         drift.on = True
         if drift.using == "ai":

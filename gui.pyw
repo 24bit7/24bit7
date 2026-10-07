@@ -312,7 +312,7 @@ class PlayTab(tk.Frame):
                                          values=MODERATOR_CHOICES, state="readonly", width=9)
         self.moderator_cb.pack(side="left")
         self.moderator_cb.bind("<<ComboboxSelected>>", self._on_moderator_changed)
-        Tooltip(self.moderator_cb, NO_KEY_TEXT, when=lambda: not engine.ANTHROPIC_API_KEY)
+        self._moderator_tip = Tooltip(self.moderator_cb, NO_KEY_TEXT, when=lambda: not engine.ai_enabled())
         help_mark(self.extras_row, "Checks Similar Artists and Similar Tracks playlists with Claude Haiku "
                                    "and removes tracks that clash with the seed's tone, energy and mood. "
                                    "Uses a little Anthropic credit, a fraction of a penny per playlist.\n"
@@ -431,9 +431,26 @@ class PlayTab(tk.Frame):
         by = engine.AI_MODERATOR_BY
         levels = {by.get("artists", "off"), by.get("tracks", "off")}
         self.moderator_var.set(levels.pop().title() if len(levels) == 1 else "Off")   # Off unless both agree
-        self.moderator_cb.state(["!disabled"] if engine.ANTHROPIC_API_KEY else ["disabled"])
+        self.moderator_cb.state(["!disabled"] if engine.ai_enabled() else ["disabled"])
+        self._moderator_tip.text = (NO_KEY_TEXT if not engine.ANTHROPIC_API_KEY
+                                    else "Paused: Use AI is Off under Settings > Keys.")
+        self._sync_ai_button()
         self._sync_play_switches()
         self._update_more_label()
+
+    def _sync_ai_button(self):
+        """AI Playlist greys out while Use AI is Off (Settings > Keys) or there's no key."""
+        button = next((b for b in self.buttons if b.cget("text") == "AI Playlist"), None)
+        if button is None:
+            return
+        on = engine.ai_enabled()
+        if not self.running:
+            button.config(state="normal" if on else "disabled")
+        if not hasattr(self, "_ai_button_tip"):
+            self._ai_button_tip = Tooltip(button, "", when=lambda: not engine.ai_enabled())
+        self._ai_button_tip.text = ("AI Playlist needs an Anthropic key under Settings > Keys."
+                                    if not engine.ANTHROPIC_API_KEY else
+                                    "Paused: Use AI is Off under Settings > Keys.")
 
     def _sync_play_switches(self):
         """Drift and Non-stop as Settings > Playlist has them for Windows (Main): No unless every option agrees."""
@@ -1016,10 +1033,18 @@ class PlayTab(tk.Frame):
         self.log.see("1.0")
         self.log.config(state="disabled")
 
+    def sync_console_buttons(self):
+        """The Query buttons come and go with Console Query and Use AI (Settings)."""
+        self._sync_head_query()
+        if self.console_strip.winfo_manager():
+            self._show_console_strip()
+        elif not (getattr(engine, "CONSOLE_QUERY", False) and engine.ai_enabled()):
+            self.console_buttons["Query"].pack_forget()
+
     def _sync_head_query(self):
         engine.refresh_settings_if_changed()
         query = self.head_buttons["Query"]
-        if getattr(engine, "CONSOLE_QUERY", False) and engine.ANTHROPIC_API_KEY and self.view != "log":
+        if getattr(engine, "CONSOLE_QUERY", False) and engine.ai_enabled() and self.view != "log":
             if not query.winfo_manager():
                 query.pack(side="left", padx=(4, 0), before=self.head_buttons["Export to Log"])
         else:
@@ -1100,7 +1125,7 @@ class PlayTab(tk.Frame):
             return   # with the tabs open, the strip sits in the tab row instead
         engine.refresh_settings_if_changed()
         query = self.console_buttons["Query"]
-        if getattr(engine, "CONSOLE_QUERY", False) and engine.ANTHROPIC_API_KEY:
+        if getattr(engine, "CONSOLE_QUERY", False) and engine.ai_enabled():
             if not query.winfo_manager():
                 query.pack(side="left", padx=(0, 4), before=self.console_buttons["Export to Log"])
         else:
@@ -1266,11 +1291,16 @@ class PlayTab(tk.Frame):
         def worker():
             engine.MIX_ROWS, engine.MIX_KEEP, engine.MIX_FAST_KEY, engine.MIX_NOTED = rows, set(), None, False
             engine.REVIEW_MODE = review
-            if review:
-                engine.review_reset()
+            overrides = {}
             engine.BUILD_STARTED, engine.LAST_OUTPUT = time.time(), None
             engine.LAST_OUTPUT_ID, engine.LAST_BUILD = None, None
             try:
+                if review:
+                    engine.review_reset()
+                    overrides = engine.review_overrides()   # Settings > Playlist's Review column
+                    if overrides:
+                        engine.use_profile(overrides)
+                        self.log_queue.put("  Review settings in use (Settings > Playlist, the Review column).")
                 target()
                 if review:
                     engine.REVIEW_ROWS = engine.review_rows(engine.REVIEW_KEYS)
@@ -1279,6 +1309,8 @@ class PlayTab(tk.Frame):
                                    f"and attach the file when you report it.")
             finally:
                 engine.MIX_ROWS, engine.MIX_KEEP, engine.MIX_FAST_KEY = None, set(), None
+                if overrides:
+                    engine.use_profile({})   # back to Windows (Main)'s own figures
                 engine.REVIEW_MODE = False
                 engine.BUILD_STARTED = None
                 self.root.after(0, self._job_done)
@@ -1301,6 +1333,7 @@ class PlayTab(tk.Frame):
         self.running = False
         for b in self.buttons:
             b.config(state="normal")
+        self._sync_ai_button()
         self._sync_seed_buttons()
         if getattr(self, "_job_review", False):   # a Review build: its tracks go to the Review list
             self._job_review = False
@@ -1475,6 +1508,7 @@ def main():
     discover = DiscoverTab(nb)
     settings = SettingsTab(nb)
     play.settings = settings   # the Play tab's Drift and Non-stop change Settings > Playlist
+    settings.play = play       # Settings > Keys > Use AI greys the Play tab's AI pieces out or back in
     if loaded_profile:
         root.after(800, lambda: print(f'Profile "{loaded_profile}" loaded.'))
     nb.add(play, text="Play")

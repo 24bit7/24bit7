@@ -181,3 +181,21 @@ A new user wants to see every match first, then decide whether they want variety
 
 **7 Oct 2026: Review Mode loads the playlist, then stops it.**
 JRiver is a better playlist editor than 24bit7 would ever be: removing tracks, reordering and adding to other playlists are all there already. So Review Mode hands over rather than building an editor, and reuses the normal send step with fast start off, stopping the zone straight after, so at most a fraction of a second plays.
+
+**7 Oct 2026 (later): Review is a list in 24bit7 after all.**
+Review Mode (above) handed over to JRiver, and the same day showed why that wasn't enough: a DJ wants to hear a candidate before committing to it, and JRiver's editor can't play one track in the headphones while the room carries on. So Review became a list in the console area with its own actions, and the 3 Oct call against a preview was reversed: **Preview in** plays one track in a second zone, which is exactly what a headphone zone is for. The actions read Output when pressed rather than remembering the build's zone, so changing your mind about the room is one dropdown, and YouTube gets a single Play on YouTube rather than four actions that mean nothing there.
+
+**7 Oct 2026: Notes on titles, not ? marks.**
+Forty ? marks were visual noise, and a note that sits behind a mark two widgets away from its setting is easy to miss. The note now belongs to the row's title, shown after half a second so sweeping the pointer across a page doesn't flash them up, and the pointer becomes a question mark where a note exists. The ? buttons on Settings > Keys stay, since those open a window with the steps for getting each key.
+
+**7 Oct 2026: A profile is applied by restarting.**
+Settings are read in several places (the engine, the Settings pages, the Play tab switches), and swapping them all in place is a lot of ways to leave a control showing the old value. Load writes the profile as pending and restarts 24bit7, which applies it before anything reads a setting, the same way the theme change already worked. Profiles cover Windows (Main) only, so loading DJ never changes what the kitchen Echo does.
+
+**7 Oct 2026: Use AI is a pause, not a key removal.**
+A No AI profile needs one switch that stops every feature spending credits and leaves every other setting alone. Use AI Off greys the AI pieces out rather than leaving them live and ignored, so what you see is what will happen, and each feature says once per build that it stood down.
+
+**7 Oct 2026: Steer trusts the AI on tempo, but checks the tags.**
+The AI's sense of tempo is approximate. Where the seed and a pick both carry BPM tags, Faster and Slower are checked against the numbers and a pick going the wrong way is left out; where tags are missing, the AI's judgement stands. Both AI Playlist modes ask for about twice the count asked for, since a share of any list isn't in the library.
+
+**7 Oct 2026: The top strip reaches the top.**
+Windows 10 paints a light edge above a caption-less window's frame. Rather than live with it, the window has no top frame at all, the top few pixels still resize, the strip's colour fills anything Windows hasn't drawn yet, and the frame is re-measured after a snap or a focus change, which is where the edge crept back. It was proved in a standalone window first, because it runs during every drag.

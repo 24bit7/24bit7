@@ -64,6 +64,9 @@ ACTIONS = [
 ]
 YOUTUBE_TIP = "Opens the ticked tracks, in tick order, as a YouTube playlist in your browser."
 SAME_ZONE = "Same zone"       # Output's first choice: the Now Playing zone
+BPM_TIP = ("From your files' BPM tags. JRiver can fill these in for your whole library: Library Tools > "
+           "Analyze Audio, choosing only files not yet analyzed. Steer's Faster and Slower check against these "
+           "where they exist.")
 SAVE_TIP = "Nothing plays and Playing Now isn't touched. Saves these as a JRiver playlist."
 
 # (title, width in characters, stretch): Artist, Title and Album share the spare room
@@ -480,9 +483,12 @@ class ReviewPanel:
         p = self.p
         for c, (title, width, stretch) in enumerate(columns):
             self.grid.grid_columnconfigure(c, weight=stretch)
-            tk.Label(self.grid, text=title, font=self._font(-1, True), bg=p["bg"], fg=p["muted"], width=width, padx=4,
-                     anchor="e" if title in ("Time", "BPM") else "w").grid(
-                row=0, column=c, sticky="ew", pady=(7, 5))
+            head = tk.Label(self.grid, text=title, font=self._font(-1, True), bg=p["bg"], fg=p["muted"], width=width,
+                            padx=4, anchor="e" if title in ("Time", "BPM") else "w")
+            head.grid(row=0, column=c, sticky="ew", pady=(7, 5))
+            if title == "BPM":   # where the figures come from, and how to get them
+                Tooltip(head, BPM_TIP, click=False)
+                head.config(cursor="question_arrow")
         tk.Frame(self.grid, bg=p["line"], height=1).grid(row=1, column=0, columnspan=len(columns), sticky="ew")
         r = 2
         for row in self.rows:

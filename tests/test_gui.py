@@ -59,6 +59,7 @@ def ui(app, monkeypatch):
     discover = gui.DiscoverTab(nb)
     settings = gui.SettingsTab(nb)
     play.settings = settings
+    settings.play = play
     nb.add(play, text="Play")
     nb.add(discover, text="Discover")
     nb.add(settings, text="Settings")
@@ -1237,3 +1238,69 @@ def test_steer_build_reaches_review(app, ui):
     assert "move from there a little in this direction: dancier" in app.ai.sent[-1]
     assert "Their tone: a tone." in app.ai.sent[-1]
     assert play.review_panel.rows, "the tracks landed in Review"
+
+
+# --- Use AI (Settings > Keys) ---
+
+def test_use_ai_off_pauses_the_ai(app, ui):
+    import settings_gui
+    play, s = ui.play, ui.settings
+    app.set_env(ANTHROPIC_API_KEY="sk-test")
+    app.engine.load_settings()
+    play.sync_moderator()
+    ai_button = next(b for b in play.buttons if b.cget("text") == "AI Playlist")
+    assert ai_button.cget("state") == "normal" and not play.moderator_cb.instate(["disabled"])
+    assert s.use_ai_var.get() == "On"
+    s.use_ai_var.set("Off"); s._use_ai_changed()
+    ui.pump(0.2)
+    assert settings_gui.read_env().get("USE_AI") == "0" and app.engine.USE_AI is False
+    assert not app.engine.ai_enabled()
+    assert ai_button.cget("state") == "disabled", "AI Playlist greys out"
+    assert play.moderator_cb.instate(["disabled"]), "the moderator dropdown greys out"
+    assert "Use AI is Off" in app.engine.vibe_blocker()
+    assert app.engine.ai_ask_json("anything") is None and app.engine.AI_LAST_ERROR == "Use AI is Off"
+    s.use_ai_var.set("On"); s._use_ai_changed()
+    ui.pump(0.2)
+    assert ai_button.cget("state") == "normal" and not play.moderator_cb.instate(["disabled"])
+
+
+def test_use_ai_off_moderator_notes_once_and_sources_skip(app, ui):
+    e = app.engine
+    app.set_env(ANTHROPIC_API_KEY="sk-test", USE_AI="0", AI_MODERATOR="normal", SIMILAR_SOURCES="lastfm,ai")
+    e.load_settings()
+    r = app.Lines()
+    e.create_similar_playlist(report=r, seed_info=e.typed_seed_info("The Beatles", "Something"))
+    text = "\n".join(r)
+    assert "AI is ticked but Use AI is Off" in text
+    assert text.count("AI Moderator skipped: Use AI is Off") <= 1
+    assert not any(c for c in app.ai.calls), "the AI was never called"
+
+
+# --- Settings > Playlist: the Review column ---
+
+def test_review_column_same_as_play_then_own_figures(app, ui):
+    import settings_gui
+    s = ui.settings
+    same = s._review_vars["same"]
+    assert all(v.get() for v in same.values()), "Same as Play ticked to start"
+    assert app.engine.review_overrides() == {}
+    settings_gui.write_env({"REVIEW_SAME_TRACKS": "0", "REVIEW_SIMILAR_TRACK_COUNT": "12",
+                            "REVIEW_SAME_ARTISTS": "0", "REVIEW_SIMILAR_ARTIST_LIMIT": "6",
+                            "REVIEW_TRACKS_PER_ARTIST_PICK": "2", "REVIEW_SIMILAR_ARTIST_TRACK_COUNT": "15"})
+    over = app.engine.review_overrides()
+    assert over == {"SIMILAR_TRACK_COUNT": "12", "SIMILAR_ARTIST_LIMIT": "6", "TRACKS_PER_ARTIST_PICK": "2",
+                    "SIMILAR_ARTIST_TRACK_COUNT": "15", "SIMILAR_ARTIST_TRACK_LIMIT": "1"}
+    # a Review build of Similar Tracks aims for 12; a Play build still for 30
+    j, play = app.jriver, ui.play
+    j.play("Speakers", [j.key_of("The Beatles", "Something")])
+    ui.pump(until=lambda: play.last_playing, timeout=10)
+    play.behaviour_var.set("Review"); play._on_behaviour_changed()
+    play.on_similar_tracks()
+    ui.wait_idle()
+    text = console(ui)
+    assert "Review settings in use" in text and "(target 12" in text, text
+    assert app.engine.SIMILAR_TRACK_COUNT == 30, "Windows (Main)'s own figure is back after the build"
+    play.behaviour_var.set("Play"); play._on_behaviour_changed()
+    play.on_similar_tracks()
+    ui.wait_idle()
+    assert "(target 30" in console(ui).split("Similar Tracks:")[-1]

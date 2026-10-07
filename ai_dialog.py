@@ -391,6 +391,10 @@ class AIPlaylistDialog(tk.Toplevel):
     def assess_tone(self):
         if getattr(self, "_assessing", False):
             return
+        if not engine.ai_enabled() and self.play is not None:
+            self.play.report("Note: Assess Tone skipped: Use AI is Off (Settings > Keys)."
+                             if engine.ANTHROPIC_API_KEY else "Note: Assess Tone needs an Anthropic key.")
+            return
         self._assessing = True
         self.assess_btn.config(text="Assessing...")
         kind = self.seed_kind

@@ -122,7 +122,7 @@ def money(dollars):
         return f"{cents:.1f} cents"
     if cents >= 0.01:
         return f"{cents:.2f} cents"
-    return "nothing"
+    return "under 0.01 cents"
 
 
 def rates_line():
@@ -181,6 +181,12 @@ def day(when):
     return f"{d.day} {d:%b %Y}"
 
 
+def cost_phrase(dollars):
+    """'about 1.1 cents', or 'under 0.01 cents' when it rounds to nothing."""
+    text = money(dollars)
+    return text if text.startswith("under") else f"about {text}"
+
+
 def headline(t=None):
     """One line for Settings: since when, requests, tokens in and out, and the estimated cost."""
     t = t or totals()
@@ -188,7 +194,7 @@ def headline(t=None):
     if not t["requests"]:
         return f"{start}: no AI requests."
     return (f"{start}: {t['requests']:,} request{'' if t['requests'] == 1 else 's'}, "
-            f"{t['input']:,} input and {t['output']:,} output tokens, about {money(t['cost'])}.")
+            f"{t['input']:,} input and {t['output']:,} output tokens, {cost_phrase(t['cost'])}.")
 
 
 def short(t=None, unit="dollars"):
@@ -196,7 +202,7 @@ def short(t=None, unit="dollars"):
     t = t or totals()
     if unit == "tokens":
         return f"AI: {t['input'] + t['output']:,} tokens"
-    return f"AI: about {money(t['cost'])}"
+    return f"AI: {cost_phrase(t['cost'])}"
 
 
 # --- the guide -------------------------------------------------------------------------
@@ -260,7 +266,7 @@ no bold, no headings, no asterisks; use "- " for a list. Plain British English. 
 
 def _usage_text(t):
     lines = [headline(t), "", "By feature (requests, input tokens, output tokens, estimated cost):"]
-    lines += [f"- {f}: {n:,}, {i:,}, {o:,}, about {money(c)}" for f, n, i, o, c in t["by_feature"]] or ["- none yet"]
+    lines += [f"- {f}: {n:,}, {i:,}, {o:,}, {cost_phrase(c)}" for f, n, i, o, c in t["by_feature"]] or ["- none yet"]
     week = _table().execute("SELECT date(at, 'unixepoch', 'localtime'), SUM(input + cache_write + cache_read), "
                             "SUM(output) FROM ai_usage WHERE at >= ? GROUP BY 1 ORDER BY 1",
                             (time.time() - 7 * 86400,)).fetchall()

@@ -24,10 +24,15 @@ CURRENT_KEY = "PROFILE_CURRENT"   # in .env: the profile last loaded or saved
 
 # .env settings beyond Settings > Sources and Playlist (engine.PROFILE_KEYS)
 EXTRA_ENV_KEYS = ["PLAY_BEHAVIOUR", "OUTPUT_TARGET", "YOUTUBE_PLAYLIST_LENGTH", "PREFER_OFFICIAL_VIDEOS",
-                  "REVIEW_PREVIEW_ZONE", "CACHE_KEEP", "CONSOLE_MODE", "CONSOLE_QUERY",
+                  "REVIEW_PREVIEW_ZONE", "CACHE_KEEP", "CONSOLE_MODE", "CONSOLE_QUERY", "USE_AI",
                   # the AI Playlist window's choices (a DJ profile can open on Steer with its usual chips)
                   "AI_DIALOG_MODE", "AI_CREATE_THEME", "AI_IF_SHORT", "AI_STEER_SEED", "AI_STEER_TONE",
-                  "AI_STEER_DIRS", "AI_STEER_OWN", "AI_STEER_STRENGTH", "AI_STEER_COUNT"]
+                  "AI_STEER_DIRS", "AI_STEER_OWN", "AI_STEER_STRENGTH", "AI_STEER_COUNT",
+                  # Settings > Playlist's Review column
+                  "REVIEW_SAME_ARTISTS", "REVIEW_SAME_TRACKS", "REVIEW_SAME_TOP",
+                  "REVIEW_SIMILAR_ARTIST_TRACK_COUNT", "REVIEW_SIMILAR_ARTIST_TRACK_LIMIT",
+                  "REVIEW_SIMILAR_ARTIST_LIMIT", "REVIEW_TRACKS_PER_ARTIST_POOL", "REVIEW_TRACKS_PER_ARTIST_PICK",
+                  "REVIEW_SIMILAR_TRACK_COUNT", "REVIEW_TOP_TRACKS_COUNT"]
 # kept in the database's meta table: Filters, JRiver Playlists (Windows Main), Add Playlist rows
 META_KEYS = ["filters", "saved_playlists", "play_mix"]
 

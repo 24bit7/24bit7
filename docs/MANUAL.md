@@ -55,7 +55,23 @@ Your settings and history live in two files next to the app: `.env` (settings an
 Every playlist starts from a seed. The seed is whichever of the two small tabs is showing when you press a button.
 
 - **Now Playing** shows what JRiver is playing. **Zone** picks which JRiver zone you seed from. If that zone's Playing Now is empty, the buttons seed from the last track JRiver played.
-- **Search** lets you type any artist and track, whether you own it or not. Press Enter for Similar Artists. **Behaviour**, beside Track, is **Play Instantly** or **Review Mode**. Review Mode loads the playlist into Playing Now and leaves it stopped on track one, so you can remove tracks, change the order or add them to another playlist in JRiver before you press play. If the zone is already playing, the playlist queues after the current track either way. It's for builds from Search only: Now Playing, voice commands, shortcuts and Non-stop always play straight away, and it isn't used when Output is YouTube.
+- **Search** lets you type any artist and track, whether you own it or not. Press Enter for Similar Artists.
+
+**Behaviour**, under **More Options**, is **Play** or **Review** for every build from the Play tab. Play sends the playlist to JRiver as it's found. Review sends nothing: the tracks are listed in 24bit7 instead, in the console area, with a **Console | Review** switch to flip between them. Voice commands, shortcuts and Non-stop always play straight away.
+
+### Review
+
+Tick the tracks you want, in the order you want them (each tick shows its number), with **Select All** and **Select None** for the lot, then choose what happens to them:
+
+- **Add as Up Next**: after the current song, in tick order.
+- **Add to End**: at the end of Playing Now.
+- **Finish This Song, Load as New**: Playing Now becomes your ticked tracks once the current song ends.
+- **Stop Song, Play Now**: the current song stops and your ticked tracks play straight away.
+- **Save as Playlist**: a new JRiver playlist of the ticked tracks, nothing played.
+
+The actions go wherever **Output** says when you press them (a zone, or the Now Playing zone for Same zone). With Output on **YouTube**, the four play actions become one, **Play on YouTube**, which opens the ticked tracks as a YouTube playlist in your browser.
+
+**Preview in** picks a zone with its own speakers or headphones, so you can hear a track before you add it. Choose a zone and a play mark appears on every row: click one and that track alone plays there, without ticking it, while the main room carries on; the previewing row turns orange, and **Stop Preview** stops it. The zone Output sends to is never offered. The preview zone needs its own output device; one sharing a sound card with the main room in WASAPI exclusive mode won't play. **A-** and **A+** set the text size of the list. The BPM column comes from your files' tags; JRiver can fill them in for the whole library with **Library Tools > Analyze Audio** (choose only files not yet analyzed), which also gives Steer's Faster and Slower something to check against.
 
 ![The Search tab](images/play_search.png)
 
@@ -66,7 +82,13 @@ Every playlist starts from a seed. The seed is whichever of the two small tabs i
 | **Similar Artists** | A playlist from artists similar to the seed. Each artist, the seed included, adds a random pick from its top tracks, so the same seed gives a different playlist every time. |
 | **Similar Tracks** | Tracks like the seed track, suggested song by song, so the playlist follows the song rather than the artist's reputation. |
 | **Artist's Top Tracks** | The artist's most popular tracks that you own, shuffled or in popularity order. From Search it needs only the artist. |
-| **AI Playlist** | Describe a mood or a scene, choose More tracks like the song that's playing, or pick one of three suggestions, and the AI chooses a playlist from your library. Needs an Anthropic key. |
+| **AI Playlist** | Opens the AI Playlist window, with two modes. **Create**: describe a mood or a scene, or click an idea chip (More tracks like the song that's playing, then the AI's suggestions), and the AI chooses a playlist from your library. **Steer**: move what's playing in a direction. Needs an Anthropic key. See below. |
+
+### The AI Playlist window
+
+**Create** takes a theme, **Tracks** (how many to ask for) and **If Short**. **Steer** starts from a **Seed**, the current track or Playing Now (All, up to 50 tracks around the current one), with an optional **Tone**: **Assess Tone** asks the AI to describe the seed's tone and puts the phrase in the box, which you can edit; left empty, the AI works from the seed and direction alone. **Direction** is a row of chips that combine (Dancier, Calmer, Faster, Slower, Darker, Brighter, Older, Newer, Deeper Cuts, Better Known), a box for your own words, and **A Little** or **A Lot** for how far to move. Faster and Slower are checked against BPM tags where both the seed and a pick have them, and a pick heading the wrong way is left out with a console line.
+
+Both modes ask the AI for about twice the count, since some picks won't be in your library, and keep the first matches. **If Short** says what happens when fewer match than asked: **Ask Again** asks the AI for more, up to two more rounds, telling it what it already suggested; **Drift** tops up from your music sources with your Drift settings; **Leave Short** stops with what matched. Everything in the window is remembered for next time, the mode included, and it all belongs to Profiles. A build from the window follows Behaviour and Output like any other.
 
 ### Output
 
@@ -163,7 +185,7 @@ Discover lists every track a build looked for and whether you own it.
 
 ## Settings
 
-Settings are grouped into pages, each made of boxed sections. A setting's explanation sits behind the small **?** beside it. Everything saves as you change it, and the running app picks it up without a restart.
+Settings are grouped into pages, each made of boxed sections. Rest the pointer on a setting's title for its explanation (the pointer turns to a question mark where there is one). Everything saves as you change it, and the running app picks it up without a restart.
 
 ### Sources
 
@@ -184,7 +206,7 @@ How each Play option builds its playlist, with a tab for each option.
 
 ![Settings, Playlist](images/settings_playlist_similar_artists.png)
 
-- **Playlist**: Similar Artists sets **Limit total tracks to**, how many artists, how many of each artist's top tracks to draw from, and how many to pick per artist. Untick the limit to keep every track found; with the last two the same (say 5 of 5) as well, there's no random pick at all. Similar Tracks sets how many tracks, the most any one artist gets, the order and **Variety**. Artist's Top Tracks sets shuffled or popular order.
+- **Playlist**: Similar Artists sets **Limit total tracks to**, how many artists, how many of each artist's top tracks to draw from, and how many to pick per artist. Untick the limit to keep every track found; with the last two the same (say 5 of 5) as well, there's no random pick at all. Similar Tracks sets how many tracks, the most any one artist gets, the order and **Variety**. Artist's Top Tracks sets shuffled or popular order. For Windows (Main) the figures come in two columns, **Play** and **Review**: with Behaviour on Review you're choosing from a list, so a shortlist is often better than a full playlist. Untick **Same as Play** at the top of the Review column to give Review its own figures for that section (Similar Artists gets its own limit, artist count and picks per artist); everything else in the section is shared, and the console says when the Review figures were used. Voice builds never review, so devices have no Review column.
 - **Skip tracks played in the last ... days** leaves out anything JRiver has played recently, so a favourite doesn't come round again the same evening. The seed track is never left out. Off by default.
 - **Drift** (Off, Keep It Tight or Spread) searches again when your library falls short of the target length. Similar Artists and Similar Tracks also have **AI Moderator on Drift tracks**. See [Drift](#drift).
 - **Non-stop** (Off, Keep It Tight or Let's See Where This Goes) keeps a playlist going when it reaches its last track. See [Non-stop](#non-stop).
@@ -221,7 +243,7 @@ Keys and passwords for each service, hidden until you tick **Show**. Each **?** 
 
 - **Last.fm** and **ListenBrainz**: free, and well worth adding.
 - **Discogs**: free, for album credits and a second source for Label.
-- **Anthropic**: paid, a few pence at most per build. Needed for AI Playlist, AI as a source, the AI Moderator and Console Query. It sits last, in its own box, with **AI Usage** underneath: the tokens each AI feature has used since you last cleared the count, with estimated costs, and a **Guide** to what $1 buys and what each feature costs per run (your own average once you've used it three times). **Query** asks Claude where the tokens go and which settings would use fewer, and answers in the console. **Show in Now Playing** puts the total at the right of Now Playing, in dollars or tokens; click it to switch. The costs are estimates from Anthropic's standard rates on the date shown, which may have changed since; Anthropic's console has your actual bill.
+- **Anthropic**: paid, a few pence at most per build. Needed for AI Playlist, AI as a source, the AI Moderator and Console Query. It sits last, in its own box. **Use AI** under the key, On or Off, pauses everything that spends AI credits without removing the key: AI Playlist and the AI Moderator dropdown grey out, the AI as a source is skipped, Drift using the AI falls back to the sources, and Console Query and Assess Tone stand down, with one console line per build saying so. Switch back On and every setting is as you left it. **AI Usage** sits underneath: the tokens each AI feature has used since you last cleared the count, with estimated costs, and a **Guide** to what $1 buys and what each feature costs per run (your own average once you've used it three times). **Query** asks Claude where the tokens go and which settings would use fewer, and answers in the console. **Show in Now Playing** puts the total at the right of Now Playing, in dollars or tokens; click it to switch. The costs are estimates from Anthropic's standard rates on the date shown, which may have changed since; Anthropic's console has your actual bill.
 - **JRiver** user name and password: only if you set them in JRiver under Tools > Options > Media Network > Authentication.
 
 Keys never leave your PC except to the service they belong to, and they never appear in a log.
@@ -236,12 +258,13 @@ Switches voice on, holds the key the Alexa skill sends, and lists each Alexa dev
 
 ![Settings, JRiver Playlists](images/settings_jriver_playlists.png)
 
-How your own JRiver playlists and smartlists play when you ask for them by voice: **Shuffle**, **Blend**, **Non-stop**, **Reseed from** (Last track, 2nd track, or **Whole playlist**, which is Keep It Tight: each top-up seeds from one of the playlist's own tracks) and **Skip recent**. **Set as Default** on the All playlists and All smartlists rows copies that row into the playlists of its type shown in the table (filter by folder first to set just one folder), and new playlists start with it. **Blend** weaves new music into the playlist, one of yours then one new, from similar artists or similar tracks, up to 50 new songs: the playlist starts at once and the new songs join a few seconds later. The **?** beside Blend and Non-stop explains each. Tick **Use global playlist settings** to set them all at once, or untick it and give each playlist its own row. The table shows each playlist's folder and type, sorts by folder or name, and can show one folder at a time. A playlist with nothing changed plays exactly as JRiver has it.
+How your own JRiver playlists and smartlists play when you ask for them by voice: **Shuffle**, **Blend**, **Non-stop**, **Reseed from** (Last track, 2nd track, or **Whole playlist**, which is Keep It Tight: each top-up seeds from one of the playlist's own tracks) and **Skip recent**. **Set as Default** on the All playlists and All smartlists rows copies that row into the playlists of its type shown in the table (filter by folder first to set just one folder), and new playlists start with it. **Blend** weaves new music into the playlist, one of yours then one new, from similar artists or similar tracks, up to 50 new songs: the playlist starts at once and the new songs join a few seconds later. Rest the pointer on Blend or Non-stop for an explanation of each. Tick **Use global playlist settings** to set them all at once, or untick it and give each playlist its own row. The table shows each playlist's folder and type, sorts by folder or name, and can show one folder at a time. A playlist with nothing changed plays exactly as JRiver has it.
 
 ### Other
 
 ![Settings, Other](images/settings_other.png)
 
+- **Profiles**: save your settings as a profile (DJ, Explore, No AI...) with **Save As**, and switch between them with **Load**, which restarts 24bit7 to apply the profile; JRiver keeps playing. A profile holds the Play tab options, Sources, Playlist settings, Filters, JRiver Playlists, Add Playlist rows, the Preview zone, the AI Playlist window's choices, Use AI, cache and console settings for Windows (Main). Keys, the JRiver connection, Alexa devices with their own settings, keyboard shortcuts and appearance stay as they are. **Current** names the profile in use, with "(changed)" once anything differs from it. Profiles are small files in a `profiles` folder beside 24bit7, so they survive updates and can be copied to another PC.
 - **General**: **Keep Cache For** (1 Month, 1 Year or Permanent) with **Clear Cache...** (older than a month, older than a year, or everything), the JRiver host if JRiver runs on another PC, the YouTube playlist length (up to 50), **Prefer official music videos**, the **Theme** (Light or Dark, applied on restart), **Use the Windows title bar** (unticked, the tabs run to the top of the window with their own minimise, maximise and close), and **Enable Console Query**.
 - **Zones**: which JRiver zones appear in the Zone and Output lists, which zone Now Playing opens on, and whether it follows JRiver's active zone. A DLNA speaker such as a Sonos only appears once DLNA Controller is ticked in JRiver (Tools > Options > Media Network > Advanced); press **Rescan** after ticking it.
 - **Windows**: **Start with Windows** launches 24bit7 when you sign in. **Start in the tray** keeps it hidden when Windows starts it. **Close to tray** makes the window's close button hide 24bit7 instead of quitting, so voice keeps listening; quit from the tray icon.
@@ -278,7 +301,7 @@ It needs no key and no sign-in. It relies on an unofficial library, ytmusicapi, 
 
 ### Fast start
 
-With nothing playing on the output zone, the first track found starts straight away and the rest follows into Playing Now as it's found, so music starts within a second or two. If something is already playing, it carries on and the new playlist queues behind it. YouTube output waits for the full list, since the link is made once. Review Mode on the Search tab turns fast start off: the playlist loads at the end and stays stopped.
+With nothing playing on the output zone, the first track found starts straight away and the rest follows into Playing Now as it's found, so music starts within a second or two. If something is already playing, it carries on and the new playlist queues behind it. YouTube output waits for the full list, since the link is made once. With Behaviour on Review, nothing is sent at all: the tracks go to the Review list for you to pick from.
 
 ### Queueing
 

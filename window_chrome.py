@@ -33,6 +33,7 @@ WM_ERASEBKGND, WM_WINDOWPOSCHANGED, WM_NCCALCSIZE, WM_NCHITTEST, WM_EXITSIZEMOVE
 WM_ACTIVATE, WM_NCACTIVATE = 0x06, 0x86
 HTCLIENT, HTTRANSPARENT, HTTOP, HTTOPLEFT, HTTOPRIGHT = 1, -1, 12, 13, 14
 SWP_NOSIZE = 0x0001
+SWP_FRAME_QUIET = SWP_FRAME | 0x0010   # SWP_NOACTIVATE: re-measure without taking the focus back
 
 
 class Chrome:
@@ -165,8 +166,9 @@ class Chrome:
                     # Focus came or went: Windows would repaint the frame (and its old top edge).
                     # -1 for lParam says don't; there is no frame to show
                     return call(old["outer"], h, msg, wp, -1)
-                if msg == WM_ACTIVATE:
-                    self._resized = True   # and re-measure shortly, in case anything was redrawn
+                if msg == WM_ACTIVATE and (wp & 0xFFFF):
+                    self._resized = True   # focus gained: re-measure shortly, in case anything was redrawn
+                    # (never on losing focus: the re-measure must not pull the focus back)
                 if msg == WM_EXITSIZEMOVE:
                     self._resized = True
                 elif msg == WM_WINDOWPOSCHANGED and not (WINDOWPOS.from_address(lp).flags & SWP_NOSIZE):
@@ -221,7 +223,7 @@ class Chrome:
         try:
             if self._resized:
                 self._resized = False
-                self.user32.SetWindowPos(self.hwnd, 0, 0, 0, 0, 0, SWP_FRAME)
+                self.user32.SetWindowPos(self.hwnd, 0, 0, 0, 0, 0, SWP_FRAME_QUIET)
             self.root.after(150, self._remeasure)
         except tk.TclError:
             pass

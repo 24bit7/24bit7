@@ -1757,6 +1757,55 @@ class SettingsTab(tk.Frame):
             widget.grid(row=where["r"], column=0, columnspan=3, sticky="w", pady=pady)
             where["r"] += 1
 
+        review = {"same": {}, "boxes": {}}   # Windows (Main): the Review column's Same as Play ticks and spinboxes
+
+        def review_header(group):
+            """Play | Review column headings, with the Review column's Same as Play tick (Main only)."""
+            if p.device_id is not None:
+                return
+            box, r = where["box"], where["r"]
+            tk.Label(box, text="Play", font=LABEL_FONT, fg=PALETTE["help_fg"]).grid(row=r, column=1, sticky="w",
+                                                                                       padx=(12, 0))
+            cell = tk.Frame(box)
+            cell.grid(row=r, column=2, sticky="w", padx=(24, 0))
+            var = tk.BooleanVar(value=read_env().get(f"REVIEW_SAME_{group.upper()}", "1").strip().lower()
+                                not in ("0", "false", "no"))
+            review["same"][group] = var
+            title = tk.Label(cell, text="Review", font=LABEL_FONT, fg=PALETTE["help_fg"])
+            title.pack(side="left", padx=(0, 10))
+            ttk.Checkbutton(cell, text="Same as Play", variable=var).pack(side="left")
+            var.trace_add("write", lambda *a, g=group: review_same_changed(g))   # saves however it's changed
+            help_mark(cell, "With Behaviour on Review you're choosing from a list, so a shortlist is often "
+                            "better than a full playlist. Untick Same as Play to give Review its own figures "
+                            "for this section; everything else here (sources, Drift, hidden tracks) is shared. "
+                            "Windows (Main) only, as voice builds never review.", on=title)
+            where["r"] += 1
+
+        def review_same_changed(group):
+            same = review["same"][group].get()
+            write_env({f"REVIEW_SAME_{group.upper()}": "1" if same else "0"})
+            for sb in review["boxes"].get(group, []):
+                sb.config(state="disabled" if same else "normal")
+
+        def review_twin(group, key, default, lo, hi, row=None):
+            """A Review-column spinbox for key, saved as REVIEW_<key> (Main only)."""
+            if p.device_id is not None:
+                return None
+            box = where["box"]
+            r = where["r"] - 1 if row is None else row
+            rkey = f"REVIEW_{key}"
+            var = tk.StringVar(value=read_env().get(rkey, "").strip() or p.env.get(key, default))
+            cell = tk.Frame(box)
+            cell.grid(row=r, column=2, sticky="w", padx=(24, 0))
+            sb = tk.Spinbox(cell, from_=lo, to=hi, textvariable=var, width=6,
+                            command=lambda k=rkey, v=var: write_env({k: v.get().strip()}))
+            sb.pack(side="left")
+            var.trace_add("write", lambda *a, k=rkey, v=var: write_env({k: v.get().strip()}))
+            review["boxes"].setdefault(group, []).append(sb)
+            if review["same"].get(group) is not None and review["same"][group].get():
+                sb.config(state="disabled")
+            return cell
+
         def spin(label, key, default, lo, hi, help_text=None):
             box, r = where["box"], where["r"]
             tk.Label(box, text=label, anchor="w").grid(row=r, column=0, sticky="w", pady=4)
@@ -2123,6 +2172,7 @@ class SettingsTab(tk.Frame):
 
         # --- Similar Artists ---
         begin("artists", "Playlist")
+        review_header("artists")
         # Limit total tracks to: a tick box in the label column, the number beside it
         box, r = where["box"], where["r"]
         limit_var = tk.BooleanVar(value=p.env.get("SIMILAR_ARTIST_TRACK_LIMIT", "1") in ("1", "true", "yes"))
@@ -2143,15 +2193,30 @@ class SettingsTab(tk.Frame):
                         command=limit_toggled).grid(row=r, column=0, sticky="w", pady=4)
         limit_toggled(save=False)
         p.vars["SIMILAR_ARTIST_TRACK_COUNT"].trace_add("write", p.save)
+        rcell = review_twin("artists", "SIMILAR_ARTIST_TRACK_COUNT", "30", 5, 100, row=r)
+        if rcell is not None:   # Review's own Limit tick, before its number
+            rlimit = tk.BooleanVar(value=read_env().get("REVIEW_SIMILAR_ARTIST_TRACK_LIMIT", "1").strip().lower()
+                                   in ("1", "true", "yes"))
+            rtick = ttk.Checkbutton(rcell, text="Limit", variable=rlimit)
+            rlimit.trace_add("write", lambda *a: write_env({"REVIEW_SIMILAR_ARTIST_TRACK_LIMIT":
+                                                            "1" if rlimit.get() else "0"}))
+            rtick.pack(side="left", padx=(8, 0))
+            review["boxes"]["artists"].append(rtick)   # greyed with the rest while Same as Play is ticked
+            if review["same"]["artists"].get():
+                rtick.config(state="disabled")
+            self._review_vars = {"same": review["same"], "limit": rlimit}
         where["r"] += 1
         spin("Number of artists", "SIMILAR_ARTIST_LIMIT", "20", 1, 50)
+        review_twin("artists", "SIMILAR_ARTIST_LIMIT", "20", 1, 50)
         pool_var, _ = spin("Number of artist's top tracks", "TRACKS_PER_ARTIST_POOL", "5", 1, 20)
+        review_twin("artists", "TRACKS_PER_ARTIST_POOL", "5", 1, 20)
         _, p.pick_sb = spin("Tracks per artist selection", "TRACKS_PER_ARTIST_PICK", "3", 1, 20,
                             "Top tracks come from your Top-track sources (Last.fm, Deezer and so on), for "
                             "the seed artist and each similar artist. Selecting fewer than the top tracks "
                             "(say 3 of 5) means the same seed gives a different playlist each run, as the "
                             "selection is random. For no random pick at all, set both numbers the "
                             "same and untick Limit total tracks to.")
+        review_twin("artists", "TRACKS_PER_ARTIST_PICK", "3", 1, 20)
         pool_var.trace_add("write", lambda *a: sync_pick_limit(p))
         recent("artists")
         drift("artists")
@@ -2161,7 +2226,9 @@ class SettingsTab(tk.Frame):
 
         # --- Similar Tracks ---
         begin("tracks", "Playlist")
+        review_header("tracks")
         spin("Number of tracks", "SIMILAR_TRACK_COUNT", "30", 5, 100, TARGET_HELP)
+        review_twin("tracks", "SIMILAR_TRACK_COUNT", "30", 5, 100)
         spin("Most tracks per artist", "SIMILAR_TRACK_PER_ARTIST", "3", 1, 20, "Includes the seed artist.")
         choice("Variety", "SIMILAR_TRACK_VARIETY", "no", ["yes", "no"],
                "Yes: gathers up to twice the matches it needs and picks from them at random, the closest "
@@ -2180,7 +2247,9 @@ class SettingsTab(tk.Frame):
 
         # --- Artist's Top Tracks ---
         begin("top", "Playlist")
+        review_header("top")
         spin("Number of tracks (1-20)", "TOP_TRACKS_COUNT", "10", 1, 20, TOP_TARGET_HELP)
+        review_twin("top", "TOP_TRACKS_COUNT", "10", 1, 20)
         choice("Order", "TOP_TRACKS_ORDER", "popular", ["popular", "reverse", "random"],
                "popular: most played first\nreverse: least played first\nrandom: shuffled")
         recent("top")
@@ -2217,11 +2286,26 @@ class SettingsTab(tk.Frame):
                       "actual bill.",
                       title_fg=PALETTE["ai_purple"])
         self._key_row(box, 0, "ANTHROPIC_API_KEY")
+        use = tk.Frame(box)
+        use.grid(row=1, column=0, columnspan=4, sticky="w", pady=(10, 0))
+        use_title = tk.Label(use, text="Use AI", font=LABEL_FONT, fg=PALETTE["ai_purple"])
+        use_title.pack(side="left", padx=(0, 12))
+        help_mark(use, "Off pauses everything that spends AI credits, without removing your key: AI Playlist, "
+                       "the AI Moderator, the AI as a source, Drift using the AI, Console Query and Assess Tone "
+                       "all stand down, and the console says so once per build. Switch back On and every "
+                       "setting is as you left it. Part of Profiles, so a No AI profile is one Load away.",
+                  on=use_title)
+        self.use_ai_var = tk.StringVar(value="Off" if self.env.get("USE_AI", "1").strip().lower()
+                                       in ("0", "false", "no", "off") else "On")
+        for choice in ("On", "Off"):
+            ttk.Radiobutton(use, text=choice, value=choice, variable=self.use_ai_var,
+                            command=self._use_ai_changed).pack(side="left", padx=(0, 10))
         usage = tk.Frame(box)
-        usage.grid(row=1, column=0, columnspan=4, sticky="w", pady=(14, 0))
+        usage.grid(row=2, column=0, columnspan=4, sticky="w", pady=(14, 0))
         tk.Label(usage, text="AI Usage", font=LABEL_FONT, fg=PALETTE["ai_purple"]).grid(row=0, column=0, sticky="w")
-        self.usage_total = tk.Label(usage, text="", anchor="w", justify="left", wraplength=680)
-        self.usage_total.grid(row=1, column=0, sticky="w", pady=(4, 6))
+        self.usage_total = tk.Label(usage, text="", anchor="w", justify="left")
+        self.usage_total.grid(row=1, column=0, sticky="w", pady=(4, 8))
+        self._wrap_to_width(usage, [self.usage_total])
         self.usage_table = tk.Frame(usage)
         self.usage_table.grid(row=2, column=0, sticky="w")
         buttons = tk.Frame(usage)
@@ -2247,18 +2331,36 @@ class SettingsTab(tk.Frame):
 
         tk.Label(usage, text="Guide", font=LABEL_FONT, fg=PALETTE["ai_purple"]).grid(
             row=5, column=0, sticky="w", pady=(18, 0))
-        self.usage_dollar = tk.Label(usage, text="", anchor="w", justify="left", wraplength=680)
-        self.usage_dollar.grid(row=6, column=0, sticky="w", pady=(4, 6))
+        self.usage_dollar = tk.Label(usage, text="", anchor="w", justify="left")
+        self.usage_dollar.grid(row=6, column=0, sticky="w", pady=(4, 8))
         self.usage_guide = tk.Frame(usage)
         self.usage_guide.grid(row=7, column=0, sticky="w")
-        tk.Label(usage, text=ai_usage.rates_line(), fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w",
-                 justify="left", wraplength=680).grid(row=8, column=0, sticky="w", pady=(10, 0))
+        self.usage_legend = tk.Label(usage, text="", fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w")
+        self.usage_legend.grid(row=8, column=0, sticky="w", pady=(6, 0))
+        rates = tk.Label(usage, text=ai_usage.rates_line(), fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w",
+                         justify="left")
+        rates.grid(row=9, column=0, sticky="w", pady=(10, 0))
+        self._wrap_to_width(usage, [self.usage_dollar, rates])
         link = tk.Label(usage, text="Anthropic's pricing page", fg=PALETTE.get("link", PALETTE["section_fg"]),
                         cursor="hand2", font=("Segoe UI", 9, "underline"))
-        link.grid(row=9, column=0, sticky="w", pady=(2, 0))
+        link.grid(row=10, column=0, sticky="w", pady=(2, 0))
         link.bind("<Button-1>", lambda e: webbrowser.open_new_tab(ai_usage.PRICES_URL))
         tab.bind("<<Shown>>", lambda e: self._fill_usage(), add="+")
         self._fill_usage()
+
+    def _use_ai_changed(self):
+        """Settings > Keys > Use AI: saved at once; the Play tab greys its AI pieces out or back in."""
+        write_env({"USE_AI": "1" if self.use_ai_var.get() == "On" else "0"})
+        engine.refresh_settings_if_changed()
+        play = getattr(self, "play", None)
+        if play is not None and hasattr(play, "sync_moderator"):
+            try:
+                play.sync_moderator()
+                play.sync_console_buttons()   # the Query button comes and goes with Use AI
+                if not engine.ai_enabled() and play.query_panel.winfo_manager():
+                    play._close_query()
+            except Exception:
+                pass
 
     def _key_row(self, box, r, key):
         """One key: its name, the hidden entry, Show, and the ? with where to get it."""
@@ -2276,25 +2378,46 @@ class SettingsTab(tk.Frame):
             button.grid(row=r, column=3, padx=(4, 0))
             Tooltip(button, KEY_HELP[key][1].replace("\n", " ") + "\nClick for these steps in a window.")
 
-    def _usage_grid(self, frame, headings, rows):
-        """A small table: headings in grey, then rows; the first column on the left, the rest right-aligned."""
+    def _wrap_to_width(self, frame, labels):
+        """Text lines wrap to the width their frame has, rather than a fixed figure."""
+        def fit(event):
+            for lab in labels:
+                lab.config(wraplength=max(300, event.width - 4))
+        frame.bind("<Configure>", fit, add="+")
+
+    def _usage_grid(self, frame, headings, rows, left=(0,)):
+        """
+        A table: a bold grey heading row with a rule under it, even rows, every other row a
+        shade off, numbers right-aligned. rows: [[(text, kind), ...]]; kind "" is plain, "dot"
+        is a magenta marker (your own average), "note" is left-aligned text.
+        left: the columns that align left (the rest align right).
+        """
         for child in frame.winfo_children():
             child.destroy()
+        stripe = PALETTE.get("field_bg") or PALETTE.get("window_bg")
+        pad = dict(padx=10, pady=4)   # inside each cell, so a shaded row is one unbroken band
         for c, heading in enumerate(headings):
-            tk.Label(frame, text=heading, fg=PALETTE["help_fg"], font=HELP_FONT).grid(
-                row=0, column=c, sticky="w" if c in (0, len(headings) - 1) and heading == "Note" or c == 0 else "e",
-                padx=(0, 18))
-        for r, row in enumerate(rows, start=1):
-            for c, (text, grey) in enumerate(row):
-                tk.Label(frame, text=text, **({"fg": PALETTE["help_fg"], "font": HELP_FONT} if grey else {})).grid(
-                    row=r, column=c, sticky="w" if c == 0 or grey else "e", padx=(0, 18))
+            tk.Label(frame, text=heading, fg=PALETTE["help_fg"], font=("Segoe UI", 9, "bold"), anchor="w" if
+                     (c in left or heading == "Note") else "e", **pad).grid(row=0, column=c, sticky="ew")
+        tk.Frame(frame, bg=PALETTE["line"], height=1).grid(row=1, column=0, columnspan=len(headings), sticky="ew")
+        for r, row in enumerate(rows, start=2):
+            bg = stripe if r % 2 else None
+            for c, (text, kind) in enumerate(row):
+                kw = dict(anchor="w" if (c in left or kind == "note") else "e", **pad)
+                if kind == "dot":
+                    kw.update(fg=PALETTE["ai_purple"], font=("Segoe UI", 8))
+                if bg:
+                    kw["bg"] = bg
+                tk.Label(frame, text=text, **kw).grid(row=r, column=c, sticky="nsew")
+        for c in range(len(headings)):
+            frame.grid_columnconfigure(c, weight=1 if headings[c] == "Note" else 0)
 
     def _fill_usage(self):
         """The AI Usage total and breakdown (heaviest first), then the per-run guide."""
         t = ai_usage.totals()
         self.usage_total.config(text=ai_usage.headline(t))
-        rows = [((f, False), (f"{n:,}", False), (f"{i:,}", False), (f"{o:,}", False),
-                 (f"about {ai_usage.money(c)}", False)) for f, n, i, o, c in t["by_feature"]]
+        rows = [((f, ""), (f"{n:,}", ""), (f"{i:,}", ""), (f"{o:,}", ""), (self._cost(c), ""))
+                for f, n, i, o, c in t["by_feature"]]
         if rows:
             self._usage_grid(self.usage_table, ("Feature", "Requests", "Input tokens", "Output tokens", "Est. cost"),
                              rows)
@@ -2302,11 +2425,22 @@ class SettingsTab(tk.Frame):
             for child in self.usage_table.winfo_children():
                 child.destroy()
         guide = ai_usage.guide()
-        self.usage_dollar.config(text=ai_usage.dollar_line(guide))
-        self._usage_grid(self.usage_guide, ("Feature", "Tokens per run", "Cost per run", "Note"),
-                         [((f, False), (f"about {tokens:,}", False), (f"about {ai_usage.money(c)}", False),
-                           ("; ".join(x for x in (note, "your own average" if yours else "") if x), True))
+        dollar = ai_usage.dollar_line(guide)
+        self.usage_dollar.config(text=dollar)
+        if dollar:
+            self.usage_dollar.grid()
+        else:
+            self.usage_dollar.grid_remove()   # no gap when there's nothing to say yet
+        self._usage_grid(self.usage_guide, ("Feature", "Tokens per run", "", "Cost per run", "Note"),
+                         [((f, ""), (f"about {tokens:,}", ""), ("\u25cf" if yours else "", "dot"),
+                           (self._cost(c), ""), (note or "", "note"))
                           for f, tokens, c, note, yours in guide])
+        self.usage_legend.config(text="\u25cf  your own average, from your recorded runs"
+                                 if any(yours for *_, yours in guide) else "")
+
+    @staticmethod
+    def _cost(dollars):
+        return ai_usage.cost_phrase(dollars)
 
     def _usage_clear(self):
         if messagebox.askyesno("Clear AI Usage", "Clear the token count? It starts again from now.", parent=self):
