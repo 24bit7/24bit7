@@ -7,8 +7,10 @@ number), then choose what to do with them. A Console | Review switch above the c
 moves between the two; the console keeps running underneath, and a dot on Console says
 something new arrived there while Review was showing.
 
-The actions send the ticked tracks, in tick order, to the zone the build was for:
-Add as Up Next, Add to End, Finish This Song, Load as New, Stop Song, Load as New,
+The actions send the ticked tracks, in tick order, wherever Output says when pressed
+(a zone, or the Now Playing zone for Same Zone). With Output on YouTube, one Play on
+YouTube button opens them there as a playlist instead:
+Add as Up Next, Add to End, Finish This Song, Load as New, Stop Song, Play Now,
 and Save as Playlist. The ticks clear once an action has gone through.
 
 The list stays until the next Review build replaces it.
@@ -42,6 +44,7 @@ LIGHT = {"bg": "#ffffff", "text": "#1a1a1a", "muted": "#4a4d52", "line": "#dcdfe
 ORANGE = "#f28c28"
 FONT, BOLD = ("Segoe UI", 9), ("Segoe UI", 9, "bold")
 SMALL_BOLD = ("Segoe UI", 8, "bold")
+SIZE_MIN, SIZE_MAX, SIZE_DEFAULT = 6, 14, 9   # the track list's text size, set with A- and A+
 DOT = "\u25cf"
 
 
@@ -56,9 +59,11 @@ ACTIONS = [
     ("next", "Add as Up Next", "Plays after the current song, then the rest of Playing Now carries on."),
     ("end", "Add to End", "Goes after everything already in Playing Now."),
     ("finish", "Finish This Song, Load as New", "The current song finishes, then Playing Now holds only these."),
-    ("stop", "Stop Song, Load as New", "The current song stops and these play straight away. "
+    ("stop", "Stop Song, Play Now", "The current song stops and these play straight away. "
                                        "Playing Now holds only these."),
 ]
+YOUTUBE_TIP = "Opens the ticked tracks, in tick order, as a YouTube playlist in your browser."
+SAME_ZONE = "Same zone"       # Output's first choice: the Now Playing zone
 SAVE_TIP = "Nothing plays and Playing Now isn't touched. Saves these as a JRiver playlist."
 
 # (title, width in characters, stretch): Artist, Title and Album share the spare room
@@ -91,7 +96,12 @@ class ReviewPanel:
         self._buttons = {}
         self._cells = {}          # key -> (tick label, [text labels])
         self._marks = {}          # key -> its Preview mark, when a preview zone is chosen
-        self.preview_name = read_env().get("REVIEW_PREVIEW_ZONE", "").strip()
+        env = read_env()
+        self.preview_name = env.get("REVIEW_PREVIEW_ZONE", "").strip()
+        try:
+            self.size = min(SIZE_MAX, max(SIZE_MIN, int(env.get("REVIEW_FONT_SIZE", SIZE_DEFAULT))))
+        except ValueError:
+            self.size = SIZE_DEFAULT
         self.preview_zone = None  # the chosen zone's ID, if it exists and isn't this list's zone
         self.previewing = None    # the key playing in the preview zone
         self.preview_at = None    # the zone it's playing in
@@ -183,6 +193,12 @@ class ReviewPanel:
         self.count_label.pack(side="left", padx=(14, 8))
         for text, command in (("Select All", self.select_all), ("Select None", self.select_none)):
             self._pill(head, text, command).pack(side="left", padx=(6, 0))
+        self.smaller_btn = self._pill(head, "A\u2212", lambda: self.set_size(self.size - 1), pad=18)
+        self.smaller_btn.pack(side="left", padx=(16, 0))
+        Tooltip(self.smaller_btn, "Smaller text in the track list.")
+        self.bigger_btn = self._pill(head, "A+", lambda: self.set_size(self.size + 1), pad=18)
+        self.bigger_btn.pack(side="left", padx=(4, 0))
+        Tooltip(self.bigger_btn, "Bigger text in the track list.")
         self.preview_bar = tk.Frame(head, bg=p["bg"])       # Preview zone and Stop Preview
         self.preview_bar.pack(side="right")
         tk.Label(self.preview_bar, text="Preview in", font=FONT, bg=p["bg"], fg=p["muted"]).pack(side="left")
@@ -194,6 +210,7 @@ class ReviewPanel:
                                            fg=ORANGE, edge=ORANGE, font=BOLD)
         self.stop_preview_btn.pack(side="left")
         self._sync_preview()
+        self._sync_size_buttons()
         tk.Frame(self.frame, bg=p["line"], height=1).pack(fill="x")
         self.action_bar = tk.Frame(self.frame, bg=p["bg"])  # the actions, along the bottom
         self.action_bar.pack(side="bottom", fill="x", padx=14, pady=(0, 10))
@@ -232,7 +249,7 @@ class ReviewPanel:
     def _paint_action(self, b, hover=False):
         p, ok = self.p, self._can_act()
         hover = hover and ok
-        w, h = self._text_width(b.cget("text"), BOLD) + 36, 36
+        w, h = self._text_width(b.cget("text"), BOLD) + 24, 28
         if b._quiet:
             fill, edge, fg = (p["row_on"] if hover else p["bg"]), (p["line"] if ok else p["line"]), \
                 (p["accent"] if ok else p["act_dim"])
@@ -250,41 +267,80 @@ class ReviewPanel:
         tk.Frame(bar, bg=p["line"], height=1).pack(fill="x", pady=(0, 12))
         row = tk.Frame(bar, bg=p["bg"])
         row.pack(fill="x")
-        into = tk.Frame(row, bg=p["bg"])
-        into.pack(side="left", padx=(0, 12))
-        tk.Label(into, text="Into", font=FONT, bg=p["bg"], fg=p["muted"]).pack(side="left")
-        self.into_label = tk.Label(into, text="", font=BOLD, bg=p["bg"], fg=p["text"])
-        self.into_label.pack(side="left", padx=(4, 0))
+        self.jriver_actions = tk.Frame(row, bg=p["bg"])   # the four, for a zone
+        self.jriver_actions.pack(side="left")
         for n, (how, text, tip) in enumerate(ACTIONS):
             if n == 2:   # the two Adds, then the two Load as New
-                tk.Frame(row, bg=p["line"], width=1, height=self._px(30)).pack(side="left", padx=(4, 10))
-            b = self._action_button(row, text, lambda h=how: self._act(h), tip)
+                tk.Frame(self.jriver_actions, bg=p["line"], width=1, height=self._px(24)).pack(side="left",
+                                                                                         padx=(2, 10))
+            b = self._action_button(self.jriver_actions, text, lambda h=how: self._act(h), tip)
             b.pack(side="left", padx=(0, 8))
             self._buttons[how] = b
+        self.youtube_actions = tk.Frame(row, bg=p["bg"])  # Output on YouTube: just the one
+        self._buttons["youtube"] = self._action_button(self.youtube_actions, "Play on YouTube", self._youtube,
+                                                       YOUTUBE_TIP)
+        self._buttons["youtube"].pack(side="left")
         save = self._action_button(row, "Save as Playlist", self._save, SAVE_TIP, quiet=True)
         save.pack(side="right")
         self._buttons["save"] = save
+        # What last happened, kept for the tests and the console; not shown (the console says it)
         self.status_label = tk.Label(bar, text="", font=FONT, bg=p["bg"], fg=p["muted"], anchor="w")
-        self.status_label.pack(fill="x", pady=(8, 0))
+        self._show_output_actions()
 
     def _can_act(self):
-        return bool(self.order) and not self.busy and self.zone is not None
+        return bool(self.order) and not self.busy
 
     def _sync_buttons(self):
         for b in self._buttons.values():
             self._paint_action(b)
+
+    # --- where the actions go: Output, read when pressed ---
+
+    def output_is_youtube(self):
         try:
-            where = engine.zone_label(self.zone) if self.zone is not None else ""
-        except Exception:
-            where = ""
-        self.into_label.config(text=where)
-        self.into_label.master.winfo_children()[0].config(text="Into" if where else "")
+            return self.play.output_var.get() == "YouTube"
+        except (AttributeError, tk.TclError):
+            return False
+
+    def output_choice(self):
+        try:
+            return self.play.output_var.get()
+        except (AttributeError, tk.TclError):
+            return ""
+
+    def target_zone(self, choice=None):
+        """The zone Output points at: a named zone, or the Now Playing zone for Same Zone.
+        None for YouTube, or when the zone isn't in JRiver. Pass choice (read on Tk's thread)
+        when calling from a worker thread."""
+        if choice is None:
+            choice = self.output_choice()
+        if choice == "YouTube":
+            return None
+        if choice and choice != SAME_ZONE:
+            return engine.zone_id(choice)
+        zid = engine.seed_zone()
+        return engine.zone_id() if zid == engine.ACTIVE_ZONE else zid
+
+    def _show_output_actions(self):
+        youtube = self.output_is_youtube()
+        (self.youtube_actions if youtube else self.jriver_actions).pack(side="left")
+        (self.jriver_actions if youtube else self.youtube_actions).pack_forget()
+
+    def output_changed(self):
+        """Output was changed on the Play tab: swap the buttons and recheck the Preview zone."""
+        self._show_output_actions()
+        was = self.preview_zone
+        self._refresh_preview_zone()
+        if self.rows and bool(was) != bool(self.preview_zone):
+            self._render(keep_scroll=True)
+        self._sync_preview()
+        self._sync_buttons()
 
     def _run(self, work):
         """Runs a JRiver call off the main thread, then reports it in the console and under the actions."""
         self.busy = True
         self._sync_buttons()
-        self.status_label.config(text="Sending to JRiver...")
+        self.status_label.config(text="Sending...")
 
         def worker():
             try:
@@ -306,9 +362,33 @@ class ReviewPanel:
     def _act(self, how):
         if not self._can_act():
             return
-        keys, zone = list(self.order), self.zone
+        keys, choice = list(self.order), self.output_choice()
         self.stop_preview(quiet=True)
-        self._run(lambda: engine.review_send(keys, how, zone))
+
+        def work():
+            zone = self.target_zone(choice)
+            if zone is None:
+                return "Problem: the Output zone isn't in JRiver, so nothing was sent. Pick another under Output."
+            return engine.review_send(keys, how, zone)
+        self._run(work)
+
+    def _youtube(self):
+        """Output on YouTube: the ticked tracks, in tick order, open as a YouTube playlist."""
+        if not self._can_act():
+            return
+        rows = {r["key"]: r for r in self.rows}
+        pairs = [(rows[k].get("artist", ""), rows[k].get("title", "")) for k in self.order if k in rows]
+        self.stop_preview(quiet=True)
+
+        def work():
+            ids = engine.youtube_ids_for_pairs(pairs)
+            sent = engine.open_youtube_playlist(ids)
+            missed = len(pairs) - len([i for i in ids if i])
+            n = f"{sent} track{'' if sent == 1 else 's'}"
+            if not sent:
+                return "Problem: YouTube had none of those tracks, so nothing was opened."
+            return f"Review: {n} opened on YouTube" + (f", {missed} not found there." if missed else ".")
+        self._run(work)
 
     def _save(self):
         if not self._can_act():
@@ -360,10 +440,11 @@ class ReviewPanel:
         self._style_switch()
 
     def show_console(self):
-        if self.showing:
-            self.frame.pack_forget()
-            self._restore_console()
+        was_showing = self.showing
         self.showing, self.dot = False, False
+        if was_showing:
+            self.frame.pack_forget()
+            self._restore_console()   # puts the arrow back, beside the switch
         self._style_switch()
 
     def console_activity(self):
@@ -399,20 +480,22 @@ class ReviewPanel:
         p = self.p
         for c, (title, width, stretch) in enumerate(columns):
             self.grid.grid_columnconfigure(c, weight=stretch)
-            tk.Label(self.grid, text=title, font=SMALL_BOLD, bg=p["bg"], fg=p["muted"], width=width, padx=4,
+            tk.Label(self.grid, text=title, font=self._font(-1, True), bg=p["bg"], fg=p["muted"], width=width, padx=4,
                      anchor="e" if title in ("Time", "BPM") else "w").grid(
                 row=0, column=c, sticky="ew", pady=(7, 5))
         tk.Frame(self.grid, bg=p["line"], height=1).grid(row=1, column=0, columnspan=len(columns), sticky="ew")
         r = 2
         for row in self.rows:
             key = row["key"]
-            tick = tk.Label(self.grid, text="", font=BOLD, bd=0, compound="center", bg=p["bg"], cursor="hand2")
+            tick = tk.Label(self.grid, text="", font=self._font(0, True), bd=0, compound="center", bg=p["bg"],
+                            cursor="hand2")
             tick.grid(row=r, column=0, sticky="nsew", padx=0, pady=0, ipady=3)
             values = (row.get("artist", ""), row.get("title", ""), row.get("album", ""),
                       clock(row.get("seconds")), row.get("bpm", ""))
             texts = []
             for c, value in enumerate(values, start=1):
-                cell = tk.Label(self.grid, text=value, font=FONT, bg=p["bg"], fg=p["text"] if c <= 2 else p["muted"],
+                cell = tk.Label(self.grid, text=value, font=self._font(), bg=p["bg"],
+                                fg=p["text"] if c <= 2 else p["muted"],
                                 cursor="hand2", padx=4, pady=3, width=COLUMNS[c][1], anchor="e" if c >= 4 else "w")
                 cell.grid(row=r, column=c, sticky="nsew")   # no gaps, so a ticked row shades as one band
                 texts.append(cell)
@@ -420,8 +503,8 @@ class ReviewPanel:
                 w.bind("<Button-1>", lambda e, k=key: self.toggle(k))
             self._cells[key] = (tick, texts)
             if self.preview_zone:   # the Preview mark: plays this track in the preview zone, doesn't tick it
-                mark = tk.Label(self.grid, text=PLAY_MARK, font=("Segoe UI", 7), bd=0, compound="center",
-                                bg=p["bg"], cursor="hand2", width=self._px(46))   # pixels, as it has an image
+                mark = tk.Label(self.grid, text=PLAY_MARK, font=self._font(-2), bd=0, compound="center",
+                                bg=p["bg"], cursor="hand2", width=self._px(46 * self._k()))   # pixels: it has an image
                 mark.grid(row=r, column=len(COLUMNS), sticky="nsew")
                 mark.bind("<Button-1>", lambda e, k=key: self._preview_click(k))
                 self._marks[key] = mark
@@ -438,17 +521,18 @@ class ReviewPanel:
         for key, (tick, texts) in self._cells.items():
             on, prev = key in self.order, key == self.previewing
             bg = p["row_prev"] if prev else (p["row_on"] if on else p["bg"])
-            box = self._shape(26, 26, p["tick_on_bg"] if on else bg, p["accent"] if on else p["tick_off"], line=2,
-                              radius=5)
+            side = round(26 * self._k())
+            box = self._shape(side, side, p["tick_on_bg"] if on else bg, p["accent"] if on else p["tick_off"],
+                              line=2, radius=5)
             tick.config(text=str(self.order.index(key) + 1) if on else "", image=box, bg=bg,
                         fg=p["tick_on_fg"] if on else p["accent"])
             tick._img = box
             for n, cell in enumerate(texts):
-                cell.config(bg=bg, font=BOLD if on and n < 2 else FONT)
+                cell.config(bg=bg, font=self._font(0, on and n < 2))
             mark = self._marks.get(key)
             if mark is not None:
                 edge = ORANGE if prev else p["line"]
-                img = self._shape(30, 24, bg, edge, radius=5)
+                img = self._shape(round(30 * self._k()), round(24 * self._k()), bg, edge, radius=5)
                 mark.config(bg=bg, image=img, fg=ORANGE if prev else p["accent"],
                             text=STOP_MARK if prev else PLAY_MARK)
                 mark._img = img
@@ -490,7 +574,7 @@ class ReviewPanel:
                 zid = engine.zone_id(self.preview_name)
             except Exception:
                 zid = None
-            if zid is not None and str(zid) == str(self.zone):
+            if zid is not None and str(zid) == str(self.target_zone()):
                 zid = None   # never the room the list is going to
         self.preview_zone = zid
 
@@ -506,12 +590,13 @@ class ReviewPanel:
         self.stop_preview_btn.config(cursor="hand2" if on else "")
 
     def preview_choices(self):
-        """The zones offered for Preview: every JRiver zone except the one this list goes to."""
+        """The zones offered for Preview: every JRiver zone except the one Output sends to."""
         try:
             zones = engine._zone_list(fresh=True)
         except Exception:
             zones = []
-        return [name for zid, name in zones if str(zid) != str(self.zone)]
+        target = self.target_zone()
+        return [name for zid, name in zones if str(zid) != str(target)]
 
     def _preview_menu(self):
         p = self.p
@@ -560,7 +645,9 @@ class ReviewPanel:
         def failed(e):
             if token == self._preview_token:
                 self.previewing = self.preview_at = None
-                self.status_label.config(text=f"Problem: Preview couldn't play that in {where} ({e}).")
+                line = f"Problem: Preview couldn't play that in {where} ({e})."
+                self.status_label.config(text=line)
+                self.play._append_log(time.strftime("%H:%M") + "  " + line)
                 self._restyle()
         self._background(lambda: engine.review_preview(key, zid), failed)
         try:   # once the track has had time to finish, the mark goes back to play
@@ -587,3 +674,46 @@ class ReviewPanel:
             self.status_label.config(text="Preview stopped.")
         self._background(lambda: engine.review_preview_stop(zid), lambda e: None)
         self._restyle()
+
+    # --- text size (A- and A+) ---
+
+    def _k(self):
+        """How much bigger than the standard size the track list is drawn."""
+        return self.size / SIZE_DEFAULT
+
+    def _font(self, step=0, bold=False):
+        return ("Segoe UI", max(6, self.size + step)) + (("bold",) if bold else ())
+
+    def set_size(self, size):
+        size = min(SIZE_MAX, max(SIZE_MIN, size))
+        if size == self.size:
+            return
+        self.size = size
+        write_env({"REVIEW_FONT_SIZE": str(size)})
+        if self.rows:
+            self._render(keep_scroll=True)
+        self._sync_size_buttons()
+
+    def _sync_size_buttons(self):
+        p = self.p
+        for b, ok in ((self.smaller_btn, self.size > SIZE_MIN), (self.bigger_btn, self.size < SIZE_MAX)):
+            if ok:
+                self._paint_pill(b)
+            else:
+                self._paint_pill(b, fg=p["line"] if p is DARK else p["tick_off"])
+            b.config(cursor="hand2" if ok else "")
+
+    # --- the console's arrow, beside the switch ---
+
+    def dock_arrow(self):
+        """While the Console | Review switch shows on Console, the tabs arrow sits centred in the
+        switch's row, so the console text starts where it always did."""
+        arrow = self.play.head_arrow
+        if self.showing or not self.switch_row.winfo_manager():
+            return
+        if arrow.winfo_manager() == "pack":
+            arrow.pack_forget()
+        arrow.place_forget()
+        arrow.config(bg=CONSOLE["bg"])
+        arrow.place(in_=self.switch_row, relx=0.5, rely=0.5, anchor="center")
+        arrow.lift()

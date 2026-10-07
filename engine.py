@@ -2559,7 +2559,9 @@ YOUTUBE_LOOKUP_WORKERS = 8      # video ID lookups run this many at a time
 
 
 def output_is_youtube():
-    return OUTPUT_TARGET == "youtube" and not OUTPUT_OVERRIDE
+    # A Review build matches against the library whatever Output says: YouTube is only where
+    # its ticked tracks go afterwards (Play on YouTube)
+    return OUTPUT_TARGET == "youtube" and not OUTPUT_OVERRIDE and not (REVIEW_MODE and not VOICE_TAKEOVER)
 
 
 def sending_message(count, detail=""):
@@ -2793,7 +2795,7 @@ REVIEW_ACTIONS = {
     "next": "Add as Up Next",
     "end": "Add to End",
     "finish": "Finish This Song, Load as New",
-    "stop": "Stop Song, Load as New",
+    "stop": "Stop Song, Play Now",
 }
 
 
@@ -2831,7 +2833,7 @@ def review_send(keys, how, zone):
     requests.get(f"{JRIVER_BASE}/Playback/PlayByKey",
                  params={"Key": ",".join(keys), "Zone": zone}, auth=AUTH, timeout=10)
     if was_playing:
-        return f"Review: song stopped, {n} loaded as new in {label}, playing now."
+        return f"Review: song stopped, {n} playing now in {label}."
     return f"Review: {n} loaded as new in {label}, playing now."
 
 

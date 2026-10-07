@@ -402,12 +402,14 @@ class PlayTab(tk.Frame):
             messagebox.showerror("Save failed", str(e), parent=self)
         self.output_cb.selection_clear()
         self._sync_behaviour()
+        panel = getattr(self, "review_panel", None)
+        if panel is not None:
+            panel.output_changed()   # Review's actions go wherever Output now says
 
     def _sync_behaviour(self):
-        """Behaviour is greyed out while Output is YouTube, as there's nothing to review in JRiver."""
-        if getattr(self, "behaviour_cb", None) is None or getattr(self, "output_var", None) is None:
-            return
-        self.behaviour_cb.state(["disabled"] if self.output_var.get() == "YouTube" else ["!disabled"])
+        """Review works with any Output, YouTube included (it opens the ticked tracks there)."""
+        if getattr(self, "behaviour_cb", None) is not None:
+            self.behaviour_cb.state(["!disabled"])
 
     def _on_behaviour_changed(self, *_):
         code = {shown: c for c, shown in PLAY_BEHAVIOUR}.get(self.behaviour_var.get(), "instant")
@@ -418,8 +420,7 @@ class PlayTab(tk.Frame):
         self.behaviour_cb.selection_clear()
 
     def _review_mode(self):
-        return (getattr(self, "behaviour_var", None) is not None
-                and self.behaviour_var.get() == "Review" and self.output_var.get() != "YouTube")
+        return getattr(self, "behaviour_var", None) is not None and self.behaviour_var.get() == "Review"
 
     def sync_moderator(self):
         """Shows Windows (Main)'s moderator choice, greyed out until there's an Anthropic key."""
@@ -869,6 +870,9 @@ class PlayTab(tk.Frame):
                 self._select_view("all")
             self.head_arrow.place(in_=self.log, relx=0.5, y=0, anchor="n")
             self.head_arrow.lift()
+        panel = getattr(self, "review_panel", None)
+        if panel is not None:
+            panel.dock_arrow()   # with the Console | Review switch showing, the arrow sits in its row
         if save:
             try:
                 write_env({"CONSOLE_TABS": "1" if open_ else "0"})

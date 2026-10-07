@@ -641,8 +641,8 @@ def test_play_tab_behaviour_saves_and_greys_out_for_youtube(app, ui):
     assert play._review_mode()
     play.output_var.set("YouTube")
     play._on_output_changed()
-    assert play.behaviour_cb.instate(["disabled"])
-    assert not play._review_mode(), "YouTube output never reviews"
+    assert not play.behaviour_cb.instate(["disabled"])
+    assert play._review_mode(), "Review works with YouTube too: Play on YouTube opens the ticked tracks"
 
 
 def test_review_is_for_app_builds_only(app, ui):
@@ -1051,3 +1051,93 @@ def test_profile_delete(app, ui, monkeypatch):
     s._profile_delete()
     assert profiles.names() == [] and profiles.current() == ""
     assert s.profile_status.cget("text") == "Current: None"
+
+
+# --- Review: Stop Song, Play Now; text size; the arrow beside the switch ---
+
+def test_stop_song_play_now_name(app, ui):
+    import review_gui
+    assert dict((h, t) for h, t, _ in review_gui.ACTIONS)["stop"] == "Stop Song, Play Now"
+    album = _album(app)
+    keys = _review_with_zone(app, ui, album)
+    _act(ui, "stop", [keys[0]])
+    assert "song stopped, 1 track playing now in Speakers" in ui.play.log.get("1.0", "end")
+
+
+def test_review_text_size_buttons(app, ui):
+    import settings_gui
+    keys = _review_with_zone(app, ui, _album(app))
+    panel = ui.play.review_panel
+    start = panel.size
+    panel.toggle(keys[1])
+    panel.bigger_btn.event_generate("<Button-1>")
+    ui.pump(0.2)
+    assert panel.size == start + 1
+    assert settings_gui.read_env().get("REVIEW_FONT_SIZE") == str(start + 1), "remembered"
+    cell = panel._cells[keys[1]][1][0]
+    assert int(str(cell.cget("font")).split()[-2] if "bold" in str(cell.cget("font")) else
+               str(cell.cget("font")).split()[-1]) == start + 1
+    assert panel.ticked_keys() == [keys[1]], "ticks kept"
+    for _ in range(20):
+        panel.set_size(panel.size - 1)
+    assert panel.size == 6, "no smaller than 6"
+    for _ in range(20):
+        panel.set_size(panel.size + 1)
+    assert panel.size == 14, "no bigger than 14"
+
+
+def test_console_arrow_sits_beside_the_switch(app, ui):
+    keys = _review_with_zone(app, ui, _album(app))
+    panel, play = ui.play.review_panel, ui.play
+    panel.show_console()
+    ui.pump(0.2)
+    info = play.head_arrow.place_info()
+    assert info.get("in") == panel.switch_row, "beside the switch, not over the text"
+    play._set_tabs_open(True, save=False)
+    ui.pump(0.1)
+    assert play.head_arrow.place_info().get("in") == panel.switch_row, "still there with the tabs open"
+    play._set_tabs_open(False, save=False)
+    assert play.head_arrow.place_info().get("in") == panel.switch_row
+
+
+# --- Review follows Output ---
+
+def test_review_actions_follow_output(app, ui):
+    album = _album(app)
+    keys = _review_with_zone(app, ui, album)
+    play = ui.play
+    play.output_var.set("Sonos")
+    play._on_output_changed()
+    _act(ui, "finish", [keys[2]])
+    assert app.jriver.zone("Sonos").playlist == [keys[2]], "went to Output's zone"
+    assert app.jriver.zone("Speakers").playlist == album, "not the zone the build was for"
+    assert "Sonos" not in play.review_panel.preview_choices(), "Output's zone never offered for Preview"
+
+
+def test_review_play_on_youtube(app, ui, monkeypatch):
+    keys = _review_with_zone(app, ui, _album(app))
+    play, panel = ui.play, ui.play.review_panel
+    seen = {}
+    monkeypatch.setattr(app.engine, "youtube_ids_for_pairs",
+                        lambda pairs: seen.setdefault("pairs", pairs) and [f"v{i}" for i, _ in enumerate(pairs)])
+    monkeypatch.setattr(app.engine, "open_youtube_playlist",
+                        lambda ids: seen.setdefault("ids", ids) and len(ids))
+    play.output_var.set("YouTube")
+    play._on_output_changed()
+    ui.pump(0.1)
+    assert panel.youtube_actions.winfo_manager() and not panel.jriver_actions.winfo_manager()
+    rows = {r["key"]: r for r in panel.rows}
+    for k in (keys[4], keys[1]):
+        panel.toggle(k)
+    panel._youtube()
+    ui.pump(until=lambda: not panel.busy)
+    assert seen["pairs"] == [(rows[k]["artist"], rows[k]["title"]) for k in (keys[4], keys[1])], "tick order"
+    assert "2 tracks opened on YouTube" in play.log.get("1.0", "end")
+    play.output_var.set("Same zone")
+    play._on_output_changed()
+    assert panel.jriver_actions.winfo_manager() and not panel.youtube_actions.winfo_manager()
+
+
+def test_review_has_no_status_line(app, ui):
+    _review_with_zone(app, ui, _album(app))
+    assert not ui.play.review_panel.status_label.winfo_manager()
