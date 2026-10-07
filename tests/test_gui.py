@@ -852,7 +852,7 @@ def _preview_ready(app, ui, zone="Sonos"):
 def test_preview_off_by_default_no_marks(app, ui):
     keys, panel = _preview_ready(app, ui, zone=None)
     assert panel.preview_zone is None and panel._marks == {}
-    assert panel.preview_btn.cget("text").startswith("Preview in: None")
+    assert panel.preview_btn.cget("text").startswith("None")
 
 
 def test_preview_never_offers_the_lists_zone(app, ui):

@@ -23,13 +23,30 @@ import time
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 
+import tkinter.font as tkfont
+
 import engine
 from settings_gui import Tooltip, read_env, write_env
+from tabs import rounded_shape
 
-BLACK, GREEN, DIM, WHITE, MUTED = "#000000", "#00ff41", "#0d4d1c", "#ffffff", "#7fbf8f"
-ROW_ON = "#0b2412"            # a ticked row
-FONT, BOLD = ("Consolas", 9), ("Consolas", 9, "bold")
+# The console stays black and green in both themes; Review follows the theme (the 7 Oct mockups).
+CONSOLE = {"bg": "#000000", "accent": "#00ff41", "on_accent": "#000000"}
+DARK = {"bg": "#000000", "text": "#d8ffe0", "muted": "#7fbf8f", "line": "#123a1c", "accent": "#00ff41",
+        "on_accent": "#000000", "row_on": "#0b2412", "row_prev": "#2a1a08", "tick_off": "#2f6b3d",
+        "tick_on_bg": "#000000", "tick_on_fg": "#00ff41", "act_bg": "#000000", "act_fg": "#00ff41",
+        "act_hover": "#0b2412", "act_dim": "#1d4d2a", "act_dim_fg": "#1d4d2a"}
+LIGHT = {"bg": "#ffffff", "text": "#1a1a1a", "muted": "#4a4d52", "line": "#dcdfe3", "accent": "#1f4e8c",
+         "on_accent": "#ffffff", "row_on": "#e3edf9", "row_prev": "#fff1e0", "tick_off": "#9aa0a6",
+         "tick_on_bg": "#1f4e8c", "tick_on_fg": "#ffffff", "act_bg": "#1f4e8c", "act_fg": "#ffffff",
+         "act_hover": "#173d6e", "act_dim": "#a9b8cc", "act_dim_fg": "#ffffff"}
+ORANGE = "#f28c28"
+FONT, BOLD = ("Segoe UI", 9), ("Segoe UI", 9, "bold")
+SMALL_BOLD = ("Segoe UI", 8, "bold")
 DOT = "\u25cf"
+
+
+def palette():
+    return DARK if getattr(engine, "THEME", "light") == "dark" else LIGHT
 PLAY_MARK, STOP_MARK = "\u25b6", "\u25a0"
 PREVIEW_TIP = ("Listen to a track before you add it, in a zone with its own speakers or headphones. "
                "The zone this list goes to isn't offered.")
@@ -62,6 +79,11 @@ class ReviewPanel:
     def __init__(self, play):
         self.play = play
         self.box = play.console_box
+        self.p = palette()
+        try:
+            self.scale = max(1.0, self.box.winfo_fpixels("1i") / 96.0)
+        except tk.TclError:
+            self.scale = 1.0
         self.rows, self.order, self.title, self.zone = [], [], "", None
         self.showing = False
         self.dot = False
@@ -80,17 +102,16 @@ class ReviewPanel:
     # --- the Console | Review switch ---
 
     def _build_switch(self):
-        self.switch_row = tk.Frame(self.box, bg=BLACK)
-        edge = tk.Frame(self.switch_row, bg=GREEN, padx=1, pady=1)
-        edge.pack(side="left")
-        inner = tk.Frame(edge, bg=BLACK)
+        self.switch_row = tk.Frame(self.box, bg=CONSOLE["bg"])
+        self.switch_edge = tk.Frame(self.switch_row, bg=CONSOLE["accent"], padx=1, pady=1)
+        self.switch_edge.pack(side="left")
+        inner = tk.Frame(self.switch_edge, bg=CONSOLE["bg"])
         inner.pack()
-        self.console_btn = tk.Label(inner, text="Console", font=("Segoe UI", 9, "bold"), padx=14, pady=2,
-                                    cursor="hand2")
+        self.console_btn = tk.Label(inner, text="Console", font=BOLD, padx=16, pady=3, cursor="hand2")
         self.console_btn.pack(side="left")
-        tk.Frame(inner, bg=GREEN, width=1).pack(side="left", fill="y")
-        self.review_btn = tk.Label(inner, text="Review", font=("Segoe UI", 9, "bold"), padx=14, pady=2,
-                                   cursor="hand2")
+        self.switch_mid = tk.Frame(inner, bg=CONSOLE["accent"], width=1)
+        self.switch_mid.pack(side="left", fill="y")
+        self.review_btn = tk.Label(inner, text="Review", font=BOLD, padx=16, pady=3, cursor="hand2")
         self.review_btn.pack(side="left")
         self.console_btn.bind("<Button-1>", lambda e: self.show_console())
         self.review_btn.bind("<Button-1>", lambda e: self.show_review())
@@ -106,7 +127,16 @@ class ReviewPanel:
             self.switch_row.pack(fill="x", padx=8, pady=(6, 4))
 
     def _style_switch(self):
-        on, off = dict(bg=GREEN, fg=BLACK), dict(bg=BLACK, fg=GREEN)
+        c = self.p if self.showing else CONSOLE   # Review's colours while it shows, the console's otherwise
+        try:
+            self.box.config(bg=c["bg"])
+        except tk.TclError:
+            pass
+        for w in (self.switch_row, self.switch_edge.winfo_children()[0]):
+            w.config(bg=c["bg"])
+        self.switch_edge.config(bg=c["accent"])
+        self.switch_mid.config(bg=c["accent"])
+        on, off = dict(bg=c["accent"], fg=c["on_accent"]), dict(bg=c["bg"], fg=c["accent"])
         self.console_btn.config(text=f"Console {DOT}" if self.dot and self.showing else "Console",
                                 **(off if self.showing else on))
         ticked = len(self.order)
@@ -115,37 +145,68 @@ class ReviewPanel:
 
     # --- the Review frame ---
 
+    # --- drawn pieces: rounded boxes as images, text on top ---
+
+    def _px(self, n):
+        return int(round(n * self.scale))
+
+    def _shape(self, w, h, fill, edge, line=1, radius=6):
+        return rounded_shape(self.box, self._px(w), self._px(h), self._px(radius), fill, edge, self._px(line))
+
+    def _text_width(self, text, font):
+        return tkfont.Font(root=self.box, font=font).measure(text) / self.scale
+
+    def _pill(self, parent, text, command, fg=None, edge=None, fill=None, font=FONT, pad=24, h=26):
+        """A small rounded outline button (Select All, Stop Preview, Save as Playlist)."""
+        p = self.p
+        b = tk.Label(parent, text=text, font=font, compound="center", bd=0, cursor="hand2", bg=p["bg"])
+        b._look = dict(fg=fg or p["accent"], edge=edge or p["line"], fill=fill or p["bg"], pad=pad, h=h, font=font)
+        self._paint_pill(b)
+        b.bind("<Button-1>", lambda e: command())
+        return b
+
+    def _paint_pill(self, b, fg=None, edge=None, fill=None):
+        look = b._look
+        w = self._text_width(b.cget("text"), look["font"]) + look["pad"]
+        img = self._shape(w, look["h"], fill or look["fill"], edge or look["edge"])
+        b.config(image=img, fg=fg or look["fg"], bg=self.p["bg"])
+        b._img = img
+
     def _build_frame(self):
-        self.frame = tk.Frame(self.box, bg=BLACK)
-        head = tk.Frame(self.frame, bg=BLACK)
-        head.pack(fill="x", padx=8, pady=(2, 6))
-        self.title_label = tk.Label(head, text="", font=BOLD, bg=BLACK, fg=WHITE, anchor="w")
+        p = self.p
+        self.frame = tk.Frame(self.box, bg=p["bg"])
+        head = tk.Frame(self.frame, bg=p["bg"])
+        head.pack(fill="x", padx=14, pady=(4, 8))
+        self.title_label = tk.Label(head, text="", font=BOLD, bg=p["bg"], fg=p["text"], anchor="w")
         self.title_label.pack(side="left")
-        self.count_label = tk.Label(head, text="", font=FONT, bg=BLACK, fg=MUTED)
-        self.count_label.pack(side="left", padx=(12, 4))
+        self.count_label = tk.Label(head, text="", font=FONT, bg=p["bg"], fg=p["muted"])
+        self.count_label.pack(side="left", padx=(14, 8))
         for text, command in (("Select All", self.select_all), ("Select None", self.select_none)):
-            self.play._head_box(head, text, command).pack(side="left", padx=(6, 0))
-        self.preview_bar = tk.Frame(head, bg=BLACK)       # Preview zone and Stop Preview
+            self._pill(head, text, command).pack(side="left", padx=(6, 0))
+        self.preview_bar = tk.Frame(head, bg=p["bg"])       # Preview zone and Stop Preview
         self.preview_bar.pack(side="right")
-        self.preview_btn = self.play._head_box(self.preview_bar, "", self._preview_menu)
-        self.preview_btn.pack(side="left")
+        tk.Label(self.preview_bar, text="Preview in", font=FONT, bg=p["bg"], fg=p["muted"]).pack(side="left")
+        self.preview_btn = tk.Label(self.preview_bar, text="", font=BOLD, bg=p["bg"], fg=ORANGE, cursor="hand2")
+        self.preview_btn.pack(side="left", padx=(8, 10))
+        self.preview_btn.bind("<Button-1>", lambda e: self._preview_menu())
         Tooltip(self.preview_btn, PREVIEW_TIP)
-        self.stop_preview_btn = self.play._head_box(self.preview_bar, "Stop Preview", self.stop_preview)
-        self.stop_preview_btn.pack(side="left", padx=(6, 0))
+        self.stop_preview_btn = self._pill(self.preview_bar, "Stop Preview", self.stop_preview,
+                                           fg=ORANGE, edge=ORANGE, font=BOLD)
+        self.stop_preview_btn.pack(side="left")
         self._sync_preview()
-        tk.Frame(self.frame, bg=GREEN, height=1).pack(fill="x", padx=8)
-        self.action_bar = tk.Frame(self.frame, bg=BLACK)  # the actions, along the bottom
-        self.action_bar.pack(side="bottom", fill="x", padx=8, pady=(6, 8))
+        tk.Frame(self.frame, bg=p["line"], height=1).pack(fill="x")
+        self.action_bar = tk.Frame(self.frame, bg=p["bg"])  # the actions, along the bottom
+        self.action_bar.pack(side="bottom", fill="x", padx=14, pady=(0, 10))
         self._build_actions()
 
-        holder = tk.Frame(self.frame, bg=BLACK)
+        holder = tk.Frame(self.frame, bg=p["bg"])
         holder.pack(fill="both", expand=True)
-        canvas = tk.Canvas(holder, bg=BLACK, highlightthickness=0, bd=0)
+        canvas = tk.Canvas(holder, bg=p["bg"], highlightthickness=0, bd=0)
         bar = ttk.Scrollbar(holder, orient="vertical", command=canvas.yview)
         canvas.configure(yscrollcommand=bar.set)
         bar.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
-        self.grid = tk.Frame(canvas, bg=BLACK, padx=8, pady=4)
+        self.grid = tk.Frame(canvas, bg=p["bg"], padx=14, pady=0)
         window = canvas.create_window((0, 0), window=self.grid, anchor="nw")
         canvas.bind("<Configure>", lambda e: canvas.itemconfigure(window, width=e.width))
         self.grid.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
@@ -158,47 +219,66 @@ class ReviewPanel:
 
     # --- the actions ---
 
-    def _action_button(self, parent, text, command, tip):
-        b = tk.Label(parent, text=text, font=("Segoe UI", 9, "bold"), bg=BLACK, fg=GREEN, padx=12, pady=4,
-                     cursor="hand2", highlightthickness=1, highlightbackground=GREEN, highlightcolor=GREEN)
+    def _action_button(self, parent, text, command, tip, quiet=False):
+        """quiet: Save as Playlist, an outline rather than the full action look."""
+        b = tk.Label(parent, text=text, font=BOLD, compound="center", bd=0, bg=self.p["bg"])
+        b._quiet = quiet
         b.bind("<Button-1>", lambda e: command())
-        b.bind("<Enter>", lambda e: b.config(bg=DIM) if self._can_act() else None, add="+")
-        b.bind("<Leave>", lambda e: b.config(bg=BLACK), add="+")
+        b.bind("<Enter>", lambda e: self._paint_action(b, hover=True), add="+")
+        b.bind("<Leave>", lambda e: self._paint_action(b), add="+")
         Tooltip(b, tip)
         return b
 
+    def _paint_action(self, b, hover=False):
+        p, ok = self.p, self._can_act()
+        hover = hover and ok
+        w, h = self._text_width(b.cget("text"), BOLD) + 36, 36
+        if b._quiet:
+            fill, edge, fg = (p["row_on"] if hover else p["bg"]), (p["line"] if ok else p["line"]), \
+                (p["accent"] if ok else p["act_dim"])
+        elif ok:
+            fill, edge, fg = (p["act_hover"] if hover else p["act_bg"]), p["accent"], p["act_fg"]
+        else:
+            fill, edge, fg = (p["bg"] if p is DARK else p["act_dim"]), p["act_dim"], p["act_dim_fg"]
+        img = self._shape(w, h, fill, edge, radius=7)
+        b.config(image=img, fg=fg, cursor="hand2" if ok else "")
+        b._img = img
+
     def _build_actions(self):
+        p = self.p
         bar = self.action_bar
-        tk.Frame(bar, bg=DIM, height=1).pack(fill="x", pady=(0, 8))
-        row = tk.Frame(bar, bg=BLACK)
+        tk.Frame(bar, bg=p["line"], height=1).pack(fill="x", pady=(0, 12))
+        row = tk.Frame(bar, bg=p["bg"])
         row.pack(fill="x")
-        self.into_label = tk.Label(row, text="", font=FONT, bg=BLACK, fg=MUTED)
-        self.into_label.pack(side="left", padx=(0, 10))
+        into = tk.Frame(row, bg=p["bg"])
+        into.pack(side="left", padx=(0, 12))
+        tk.Label(into, text="Into", font=FONT, bg=p["bg"], fg=p["muted"]).pack(side="left")
+        self.into_label = tk.Label(into, text="", font=BOLD, bg=p["bg"], fg=p["text"])
+        self.into_label.pack(side="left", padx=(4, 0))
         for n, (how, text, tip) in enumerate(ACTIONS):
             if n == 2:   # the two Adds, then the two Load as New
-                tk.Frame(row, bg=DIM, width=1, height=22).pack(side="left", padx=(4, 10))
+                tk.Frame(row, bg=p["line"], width=1, height=self._px(30)).pack(side="left", padx=(4, 10))
             b = self._action_button(row, text, lambda h=how: self._act(h), tip)
-            b.pack(side="left", padx=(0, 6))
+            b.pack(side="left", padx=(0, 8))
             self._buttons[how] = b
-        save = self._action_button(row, "Save as Playlist", self._save, SAVE_TIP)
+        save = self._action_button(row, "Save as Playlist", self._save, SAVE_TIP, quiet=True)
         save.pack(side="right")
         self._buttons["save"] = save
-        self.status_label = tk.Label(bar, text="", font=FONT, bg=BLACK, fg=MUTED, anchor="w")
-        self.status_label.pack(fill="x", pady=(6, 0))
+        self.status_label = tk.Label(bar, text="", font=FONT, bg=p["bg"], fg=p["muted"], anchor="w")
+        self.status_label.pack(fill="x", pady=(8, 0))
 
     def _can_act(self):
         return bool(self.order) and not self.busy and self.zone is not None
 
     def _sync_buttons(self):
-        ok = self._can_act()
         for b in self._buttons.values():
-            b.config(fg=GREEN if ok else DIM, highlightbackground=GREEN if ok else DIM,
-                     cursor="hand2" if ok else "")
+            self._paint_action(b)
         try:
             where = engine.zone_label(self.zone) if self.zone is not None else ""
         except Exception:
             where = ""
-        self.into_label.config(text=f"Into {where}" if where else "")
+        self.into_label.config(text=where)
+        self.into_label.master.winfo_children()[0].config(text="Into" if where else "")
 
     def _run(self, work):
         """Runs a JRiver call off the main thread, then reports it in the console and under the actions."""
@@ -316,35 +396,37 @@ class ReviewPanel:
         columns = self._columns()
         for c in range(len(COLUMNS) + 1):
             self.grid.grid_columnconfigure(c, weight=0)
+        p = self.p
         for c, (title, width, stretch) in enumerate(columns):
             self.grid.grid_columnconfigure(c, weight=stretch)
-            tk.Label(self.grid, text=title, font=BOLD, bg=BLACK, fg=MUTED, width=width, padx=4,
+            tk.Label(self.grid, text=title, font=SMALL_BOLD, bg=p["bg"], fg=p["muted"], width=width, padx=4,
                      anchor="e" if title in ("Time", "BPM") else "w").grid(
-                row=0, column=c, sticky="ew", pady=(0, 2))
-        r = 1
+                row=0, column=c, sticky="ew", pady=(7, 5))
+        tk.Frame(self.grid, bg=p["line"], height=1).grid(row=1, column=0, columnspan=len(columns), sticky="ew")
+        r = 2
         for row in self.rows:
             key = row["key"]
-            tick = tk.Label(self.grid, text="", font=BOLD, width=2, bg=BLACK, fg=GREEN, cursor="hand2",
-                            highlightthickness=1, highlightbackground=DIM, highlightcolor=DIM)
-            tick.grid(row=r, column=0, sticky="w", padx=(0, 8), pady=2)
+            tick = tk.Label(self.grid, text="", font=BOLD, bd=0, compound="center", bg=p["bg"], cursor="hand2")
+            tick.grid(row=r, column=0, sticky="nsew", padx=0, pady=0, ipady=3)
             values = (row.get("artist", ""), row.get("title", ""), row.get("album", ""),
                       clock(row.get("seconds")), row.get("bpm", ""))
             texts = []
             for c, value in enumerate(values, start=1):
-                cell = tk.Label(self.grid, text=value, font=FONT, bg=BLACK, fg=GREEN, cursor="hand2", padx=4, pady=3,
-                                width=COLUMNS[c][1], anchor="e" if c >= 4 else "w")
+                cell = tk.Label(self.grid, text=value, font=FONT, bg=p["bg"], fg=p["text"] if c <= 2 else p["muted"],
+                                cursor="hand2", padx=4, pady=3, width=COLUMNS[c][1], anchor="e" if c >= 4 else "w")
                 cell.grid(row=r, column=c, sticky="nsew")   # no gaps, so a ticked row shades as one band
                 texts.append(cell)
             for w in [tick] + texts:   # the whole row is the target: tick or untick
                 w.bind("<Button-1>", lambda e, k=key: self.toggle(k))
             self._cells[key] = (tick, texts)
             if self.preview_zone:   # the Preview mark: plays this track in the preview zone, doesn't tick it
-                mark = tk.Label(self.grid, text=PLAY_MARK, font=FONT, bg=BLACK, fg=GREEN, cursor="hand2",
-                                width=3, padx=4, pady=3)
+                mark = tk.Label(self.grid, text=PLAY_MARK, font=("Segoe UI", 7), bd=0, compound="center",
+                                bg=p["bg"], cursor="hand2", width=self._px(46))   # pixels, as it has an image
                 mark.grid(row=r, column=len(COLUMNS), sticky="nsew")
                 mark.bind("<Button-1>", lambda e, k=key: self._preview_click(k))
                 self._marks[key] = mark
-            tk.Frame(self.grid, bg=DIM, height=1).grid(row=r + 1, column=0, columnspan=len(columns), sticky="ew")
+            tk.Frame(self.grid, bg=p["line"], height=1).grid(row=r + 1, column=0, columnspan=len(columns),
+                                                             sticky="ew")
             r += 2
         self.canvas.update_idletasks()
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
@@ -352,16 +434,24 @@ class ReviewPanel:
         self._restyle()
 
     def _restyle(self):
+        p = self.p
         for key, (tick, texts) in self._cells.items():
-            on = key in self.order
-            bg = ROW_ON if on else BLACK
-            tick.config(text=str(self.order.index(key) + 1) if on else "",
-                        highlightbackground=GREEN if on else DIM, highlightcolor=GREEN if on else DIM)
-            for cell in texts:
-                cell.config(bg=bg, font=BOLD if on else FONT)
+            on, prev = key in self.order, key == self.previewing
+            bg = p["row_prev"] if prev else (p["row_on"] if on else p["bg"])
+            box = self._shape(26, 26, p["tick_on_bg"] if on else bg, p["accent"] if on else p["tick_off"], line=2,
+                              radius=5)
+            tick.config(text=str(self.order.index(key) + 1) if on else "", image=box, bg=bg,
+                        fg=p["tick_on_fg"] if on else p["accent"])
+            tick._img = box
+            for n, cell in enumerate(texts):
+                cell.config(bg=bg, font=BOLD if on and n < 2 else FONT)
             mark = self._marks.get(key)
             if mark is not None:
-                mark.config(bg=bg, text=STOP_MARK if key == self.previewing else PLAY_MARK)
+                edge = ORANGE if prev else p["line"]
+                img = self._shape(30, 24, bg, edge, radius=5)
+                mark.config(bg=bg, image=img, fg=ORANGE if prev else p["accent"],
+                            text=STOP_MARK if prev else PLAY_MARK)
+                mark._img = img
         n = len(self.rows)
         self.title_label.config(text=self.title)
         self.count_label.config(text=f"{n} track{'' if n == 1 else 's'}, {len(self.order)} ticked")
@@ -406,9 +496,14 @@ class ReviewPanel:
 
     def _sync_preview(self):
         shown = self.preview_name if self.preview_zone else "None"
-        self.preview_btn.config(text=f"Preview in: {shown} \u25be")
+        self.preview_btn.config(text=f"{shown} \u25be", fg=ORANGE if self.preview_zone else self.p["muted"])
         on = self.previewing is not None
-        self.stop_preview_btn.config(fg=GREEN if on else DIM, cursor="hand2" if on else "")
+        if on:
+            self._paint_pill(self.stop_preview_btn)
+        else:
+            self._paint_pill(self.stop_preview_btn, fg=self.p["line"] if self.p is DARK else self.p["tick_off"],
+                             edge=self.p["line"])
+        self.stop_preview_btn.config(cursor="hand2" if on else "")
 
     def preview_choices(self):
         """The zones offered for Preview: every JRiver zone except the one this list goes to."""
@@ -419,8 +514,9 @@ class ReviewPanel:
         return [name for zid, name in zones if str(zid) != str(self.zone)]
 
     def _preview_menu(self):
-        menu = tk.Menu(self.frame, tearoff=0, bg=BLACK, fg=GREEN, activebackground=DIM,
-                       activeforeground=GREEN, font=FONT)
+        p = self.p
+        menu = tk.Menu(self.frame, tearoff=0, bg=p["bg"], fg=p["text"], activebackground=p["row_on"],
+                       activeforeground=p["accent"], font=FONT)
         for name in ["None"] + self.preview_choices():
             menu.add_command(label=name, command=lambda n=name: self.choose_preview("" if n == "None" else n))
         b = self.preview_btn
