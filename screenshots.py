@@ -39,6 +39,9 @@ SHOTS = [
     ("play", ["Play", "Now Playing"], ["gui.pyw", "mix_gui.py"], "more_closed"),
     ("play_more_options", ["Play", "Now Playing"], ["gui.pyw", "mix_gui.py"], "more_open"),
     ("play_search", ["Play", "Search"], ["gui.pyw"], "more_closed"),
+    ("play_review", ["Play", "Now Playing"], ["gui.pyw", "review_gui.py"], "review"),
+    ("ai_playlist_create", ["Play", "Now Playing"], ["ai_dialog.py"], "ai_create"),
+    ("ai_playlist_steer", ["Play", "Now Playing"], ["ai_dialog.py"], "ai_steer"),
     ("console_tabs", ["Play", "Now Playing"], ["gui.pyw", "buildlog.py"], "tabs_kitchen"),
     ("console_log", ["Play", "Now Playing"], ["gui.pyw", "buildlog.py"], "tabs_log"),
     ("discover", ["Discover"], ["discover_gui.py"], None),
@@ -72,6 +75,19 @@ DEMO_ENV = {"HIDDEN_ZONES": "", "DEFAULT_ZONE": "Speakers", "FOLLOW_ACTIVE_ZONE"
 DEMO_SAVED_ROWS = {"201": {"blend": "tracks"}, "202": {"nonstop": "artists"}}
 DEMO_DEVICES = [("demo-kitchen", "Kitchen Echo", "Kitchen", 0, "2026-10-04 10:41"),
                 ("demo-lounge", "Lounge Dot", "Speakers", 0, "2026-10-04 09:15")]
+# Review: a Similar Artists shortlist, as the Review list shows it
+DEMO_REVIEW = [
+    ("The Kinks", "Waterloo Sunset", "Something Else by The Kinks", 193, "92"),
+    ("The Hollies", "Bus Stop", "Bus Stop", 174, "128"),
+    ("The Byrds", "Turn! Turn! Turn!", "Turn! Turn! Turn!", 229, "116"),
+    ("Badfinger", "Baby Blue", "Straight Up", 217, "126"),
+    ("The Zombies", "Time Of The Season", "Odessey and Oracle", 213, "118"),
+    ("Harry Nilsson", "Everybody's Talkin'", "Aerial Ballet", 164, ""),
+    ("The Move", "Flowers In The Rain", "Move", 146, "134"),
+    ("Big Star", "Thirteen", "#1 Record", 154, "88"),
+]
+DEMO_IDEAS = ["Late-night jazz, slow and smoky", "Sunday morning, acoustic", "Driving at night"]
+DEMO_TONE = "Warm late-60s British pop, mid-tempo, melodic and upbeat"
 DEMO_PLAYLISTS = [
     {"ID": "201", "Name": "Sunday Morning", "Folder": "", "Type": "Playlist"},
     {"ID": "202", "Name": "Road Trip", "Folder": "Mixes", "Type": "Playlist"},
@@ -376,6 +392,43 @@ def go_to(root, path, TabbedPane):
     return where
 
 
+def show_review(play):
+    """The Review list with the demo shortlist: three ticked in order, a preview zone chosen, one previewing."""
+    panel = play.review_panel
+    rows = [{"key": str(2000 + n), "artist": a, "title": t, "album": al, "seconds": s, "bpm": b}
+            for n, (a, t, al, s, b) in enumerate(DEMO_REVIEW)]
+    panel.load(rows, "Similar Artists: The Beatles - Here Comes The Sun", DEMO_ZONES[0][0])
+    panel.preview_name, panel.preview_zone = "Kitchen", DEMO_ZONES[1][0]   # set directly: no JRiver in demo mode
+    panel._render()
+    for key in ("2003", "2001", "2004"):
+        panel.toggle(key)
+    panel.previewing, panel.preview_at = "2002", DEMO_ZONES[1][0]
+    panel._restyle()
+    panel.show_review()
+
+
+def open_ai_window(gui, root, play, mode):
+    """The AI Playlist window over the Play tab, filled from demo data so no AI request is made."""
+    engine = gui.engine
+    engine.ai_vibe_suggestions = lambda: list(DEMO_IDEAS)
+    engine.ai_assess_tone = lambda pairs: DEMO_TONE
+    from settings_gui import write_env
+    write_env({"AI_DIALOG_MODE": mode, "AI_CREATE_THEME": "", "AI_STEER_TONE": DEMO_TONE if mode == "steer" else "",
+               "AI_STEER_DIRS": "dancier,faster" if mode == "steer" else "", "AI_STEER_OWN": "",
+               "AI_STEER_STRENGTH": "little", "AI_STEER_SEED": "current", "AI_IF_SHORT": "ask"})
+    import ai_dialog
+    dialog = ai_dialog.AIPlaylistDialog(root, play=play, on_create=lambda *a: None, on_steer=lambda *a: None)
+    settle(root, 1.2)
+    return dialog
+
+
+def grab_window(window):
+    from PIL import ImageGrab
+    window.update_idletasks()
+    x, y = window.winfo_rootx(), window.winfo_rooty()
+    return ImageGrab.grab(bbox=(x - 1, y - 1, x + window.winfo_width() + 1, y + window.winfo_height() + 1))
+
+
 def grab(root):
     from PIL import ImageGrab
     root.lift()
@@ -495,9 +548,20 @@ def main():
                 else:   # the Kitchen Echo build that started its Non-stop chain, opened from the Log
                     import buildlog
                     play._load_build(next(r for r in buildlog.recent("demo-kitchen") if r["chain_pos"] == 1))
-            settle(root, 1.0 if name == "settings_jriver_playlists" else 0.5)
-            (written if save_if_changed(capture(root, page), name) else same).append(name)
+            dialog = None
+            if action == "review":
+                show_review(play)
+            elif action in ("ai_create", "ai_steer"):
+                play._show_more(False, save=False)
+                dialog = open_ai_window(gui, root, play, "steer" if action == "ai_steer" else "create")
+            settle(root, 1.0 if name in ("settings_jriver_playlists", "play_review") or dialog else 0.5)
+            image = grab_window(dialog) if dialog else capture(root, page)
+            (written if save_if_changed(image, name) else same).append(name)
             print(f"  {name}: {'saved' if name in written else 'unchanged'}")
+            if dialog is not None:
+                dialog.destroy()
+            if action == "review" and getattr(play, "review_panel", None) is not None:
+                play.review_panel.show_console()
     finally:
         root.destroy()
         if gui.engine._db is not None:

@@ -61,6 +61,8 @@ Every playlist starts from a seed. The seed is whichever of the two small tabs i
 
 ### Review
 
+![Review](images/play_review.png)
+
 Tick the tracks you want, in the order you want them (each tick shows its number), with **Select All** and **Select None** for the lot, then choose what happens to them:
 
 - **Add as Up Next**: after the current song, in tick order.
@@ -85,6 +87,10 @@ The actions go wherever **Output** says when you press them (a zone, or the Now 
 | **AI Playlist** | Opens the AI Playlist window, with two modes. **Create**: describe a mood or a scene, or click an idea chip (More tracks like the song that's playing, then the AI's suggestions), and the AI chooses a playlist from your library. **Steer**: move what's playing in a direction. Needs an Anthropic key. See below. |
 
 ### The AI Playlist window
+
+![AI Playlist, Create](images/ai_playlist_create.png)
+
+![AI Playlist, Steer](images/ai_playlist_steer.png)
 
 **Create** takes a theme, **Tracks** (how many to ask for) and **If Short**. **Steer** starts from a **Seed**, the current track or Playing Now (All, up to 50 tracks around the current one), with an optional **Tone**: **Assess Tone** asks the AI to describe the seed's tone and puts the phrase in the box, which you can edit; left empty, the AI works from the seed and direction alone. **Direction** is a row of chips that combine (Dancier, Calmer, Faster, Slower, Darker, Brighter, Older, Newer, Deeper Cuts, Better Known), a box for your own words, and **A Little** or **A Lot** for how far to move. Faster and Slower are checked against BPM tags where both the seed and a pick have them, and a pick heading the wrong way is left out with a console line.
 
