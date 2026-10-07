@@ -2759,6 +2759,34 @@ def review_reset():
     """Called as a Review build starts: an empty list, and nothing in JRiver touched."""
     globals()["REVIEW_KEYS"] = []
     globals()["REVIEW_ZONE"] = None
+    globals()["REVIEW_ROWS"] = []
+
+
+REVIEW_ROWS = []         # the Review list's rows, made from REVIEW_KEYS when the build finishes
+
+
+def review_rows(keys):
+    """The Review list's rows: artist, title, album, length and BPM for each track, from the library."""
+    import library   # here rather than at the top: it imports engine
+    try:
+        library.ensure_loaded()
+    except Exception:
+        pass
+    rows = []
+    for k in keys:
+        row = library.track_row(k) or {}
+        try:
+            seconds = float(row.get("Duration") or 0)
+        except ValueError:
+            seconds = 0
+        bpm = (row.get("BPM") or "").strip()
+        try:
+            bpm = str(round(float(bpm))) if bpm and float(bpm) > 0 else ""
+        except ValueError:
+            bpm = ""
+        rows.append({"key": str(k), "artist": row.get("Artist", ""), "title": row.get("Name", "") or f"Track {k}",
+                     "album": row.get("Album", ""), "seconds": seconds, "bpm": bpm})
+    return rows
 MIX_FAST_KEY = None      # an Add before playlist's first track, started by fast start
 MIX_NOTED = False        # the "left out on YouTube" note has been logged this build
 CANCEL_CHECK = None      # set by voice.py: returns True once a newer command has taken over

@@ -657,3 +657,67 @@ def test_review_is_for_app_builds_only(app, ui):
             if not play.running:
                 break
     assert seen == [False, True], "a voice-style build ignores Review; an app build uses it"
+
+
+# --- Review: the list in the console area ---
+
+def _review_build(app, ui, n=6):
+    play = ui.play
+    keys = [str(r["Key"]) for r in app.jriver.by_key.values()][:n]
+    play.behaviour_var.set("Review")
+
+    def target():
+        play.report("Similar Tracks: The Beatles - Here Comes The Sun  (target 30, at most 2 per artist)")
+        app.engine.REVIEW_KEYS = list(keys)
+    play._run_job(target, needs_playing=False, review=True)
+    ui.pump(until=lambda: not play.running)
+    ui.pump(0.2)
+    return keys
+
+
+def test_review_build_opens_the_review_list(app, ui):
+    keys = _review_build(app, ui)
+    panel = ui.play.review_panel
+    assert panel.showing and [r["key"] for r in panel.rows] == keys
+    assert panel.title == "Similar Tracks: The Beatles - Here Comes The Sun"
+    assert all(r["artist"] and r["title"] for r in panel.rows), "rows filled from the library"
+    assert not ui.play.log.frame.winfo_manager(), "the console text is hidden while Review shows"
+    assert not app.jriver.zone("Speakers").playlist, "nothing sent to JRiver"
+
+
+def test_review_ticks_number_in_click_order(app, ui):
+    keys = _review_build(app, ui)
+    panel = ui.play.review_panel
+    for k in (keys[3], keys[1], keys[4]):
+        panel.toggle(k)
+    assert panel.ticked_keys() == [keys[3], keys[1], keys[4]]
+    assert [panel._cells[k][0].cget("text") for k in (keys[3], keys[1], keys[4], keys[0])] == ["1", "2", "3", ""]
+    panel.toggle(keys[1])   # untick the middle one: the rest close up
+    assert panel._cells[keys[4]][0].cget("text") == "2"
+    assert panel.count_label.cget("text") == "6 tracks, 2 ticked"
+    panel.select_all()
+    assert panel.ticked_keys() == keys
+    panel.select_none()
+    assert panel.ticked_keys() == []
+
+
+def test_review_switch_back_to_console_and_dot(app, ui):
+    keys = _review_build(app, ui)
+    panel, play = ui.play.review_panel, ui.play
+    panel.toggle(keys[0])
+    panel.show_console()
+    assert play.log.frame.winfo_manager() and not panel.frame.winfo_manager()
+    assert panel.review_btn.cget("text") == "Review (1)", "ticked tracks are still waiting"
+    panel.show_review()
+    play._append_log("  a voice build in the kitchen")
+    assert panel.console_btn.cget("text").startswith("Console ") and panel.dot
+    panel.show_console()
+    assert play.log.frame.winfo_manager() and not panel.dot
+
+
+def test_play_build_leaves_review_closed(app, ui):
+    play = ui.play
+    play.behaviour_var.set("Play")
+    play._run_job(lambda: play.report("Similar Tracks: x"), needs_playing=False, review=True)
+    ui.pump(until=lambda: not play.running)
+    assert not play.review_panel.showing and not play.review_panel.switch_row.winfo_manager()

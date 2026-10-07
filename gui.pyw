@@ -34,6 +34,7 @@ from settings_gui import MODERATOR_CHOICES, MODERATOR_LEVELS_HELP
 from discover_gui import DiscoverTab
 from tabs import TabbedPane, PALETTE, FlatButton, InfoLine, apply_theme
 from mix_gui import MixRows
+from review_gui import ReviewPanel
 import console_query
 import playmix
 import buildlog
@@ -535,6 +536,7 @@ class PlayTab(tk.Frame):
         self.log.tag_configure("debug", elide=self.console_mode == "simple")
         self._build_console_strip(frame)
         self._build_console_head()
+        self.review_panel = ReviewPanel(self)   # Console | Review
         self._greeting_active = True
         self._type_greeting("Follow the white rabbit.", 0)
 
@@ -735,6 +737,8 @@ class PlayTab(tk.Frame):
             line = time.strftime("%H:%M") + "  " + line.lstrip("\n")
             self._stamp_next = False
         self._live.append(line)
+        if getattr(self, "review_panel", None) is not None:
+            self.review_panel.console_activity()   # a dot on Console while Review is showing
         if not self._live_visible():
             return   # another tab is showing: the line is kept for when this build's tab is chosen
         at_bottom = self.log.yview()[1] >= 0.999   # scrolled up to read? new lines don't pull you down
@@ -1249,6 +1253,9 @@ class PlayTab(tk.Frame):
 
         rows = (playmix.rows() or None) if mix else None   # added playlists: app builds only
         review = review and bool(mix) and self._review_mode()   # Review: app builds, never voice
+        self._job_review = review
+        if origin is None and getattr(self, "review_panel", None) is not None:
+            self.review_panel.show_console()   # a build from the window: watch it run in the console
 
         def worker():
             engine.MIX_ROWS, engine.MIX_KEEP, engine.MIX_FAST_KEY, engine.MIX_NOTED = rows, set(), None, False
@@ -1259,6 +1266,8 @@ class PlayTab(tk.Frame):
             engine.LAST_OUTPUT_ID, engine.LAST_BUILD = None, None
             try:
                 target()
+                if review:
+                    engine.REVIEW_ROWS = engine.review_rows(engine.REVIEW_KEYS)
             except Exception as e:
                 self.log_queue.put(f"Problem: something went wrong ({e}). Press Export to Log "
                                    f"and attach the file when you report it.")
@@ -1287,6 +1296,17 @@ class PlayTab(tk.Frame):
         for b in self.buttons:
             b.config(state="normal")
         self._sync_seed_buttons()
+        if getattr(self, "_job_review", False):   # a Review build: its tracks go to the Review list
+            self._job_review = False
+            self.review_panel.load(getattr(engine, "REVIEW_ROWS", []), self._review_title(),
+                                   engine.REVIEW_ZONE)
+
+    def _review_title(self):
+        """The build's first line, without its time or the settings in brackets after it."""
+        for line in self._live:
+            if line.strip() and not line.startswith((" ", "\n")):
+                return re.sub(r"^\d\d:\d\d  ", "", line.strip()).split("  (")[0]
+        return "Review"
 
     def on_similar(self):
         if self._seed_is_search():
