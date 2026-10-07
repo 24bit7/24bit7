@@ -34,11 +34,11 @@ from tabs import rounded_shape
 # The console stays black and green in both themes; Review follows the theme (the 7 Oct mockups).
 CONSOLE = {"bg": "#000000", "accent": "#00ff41", "on_accent": "#000000"}
 DARK = {"bg": "#000000", "text": "#d8ffe0", "muted": "#7fbf8f", "line": "#123a1c", "accent": "#00ff41",
-        "on_accent": "#000000", "row_on": "#0b2412", "row_prev": "#2a1a08", "tick_off": "#2f6b3d",
+        "on_accent": "#000000", "row_on": "#0b2412", "stripe": "#07120a", "row_prev": "#2a1a08", "tick_off": "#2f6b3d",
         "tick_on_bg": "#000000", "tick_on_fg": "#00ff41", "act_bg": "#000000", "act_fg": "#00ff41",
         "act_hover": "#0b2412", "act_dim": "#1d4d2a", "act_dim_fg": "#1d4d2a"}
 LIGHT = {"bg": "#ffffff", "text": "#1a1a1a", "muted": "#4a4d52", "line": "#dcdfe3", "accent": "#1f4e8c",
-         "on_accent": "#ffffff", "row_on": "#e3edf9", "row_prev": "#fff1e0", "tick_off": "#9aa0a6",
+         "on_accent": "#ffffff", "row_on": "#e3edf9", "stripe": "#f6f7f9", "row_prev": "#fff1e0", "tick_off": "#9aa0a6",
          "tick_on_bg": "#1f4e8c", "tick_on_fg": "#ffffff", "act_bg": "#1f4e8c", "act_fg": "#ffffff",
          "act_hover": "#173d6e", "act_dim": "#a9b8cc", "act_dim_fg": "#ffffff"}
 ORANGE = "#f28c28"
@@ -518,9 +518,10 @@ class ReviewPanel:
 
     def _restyle(self):
         p = self.p
-        for key, (tick, texts) in self._cells.items():
+        for n_row, (key, (tick, texts)) in enumerate(self._cells.items()):
             on, prev = key in self.order, key == self.previewing
-            bg = p["row_prev"] if prev else (p["row_on"] if on else p["bg"])
+            plain = p["stripe"] if n_row % 2 else p["bg"]   # every other row a shade off, to follow along
+            bg = p["row_prev"] if prev else (p["row_on"] if on else plain)
             side = round(26 * self._k())
             box = self._shape(side, side, p["tick_on_bg"] if on else bg, p["accent"] if on else p["tick_off"],
                               line=2, radius=5)

@@ -1141,3 +1141,15 @@ def test_review_play_on_youtube(app, ui, monkeypatch):
 def test_review_has_no_status_line(app, ui):
     _review_with_zone(app, ui, _album(app))
     assert not ui.play.review_panel.status_label.winfo_manager()
+
+
+def test_review_rows_alternate_shading(app, ui):
+    keys = _review_with_zone(app, ui, _album(app))
+    panel = ui.play.review_panel
+    p = panel.p
+    shade = lambda k: panel._cells[k][1][0].cget("bg")
+    assert shade(keys[0]) == p["bg"] and shade(keys[1]) == p["stripe"] and shade(keys[2]) == p["bg"]
+    panel.toggle(keys[1])
+    assert shade(keys[1]) == p["row_on"], "a ticked row's shading wins over the stripe"
+    panel.toggle(keys[1])
+    assert shade(keys[1]) == p["stripe"]
