@@ -721,3 +721,116 @@ def test_play_build_leaves_review_closed(app, ui):
     play._run_job(lambda: play.report("Similar Tracks: x"), needs_playing=False, review=True)
     ui.pump(until=lambda: not play.running)
     assert not play.review_panel.showing and not play.review_panel.switch_row.winfo_manager()
+
+
+# --- Review: the actions ---
+
+def _review_with_zone(app, ui, playing=None, pos=1):
+    """A Review build of 6 library tracks for Speakers, with Speakers playing `playing` (or stopped)."""
+    play = ui.play
+    keys = [str(r["Key"]) for r in app.jriver.by_key.values()][20:26]
+    if playing:
+        app.jriver.play("Speakers", playing, pos=pos)
+    play.behaviour_var.set("Review")
+
+    def target():
+        play.report("Similar Artists: Moby - Porcelain  (target 30)")
+        app.engine.REVIEW_KEYS = list(keys)
+        app.engine.REVIEW_ZONE = app.jriver.zone("Speakers").id
+    play._run_job(target, needs_playing=False, review=True)
+    ui.pump(until=lambda: not play.running)
+    ui.pump(0.2)
+    return keys
+
+
+def _act(ui, how, ticks):
+    panel = ui.play.review_panel
+    for k in ticks:
+        panel.toggle(k)
+    panel._act(how)
+    ui.pump(until=lambda: not panel.busy)
+    ui.pump(0.2)
+    return panel
+
+
+
+def _album(app):
+    return [str(r["Key"]) for r in app.jriver.by_key.values()][:5]
+
+
+def test_review_add_as_up_next(app, ui):
+    album = _album(app)
+    keys = _review_with_zone(app, ui, album)
+    panel = _act(ui, "next", [keys[4], keys[0]])
+    z = app.jriver.zone("Speakers")
+    assert z.playlist == album[:2] + [keys[4], keys[0]] + album[2:], "after the current song, in tick order"
+    assert z.state == 2 and z.pos == 1
+    assert panel.ticked_keys() == [], "ticks clear once it's gone"
+    assert "added as Up Next in Speakers" in ui.play.log.get("1.0", "end")
+
+
+def test_review_add_to_end(app, ui):
+    album = _album(app)
+    keys = _review_with_zone(app, ui, album)
+    _act(ui, "end", [keys[1], keys[2]])
+    assert app.jriver.zone("Speakers").playlist == album + [keys[1], keys[2]]
+
+
+def test_review_finish_this_song_load_as_new(app, ui):
+    album = _album(app)
+    keys = _review_with_zone(app, ui, album)
+    _act(ui, "finish", [keys[2], keys[3]])
+    z = app.jriver.zone("Speakers")
+    assert z.playlist == [album[1], keys[2], keys[3]] and z.pos == 0, "the current song, then only these"
+    assert z.state == 2
+
+
+def test_review_stop_song_load_as_new(app, ui):
+    album = _album(app)
+    keys = _review_with_zone(app, ui, album)
+    _act(ui, "stop", [keys[5], keys[0]])
+    z = app.jriver.zone("Speakers")
+    assert z.playlist == [keys[5], keys[0]] and z.pos == 0 and z.state == 2
+
+
+def test_review_load_as_new_on_a_stopped_zone_plays(app, ui):
+    keys = _review_with_zone(app, ui)
+    _act(ui, "finish", [keys[1]])
+    z = app.jriver.zone("Speakers")
+    assert z.playlist == [keys[1]] and z.state == 2
+
+
+def test_review_actions_need_a_tick(app, ui):
+    keys = _review_with_zone(app, ui, _album(app))
+    panel = ui.play.review_panel
+    before = list(app.jriver.zone("Speakers").playlist)
+    panel._act("next")
+    ui.pump(0.3)
+    assert app.jriver.zone("Speakers").playlist == before and not panel.busy
+
+
+def test_review_save_as_playlist(app, ui, monkeypatch):
+    from tkinter import simpledialog
+    monkeypatch.setattr(simpledialog, "askstring", lambda *a, **k: "Wedding Extras")
+    keys = _review_with_zone(app, ui, _album(app))
+    before = list(app.jriver.zone("Speakers").playlist)
+    panel = ui.play.review_panel
+    for k in (keys[3], keys[0]):
+        panel.toggle(k)
+    panel._save()
+    ui.pump(until=lambda: not panel.busy)
+    saved = [p for p in app.jriver.playlists if p["Name"] == "Wedding Extras"]
+    assert saved and saved[0]["keys"] == [keys[3], keys[0]]
+    assert app.jriver.zone("Speakers").playlist == before, "saving plays nothing"
+
+
+def test_review_save_asks_before_replacing(app, ui, monkeypatch):
+    from tkinter import simpledialog
+    monkeypatch.setattr(simpledialog, "askstring", lambda *a, **k: "Sunday Morning")   # already exists
+    keys = _review_with_zone(app, ui)
+    panel = ui.play.review_panel
+    panel.toggle(keys[0])
+    panel._save()   # the fixture answers No
+    ui.pump(0.3)
+    sunday = next(p for p in app.jriver.playlists if p["Name"] == "Sunday Morning")
+    assert keys[0] not in sunday["keys"], "kept, as the answer was No"

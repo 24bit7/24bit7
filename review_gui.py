@@ -7,15 +7,34 @@ number), then choose what to do with them. A Console | Review switch above the c
 moves between the two; the console keeps running underneath, and a dot on Console says
 something new arrived there while Review was showing.
 
+The actions send the ticked tracks, in tick order, to the zone the build was for:
+Add as Up Next, Add to End, Finish This Song, Load as New, Stop Song, Load as New,
+and Save as Playlist. The ticks clear once an action has gone through.
+
 The list stays until the next Review build replaces it.
 """
+import threading
+import time
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox, simpledialog
+
+import engine
+from settings_gui import Tooltip
 
 BLACK, GREEN, DIM, WHITE, MUTED = "#000000", "#00ff41", "#0d4d1c", "#ffffff", "#7fbf8f"
 ROW_ON = "#0b2412"            # a ticked row
 FONT, BOLD = ("Consolas", 9), ("Consolas", 9, "bold")
 DOT = "\u25cf"
+
+# (how, button, what it does): the two Adds keep Playing Now, the two Load as New replace it
+ACTIONS = [
+    ("next", "Add as Up Next", "Plays after the current song, then the rest of Playing Now carries on."),
+    ("end", "Add to End", "Goes after everything already in Playing Now."),
+    ("finish", "Finish This Song, Load as New", "The current song finishes, then Playing Now holds only these."),
+    ("stop", "Stop Song, Load as New", "The current song stops and these play straight away. "
+                                       "Playing Now holds only these."),
+]
+SAVE_TIP = "Nothing plays and Playing Now isn't touched. Saves these as a JRiver playlist."
 
 # (title, width in characters, stretch): Artist, Title and Album share the spare room
 COLUMNS = [("Add", 4, 0), ("Artist", 18, 2), ("Title", 24, 3), ("Album", 18, 2), ("Time", 6, 0), ("BPM", 5, 0)]
@@ -38,6 +57,8 @@ class ReviewPanel:
         self.rows, self.order, self.title, self.zone = [], [], "", None
         self.showing = False
         self.dot = False
+        self.busy = False
+        self._buttons = {}
         self._cells = {}          # key -> (tick label, [text labels])
         self._build_switch()
         self._build_frame()
@@ -95,6 +116,7 @@ class ReviewPanel:
         tk.Frame(self.frame, bg=GREEN, height=1).pack(fill="x", padx=8)
         self.action_bar = tk.Frame(self.frame, bg=BLACK)  # the actions, along the bottom
         self.action_bar.pack(side="bottom", fill="x", padx=8, pady=(6, 8))
+        self._build_actions()
 
         holder = tk.Frame(self.frame, bg=BLACK)
         holder.pack(fill="both", expand=True)
@@ -113,6 +135,95 @@ class ReviewPanel:
         canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", wheel))
         canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
         self.canvas = canvas
+
+    # --- the actions ---
+
+    def _action_button(self, parent, text, command, tip):
+        b = tk.Label(parent, text=text, font=("Segoe UI", 9, "bold"), bg=BLACK, fg=GREEN, padx=12, pady=4,
+                     cursor="hand2", highlightthickness=1, highlightbackground=GREEN, highlightcolor=GREEN)
+        b.bind("<Button-1>", lambda e: command())
+        b.bind("<Enter>", lambda e: b.config(bg=DIM) if self._can_act() else None, add="+")
+        b.bind("<Leave>", lambda e: b.config(bg=BLACK), add="+")
+        Tooltip(b, tip)
+        return b
+
+    def _build_actions(self):
+        bar = self.action_bar
+        tk.Frame(bar, bg=DIM, height=1).pack(fill="x", pady=(0, 8))
+        row = tk.Frame(bar, bg=BLACK)
+        row.pack(fill="x")
+        self.into_label = tk.Label(row, text="", font=FONT, bg=BLACK, fg=MUTED)
+        self.into_label.pack(side="left", padx=(0, 10))
+        for n, (how, text, tip) in enumerate(ACTIONS):
+            if n == 2:   # the two Adds, then the two Load as New
+                tk.Frame(row, bg=DIM, width=1, height=22).pack(side="left", padx=(4, 10))
+            b = self._action_button(row, text, lambda h=how: self._act(h), tip)
+            b.pack(side="left", padx=(0, 6))
+            self._buttons[how] = b
+        save = self._action_button(row, "Save as Playlist", self._save, SAVE_TIP)
+        save.pack(side="right")
+        self._buttons["save"] = save
+        self.status_label = tk.Label(bar, text="", font=FONT, bg=BLACK, fg=MUTED, anchor="w")
+        self.status_label.pack(fill="x", pady=(6, 0))
+
+    def _can_act(self):
+        return bool(self.order) and not self.busy and self.zone is not None
+
+    def _sync_buttons(self):
+        ok = self._can_act()
+        for b in self._buttons.values():
+            b.config(fg=GREEN if ok else DIM, highlightbackground=GREEN if ok else DIM,
+                     cursor="hand2" if ok else "")
+        try:
+            where = engine.zone_label(self.zone) if self.zone is not None else ""
+        except Exception:
+            where = ""
+        self.into_label.config(text=f"Into {where}" if where else "")
+
+    def _run(self, work):
+        """Runs a JRiver call off the main thread, then reports it in the console and under the actions."""
+        self.busy = True
+        self._sync_buttons()
+        self.status_label.config(text="Sending to JRiver...")
+
+        def worker():
+            try:
+                line = work()
+            except Exception as e:
+                line = f"Problem: Review couldn't send that to JRiver ({e})."
+            self.play.root.after(0, lambda: self._done(line))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _done(self, line):
+        self.busy = False
+        self.play._append_log(time.strftime("%H:%M") + "  " + line)
+        self.dot = False   # our own line, not news from elsewhere
+        self.status_label.config(text=line.replace("Review: ", "", 1))
+        if not line.startswith("Problem:"):
+            self.order = []
+        self._restyle()
+
+    def _act(self, how):
+        if not self._can_act():
+            return
+        keys, zone = list(self.order), self.zone
+        self._run(lambda: engine.review_send(keys, how, zone))
+
+    def _save(self):
+        if not self._can_act():
+            return
+        default = self.title.replace("\\", " ").replace("/", " ") or "24bit7 Review"
+        name = simpledialog.askstring("Save as Playlist", "Name for the JRiver playlist:",
+                                      initialvalue=default, parent=self.frame)
+        name = (name or "").strip().replace("\\", " ").replace("/", " ")
+        if not name:
+            return
+        if engine.playlist_exists(name) and not messagebox.askyesno(
+                "Save as Playlist", f"JRiver already has a playlist called \"{name}\". Replace it?",
+                parent=self.frame):
+            return
+        keys = list(self.order)
+        self._run(lambda: engine.review_save(keys, name))
 
     # --- moving between Console and Review ---
 
@@ -165,6 +276,7 @@ class ReviewPanel:
         """A Review build finished: its tracks replace the list, nothing ticked, and Review shows."""
         self.rows = [dict(r) for r in rows or []]
         self.order, self.title, self.zone = [], title, zone
+        self.status_label.config(text="")
         self._render()
         if self.rows:
             self.show_review()
@@ -212,9 +324,12 @@ class ReviewPanel:
         self.title_label.config(text=self.title)
         self.count_label.config(text=f"{n} track{'' if n == 1 else 's'}, {len(self.order)} ticked")
         self._style_switch()
+        self._sync_buttons()
 
     def toggle(self, key):
         """Ticking adds the track at the end of the order; unticking closes the gap."""
+        if self.busy:
+            return
         if key in self.order:
             self.order.remove(key)
         else:

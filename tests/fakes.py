@@ -288,6 +288,21 @@ class FakeJRiver:
             pl = next(p for p in self.playlists if p["ID"] == str(params.get("Playlist")))
             z.playlist, z.pos, z.state = list(pl["keys"]), 0, 2
             return Resp(text=_response({}))
+        if path == "Playlists/Add":
+            name = str(params.get("Path", ""))
+            old = next((p for p in self.playlists if p["Path"] == name and p["Type"] == "Playlist"), None)
+            if old is not None and params.get("CreateMode") == "Overwrite":
+                old["keys"], pid = [], old["ID"]
+            else:
+                pid = str(300 + len(self.playlists))
+                self.add_playlist(pid, name.split("\\")[-1], name, "Playlist", [])
+            return Resp(text=_response({"PlaylistID": pid}))
+        if path == "Playlist/AddFile":
+            return Resp(status=500, text="")   # as on a real JRiver: AddFiles is the one that works
+        if path == "Playlist/AddFiles":
+            pl = next(p for p in self.playlists if p["ID"] == str(params.get("Playlist")))
+            pl["keys"] += [k for k in str(params.get("Keys", "")).split(",") if k]
+            return Resp(text=_response({}))
         if path == "Playlists/List":
             body = "".join("<Item>" + "".join(f"<Field Name=\"{k}\">{escape(v)}</Field>"
                                               for k, v in p.items() if k != "keys") + "</Item>"

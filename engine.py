@@ -2787,6 +2787,85 @@ def review_rows(keys):
         rows.append({"key": str(k), "artist": row.get("Artist", ""), "title": row.get("Name", "") or f"Track {k}",
                      "album": row.get("Album", ""), "seconds": seconds, "bpm": bpm})
     return rows
+
+
+REVIEW_ACTIONS = {
+    "next": "Add as Up Next",
+    "end": "Add to End",
+    "finish": "Finish This Song, Load as New",
+    "stop": "Stop Song, Load as New",
+}
+
+
+def review_send(keys, how, zone):
+    """
+    Sends the ticked Review tracks to a zone, in tick order. how:
+      next    after the current song, then the rest of Playing Now carries on
+      end     after everything already in Playing Now
+      finish  the current song finishes, then Playing Now holds only these
+      stop    the current song stops and these play now; Playing Now holds only these
+    A stopped zone: the Adds just add; both Load as New choices start these playing.
+    Returns the console line.
+    """
+    keys = [str(k) for k in keys if k]
+    if not keys:
+        return "Review: nothing ticked, so nothing sent."
+    label = zone_label(zone)
+    n = f"{len(keys)} track{'' if len(keys) == 1 else 's'}"
+    if how == "next":
+        requests.get(f"{JRIVER_BASE}/Playback/PlayByKey",
+                     params={"Key": ",".join(keys), "Location": "Next", "Zone": zone}, auth=AUTH, timeout=10)
+        return f"Review: {n} added as Up Next in {label}."
+    if how == "end":
+        queue_tracks(keys, zone)
+        return f"Review: {n} added to the end of Playing Now in {label}."
+    was_playing = not jriver_is_stopped(zone)
+    if was_playing and how == "finish":
+        clear_around_current(zone)
+        queue_tracks(keys, zone)
+        return f"Review: {n} loaded as new in {label}, after the song playing now."
+    if was_playing:   # Stop Song: stop, empty Playing Now, then load and play as a stopped zone does
+        requests.get(f"{JRIVER_BASE}/Playback/Stop", params={"Zone": zone}, auth=AUTH, timeout=10)
+        clear_around_current(zone)
+        remove_from_playing_now(0, zone)   # the song that was playing
+    requests.get(f"{JRIVER_BASE}/Playback/PlayByKey",
+                 params={"Key": ",".join(keys), "Zone": zone}, auth=AUTH, timeout=10)
+    if was_playing:
+        return f"Review: song stopped, {n} loaded as new in {label}, playing now."
+    return f"Review: {n} loaded as new in {label}, playing now."
+
+
+def playlist_exists(name):
+    """True when JRiver already has a playlist (not a smartlist) with this name or path."""
+    try:
+        r = requests.get(f"{JRIVER_BASE}/Playlists/List", auth=AUTH, timeout=10)
+        for item in ET.fromstring(r.text).findall(".//Item"):
+            f = {x.get("Name"): (x.text or "") for x in item.findall("Field")}
+            if f.get("Type") == "Playlist" and name.lower() in (f.get("Name", "").lower(), f.get("Path", "").lower()):
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def review_save(keys, name):
+    """Saves the ticked Review tracks, in tick order, as a JRiver playlist. Replaces one of that name."""
+    keys = [str(k) for k in keys if k]
+    r = requests.get(f"{JRIVER_BASE}/Playlists/Add",
+                     params={"Type": "Playlist", "Path": name, "CreateMode": "Overwrite"}, auth=AUTH, timeout=10)
+    pid = ""
+    try:
+        pid = next((i.text or "").strip() for i in ET.fromstring(r.text).findall("Item")
+                   if i.get("Name") == "PlaylistID")
+    except (ET.ParseError, StopIteration):
+        pass
+    if not pid:
+        raise RuntimeError("JRiver didn't create the playlist")
+    r = requests.get(f"{JRIVER_BASE}/Playlist/AddFiles",
+                     params={"PlaylistType": "ID", "Playlist": pid, "Keys": ",".join(keys)}, auth=AUTH, timeout=10)
+    r.raise_for_status()
+    n = f"{len(keys)} track{'' if len(keys) == 1 else 's'}"
+    return f"Review: {n} saved as the JRiver playlist \"{name}\"."
 MIX_FAST_KEY = None      # an Add before playlist's first track, started by fast start
 MIX_NOTED = False        # the "left out on YouTube" note has been logged this build
 CANCEL_CHECK = None      # set by voice.py: returns True once a newer command has taken over
