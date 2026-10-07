@@ -24,7 +24,10 @@ CURRENT_KEY = "PROFILE_CURRENT"   # in .env: the profile last loaded or saved
 
 # .env settings beyond Settings > Sources and Playlist (engine.PROFILE_KEYS)
 EXTRA_ENV_KEYS = ["PLAY_BEHAVIOUR", "OUTPUT_TARGET", "YOUTUBE_PLAYLIST_LENGTH", "PREFER_OFFICIAL_VIDEOS",
-                  "REVIEW_PREVIEW_ZONE", "CACHE_KEEP", "CONSOLE_MODE", "CONSOLE_QUERY"]
+                  "REVIEW_PREVIEW_ZONE", "CACHE_KEEP", "CONSOLE_MODE", "CONSOLE_QUERY",
+                  # the AI Playlist window's choices (a DJ profile can open on Steer with its usual chips)
+                  "AI_DIALOG_MODE", "AI_CREATE_THEME", "AI_IF_SHORT", "AI_STEER_SEED", "AI_STEER_TONE",
+                  "AI_STEER_DIRS", "AI_STEER_OWN", "AI_STEER_STRENGTH", "AI_STEER_COUNT"]
 # kept in the database's meta table: Filters, JRiver Playlists (Windows Main), Add Playlist rows
 META_KEYS = ["filters", "saved_playlists", "play_mix"]
 

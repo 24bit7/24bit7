@@ -1742,6 +1742,20 @@ AI_VIBE_PROMPT = (
     "Respond with a JSON array of objects with keys \"artist\" and \"track\" only, "
     "compact on a single line with no indentation or line breaks, no commentary, no code fences."
 )
+AI_TONE_PROMPT = (
+    "Here are some tracks a listener is playing:\n{tracks}\n\n"
+    "Describe their shared tone in one short phrase a DJ would understand: genre or era, "
+    "tempo feel, energy and mood. Under fifteen words, no artist names. "
+    "Respond with the phrase only, no quotes, no commentary."
+)
+AI_STEER_PROMPT = (
+    "A listener is playing these tracks:\n{tracks}\n{tone_line}"
+    "Suggest {count} songs that move from there {how} in this direction: {direction}. "
+    "Keep what makes the current music work while shifting it as asked; don't repeat the tracks above. "
+    "Favour well-known, widely-available recordings across a range of artists. "
+    "Respond with a JSON array of objects with keys \"artist\" and \"track\" only, "
+    "compact on a single line with no indentation or line breaks, no commentary, no code fences."
+)
 AI_VIBE_SUGGESTIONS_PROMPT = (
     "Suggest three short, evocative music playlist moods a listener might enjoy, "
     "each under eight words (for example a time of day, activity, feeling or era). "
@@ -1865,6 +1879,27 @@ def _json_body(text):
     return text[start:end + 1] if end > start else text[start:]
 
 
+def ai_ask_text(prompt, max_tokens=200, feature="AI"):
+    """Sends a prompt expecting a short plain answer; returns the text, or '' if it couldn't be had."""
+    global AI_LAST_ERROR
+    if not ANTHROPIC_API_KEY:
+        AI_LAST_ERROR = "no API key"
+        return ""
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        message = _ai_create(client, feature, model=AI_MODEL, max_tokens=max_tokens,
+                             messages=[{"role": "user", "content": prompt}])
+        AI_LAST_ERROR = ""
+        return "".join(b.text for b in message.content if getattr(b, "type", "") == "text")
+    except ImportError:
+        AI_LAST_ERROR = "anthropic package not installed"
+    except Exception as e:
+        AI_LAST_ERROR = f"request failed: {e.__class__.__name__}"
+        debug(f"AI request failed: {e}")
+    return ""
+
+
 def ai_ask_json(prompt, max_tokens=4000, feature="AI"):
     """Sends a prompt expecting JSON; returns the parsed value, what could be salvaged, or None."""
     global AI_LAST_ERROR
@@ -1922,9 +1957,10 @@ def ai_vibe_suggestions():
     return []
 
 
-def ai_vibe_tracks(vibe, count, avoid=()):
-    """Artist/track pairs for a vibe, leaving out any 'Artist - Title' in avoid. Returns [(artist, track)]."""
-    prompt = AI_VIBE_PROMPT.format(vibe=vibe, count=count)
+def ai_vibe_tracks(vibe, count, avoid=(), prompt=None):
+    """Artist/track pairs for a vibe (or a ready prompt), leaving out any 'Artist - Title' in avoid.
+    Returns [(artist, track)]."""
+    prompt = prompt or AI_VIBE_PROMPT.format(vibe=vibe, count=count)
     if avoid:
         prompt += ("\n\nDon't include any of these, which have already been used or tried:\n"
                    + "\n".join(list(avoid)[-150:]))
@@ -4368,7 +4404,81 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
 # Mode 4: Vibe Playlist (AI-described mood)
 # ---------------------------------------------------------------------------
 
-def create_vibe_playlist(vibe, report=print, count=None):
+STEER_DIRECTIONS = [("dancier", "Dancier"), ("calmer", "Calmer"), ("faster", "Faster"), ("slower", "Slower"),
+                    ("darker", "Darker"), ("brighter", "Brighter"), ("older", "Older"), ("newer", "Newer"),
+                    ("deeper", "Deeper Cuts"), ("known", "Better Known")]
+STEER_SEED_CAP = 50   # Playing Now (All) sends at most this many tracks, around the current one
+
+
+def steer_seed_pairs(all_tracks=False, zone=None):
+    """
+    What Steer starts from: [(artist, title)] for the current track, or for Playing Now (All)
+    the tracks around it, up to STEER_SEED_CAP. [] when nothing is playing.
+    """
+    zone = zone if zone is not None else seed_zone()
+    info = get_playing_info(zone) or {}
+    pos = info.get("PlayingNowPosition", "-1")
+    if not all_tracks:
+        name, artist = (info.get("Name") or "").strip(), (info.get("Artist") or "").split(";")[0].strip()
+        if pos == "-1" or not name or name == "Unknown":
+            return []
+        return [(deinvert_the(artist), name)]
+    rows = playing_now_rows(zone)
+    if not rows:
+        return []
+    try:
+        at = max(0, int(pos))
+    except (TypeError, ValueError):
+        at = 0
+    if len(rows) > STEER_SEED_CAP:
+        start = max(0, min(at - STEER_SEED_CAP // 2, len(rows) - STEER_SEED_CAP))
+        rows = rows[start:start + STEER_SEED_CAP]
+    return [(deinvert_the((r.get("Artist") or "").split(";")[0].strip()), (r.get("Name") or "").strip())
+            for r in rows if r.get("Name")]
+
+
+def _tracks_block(pairs):
+    return "\n".join(f"- {a} - {t}" for a, t in pairs)
+
+
+def ai_assess_tone(pairs):
+    """One short phrase describing the tone of these tracks, or '' if the AI has nothing."""
+    if not pairs:
+        return ""
+    text = ai_ask_text(AI_TONE_PROMPT.format(tracks=_tracks_block(pairs)), max_tokens=80, feature="Assess Tone")
+    return (text or "").strip().strip('"').rstrip(".")
+
+
+def steer_description(directions, own_words, strength):
+    """The direction as words for the AI and the console: 'dancier and faster, more Latin (a lot)'."""
+    names = dict(STEER_DIRECTIONS)
+    parts = [names[d].lower() for d in directions if d in names]
+    if own_words:
+        parts.append(own_words.strip())
+    if not parts:
+        return "the same feel, fresh tracks"
+    return ", ".join(parts[:-1]) + (" and " if len(parts) > 1 else "") + parts[-1]
+
+
+def steer_playlist(seed_pairs, directions, own_words="", strength="little", tone="", count=12, report=print):
+    """
+    AI Playlist > Steer: tracks that move on from what's playing in a chosen direction.
+    seed_pairs: the tracks to start from; tone: a phrase (from Assess Tone or typed), or ''.
+    Runs as an AI Playlist build, so Behaviour (Play / Review) and Output apply as usual.
+    """
+    if not seed_pairs:
+        report("Problem: nothing is playing to steer from. Start a track, or use Create.")
+        return
+    direction = steer_description(directions, own_words, strength)
+    how = "a long way" if strength == "lot" else "a little"
+    tone_line = f"Their tone: {tone}.\n" if tone else ""
+    prompt = AI_STEER_PROMPT.format(tracks=_tracks_block(seed_pairs), tone_line=tone_line, count="{count}",
+                                    how=how, direction=direction)
+    label = f"Steer: {direction} ({how})" + (f", from {len(seed_pairs)} tracks" if len(seed_pairs) > 1 else "")
+    create_vibe_playlist(label, report=report, count=count, prompt=prompt)
+
+
+def create_vibe_playlist(vibe, report=print, count=None, prompt=None):
     """
     Builds a playlist from a text description of a mood.
     AI suggests artist/track pairs (always AI, regardless of source settings,
@@ -4398,7 +4508,7 @@ def create_vibe_playlist(vibe, report=print, count=None):
     wanted = target   # the AI's own picks aren't moderated, so no extras are needed
 
     report("  Asking the AI for tracks...")
-    pairs = ai_vibe_tracks(vibe, count=wanted)
+    pairs = ai_vibe_tracks(vibe, count=wanted, prompt=prompt.replace("{count}", str(wanted)) if prompt else None)
     if not pairs:
         report("  Problem: the AI returned nothing usable.")
         session_finish(session_id, send_mix_only(fast, None, report), report=report)

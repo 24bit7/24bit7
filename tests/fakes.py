@@ -499,6 +499,11 @@ class FakeAI:
         if m:
             return json.dumps([{"artist": a, "track": t} for a, t in self.web.similar_tracks(m.group(2), m.group(1))],
                               separators=(",", ":"))
+        if "shared tone" in prompt:
+            return "Warm late-70s disco and funk, mid-tempo, upbeat"
+        if "move from there" in prompt:
+            pairs = [(r["Artist"], r["Name"]) for r in self.web.j.tracks if r["Artist"] != "Various Artists"][1::2]
+            return json.dumps([{"artist": a, "track": t} for a, t in pairs])
         if "playlist moods" in prompt:
             return json.dumps(["Sunday morning coffee", "Late night drive", "Summer garden party"])
         if "fit this mood" in prompt:

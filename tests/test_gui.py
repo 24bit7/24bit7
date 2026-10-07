@@ -1184,10 +1184,56 @@ def test_ai_playlist_window_create(app, ui, monkeypatch):
     dlg2.destroy()
 
 
-def test_ai_playlist_steer_not_yet(app, ui):
-    import ai_dialog
-    dlg = ai_dialog.AIPlaylistDialog(ui.play.root, play=ui.play, on_create=lambda t, n: None)
+
+# --- AI Playlist window (Steer) ---
+
+def test_ai_playlist_steer(app, ui):
+    import ai_dialog, settings_gui
+    album = _album(app)
+    app.jriver.play("Speakers", album, pos=1)
+    got = {}
+    dlg = ai_dialog.AIPlaylistDialog(ui.play.root, play=ui.play, on_create=lambda t, n: None,
+                                     on_steer=lambda spec: got.update(spec))
     ui.pump(0.3)
     dlg.set_mode("steer")
-    assert dlg.mode == "create" and "next build" in dlg.mode_note.cget("text")
-    dlg.destroy()
+    ui.pump(0.5)
+    assert dlg.go_btn.cget("text") == "Steer" and settings_gui.read_env().get("AI_DIALOG_MODE") == "steer"
+    assert dlg.seed_note.cget("text") and dlg.seed_note.cget("text") != "Nothing is playing."
+    dlg.set_seed("all")
+    ui.pump(0.5)
+    assert dlg.seed_note.cget("text") == f"{len(album)} tracks"
+    dlg.toggle_direction("dancier"); dlg.toggle_direction("faster")
+    dlg.set_strength("lot")
+    dlg.assess_tone()
+    ui.pump(until=lambda: dlg.tone_text() != "", timeout=5)
+    assert dlg.tone_text() == "Warm late-70s disco and funk, mid-tempo, upbeat"
+    dlg.own.insert(0, "more Latin")
+    dlg.submit()
+    ui.pump(0.1)
+    assert got["seed_kind"] == "all" and got["directions"] == ["dancier", "faster"] and got["strength"] == "lot"
+    assert got["own_words"] == "more Latin" and got["count"] == 12
+    env = settings_gui.read_env()
+    assert env.get("AI_STEER_DIRS") == "dancier,faster" and env.get("AI_STEER_OWN") == "more Latin"
+    # next time: opens on Steer with everything as left
+    dlg2 = ai_dialog.AIPlaylistDialog(ui.play.root, play=ui.play, on_create=lambda t, n: None)
+    ui.pump(0.3)
+    assert dlg2.mode == "steer" and dlg2.directions == ["dancier", "faster"] and dlg2.strength == "lot"
+    assert dlg2.tone_text().startswith("Warm late-70s") and dlg2.own.get() == "more Latin"
+    dlg2.destroy()
+
+
+def test_steer_build_reaches_review(app, ui):
+    album = _album(app)
+    app.jriver.play("Speakers", album, pos=1)
+    play = ui.play
+    play.behaviour_var.set("Review"); play._on_behaviour_changed()
+    pairs = app.engine.steer_seed_pairs(all_tracks=False)
+    assert len(pairs) == 1
+    play._run_job(lambda: app.engine.steer_playlist(pairs, ["dancier"], "", "little", "a tone", 6, report=play.report),
+                  needs_playing=False, review=True)
+    ui.pump(until=lambda: not play.running, timeout=20)
+    log = play.log.get("1.0", "end")
+    assert "AI Playlist: Steer: dancier (a little)" in log
+    assert "move from there a little in this direction: dancier" in app.ai.sent[-1]
+    assert "Their tone: a tone." in app.ai.sent[-1]
+    assert play.review_panel.rows, "the tracks landed in Review"
