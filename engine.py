@@ -3576,6 +3576,8 @@ class Drift:
                  played=None, vibe=None):
         cfg = DRIFT.get(group, {})
         self.vibe = vibe          # a vibe playlist's description, for Drift using the AI
+        self.prompt = None        # or a ready prompt with {count} in it (Steer), used instead of the description
+        self.check = None         # Steer's BpmCheck, applied to the AI's picks in its rounds too
         self.ai_tried = set()     # (artist, title) the AI suggested that weren't used
         self.played = played      # the mode's PlayedFilter, so Drift skips recent plays too
         self.seed = seed          # what the AI Moderator judges each round against
@@ -3834,7 +3836,9 @@ class Drift:
         if not self.vibe:
             return
         avoid = [f"{a} - {t}" for a, t, _, _ in self.finds] + [f"{a} - {t}" for a, t in self.ai_tried]
-        pairs = ai_vibe_tracks(self.vibe, max(5, self.target - len(keys) + 5), avoid=avoid)
+        want = max(5, self.target - len(keys) + 5)
+        pairs = ai_vibe_tracks(self.vibe, want, avoid=avoid,
+                               prompt=self.prompt.replace("{count}", str(want)) if self.prompt else None)
         prefetch_youtube_ids(pairs)
         for artist, track in pairs:
             if len(keys) >= self.target:
@@ -3845,6 +3849,9 @@ class Drift:
             self.checked.add(ident)
             key = find_jriver_key_by_track(artist, track)
             session_log(self.session_id, artist, track, "AI", found=bool(key))
+            if key and self.check is not None and not self.check.allows(key, artist, track):
+                self.ai_tried.add((artist, track))
+                continue
             if self._take(keys, artist, track, key, 1):
                 self.report(f"    In library: {artist} - {track}  (AI)")
             else:
@@ -4460,7 +4467,68 @@ def steer_description(directions, own_words, strength):
     return ", ".join(parts[:-1]) + (" and " if len(parts) > 1 else "") + parts[-1]
 
 
-def steer_playlist(seed_pairs, directions, own_words="", strength="little", tone="", count=12, report=print):
+IF_SHORT_NAMES = {"ask": "Ask Again", "drift": "Drift", "leave": "Leave Short"}
+
+
+def library_bpm(key):
+    """A library track's BPM as a number, or None when it isn't tagged."""
+    import library   # here rather than at the top: it imports engine
+    try:
+        library.ensure_loaded()
+        value = (library.track_row(key) or {}).get("BPM") or ""
+        bpm = float(str(value).strip())
+        return bpm if bpm > 0 else None
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+class BpmCheck:
+    """
+    Steer asked for Faster or Slower: where both the seed and a pick carry BPM tags, a pick
+    heading the wrong way is left out, and the console sums it up at the end. Untagged
+    tracks are trusted to the AI. Inactive when neither (or both) was asked for.
+    """
+
+    def __init__(self, seed_keys, directions, report=print):
+        self.report = report
+        self.faster, self.slower = "faster" in directions, "slower" in directions
+        self.active = self.faster != self.slower
+        self.seed_bpm = None
+        self.dropped, self.untagged, self.kept = 0, 0, 0
+        if self.active:
+            bpms = [b for b in (library_bpm(k) for k in seed_keys) if b]
+            self.seed_bpm = sum(bpms) / len(bpms) if bpms else None
+
+    def allows(self, key, artist="", track=""):
+        """True if the pick may go in."""
+        if not self.active or self.seed_bpm is None:
+            return True
+        bpm = library_bpm(key)
+        if bpm is None:
+            self.untagged += 1
+            return True
+        if (self.faster and bpm < self.seed_bpm) or (self.slower and bpm > self.seed_bpm):
+            self.dropped += 1
+            self.report(f"    Left out: {artist} - {track}  ({bpm:.0f} BPM, not "
+                        f"{'faster' if self.faster else 'slower'} than the seed's {self.seed_bpm:.0f})")
+            return False
+        self.kept += 1
+        return True
+
+    def summary(self):
+        if not self.active:
+            return
+        if self.seed_bpm is None:
+            self.report("  Note: the seed has no BPM tag, so Faster/Slower was left to the AI's judgement.")
+            return
+        word = "faster" if self.faster else "slower"
+        tail = f"; {self.untagged} untagged, trusted to the AI" if self.untagged else ""
+        self.report(f"  BPM check against the seed's {self.seed_bpm:.0f} BPM: {self.kept} {word}, "
+                    f"{self.dropped} left out{tail}.")
+
+
+def steer_playlist(seed_pairs, directions, own_words="", strength="little", tone="", count=12, report=print,
+                   if_short=None):
     """
     AI Playlist > Steer: tracks that move on from what's playing in a chosen direction.
     seed_pairs: the tracks to start from; tone: a phrase (from Assess Tone or typed), or ''.
@@ -4475,10 +4543,14 @@ def steer_playlist(seed_pairs, directions, own_words="", strength="little", tone
     prompt = AI_STEER_PROMPT.format(tracks=_tracks_block(seed_pairs), tone_line=tone_line, count="{count}",
                                     how=how, direction=direction)
     label = f"Steer: {direction} ({how})" + (f", from {len(seed_pairs)} tracks" if len(seed_pairs) > 1 else "")
-    create_vibe_playlist(label, report=report, count=count, prompt=prompt)
+    check = None
+    if ("faster" in directions) != ("slower" in directions):
+        seed_keys = [k for k in (find_jriver_key_by_track(a, t) for a, t in seed_pairs) if k]
+        check = BpmCheck(seed_keys, directions, report)
+    create_vibe_playlist(label, report=report, count=count, prompt=prompt, if_short=if_short, check=check)
 
 
-def create_vibe_playlist(vibe, report=print, count=None, prompt=None):
+def create_vibe_playlist(vibe, report=print, count=None, prompt=None, if_short=None, check=None):
     """
     Builds a playlist from a text description of a mood.
     AI suggests artist/track pairs (always AI, regardless of source settings,
@@ -4497,7 +4569,8 @@ def create_vibe_playlist(vibe, report=print, count=None, prompt=None):
         report("Problem: AI Playlist needs an Anthropic key. " + KEY_HELP_LINE)
         return
     target = VIBE_TRACK_COUNT if count is None else min(100, max(5, int(count)))
-    report(f"AI Playlist: {vibe}  (target {target} tracks)")
+    report(f"AI Playlist: {vibe}  (target {target} tracks"
+           + (f", if short: {IF_SHORT_NAMES[if_short]}" if if_short in IF_SHORT_NAMES else "") + ")")
 
     seed_info = {"Artist": "AI Playlist", "Name": vibe, "Album": ""}
     session_id = session_start("vibe", seed_info, "AI")
@@ -4505,7 +4578,16 @@ def create_vibe_playlist(vibe, report=print, count=None, prompt=None):
     played = PlayedFilter("vibe", report=report, filters=True)
     drift = Drift("vibe", target, session_id, report, per_artist=TRACKS_PER_ARTIST_PICK, seed=f"vibe: {vibe}",
                   played=played, vibe=vibe)
-    wanted = target   # the AI's own picks aren't moderated, so no extras are needed
+    drift.prompt, drift.check = prompt, check
+    if if_short == "ask":        # the AI Playlist window's If Short: asked again, up to two more rounds
+        drift.on, drift.using, drift.rounds = True, "ai", 2
+    elif if_short == "drift":    # topped up from the music sources with the Drift settings
+        drift.on = True
+        if drift.using == "ai":
+            drift.using = "tracks"
+    elif if_short == "leave":
+        drift.on = False
+    wanted = min(100, target * 2)   # about twice as many as needed: some won't be in the library
 
     report("  Asking the AI for tracks...")
     pairs = ai_vibe_tracks(vibe, count=wanted, prompt=prompt.replace("{count}", str(wanted)) if prompt else None)
@@ -4518,6 +4600,10 @@ def create_vibe_playlist(vibe, report=print, count=None, prompt=None):
     keys, misses = [], 0
     for artist, track in pairs:
         key = find_jriver_key_by_track(artist, track)
+        if key and check is not None and not check.allows(key, artist, track):
+            drift.ai_tried.add((artist, track))
+            session_log(session_id, artist, track, "AI", found=True)
+            continue
         if key:
             report(f"    In library: {artist} - {track}")
             if key not in keys and played.fresh(key):
@@ -4531,6 +4617,8 @@ def create_vibe_playlist(vibe, report=print, count=None, prompt=None):
             drift.ai_tried.add((artist, track))   # so Drift using the AI doesn't ask for it again
             session_log(session_id, artist, track, "AI", found=False)
     report(f"  AI picks: {len(keys)} in library, {misses} not.")
+    if check is not None:
+        check.summary()
     # the AI's own picks aren't moderated; Drift tracks from the sources can be (Settings > Playlist)
 
     if not keys:

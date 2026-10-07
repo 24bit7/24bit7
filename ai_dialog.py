@@ -423,7 +423,8 @@ class AIPlaylistDialog(tk.Toplevel):
     def steer_spec(self):
         """What Steer was asked for, as the engine wants it."""
         return dict(seed_kind=self.seed_kind, tone=self.tone_text(), directions=list(self.directions),
-                    own_words=self.own.get().strip(), strength=self.strength, count=self.count_value())
+                    own_words=self.own.get().strip(), strength=self.strength, count=self.count_value(),
+                    if_short=self.if_short)
 
     # --- Create ---
 
@@ -544,7 +545,7 @@ class AIPlaylistDialog(tk.Toplevel):
         count = self.count_value()
         write_env({"AI_CREATE_THEME": theme, "VIBE_TRACK_COUNT": str(count)})
         self.destroy()
-        self.on_create(theme, count)
+        self.on_create(theme, count, self.if_short)
 
     # --- window mechanics ---
 

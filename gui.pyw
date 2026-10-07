@@ -1356,12 +1356,13 @@ class PlayTab(tk.Frame):
         if problem:
             self.report(problem)
             return
-        AIPlaylistDialog(self.root, play=self, on_create=lambda theme, count: self._run_job(
-            lambda: engine.create_vibe_playlist(theme, count=count, report=self.report), needs_playing=False,
-            review=True), on_steer=lambda spec: self._run_job(
+        AIPlaylistDialog(self.root, play=self, on_create=lambda theme, count, if_short: self._run_job(
+            lambda: engine.create_vibe_playlist(theme, count=count, if_short=if_short, report=self.report),
+            needs_playing=False, review=True), on_steer=lambda spec: self._run_job(
             lambda: engine.steer_playlist(engine.steer_seed_pairs(all_tracks=spec["seed_kind"] == "all"),
                                           spec["directions"], spec["own_words"], spec["strength"], spec["tone"],
-                                          spec["count"], report=self.report), needs_playing=False, review=True))
+                                          spec["count"], report=self.report, if_short=spec["if_short"]),
+            needs_playing=False, review=True))
 
 
 def _enable_dpi_awareness():

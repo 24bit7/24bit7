@@ -668,3 +668,60 @@ def test_moderator_no_json_reports_problem(app):
     r = app.Lines()
     assert app.engine.moderate(MOD_TRACKS, "Tom Petty - Wildflowers", report=r) == set()
     assert r.has("didn't come back (no JSON in the reply)"), r.text()
+
+
+# --- AI Playlist: If Short and the BPM check ---
+
+def _steer_setup(app):
+    album = [str(r["Key"]) for r in app.jriver.by_key.values()][:5]
+    app.jriver.play("Speakers", album, pos=1)
+    return album
+
+
+def test_if_short_ask_asks_the_ai_again(app):
+    e = app.engine
+    r = app.Lines()
+    # the fake's first answer gives few library hits; Ask Again means a second AI round
+    e.create_vibe_playlist("sunday morning coffee", count=60, if_short="ask", report=r)
+    text = "\n".join(r)
+    assert "if short: Ask Again" in text
+    assert "Drift round 1 of 2" in text and "asking the AI again" in text
+
+
+def test_if_short_leave_stops_short(app):
+    e = app.engine
+    r = app.Lines()
+    e.create_vibe_playlist("sunday morning coffee", count=60, if_short="leave", report=r)
+    text = "\n".join(r)
+    assert "if short: Leave Short" in text and "Drift round" not in text
+
+
+def test_if_short_drift_uses_the_sources(app):
+    e = app.engine
+    app.set_env(DRIFT_VIBE_USING="ai")   # even with Drift set to the AI, If Short: Drift goes to the sources
+    e.load_settings()
+    r = app.Lines()
+    e.create_vibe_playlist("sunday morning coffee", count=60, if_short="drift", report=r)
+    text = "\n".join(r)
+    assert "if short: Drift" in text and "Drift round 1" in text and "asking the AI again" not in text
+
+
+def test_steer_bpm_check_drops_the_wrong_way(app):
+    e = app.engine
+    album = _steer_setup(app)
+    seed_key = album[1]
+    for k, row in app.jriver.by_key.items():
+        row["BPM"] = "120" if k == seed_key else ("100" if int(k) % 4 == 0 else "140")   # some slower, some faster
+    import library
+    library.load()
+    pairs = e.steer_seed_pairs(all_tracks=False)
+    r = app.Lines()
+    e.steer_playlist(pairs, ["faster"], "", "little", "", 10, report=r, if_short="leave")
+    text = "\n".join(r)
+    assert "BPM check against the seed's 120 BPM" in text
+    assert "Left out:" in text and "not faster than the seed's 120" in text and "left out" in text
+    for line in r:
+        if line.startswith("    In library:"):
+            name = line.split("In library: ", 1)[1]
+            key = next(k for k, row in app.jriver.by_key.items() if f"{row['Artist']} - {row['Name']}" == name)
+            assert float(app.jriver.by_key[key]["BPM"]) >= 120, f"{name} should have been left out"

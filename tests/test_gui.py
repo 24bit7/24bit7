@@ -1161,7 +1161,7 @@ def test_ai_playlist_window_create(app, ui, monkeypatch):
     import ai_dialog, settings_gui
     monkeypatch.setattr(app.engine, "ai_vibe_suggestions", lambda: ["Late-night jazz", "Driving at night"])
     got = {}
-    dlg = ai_dialog.AIPlaylistDialog(ui.play.root, play=ui.play, on_create=lambda t, n: got.update(theme=t, count=n))
+    dlg = ai_dialog.AIPlaylistDialog(ui.play.root, play=ui.play, on_create=lambda t, n, s: got.update(theme=t, count=n, if_short=s))
     ui.pump(0.6)
     assert dlg.mode == "create"
     texts = [c.cget("text") for c in dlg.idea_chips]
@@ -1173,12 +1173,12 @@ def test_ai_playlist_window_create(app, ui, monkeypatch):
     dlg.set_if_short("drift")
     dlg.submit()
     ui.pump(0.1)
-    assert got == {"theme": "Late-night jazz", "count": 12}
+    assert got == {"theme": "Late-night jazz", "count": 12, "if_short": "drift"}
     env = settings_gui.read_env()
     assert env.get("AI_CREATE_THEME") == "Late-night jazz" and env.get("VIBE_TRACK_COUNT") == "12"
     assert env.get("AI_IF_SHORT") == "drift" and env.get("AI_DIALOG_MODE", "create") == "create"
     # next time: remembered
-    dlg2 = ai_dialog.AIPlaylistDialog(ui.play.root, play=ui.play, on_create=lambda t, n: None)
+    dlg2 = ai_dialog.AIPlaylistDialog(ui.play.root, play=ui.play, on_create=lambda *a: None)
     ui.pump(0.3)
     assert dlg2.theme.get() == "Late-night jazz" and dlg2.count.get() == "12" and dlg2.if_short == "drift"
     dlg2.destroy()
@@ -1192,7 +1192,7 @@ def test_ai_playlist_steer(app, ui):
     album = _album(app)
     app.jriver.play("Speakers", album, pos=1)
     got = {}
-    dlg = ai_dialog.AIPlaylistDialog(ui.play.root, play=ui.play, on_create=lambda t, n: None,
+    dlg = ai_dialog.AIPlaylistDialog(ui.play.root, play=ui.play, on_create=lambda *a: None,
                                      on_steer=lambda spec: got.update(spec))
     ui.pump(0.3)
     dlg.set_mode("steer")
@@ -1211,11 +1211,11 @@ def test_ai_playlist_steer(app, ui):
     dlg.submit()
     ui.pump(0.1)
     assert got["seed_kind"] == "all" and got["directions"] == ["dancier", "faster"] and got["strength"] == "lot"
-    assert got["own_words"] == "more Latin" and got["count"] == 12
+    assert got["own_words"] == "more Latin" and got["count"] == 12 and got["if_short"] == "ask"
     env = settings_gui.read_env()
     assert env.get("AI_STEER_DIRS") == "dancier,faster" and env.get("AI_STEER_OWN") == "more Latin"
     # next time: opens on Steer with everything as left
-    dlg2 = ai_dialog.AIPlaylistDialog(ui.play.root, play=ui.play, on_create=lambda t, n: None)
+    dlg2 = ai_dialog.AIPlaylistDialog(ui.play.root, play=ui.play, on_create=lambda *a: None)
     ui.pump(0.3)
     assert dlg2.mode == "steer" and dlg2.directions == ["dancier", "faster"] and dlg2.strength == "lot"
     assert dlg2.tone_text().startswith("Warm late-70s") and dlg2.own.get() == "more Latin"
