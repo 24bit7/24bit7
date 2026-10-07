@@ -44,6 +44,7 @@ COUNT_MIN, COUNT_MAX = 5, 100
 class AIPlaylistDialog(tk.Toplevel):
     def __init__(self, master, on_create, play=None, on_steer=None):
         super().__init__(master)
+        self.withdraw()   # built out of sight: shown once, dressed and in place, with no flicker
         self.on_create = on_create
         self.on_steer = on_steer
         self.play = play
@@ -76,7 +77,6 @@ class AIPlaylistDialog(tk.Toplevel):
         self.body.pack(fill="both", expand=True)
         self.body.pack_propagate(True)
         self._build()
-        self.withdraw()
         self.after(10, lambda: self._show_over(master))
         self.bind("<Escape>", lambda e: self.destroy())
         self.after(100, self._drain_later)
@@ -578,13 +578,23 @@ class AIPlaylistDialog(tk.Toplevel):
             w, h = self.winfo_reqwidth(), self.winfo_reqheight()
             x = master.winfo_rootx() + (master.winfo_width() - w) // 2
             y = master.winfo_rooty() + max(0, (master.winfo_height() - h) // 2)
-            self.geometry(f"+{max(0, x)}+{max(0, y)}")
-            self._strip_title_bar()
+            self.geometry(f"{w}x{h}+{max(0, x)}+{max(0, y)}")
+            try:
+                self.wm_attributes("-alpha", 0.0)   # shown invisible first, so the dressing happens unseen
+            except tk.TclError:
+                pass
             self.deiconify()
+            self.update_idletasks()
+            self._strip_title_bar()
+            self.geometry(f"{w}x{h}+{max(0, x)}+{max(0, y)}")   # again: Windows moves it when the bar goes
+            self.update_idletasks()
+            try:
+                self.wm_attributes("-alpha", 1.0)
+            except tk.TclError:
+                pass
             self.lift()
             if self.mode == "create":
                 self.theme.focus_set()
-            self._fit()
         except tk.TclError:
             pass
 
