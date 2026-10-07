@@ -2866,6 +2866,19 @@ def review_save(keys, name):
     r.raise_for_status()
     n = f"{len(keys)} track{'' if len(keys) == 1 else 's'}"
     return f"Review: {n} saved as the JRiver playlist \"{name}\"."
+
+
+def review_preview(key, zone):
+    """Plays one Review track in the preview zone. Its Playing Now holds just that track."""
+    r = requests.get(f"{JRIVER_BASE}/Playback/PlayByKey", params={"Key": str(key), "Zone": zone},
+                     auth=AUTH, timeout=10)
+    r.raise_for_status()
+
+
+def review_preview_stop(zone):
+    """Stops the preview zone."""
+    if zone is not None:
+        requests.get(f"{JRIVER_BASE}/Playback/Stop", params={"Zone": zone}, auth=AUTH, timeout=10)
 MIX_FAST_KEY = None      # an Add before playlist's first track, started by fast start
 MIX_NOTED = False        # the "left out on YouTube" note has been logged this build
 CANCEL_CHECK = None      # set by voice.py: returns True once a newer command has taken over

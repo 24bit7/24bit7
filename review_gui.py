@@ -12,6 +12,11 @@ Add as Up Next, Add to End, Finish This Song, Load as New, Stop Song, Load as Ne
 and Save as Playlist. The ticks clear once an action has gone through.
 
 The list stays until the next Review build replaces it.
+
+Preview: a "Preview in" choice at the right of the header picks a zone with its own
+speakers or headphones (None by default; the zone the list goes to isn't offered).
+With one chosen, each row gets a play mark that plays just that track there, one at
+a time. Stop Preview, any action, a new Review build or choosing None stops it.
 """
 import threading
 import time
@@ -19,12 +24,15 @@ import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 
 import engine
-from settings_gui import Tooltip
+from settings_gui import Tooltip, read_env, write_env
 
 BLACK, GREEN, DIM, WHITE, MUTED = "#000000", "#00ff41", "#0d4d1c", "#ffffff", "#7fbf8f"
 ROW_ON = "#0b2412"            # a ticked row
 FONT, BOLD = ("Consolas", 9), ("Consolas", 9, "bold")
 DOT = "\u25cf"
+PLAY_MARK, STOP_MARK = "\u25b6", "\u25a0"
+PREVIEW_TIP = ("Listen to a track before you add it, in a zone with its own speakers or headphones. "
+               "The zone this list goes to isn't offered.")
 
 # (how, button, what it does): the two Adds keep Playing Now, the two Load as New replace it
 ACTIONS = [
@@ -60,6 +68,12 @@ class ReviewPanel:
         self.busy = False
         self._buttons = {}
         self._cells = {}          # key -> (tick label, [text labels])
+        self._marks = {}          # key -> its Preview mark, when a preview zone is chosen
+        self.preview_name = read_env().get("REVIEW_PREVIEW_ZONE", "").strip()
+        self.preview_zone = None  # the chosen zone's ID, if it exists and isn't this list's zone
+        self.previewing = None    # the key playing in the preview zone
+        self.preview_at = None    # the zone it's playing in
+        self._preview_token = 0   # a later preview or stop makes an older end-of-track check stale
         self._build_switch()
         self._build_frame()
 
@@ -113,6 +127,12 @@ class ReviewPanel:
             self.play._head_box(head, text, command).pack(side="left", padx=(6, 0))
         self.preview_bar = tk.Frame(head, bg=BLACK)       # Preview zone and Stop Preview
         self.preview_bar.pack(side="right")
+        self.preview_btn = self.play._head_box(self.preview_bar, "", self._preview_menu)
+        self.preview_btn.pack(side="left")
+        Tooltip(self.preview_btn, PREVIEW_TIP)
+        self.stop_preview_btn = self.play._head_box(self.preview_bar, "Stop Preview", self.stop_preview)
+        self.stop_preview_btn.pack(side="left", padx=(6, 0))
+        self._sync_preview()
         tk.Frame(self.frame, bg=GREEN, height=1).pack(fill="x", padx=8)
         self.action_bar = tk.Frame(self.frame, bg=BLACK)  # the actions, along the bottom
         self.action_bar.pack(side="bottom", fill="x", padx=8, pady=(6, 8))
@@ -207,6 +227,7 @@ class ReviewPanel:
         if not self._can_act():
             return
         keys, zone = list(self.order), self.zone
+        self.stop_preview(quiet=True)
         self._run(lambda: engine.review_send(keys, how, zone))
 
     def _save(self):
@@ -223,6 +244,7 @@ class ReviewPanel:
                 parent=self.frame):
             return
         keys = list(self.order)
+        self.stop_preview(quiet=True)
         self._run(lambda: engine.review_save(keys, name))
 
     # --- moving between Console and Review ---
@@ -274,18 +296,27 @@ class ReviewPanel:
 
     def load(self, rows, title="", zone=None):
         """A Review build finished: its tracks replace the list, nothing ticked, and Review shows."""
+        self.stop_preview(quiet=True)
         self.rows = [dict(r) for r in rows or []]
         self.order, self.title, self.zone = [], title, zone
         self.status_label.config(text="")
+        self._refresh_preview_zone()
         self._render()
         if self.rows:
             self.show_review()
 
-    def _render(self):
+    def _columns(self):
+        return COLUMNS + ([("", 3, 0)] if self.preview_zone else [])
+
+    def _render(self, keep_scroll=False):
+        top = self.canvas.yview()[0]
         for child in self.grid.winfo_children():
             child.destroy()
-        self._cells = {}
-        for c, (title, width, stretch) in enumerate(COLUMNS):
+        self._cells, self._marks = {}, {}
+        columns = self._columns()
+        for c in range(len(COLUMNS) + 1):
+            self.grid.grid_columnconfigure(c, weight=0)
+        for c, (title, width, stretch) in enumerate(columns):
             self.grid.grid_columnconfigure(c, weight=stretch)
             tk.Label(self.grid, text=title, font=BOLD, bg=BLACK, fg=MUTED, width=width, padx=4,
                      anchor="e" if title in ("Time", "BPM") else "w").grid(
@@ -307,9 +338,17 @@ class ReviewPanel:
             for w in [tick] + texts:   # the whole row is the target: tick or untick
                 w.bind("<Button-1>", lambda e, k=key: self.toggle(k))
             self._cells[key] = (tick, texts)
-            tk.Frame(self.grid, bg=DIM, height=1).grid(row=r + 1, column=0, columnspan=len(COLUMNS), sticky="ew")
+            if self.preview_zone:   # the Preview mark: plays this track in the preview zone, doesn't tick it
+                mark = tk.Label(self.grid, text=PLAY_MARK, font=FONT, bg=BLACK, fg=GREEN, cursor="hand2",
+                                width=3, padx=4, pady=3)
+                mark.grid(row=r, column=len(COLUMNS), sticky="nsew")
+                mark.bind("<Button-1>", lambda e, k=key: self._preview_click(k))
+                self._marks[key] = mark
+            tk.Frame(self.grid, bg=DIM, height=1).grid(row=r + 1, column=0, columnspan=len(columns), sticky="ew")
             r += 2
-        self.canvas.yview_moveto(0)
+        self.canvas.update_idletasks()
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        self.canvas.yview_moveto(top if keep_scroll else 0)
         self._restyle()
 
     def _restyle(self):
@@ -320,11 +359,15 @@ class ReviewPanel:
                         highlightbackground=GREEN if on else DIM, highlightcolor=GREEN if on else DIM)
             for cell in texts:
                 cell.config(bg=bg, font=BOLD if on else FONT)
+            mark = self._marks.get(key)
+            if mark is not None:
+                mark.config(bg=bg, text=STOP_MARK if key == self.previewing else PLAY_MARK)
         n = len(self.rows)
         self.title_label.config(text=self.title)
         self.count_label.config(text=f"{n} track{'' if n == 1 else 's'}, {len(self.order)} ticked")
         self._style_switch()
         self._sync_buttons()
+        self._sync_preview()
 
     def toggle(self, key):
         """Ticking adds the track at the end of the order; unticking closes the gap."""
@@ -346,3 +389,105 @@ class ReviewPanel:
 
     def ticked_keys(self):
         return list(self.order)
+
+    # --- Preview ---
+
+    def _refresh_preview_zone(self):
+        """The chosen preview zone's ID, or None: not chosen, gone from JRiver, or this list's own zone."""
+        zid = None
+        if self.preview_name:
+            try:
+                zid = engine.zone_id(self.preview_name)
+            except Exception:
+                zid = None
+            if zid is not None and str(zid) == str(self.zone):
+                zid = None   # never the room the list is going to
+        self.preview_zone = zid
+
+    def _sync_preview(self):
+        shown = self.preview_name if self.preview_zone else "None"
+        self.preview_btn.config(text=f"Preview in: {shown} \u25be")
+        on = self.previewing is not None
+        self.stop_preview_btn.config(fg=GREEN if on else DIM, cursor="hand2" if on else "")
+
+    def preview_choices(self):
+        """The zones offered for Preview: every JRiver zone except the one this list goes to."""
+        try:
+            zones = engine._zone_list(fresh=True)
+        except Exception:
+            zones = []
+        return [name for zid, name in zones if str(zid) != str(self.zone)]
+
+    def _preview_menu(self):
+        menu = tk.Menu(self.frame, tearoff=0, bg=BLACK, fg=GREEN, activebackground=DIM,
+                       activeforeground=GREEN, font=FONT)
+        for name in ["None"] + self.preview_choices():
+            menu.add_command(label=name, command=lambda n=name: self.choose_preview("" if n == "None" else n))
+        b = self.preview_btn
+        try:
+            menu.tk_popup(b.winfo_rootx(), b.winfo_rooty() + b.winfo_height())
+        finally:
+            menu.grab_release()
+
+    def choose_preview(self, name):
+        """A zone picked under Preview in (empty for None): remembered, and the marks shown or hidden."""
+        self.stop_preview(quiet=True)
+        self.preview_name = name
+        write_env({"REVIEW_PREVIEW_ZONE": name})
+        self._refresh_preview_zone()
+        if self.rows:
+            self._render(keep_scroll=True)
+        self._sync_preview()
+
+    def _background(self, work, failed):
+        def worker():
+            try:
+                work()
+            except Exception as e:
+                self.play.root.after(0, lambda e=e: failed(e))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _preview_click(self, key):
+        if self.preview_zone is None:
+            return
+        if key == self.previewing:
+            self.stop_preview()
+            return
+        row = next((r for r in self.rows if r["key"] == key), {})
+        zid, where = self.preview_zone, self.preview_name
+        self._preview_token += 1
+        token = self._preview_token
+        self.previewing, self.preview_at = key, zid
+        what = " - ".join(x for x in (row.get("artist", ""), row.get("title", "")) if x)
+        self.status_label.config(text=f"Previewing {what} in {where}.")
+
+        def failed(e):
+            if token == self._preview_token:
+                self.previewing = self.preview_at = None
+                self.status_label.config(text=f"Problem: Preview couldn't play that in {where} ({e}).")
+                self._restyle()
+        self._background(lambda: engine.review_preview(key, zid), failed)
+        try:   # once the track has had time to finish, the mark goes back to play
+            seconds = float(row.get("seconds") or 0)
+        except (TypeError, ValueError):
+            seconds = 0
+        if seconds:
+            self.play.root.after(int(seconds * 1000) + 2000, lambda: self._preview_ended(token))
+        self._restyle()
+
+    def _preview_ended(self, token):
+        if token == self._preview_token and self.previewing is not None:
+            self.previewing = self.preview_at = None
+            self._restyle()
+
+    def stop_preview(self, quiet=False):
+        """Stops the preview zone. quiet: an action or a new list is about to say what happened."""
+        if self.previewing is None:
+            return
+        zid = self.preview_at
+        self._preview_token += 1
+        self.previewing = self.preview_at = None
+        if not quiet:
+            self.status_label.config(text="Preview stopped.")
+        self._background(lambda: engine.review_preview_stop(zid), lambda e: None)
+        self._restyle()

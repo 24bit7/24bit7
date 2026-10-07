@@ -834,3 +834,84 @@ def test_review_save_asks_before_replacing(app, ui, monkeypatch):
     ui.pump(0.3)
     sunday = next(p for p in app.jriver.playlists if p["Name"] == "Sunday Morning")
     assert keys[0] not in sunday["keys"], "kept, as the answer was No"
+
+
+# --- Review: Preview ---
+
+def _preview_ready(app, ui, zone="Sonos"):
+    global settings_gui
+    import settings_gui
+    keys = _review_with_zone(app, ui, _album(app))
+    panel = ui.play.review_panel
+    if zone:
+        panel.choose_preview(zone)
+        ui.pump(0.1)
+    return keys, panel
+
+
+def test_preview_off_by_default_no_marks(app, ui):
+    keys, panel = _preview_ready(app, ui, zone=None)
+    assert panel.preview_zone is None and panel._marks == {}
+    assert panel.preview_btn.cget("text").startswith("Preview in: None")
+
+
+def test_preview_never_offers_the_lists_zone(app, ui):
+    keys, panel = _preview_ready(app, ui, zone=None)
+    choices = panel.preview_choices()
+    assert "Speakers" not in choices and "Sonos" in choices and "Kitchen" in choices
+
+
+def test_preview_plays_one_track_in_the_preview_zone(app, ui):
+    keys, panel = _preview_ready(app, ui)
+    album = _album(app)
+    assert settings_gui.read_env().get("REVIEW_PREVIEW_ZONE") == "Sonos", "remembered"
+    assert set(panel._marks) == set(keys), "a mark on every row"
+    panel._preview_click(keys[2])
+    ui.pump(0.3)
+    sonos, speakers = app.jriver.zone("Sonos"), app.jriver.zone("Speakers")
+    assert sonos.playlist == [keys[2]] and sonos.state == 2
+    assert speakers.playlist == album and speakers.pos == 1 and speakers.state == 2, "main room untouched"
+    assert panel.ticked_keys() == [], "previewing doesn't tick"
+    assert panel._marks[keys[2]].cget("text") == "\u25a0"
+    panel._preview_click(keys[4])   # another track replaces it
+    ui.pump(0.3)
+    assert sonos.playlist == [keys[4]]
+    assert panel._marks[keys[2]].cget("text") == "\u25b6"
+
+
+def test_stop_preview_and_clicking_the_stop_mark(app, ui):
+    keys, panel = _preview_ready(app, ui)
+    panel._preview_click(keys[0])
+    ui.pump(0.3)
+    panel._preview_click(keys[0])   # the stop mark
+    ui.pump(0.3)
+    assert app.jriver.zone("Sonos").state == 0 and panel.previewing is None
+    panel._preview_click(keys[1])
+    ui.pump(0.3)
+    panel.stop_preview()
+    ui.pump(0.3)
+    assert app.jriver.zone("Sonos").state == 0
+    assert panel.status_label.cget("text") == "Preview stopped."
+
+
+def test_an_action_stops_the_preview(app, ui):
+    keys, panel = _preview_ready(app, ui)
+    panel._preview_click(keys[3])
+    ui.pump(0.3)
+    _act(ui, "end", [keys[1]])
+    assert app.jriver.zone("Sonos").state == 0 and panel.previewing is None
+
+
+def test_choosing_none_stops_and_hides_the_marks(app, ui):
+    keys, panel = _preview_ready(app, ui)
+    panel._preview_click(keys[0])
+    ui.pump(0.3)
+    panel.choose_preview("")
+    ui.pump(0.3)
+    assert app.jriver.zone("Sonos").state == 0 and panel._marks == {}
+    assert settings_gui.read_env().get("REVIEW_PREVIEW_ZONE") == ""
+
+
+def test_preview_zone_same_as_list_zone_is_refused(app, ui):
+    keys, panel = _preview_ready(app, ui, zone="Speakers")
+    assert panel.preview_zone is None and panel._marks == {}
