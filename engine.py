@@ -2746,6 +2746,7 @@ def jriver_is_stopped(zone=ACTIVE_ZONE):
 VOICE_TAKEOVER = False   # True while a voice build runs
 MIX_ROWS = None          # the Play tab's added playlists for this build; None for voice, shortcuts, non-stop
 MIX_KEEP = set()         # keys from those playlists: the hidden-track check leaves them alone
+REVIEW_MODE = False      # True while an app build runs in Review Mode: load the playlist, don't play it
 MIX_FAST_KEY = None      # an Add before playlist's first track, started by fast start
 MIX_NOTED = False        # the "left out on YouTube" note has been logged this build
 CANCEL_CHECK = None      # set by voice.py: returns True once a newer command has taken over
@@ -2895,6 +2896,9 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
             debug(f"{zone_label(zone)} was stopped, so the playlist starts there now")
         requests.get(f"{JRIVER_BASE}/Playback/PlayByKey",
                      params={"Key": ",".join(keys), "Zone": zone}, auth=AUTH)
+        if REVIEW_MODE and not VOICE_TAKEOVER:   # Review Mode: loaded, then stopped on track one
+            requests.get(f"{JRIVER_BASE}/Playback/Stop", params={"Zone": zone}, auth=AUTH)
+            report(f"  Loaded for review in {zone_label(zone)}: press play in JRiver when you're ready.")
         return
     report(f"  Queued in {zone_label(zone)} after the current track.")
     clear_around_current(zone)
@@ -3301,7 +3305,7 @@ class FastStart:
 
     def __init__(self, seed_info=None, report=print, enabled=True):
         self.report, self.key, self.zone = report, None, None
-        if not enabled or output_is_youtube() or (seed_info and not seed_info.get("Typed")):
+        if not enabled or REVIEW_MODE or output_is_youtube() or (seed_info and not seed_info.get("Typed")):
             return   # YouTube output, or a now-playing seed (music is already playing)
         zone = output_zone(seed_info, None, lambda *_: None)
         if zone is not None and zone_is_free(zone):

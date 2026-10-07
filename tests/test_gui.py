@@ -640,3 +640,32 @@ def test_play_tab_variety_writes_settings(app, ui):
     app.set_env(SIMILAR_TRACK_VARIETY="no")
     play._sync_play_switches()
     assert play.variety_var.get() == "No"
+
+
+def test_play_tab_behaviour_saves_and_greys_out_for_youtube(app, ui):
+    play = ui.play
+    assert play.behaviour_var.get() == "Play Instantly"
+    play.behaviour_var.set("Review Mode")
+    play._on_behaviour_changed()
+    ui.pump(0.2)
+    import settings_gui
+    assert settings_gui.read_env().get("PLAY_BEHAVIOUR") == "review"
+    assert play._review_mode()
+    play.output_var.set("YouTube")
+    play._on_output_changed()
+    assert play.behaviour_cb.instate(["disabled"])
+    assert not play._review_mode(), "YouTube output never reviews"
+
+
+def test_review_mode_is_for_search_builds_only(app, ui):
+    play = ui.play
+    assert str(play.behaviour_cb.master.master) == str(play.search_tab), "Behaviour sits on the Search tab"
+    play.behaviour_var.set("Review Mode")
+    seen = []
+    for review in (False, True):
+        play._run_job(lambda: seen.append(app.engine.REVIEW_MODE), needs_playing=False, review=review)
+        for _ in range(50):
+            ui.pump(0.05)
+            if not play.running:
+                break
+    assert seen == [False, True], "a Now Playing build ignores Review Mode; a Search build uses it"

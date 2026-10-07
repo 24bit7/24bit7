@@ -64,6 +64,7 @@ DRIFT_GROUPS = ("artists", "tracks", "vibe")            # Top Tracks has no Drif
 NONSTOP_GROUPS = ("artists", "tracks", "top", "vibe")
 PLAY_RESEED = [("last", "Last track"), ("second", "2nd track")]
 PLAY_NONSTOP = [("off", "Off"), ("tight", "Keep It Tight"), ("journey", "Let's See Where This Goes")]
+PLAY_BEHAVIOUR = [("instant", "Play Instantly"), ("review", "Review Mode")]   # the Search tab's builds only
 PLAY_DRIFT = [("off", "Off"), ("close", "Keep It Tight"), ("spread", "Spread")]   # as Settings > Playlist shows them   # as Settings > Playlist shows them
 
 
@@ -178,6 +179,24 @@ class PlayTab(tk.Frame):
         tk.Label(self.search_tab, text="Track", font=("Segoe UI", 10)).grid(row=0, column=2, sticky="w")
         self.search_track = ttk.Entry(self.search_tab, width=34, font=("Segoe UI", 11), style="Field.TEntry")
         self.search_track.grid(row=0, column=3, sticky="w", padx=(8, 0))
+        # Behaviour goes on the Search tab: play straight away, or load into Playing Now to edit in JRiver
+        cell = tk.Frame(self.search_tab)
+        cell.grid(row=0, column=4, sticky="w", padx=(20, 0))
+        tk.Label(cell, text="Behaviour", font=("Segoe UI", 10)).pack(side="left", padx=(0, 8))
+        saved = read_env().get("PLAY_BEHAVIOUR", "instant").strip().lower()
+        self.behaviour_var = tk.StringVar(value=dict(PLAY_BEHAVIOUR).get(saved, "Play Instantly"))
+        self.behaviour_cb = ttk.Combobox(cell, textvariable=self.behaviour_var, state="readonly", width=14,
+                                         values=[shown for _, shown in PLAY_BEHAVIOUR])
+        self.behaviour_cb.pack(side="left")
+        self.behaviour_cb.bind("<<ComboboxSelected>>", self._on_behaviour_changed)
+        help_mark(cell, "Play Instantly: the playlist starts as soon as it's found.\n"
+                        "Review Mode: the playlist is loaded into Playing Now and left stopped on track "
+                        "one, so you can remove tracks, change the order or add them to another playlist "
+                        "in JRiver, then press play. If the zone is already playing, the playlist is "
+                        "queued after the current track either way.\n"
+                        "For builds from this Search tab only. Now Playing, voice commands, keyboard "
+                        "shortcuts and Non-stop always play straight away. Not used when Output is "
+                        "YouTube.").pack(side="left", padx=(8, 0))
         tk.Label(self.search_tab, text="Build a playlist from any track, even one you don't own. "
                                        "Press Enter for Similar Artists.",
                  font=("Segoe UI", 8), fg=PALETTE["text_muted"]).grid(row=1, column=0, columnspan=4, sticky="w", pady=(6, 0))
@@ -276,6 +295,7 @@ class PlayTab(tk.Frame):
                                       postcommand=self._fill_output_list)
         self.output_cb.pack(side="left")
         self.output_cb.bind("<<ComboboxSelected>>", self._on_output_changed)
+        self._sync_behaviour()
 
         # The More options row: Show Credits, AI Moderator, Add playlist, with the playlist
         # rows under it. Held in a frame that's always packed, so it opens in the same place.
@@ -394,6 +414,25 @@ class PlayTab(tk.Frame):
         except Exception as e:
             messagebox.showerror("Save failed", str(e), parent=self)
         self.output_cb.selection_clear()
+        self._sync_behaviour()
+
+    def _sync_behaviour(self):
+        """Behaviour is greyed out while Output is YouTube, as there's nothing to review in JRiver."""
+        if getattr(self, "behaviour_cb", None) is None or getattr(self, "output_var", None) is None:
+            return
+        self.behaviour_cb.state(["disabled"] if self.output_var.get() == "YouTube" else ["!disabled"])
+
+    def _on_behaviour_changed(self, *_):
+        code = {shown: c for c, shown in PLAY_BEHAVIOUR}.get(self.behaviour_var.get(), "instant")
+        try:
+            write_env({"PLAY_BEHAVIOUR": code})
+        except Exception as e:
+            messagebox.showerror("Save failed", str(e), parent=self)
+        self.behaviour_cb.selection_clear()
+
+    def _review_mode(self):
+        return (getattr(self, "behaviour_var", None) is not None
+                and self.behaviour_var.get() == "Review Mode" and self.output_var.get() != "YouTube")
 
     def sync_moderator(self):
         """Shows Windows (Main)'s moderator choice, greyed out until there's an Anthropic key."""
@@ -1218,7 +1257,7 @@ class PlayTab(tk.Frame):
         else:
             self._append_query(answer + "\n")
 
-    def _run_job(self, target, needs_playing=True, mix=True, origin=None):
+    def _run_job(self, target, needs_playing=True, mix=True, origin=None, review=False):
         if self.running:
             return
         if needs_playing and not self.last_playing:
@@ -1234,9 +1273,11 @@ class PlayTab(tk.Frame):
         self._stamp_next = True   # the build's first line gets the time
 
         rows = (playmix.rows() or None) if mix else None   # added playlists: app builds only
+        review = review and bool(mix) and self._review_mode()   # Review Mode: Search builds only
 
         def worker():
             engine.MIX_ROWS, engine.MIX_KEEP, engine.MIX_FAST_KEY, engine.MIX_NOTED = rows, set(), None, False
+            engine.REVIEW_MODE = review
             engine.BUILD_STARTED, engine.LAST_OUTPUT = time.time(), None
             engine.LAST_OUTPUT_ID, engine.LAST_BUILD = None, None
             try:
@@ -1246,6 +1287,7 @@ class PlayTab(tk.Frame):
                                    f"and attach the file when you report it.")
             finally:
                 engine.MIX_ROWS, engine.MIX_KEEP, engine.MIX_FAST_KEY = None, set(), None
+                engine.REVIEW_MODE = False
                 engine.BUILD_STARTED = None
                 self.root.after(0, self._job_done)
 
@@ -1274,7 +1316,7 @@ class PlayTab(tk.Frame):
             seed = self._typed_seed(need_track=True)
             if seed:
                 self._run_job(lambda: engine.create_similar_playlist(report=self.report, seed_info=seed),
-                              needs_playing=False)
+                              needs_playing=False, review=True)
             return
         self._run_job(lambda: self._seeded(engine.create_similar_playlist), needs_playing=False)
 
@@ -1283,7 +1325,7 @@ class PlayTab(tk.Frame):
             seed = self._typed_seed(need_track=True)
             if seed:
                 self._run_job(lambda: engine.create_similar_tracks_playlist(report=self.report, seed_info=seed),
-                              needs_playing=False)
+                              needs_playing=False, review=True)
             return
         self._run_job(lambda: self._seeded(engine.create_similar_tracks_playlist), needs_playing=False)
 
@@ -1292,7 +1334,7 @@ class PlayTab(tk.Frame):
             seed = self._typed_seed(need_track=False)
             if seed:
                 self._run_job(lambda: engine.play_top_n(report=self.report, seed_info=seed),
-                              needs_playing=False)
+                              needs_playing=False, review=True)
             return
         self._run_job(lambda: self._seeded(engine.play_top_n), needs_playing=False)
 
