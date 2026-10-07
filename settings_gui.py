@@ -116,28 +116,66 @@ MODERATOR_WARNING = ("AI Moderator checks each playlist using the Anthropic API,
                      "from your Anthropic account. Each playlist costs a fraction of a penny.")
 
 
-class Tooltip:
-    """A small note shown while the pointer is over a widget, or on a click, when when() says so."""
+NOTE_DELAY_MS = 500   # a note waits this long, so passing the pointer over a title doesn't flash one up
+NOTE_WRAP = 720       # wide and short rather than narrow and tall
 
-    def __init__(self, widget, text, when=lambda: True):
+
+class Tooltip:
+    """
+    A small note shown while the pointer rests on a widget, after a short delay, or on a
+    click (when click is True), when when() says so. Kept fully on screen.
+    """
+
+    def __init__(self, widget, text, when=lambda: True, click=True, delay=NOTE_DELAY_MS):
         self.widget, self.text, self.when, self.tip = widget, text, when, None
-        widget.bind("<Enter>", lambda e: self.show(), add="+")
+        self.delay, self._pending = delay, None
+        widget._has_note = True
+        widget._tooltip = self
+        widget.bind("<Enter>", lambda e: self._wait(), add="+")
         widget.bind("<Leave>", lambda e: self.hide(), add="+")
-        widget.bind("<Button-1>", lambda e: self.show(), add="+")
+        if click:
+            widget.bind("<Button-1>", lambda e: self.show(), add="+")
         widget.bind("<Destroy>", lambda e: self.hide(), add="+")
 
+    def _wait(self):
+        self._cancel()
+        if self.delay:
+            self._pending = self.widget.after(self.delay, self.show)
+        else:
+            self.show()
+
+    def _cancel(self):
+        if self._pending is not None:
+            try:
+                self.widget.after_cancel(self._pending)
+            except tk.TclError:
+                pass
+            self._pending = None
+
     def show(self):
+        self._cancel()
         if self.tip or not self.when():
             return
-        x = self.widget.winfo_rootx()
-        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
+        try:
+            x = self.widget.winfo_rootx()
+            y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
+        except tk.TclError:
+            return
         self.tip = tk.Toplevel(self.widget)
         self.tip.wm_overrideredirect(True)
+        tk.Label(self.tip, text=self.text, bg=PALETTE["tooltip_bg"], fg=PALETTE["tooltip_fg"], relief="solid",
+                 borderwidth=1, justify="left", wraplength=NOTE_WRAP, font=("Segoe UI", 9),
+                 padx=10, pady=6).pack()
+        self.tip.update_idletasks()   # its size, so it can be kept on screen
+        w, h = self.tip.winfo_reqwidth(), self.tip.winfo_reqheight()
+        sw, sh = self.tip.winfo_screenwidth(), self.tip.winfo_screenheight()
+        x = max(0, min(x, sw - w - 4))
+        if y + h > sh - 4:   # no room below: above the widget instead
+            y = max(0, self.widget.winfo_rooty() - h - 4)
         self.tip.wm_geometry(f"+{x}+{y}")
-        tk.Label(self.tip, text=self.text, bg=PALETTE["tooltip_bg"], fg=PALETTE["tooltip_fg"], relief="solid", borderwidth=1, justify="left",
-                 wraplength=460, font=("Segoe UI", 9), padx=8, pady=5).pack()
 
     def hide(self):
+        self._cancel()
         if self.tip:
             self.tip.destroy()
             self.tip = None
@@ -161,12 +199,101 @@ SECTION_EDGE = "#aab4c3"  # the thin line round each section
 HELP_MARK_BG = "#8a97aa"
 
 
-def help_mark(parent, text):
-    """A small ? that shows text in a popup while the pointer is over it."""
-    mark = tk.Label(parent, text="?", font=("Segoe UI", 8, "bold"), fg=PALETTE["help_mark_fg"], bg=PALETTE["help_mark_bg"],
-                    width=2, cursor="question_arrow")
-    Tooltip(mark, text)
-    return mark
+NOTE_TITLES = (tk.Label, ttk.Label, tk.Checkbutton, ttk.Checkbutton)
+
+
+def help_mark(parent, text, on=None):
+    """
+    A note for a setting, shown while the pointer rests on its title (the pointer
+    becomes a question mark there). Returns an empty placeholder for the caller to
+    pack or grid where the old ? went; once it's placed, the note goes on the row's
+    title: the first label or tick box in that stretch of the row (back to the
+    previous note), or in the same grid row. on names the title outright.
+    If no title can be found, a ? is shown as before, so no note is ever lost.
+    """
+    anchor = tk.Frame(parent, width=1, height=1, bd=0, highlightthickness=0)
+    anchor._note_text = text
+    anchor._note_target = None
+    if on is not None:
+        _note_on(anchor, on)
+    else:
+        anchor.after_idle(lambda: _place_note(anchor))
+    return anchor
+
+
+def _is_title(w):
+    try:
+        return isinstance(w, NOTE_TITLES) and str(w.cget("text")).strip() != "" \
+            and not getattr(w, "_has_note", False)
+    except tk.TclError:
+        return False
+
+
+def _note_title(anchor):
+    """
+    The title a placed note belongs to, or None. Looks in the note's own row first; if
+    the note sits in a cell of its own (a box holding just the control), it looks
+    beside that cell instead, up to two levels out.
+    """
+    spot = anchor
+    for _ in range(3):
+        title = _title_before(spot)
+        if title is not None:
+            return title
+        spot = spot.master
+        if spot is None or not spot.winfo_manager() or spot.master is None:
+            return None
+    return None
+
+
+def _title_before(anchor):
+    """The first title before this widget: in its grid row, or in its stretch of a packed row."""
+    parent = anchor.master
+    if anchor.winfo_manager() == "grid":
+        info = anchor.grid_info()
+        row, col = int(info["row"]), int(info["column"])
+        before = [w for w in parent.grid_slaves(row=row)
+                  if w is not anchor and int(w.grid_info()["column"]) < col]
+        before.sort(key=lambda w: int(w.grid_info()["column"]))
+        return next((w for w in before if _is_title(w)), None)
+    if anchor.winfo_manager() != "pack":
+        return None
+    stretch = []
+    for w in reversed(parent.winfo_children()[:parent.winfo_children().index(anchor)]):
+        if hasattr(w, "_note_text"):   # the previous note's place: its title is behind it
+            break
+        stretch.append(w)
+    return next((w for w in reversed(stretch) if _is_title(w)), None)
+
+
+def _note_on(anchor, title):
+    anchor._note_target = title
+    Tooltip(title, anchor._note_text, click=False)
+    try:
+        title.config(cursor="question_arrow")
+    except tk.TclError:
+        pass
+
+
+def _place_note(anchor):
+    try:
+        if not anchor.winfo_exists() or anchor._note_target is not None:
+            return
+        title = _note_title(anchor) if anchor.winfo_manager() else None
+    except tk.TclError:
+        return
+    if title is not None:
+        _note_on(anchor, title)
+        return
+    if not anchor.winfo_manager():   # not placed yet: look again once it is, for a while
+        anchor._tries = getattr(anchor, "_tries", 0) + 1
+        if anchor._tries < 50:
+            anchor.after(200, lambda: _place_note(anchor))
+        return
+    mark = tk.Label(anchor, text="?", font=("Segoe UI", 8, "bold"), fg=PALETTE["help_mark_fg"],
+                    bg=PALETTE["help_mark_bg"], width=2, cursor="question_arrow")
+    mark.pack()
+    _note_on(anchor, mark)
 
 
 def section(parent, title, help_text=None, row=None, title_fg=None):

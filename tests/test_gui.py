@@ -915,3 +915,51 @@ def test_choosing_none_stops_and_hides_the_marks(app, ui):
 def test_preview_zone_same_as_list_zone_is_refused(app, ui):
     keys, panel = _preview_ready(app, ui, zone="Speakers")
     assert panel.preview_zone is None and panel._marks == {}
+
+
+# --- notes on titles (the ? marks retired) ---
+
+def _widgets(w):
+    yield w
+    for c in w.winfo_children():
+        yield from _widgets(c)
+
+
+def test_every_note_sits_on_a_title(app, ui):
+    ui.pump(1.5)
+    notes = [w for w in _widgets(ui.play.root) if hasattr(w, "_note_text")]
+    assert len(notes) > 60
+    for w in notes:
+        title = w._note_target
+        assert title is not None, f"unplaced: {w._note_text[:40]}"
+        assert str(title.cget("text")) != "?", f"fell back to a ?: {w._note_text[:40]}"
+        assert str(title.cget("cursor")) == "question_arrow"
+    titles = [id(w._note_target) for w in notes]
+    assert len(titles) == len(set(titles)), "one note per title"
+
+
+def test_note_goes_on_the_rows_title_not_the_last_label(app, ui):
+    ui.pump(1.5)
+    timing = next(w for w in _widgets(ui.play.root)
+                  if getattr(w, "_note_text", "").startswith("Fine-tunes switching"))
+    assert timing._note_target.cget("text") == "Switch Timing Adjustment", "not 'seconds'"
+
+
+def test_note_waits_before_showing(app, ui):
+    import settings_gui
+    ui.pump(1.5)
+    behaviour = next(w for w in _widgets(ui.play.root)
+                     if getattr(w, "_note_text", "").startswith("Play: the playlist"))._note_target
+    note = behaviour._tooltip
+    note._wait()   # as the pointer arrives
+    ui.pump(0.1)
+    assert note.tip is None, "not straight away"
+    ui.pump(settings_gui.NOTE_DELAY_MS / 1000 + 0.3)
+    assert note.tip is not None, "shown after the delay"
+    assert int(note.tip.winfo_children()[0].cget("wraplength")) == settings_gui.NOTE_WRAP
+    note.hide()   # as the pointer leaves
+    assert note.tip is None
+    note._wait()
+    note.hide()   # left before the delay: never shown
+    ui.pump(settings_gui.NOTE_DELAY_MS / 1000 + 0.3)
+    assert note.tip is None
