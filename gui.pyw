@@ -37,6 +37,7 @@ from mix_gui import MixRows
 from review_gui import ReviewPanel
 import console_query
 import playmix
+import profiles
 import buildlog
 import support_gui
 import window_chrome
@@ -1536,6 +1537,7 @@ def main():
     _enable_dpi_awareness()
     _set_app_id()
     closed_other = _close_other_copy()
+    loaded_profile = profiles.apply_pending()   # a profile chosen with Load, before anything reads a setting
     root = tk.Tk()
     root.withdraw()   # built out of sight and shown once it's ready, so it doesn't flash up small first
     _set_window_icon(root)
@@ -1554,6 +1556,8 @@ def main():
     discover = DiscoverTab(nb)
     settings = SettingsTab(nb)
     play.settings = settings   # the Play tab's Drift and Non-stop change Settings > Playlist
+    if loaded_profile:
+        root.after(800, lambda: print(f'Profile "{loaded_profile}" loaded.'))
     nb.add(play, text="Play")
     nb.add(discover, text="Discover")
     nb.add(settings, text="Settings")

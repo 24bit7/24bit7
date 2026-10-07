@@ -963,3 +963,91 @@ def test_note_waits_before_showing(app, ui):
     note.hide()   # left before the delay: never shown
     ui.pump(settings_gui.NOTE_DELAY_MS / 1000 + 0.3)
     assert note.tip is None
+
+
+# --- Profiles (Settings > Other) ---
+
+def _env(app):
+    import settings_gui
+    return settings_gui.read_env()
+
+
+def test_profile_save_change_and_load_back(app, ui, monkeypatch):
+    import profiles, settings_gui
+    from tkinter import simpledialog
+    s = ui.settings
+    settings_gui.write_env({"SIMILAR_TRACK_COUNT": "25", "PLAY_BEHAVIOUR": "review", "THEME": "dark",
+                            "ANTHROPIC_API_KEY": "sk-original"})
+    app.engine.db().execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('play_mix', '{\"rows\": [1]}')")
+    app.engine.db().commit()
+    monkeypatch.setattr(simpledialog, "askstring", lambda *a, **k: "DJ")
+    s._profile_save_as()
+    assert profiles.names() == ["DJ"] and profiles.current() == "DJ"
+    saved = profiles.read("DJ")
+    assert saved["env"]["SIMILAR_TRACK_COUNT"] == "25" and saved["env"]["PLAY_BEHAVIOUR"] == "review"
+    assert "ANTHROPIC_API_KEY" not in saved["env"] and "THEME" not in saved["env"], "keys and looks stay out"
+    assert s.profile_status.cget("text") == "Current: DJ"
+    assert not profiles.changed()
+
+    # change things after saving
+    settings_gui.write_env({"SIMILAR_TRACK_COUNT": "40", "PLAY_BEHAVIOUR": "instant", "THEME": "light",
+                            "ANTHROPIC_API_KEY": "sk-new"})
+    app.engine.db().execute("DELETE FROM meta WHERE key='play_mix'")
+    app.engine.db().commit()
+    assert profiles.changed()
+    s._show_profile_status()
+    assert s.profile_status.cget("text") == "Current: DJ (changed)"
+
+    # Load: confirmed (the fixture answers No, so answer Yes here), queued, restart asked for
+    from tkinter import messagebox
+    monkeypatch.setattr(messagebox, "askyesno", lambda *a, **k: True)
+    restarts = []
+    ui.play.root.bind("<<Restart24bit7>>", lambda e: restarts.append(1))
+    s.profile_var.set("DJ")
+    s._profile_load()
+    ui.pump(0.2)
+    assert restarts and os.path.isfile(profiles.PENDING)
+
+    # the next start applies it
+    assert profiles.apply_pending() == "DJ"
+    env = _env(app)
+    assert env["SIMILAR_TRACK_COUNT"] == "25" and env["PLAY_BEHAVIOUR"] == "review"
+    assert env["THEME"] == "light" and env["ANTHROPIC_API_KEY"] == "sk-new", "machine settings untouched"
+    row = app.engine.db().execute("SELECT value FROM meta WHERE key='play_mix'").fetchone()
+    assert row and row[0] == '{"rows": [1]}', "Add Playlist rows come back"
+    assert app.engine.SIMILAR_TRACK_COUNT == 25, "the running settings follow"
+    assert not os.path.isfile(profiles.PENDING) and not profiles.changed()
+
+
+def test_profile_unset_settings_go_back_to_defaults(app, ui):
+    import profiles, settings_gui
+    settings_gui.write_env({"CONSOLE_MODE": None})
+    profiles.save("Plain")
+    settings_gui.write_env({"CONSOLE_MODE": "advanced"})
+    profiles.queue_load("Plain")
+    profiles.apply_pending()
+    assert "CONSOLE_MODE" not in _env(app)
+    assert not profiles.changed("Plain")
+
+
+def test_profile_load_cancelled_changes_nothing(app, ui):
+    import profiles
+    profiles.save("Explore")
+    ui.settings._fill_profiles("Explore")
+    import settings_gui
+    settings_gui.write_env({"SIMILAR_TRACK_COUNT": "33"})
+    ui.settings._profile_load()   # the fixture answers No
+    assert not os.path.isfile(profiles.PENDING)
+    assert _env(app)["SIMILAR_TRACK_COUNT"] == "33"
+
+
+def test_profile_delete(app, ui, monkeypatch):
+    import profiles
+    from tkinter import messagebox
+    profiles.save("No AI")
+    s = ui.settings
+    s._fill_profiles("No AI")
+    monkeypatch.setattr(messagebox, "askyesno", lambda *a, **k: True)
+    s._profile_delete()
+    assert profiles.names() == [] and profiles.current() == ""
+    assert s.profile_status.cget("text") == "Current: None"

@@ -12,6 +12,7 @@ Each page is made of boxed sections; a setting's explanation sits behind a small
 """
 
 import os
+import re
 import sys
 import threading
 import tkinter as tk
@@ -2388,8 +2389,112 @@ class SettingsTab(tk.Frame):
         self._clear_cache_win = win
         return win
 
+    # --- Profiles (Settings > Other) ---
+
+    def _build_profiles(self, tab):
+        import profiles
+        box = section(tab, "Profiles",
+                      "Save your settings as a profile, such as DJ, Explore or No AI, and switch between them. "
+                      "A profile holds the Play tab options, Sources, Playlist settings, Filters, JRiver "
+                      "Playlists, Add Playlist rows, the Preview zone, cache and console settings for Windows "
+                      "(Main). Keys, the JRiver connection, Alexa devices with their own settings, keyboard "
+                      "shortcuts and appearance stay as they are. Loading restarts 24bit7; JRiver keeps playing.")
+        row = tk.Frame(box)
+        row.grid(row=0, column=0, sticky="w", pady=4)
+        tk.Label(row, text="Profile", anchor="w").pack(side="left", padx=(0, 12))
+        self.profile_var = tk.StringVar()
+        self.profile_cb = ttk.Combobox(row, textvariable=self.profile_var, state="readonly", width=24)
+        self.profile_cb.pack(side="left")
+        self.profile_cb.bind("<<ComboboxSelected>>", lambda e: self.profile_cb.selection_clear())
+        for text, command, width in (("Load", self._profile_load, 8), ("Save As...", self._profile_save_as, 11),
+                                     ("Delete", self._profile_delete, 8)):
+            tk.Button(row, text=text, width=width, command=command).pack(side="left", padx=(10, 0))
+        self.profile_status = tk.Label(box, text="", anchor="w", fg=PALETTE["help_fg"], font=HELP_FONT)
+        self.profile_status.grid(row=1, column=0, sticky="w", pady=(2, 0))
+        self._fill_profiles(profiles.current())
+        self.after(2000, self._poll_profile_status)
+
+    def _fill_profiles(self, select=None):
+        import profiles
+        names = profiles.names()
+        self.profile_cb.config(values=names)
+        if select in names:
+            self.profile_var.set(select)
+        elif self.profile_var.get() not in names:
+            self.profile_var.set(names[0] if names else "")
+        self._show_profile_status()
+
+    def _show_profile_status(self):
+        import profiles
+        try:
+            cur = profiles.current()
+            text = "Current: None" if not cur else f"Current: {cur}" + (" (changed)" if profiles.changed(cur) else "")
+        except Exception as e:
+            text = f"Problem: couldn't read the profiles ({e})."
+        self.profile_status.config(text=text)
+
+    def _poll_profile_status(self):
+        """Keeps "(changed)" honest while the Other page is on screen."""
+        try:
+            if self.profile_status.winfo_viewable():
+                self._show_profile_status()
+            self.after(2000, self._poll_profile_status)
+        except tk.TclError:
+            pass
+
+    def _profile_save_as(self):
+        import profiles
+        name = simpledialog.askstring("Save Profile", "Name for this profile:",
+                                      initialvalue=profiles.current() or self.profile_var.get(), parent=self)
+        name = re.sub(r"[^\w\- ]+", "", name or "").strip()
+        if not name:
+            return
+        if profiles.exists(name) and not messagebox.askyesno(
+                "Save Profile", f'There\'s already a profile called "{name}". Replace it with your current settings?',
+                parent=self):
+            return
+        profiles.save(name)
+        self._fill_profiles(name)
+
+    def _profile_load(self):
+        import profiles
+        name = self.profile_var.get()
+        if not name:
+            return
+        cur = profiles.current()
+        if cur == name and not profiles.changed(name):
+            self.profile_status.config(text=f"Current: {name} (already loaded)")
+            return
+        if cur and profiles.changed(cur):
+            warn = f'You\'ve changed settings since "{cur}" was loaded or saved. Those changes will be lost.\n\n'
+        elif not cur:
+            warn = "Your current settings aren't saved as a profile, so they'll be replaced.\n\n"
+        else:
+            warn = ""
+        if not messagebox.askyesno("Load Profile", f'{warn}Load "{name}"? 24bit7 restarts to apply it; '
+                                   "JRiver keeps playing.", parent=self):
+            return
+        try:
+            profiles.queue_load(name)
+        except Exception as e:
+            messagebox.showerror("Load Profile", f"Couldn't load it: {e}", parent=self)
+            return
+        self._loading = True   # nothing saves over it on the way out
+        self.winfo_toplevel().event_generate("<<Restart24bit7>>")
+
+    def _profile_delete(self):
+        import profiles
+        name = self.profile_var.get()
+        if not name or not messagebox.askyesno("Delete Profile", f'Delete the profile "{name}"? '
+                                               "Your current settings aren't changed.", parent=self):
+            return
+        profiles.delete(name)
+        self.profile_var.set("")
+        self._fill_profiles()
+
     def _build_other(self, nb):
         tab = self._scroll_tab(nb, "Other")
+        self._build_profiles(tab)
 
         # --- General ---
         box = section(tab, "General")
