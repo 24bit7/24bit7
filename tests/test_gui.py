@@ -624,3 +624,19 @@ def test_discover_is_laid_out_before_its_first_load(app, ui):
     d.ensure_loaded()
     ui.pump(0.5)
     assert d.session_var.get() != "Loading sessions..." and d.count_label.cget("text") != "Loading..."
+
+
+def test_play_tab_variety_writes_settings(app, ui):
+    play = ui.play
+    play.variety_var.set("No")
+    play._on_variety_changed()
+    ui.pump(0.3)
+    assert app.engine.SIMILAR_TRACK_VARIETY is False
+    assert ui.settings._main_playlist.vars["SIMILAR_TRACK_VARIETY"].get() == "no"
+    play.variety_var.set("Yes")
+    play._on_variety_changed()
+    ui.pump(0.3)
+    assert app.engine.SIMILAR_TRACK_VARIETY is True
+    app.set_env(SIMILAR_TRACK_VARIETY="no")
+    play._sync_play_switches()
+    assert play.variety_var.get() == "No"

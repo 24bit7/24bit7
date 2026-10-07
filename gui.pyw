@@ -328,6 +328,20 @@ class PlayTab(tk.Frame):
                                    "The rest of the Non-stop settings are in Settings > Playlist, and changing "
                                    "Non-stop here changes it there too. Shows a mode only when all four agree. "
                                    "Voice devices with settings of their own keep theirs.").pack(side="left", padx=(8, 0))
+        # Variety: Similar Tracks only, a second door onto Windows (Main)'s Settings > Playlist value
+        tk.Label(self.extras_row, text="Variety", font=("Segoe UI", 9, "bold"),
+                 fg=PALETTE["text_secondary"]).pack(side="left", padx=(24, 6))
+        self.variety_var = tk.StringVar(value="No")
+        self.variety_cb = ttk.Combobox(self.extras_row, textvariable=self.variety_var,
+                                       values=["Yes", "No"], state="readonly", width=5)
+        self.variety_cb.pack(side="left")
+        self.variety_cb.bind("<<ComboboxSelected>>", self._on_variety_changed)
+        help_mark(self.extras_row, "Similar Tracks only. Yes gathers up to twice the matches it needs and "
+                                   "picks from them at random, the closest the most likely, so the same seed "
+                                   "gives a different playlist each run. No takes the closest matches in order "
+                                   "and stops at the number of tracks. Changing Variety here changes it in "
+                                   "Settings > Playlist too. Voice devices with settings of their own keep "
+                                   "theirs.").pack(side="left", padx=(8, 0))
         self.credits_button = FlatButton(self.extras_row, text="Show Credits", command=self.on_credits,
                                          quiet=True, width=14, height=1)
         self.credits_button.pack(side="left", padx=(24, 0))
@@ -401,6 +415,7 @@ class PlayTab(tk.Frame):
         by = engine.NONSTOP_BY
         states = {(by[g].get("mode", "journey") if by[g]["on"] else "off") for g in NONSTOP_GROUPS if g in by}
         self.nonstop_var.set(dict(PLAY_NONSTOP).get(states.pop() if len(states) == 1 else "off", "Off"))
+        self.variety_var.set("Yes" if engine.SIMILAR_TRACK_VARIETY else "No")
 
     def _save_play_switches(self, updates, apply):
         """
@@ -463,6 +478,15 @@ class PlayTab(tk.Frame):
                 sync_nonstop(page)
         self.nonstop_cb.selection_clear()
         self._save_play_switches(updates, apply)
+
+    def _on_variety_changed(self, *_):
+        value = "no" if self.variety_var.get() == "No" else "yes"
+
+        def apply(page):
+            if "SIMILAR_TRACK_VARIETY" in page.vars:
+                page.vars["SIMILAR_TRACK_VARIETY"].set(value)
+        self.variety_cb.selection_clear()
+        self._save_play_switches({"SIMILAR_TRACK_VARIETY": value}, apply)
 
     def _on_moderator_changed(self, *_):
         value = self.moderator_var.get().lower()

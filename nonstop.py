@@ -123,7 +123,7 @@ def _second_track_seed(zone, info):
 
 def _build(mode, seed, report):
     if mode == "artists":
-        engine.create_similar_playlist(report=report, seed_info=seed)
+        engine.create_similar_playlist(report=report, seed_info=seed, topup=True)
     else:
         engine.create_similar_tracks_playlist(report=report, seed_info=seed)
 

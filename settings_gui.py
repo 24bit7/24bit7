@@ -269,6 +269,8 @@ class ProfilePage:
                     out[key] = v[key].get().lower()
             return out
         out = {key: v[key].get().strip() for key in PLAYLIST_TEXT_KEYS}
+        if "SIMILAR_ARTIST_TRACK_LIMIT" in v:
+            out["SIMILAR_ARTIST_TRACK_LIMIT"] = "1" if v["SIMILAR_ARTIST_TRACK_LIMIT"].get() else "0"
         for group, (on, using, rounds, _) in self.drift.items():
             name = f"DRIFT_{group.upper()}"
             out[name] = "1" if on.get() else "0"
@@ -309,7 +311,8 @@ class ProfilePage:
 # Playlist settings saved as typed (spin boxes and dropdowns)
 PLAYLIST_TEXT_KEYS = ["SIMILAR_ARTIST_TRACK_COUNT", "SIMILAR_ARTIST_LIMIT", "TRACKS_PER_ARTIST_POOL",
                       "TRACKS_PER_ARTIST_PICK", "SIMILAR_TRACK_COUNT", "SIMILAR_TRACK_PER_ARTIST",
-                      "SIMILAR_TRACK_ORDER", "TOP_TRACKS_COUNT", "TOP_TRACKS_ORDER", "VIBE_TRACK_COUNT",
+                      "SIMILAR_TRACK_ORDER", "SIMILAR_TRACK_VARIETY", "TOP_TRACKS_COUNT", "TOP_TRACKS_ORDER",
+                      "VIBE_TRACK_COUNT",
                       "SKIP_PLAYED_ARTISTS_DAYS", "SKIP_PLAYED_TRACKS_DAYS",
                       "SKIP_PLAYED_TOP_DAYS", "SKIP_PLAYED_VIBE_DAYS"]
 
@@ -374,6 +377,7 @@ def table_colours():
 
 
 # The ? beside each Number of tracks
+LIMIT_HELP = "Ticked, the playlist stops at this many tracks, picked at random from everything found. Unticked, every track found goes in: Number of artists times Tracks per artist selection, plus the seed artist's, so the playlist can run long, and Drift doesn't run as there's no target to fall short of. Non-stop top-ups always keep to this number.\nTo switch the random pick off altogether, set Tracks per artist selection to the same as Number of artist's top tracks (say 5 of 5) and untick this."
 TARGET_HELP = 'This is the target number of tracks. The playlist may come out shorter, depending on how many matches are in your library. If your playlists are often too short, tick Drift to fill them out.'
 TOP_TARGET_HELP = "This is the target number of tracks. The playlist may come out shorter, depending on how many of the artist's top tracks are in your library."
 
@@ -1991,14 +1995,35 @@ class SettingsTab(tk.Frame):
 
         # --- Similar Artists ---
         begin("artists", "Playlist")
-        spin("Number of tracks", "SIMILAR_ARTIST_TRACK_COUNT", "30", 5, 100, TARGET_HELP)
+        # Limit total tracks to: a tick box in the label column, the number beside it
+        box, r = where["box"], where["r"]
+        limit_var = tk.BooleanVar(value=p.env.get("SIMILAR_ARTIST_TRACK_LIMIT", "1") in ("1", "true", "yes"))
+        p.vars["SIMILAR_ARTIST_TRACK_LIMIT"] = limit_var
+        p.vars["SIMILAR_ARTIST_TRACK_COUNT"] = tk.StringVar(value=p.env.get("SIMILAR_ARTIST_TRACK_COUNT", "30"))
+        cell = tk.Frame(box)
+        cell.grid(row=r, column=1, sticky="w", padx=(12, 0))
+        limit_sb = tk.Spinbox(cell, from_=5, to=100, textvariable=p.vars["SIMILAR_ARTIST_TRACK_COUNT"],
+                              width=6, command=p.save)
+        limit_sb.pack(side="left")
+        help_mark(cell, LIMIT_HELP).pack(side="left", padx=(8, 0))
+
+        def limit_toggled(save=True):
+            limit_sb.config(state="normal" if limit_var.get() else "disabled")
+            if save:
+                p.save()
+        ttk.Checkbutton(box, text="Limit total tracks to", variable=limit_var,
+                        command=limit_toggled).grid(row=r, column=0, sticky="w", pady=4)
+        limit_toggled(save=False)
+        p.vars["SIMILAR_ARTIST_TRACK_COUNT"].trace_add("write", p.save)
+        where["r"] += 1
         spin("Number of artists", "SIMILAR_ARTIST_LIMIT", "20", 1, 50)
         pool_var, _ = spin("Number of artist's top tracks", "TRACKS_PER_ARTIST_POOL", "5", 1, 20)
         _, p.pick_sb = spin("Tracks per artist selection", "TRACKS_PER_ARTIST_PICK", "3", 1, 20,
                             "Top tracks come from your Top-track sources (Last.fm, Deezer and so on), for "
                             "the seed artist and each similar artist. Selecting fewer than the top tracks "
                             "(say 3 of 5) means the same seed gives a different playlist each run, as the "
-                            "selection is random.")
+                            "selection is random. For no random pick at all, set both numbers the "
+                            "same and untick Limit total tracks to.")
         pool_var.trace_add("write", lambda *a: sync_pick_limit(p))
         recent("artists")
         drift("artists")
@@ -2010,6 +2035,12 @@ class SettingsTab(tk.Frame):
         begin("tracks", "Playlist")
         spin("Number of tracks", "SIMILAR_TRACK_COUNT", "30", 5, 100, TARGET_HELP)
         spin("Most tracks per artist", "SIMILAR_TRACK_PER_ARTIST", "3", 1, 20, "Includes the seed artist.")
+        choice("Variety", "SIMILAR_TRACK_VARIETY", "no", ["yes", "no"],
+               "Yes: gathers up to twice the matches it needs and picks from them at random, the closest "
+               "the most likely, so the same seed gives a different playlist each run.\n"
+               "No: takes the closest matches in order and stops at the number of tracks, so the same "
+               "seed gives the same playlist.\n"
+               "Also on the Play tab under More Options, which changes Windows (Main).")
         choice("Order", "SIMILAR_TRACK_ORDER", "shuffled", ["shuffled", "similar first"],
                "Similar first keeps the order the sources agreed on, strongest matches first. "
                "Shuffled mixes them up.")

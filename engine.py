@@ -40,8 +40,10 @@ PROFILE_KEYS = {
     "sources": ["SIMILAR_SOURCES", "SIMILAR_MIN_AGREEMENT", "LISTENBRAINZ_ALGORITHM", "SIMILAR_TRACK_SOURCES",
                 "SIMILAR_TRACK_MIN_AGREEMENT", "LISTENBRAINZ_TRACK_ALGORITHM", "TOP_TRACK_SOURCES", "AI_MODERATOR",
                 "AI_MODERATOR_ARTISTS", "AI_MODERATOR_TRACKS"],
-    "playlist": ["SIMILAR_ARTIST_TRACK_COUNT", "SIMILAR_ARTIST_LIMIT", "TRACKS_PER_ARTIST_POOL",
+    "playlist": ["SIMILAR_ARTIST_TRACK_COUNT", "SIMILAR_ARTIST_TRACK_LIMIT", "SIMILAR_ARTIST_LIMIT",
+                 "TRACKS_PER_ARTIST_POOL",
                  "TRACKS_PER_ARTIST_PICK", "SIMILAR_TRACK_COUNT", "SIMILAR_TRACK_PER_ARTIST", "SIMILAR_TRACK_ORDER",
+                 "SIMILAR_TRACK_VARIETY",
                  "TOP_TRACKS_COUNT", "TOP_TRACKS_ORDER", "VIBE_TRACK_COUNT",
                  "DRIFT_ARTISTS", "DRIFT_ARTISTS_USING", "DRIFT_ARTISTS_ROUNDS",
                  "DRIFT_TRACKS", "DRIFT_TRACKS_USING", "DRIFT_TRACKS_ROUNDS",
@@ -216,7 +218,7 @@ def load_settings():
     global DIGITAL_STORES, REFERENCE_SITES, DEBUG, SIMILAR_ARTIST_LIMIT, TRACKS_PER_ARTIST_POOL
     global SIMILAR_MIN_AGREEMENT
     global SIMILAR_TRACK_SOURCES, SIMILAR_TRACK_MIN_AGREEMENT, SIMILAR_TRACK_COUNT
-    global SIMILAR_TRACK_PER_ARTIST, SIMILAR_TRACK_ORDER
+    global SIMILAR_TRACK_PER_ARTIST, SIMILAR_TRACK_ORDER, SIMILAR_TRACK_VARIETY
     global LISTENBRAINZ_TRACK_ALGORITHM_SETTING
     global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, CACHE_DAYS, CACHE_KEEP
     global TABLE_FONT_SIZE, VIBE_TRACK_COUNT
@@ -226,7 +228,7 @@ def load_settings():
     global START_IN_TRAY, CLOSE_TO_TRAY
     global LISTEN_SITES, CUSTOM_SITES
     global SKIP_LONG_CLOSERS, LONG_CLOSER_MINUTES
-    global SIMILAR_ARTIST_TRACK_COUNT, DRIFT
+    global SIMILAR_ARTIST_TRACK_COUNT, SIMILAR_ARTIST_TRACK_LIMIT, DRIFT
     global AI_MODERATOR, MODERATOR_WARNED, SKIP_PLAYED
     global NONSTOP, NONSTOP_USING, NONSTOP_RESEED, NONSTOP_TOP_REST, NONSTOP_TOP_REST_COUNT, NONSTOP_VIBE
     global NONSTOP_BY, LONG_CLOSERS, AI_MODERATOR_BY, RUN_AFTER
@@ -283,9 +285,13 @@ def load_settings():
     SIMILAR_TRACK_ORDER = os.getenv("SIMILAR_TRACK_ORDER", "shuffled").strip().lower()
     if SIMILAR_TRACK_ORDER not in ("shuffled", "similar first"):
         SIMILAR_TRACK_ORDER = "shuffled"
+    # Variety: yes picks at random from a wider pool, no takes the closest matches in order
+    SIMILAR_TRACK_VARIETY = os.getenv("SIMILAR_TRACK_VARIETY", "no").strip().lower() not in ("no", "0", "false")
 
     SIMILAR_ARTIST_LIMIT = _int_setting("SIMILAR_ARTIST_LIMIT", 20, 1, 50)
     SIMILAR_ARTIST_TRACK_COUNT = _int_setting("SIMILAR_ARTIST_TRACK_COUNT", 30, 5, 100)
+    # Limit total tracks to: unticked, every track found goes in
+    SIMILAR_ARTIST_TRACK_LIMIT = os.getenv("SIMILAR_ARTIST_TRACK_LIMIT", "1").strip().lower() in ("1", "true", "yes")
     # Drift, per Play mode group: on/off, what it drifts using, and how many rounds.
     # An older .env with Similar Tracks' "Top up from Similar Artists" ticked carries
     # over as Drift on for Similar Tracks, using similar artists, one round (the same thing).
@@ -455,6 +461,8 @@ LISTENBRAINZ_TRACK_ALGORITHM=alltime
 # Playlist sizes and order
 SIMILAR_ARTIST_LIMIT=20
 SIMILAR_ARTIST_TRACK_COUNT=30
+# Similar Artists: 1 stops at SIMILAR_ARTIST_TRACK_COUNT tracks, 0 keeps every track found
+SIMILAR_ARTIST_TRACK_LIMIT=1
 TRACKS_PER_ARTIST_POOL=5
 TRACKS_PER_ARTIST_PICK=3
 TOP_TRACKS_COUNT=10
@@ -491,6 +499,8 @@ LONG_CLOSER_MINUTES=6
 SIMILAR_TRACK_COUNT=30
 SIMILAR_TRACK_PER_ARTIST=3
 SIMILAR_TRACK_ORDER=shuffled
+# Similar Tracks variety: yes picks at random (the closest the most likely), no takes the closest in order
+SIMILAR_TRACK_VARIETY=no
 
 # Discover search sites (comma-separated). Stores search artist + track, reference
 # sites search the artist. One browser tab opens per site.
@@ -3815,7 +3825,7 @@ def finish_playlist(keys, drift, fast, seed_info, report, detail=""):
     return len(keys)
 
 
-def create_similar_playlist(report=print, seed_info=None):
+def create_similar_playlist(report=print, seed_info=None, topup=False):
     """
     Builds a playlist around the playing artist:
       1. The seed artist's own top tracks (from the Top-track sources), minus
@@ -3823,7 +3833,8 @@ def create_similar_playlist(report=print, seed_info=None):
          top TRACKS_PER_ARTIST_POOL, queue the ones in the library.
       2. SIMILAR_ARTIST_LIMIT similar artists from the Similar-artist sources,
          each given the same treatment.
-      3. Shuffle the hits, keep SIMILAR_ARTIST_TRACK_COUNT, send them.
+      3. Shuffle the hits, keep SIMILAR_ARTIST_TRACK_COUNT (or all of them with the
+         limit unticked, though a Non-stop top-up always keeps to it), send them.
       4. Still short and Drift is on: search again from what was found.
     With nothing playing on the output zone (a search or a voice command), the
     first track found starts playing straight away (fast start).
@@ -3849,9 +3860,10 @@ def create_similar_playlist(report=print, seed_info=None):
     if len(seeds) > 1:
         report(f"  Multi-value artist, treating as any of: {', '.join(seeds)}")
     report_missing_keys(report, similar=True, top_tracks=True)
-    target = SIMILAR_ARTIST_TRACK_COUNT
+    limited = SIMILAR_ARTIST_TRACK_LIMIT or topup
+    target = SIMILAR_ARTIST_TRACK_COUNT if limited else 0   # 0: no limit, and nothing for Drift to fill
     report(f"  Per artist: top {TRACKS_PER_ARTIST_POOL} from sources, {TRACKS_PER_ARTIST_PICK} picked at random "
-           f"(target {target} tracks).")
+           + (f"(target {target} tracks)." if limited else "(no limit on total tracks)."))
     session_id = session_start("similar", seed_info)
     fast = FastStart(seed_info, report)
     first_key = typed_seed_key(seed_info, seeds, session_id, report)
@@ -3912,7 +3924,7 @@ def create_similar_playlist(report=print, seed_info=None):
     if collected_keys or first_key:
         body = [k for k in collected_keys if k != first_key]
         random.shuffle(body)
-        keys_list = fast.lead(([first_key] if first_key else []) + body, first_key)[:target]
+        keys_list = fast.lead(([first_key] if first_key else []) + body, first_key)[:target or None]
         queued = finish_playlist(keys_list, drift, fast, seed_info, report)
         played.done()
         debug("Queue refreshed")
@@ -4150,23 +4162,25 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
         per[artist_key(seeds[0])] = 1
         drift.per[artist_key(seeds[0])] = 1
     need = max(1, min(SIMILAR_TRACK_MIN_AGREEMENT, len(responding)))
-    # Variety: collect up to VARIETY_POOL times what's wanted (and per artist), then pick
-    # at random with the closest the most likely, so the same seed doesn't always give the same tracks
+    # Variety on: collect up to VARIETY_POOL times what's wanted (and per artist), then pick
+    # at random with the closest the most likely, so the same seed doesn't always give the same tracks.
+    # Variety off: collect just what's wanted, so the closest matches go in, in order.
+    variety = VARIETY_POOL if SIMILAR_TRACK_VARIETY else 1
     pool, pool_keys, pool_per = [], set(), dict(per)   # pool: (artist, title, key, sources, owner), best first
-    pool_size = wanted * VARIETY_POOL
+    pool_size = wanted * variety
     while candidates:
         for (artist, title), sources in candidates:
             if len(keys) + len(pool) >= pool_size:
                 break
             ident = (artist_key(artist), clean_name(title))
-            if ident in checked or len(sources) < need or pool_per.get(ident[0], 0) >= per_artist * VARIETY_POOL:
+            if ident in checked or len(sources) < need or pool_per.get(ident[0], 0) >= per_artist * variety:
                 continue
             checked.add(ident)
             key = find_jriver_key_by_track(artist, title) if use_youtube else library.find_track_key(artist, title)
             session_log(session_id, artist, title, sources, found=bool(key))
             owner = owner_key(artist, key) if key else ident[0]   # counted as tagged in the library
             if (key and key not in keys and str(key) not in pool_keys and played.fresh(key)
-                    and pool_per.get(owner, 0) < per_artist * VARIETY_POOL):
+                    and pool_per.get(owner, 0) < per_artist * variety):
                 pool.append((artist, title, key, sources, owner))
                 pool_keys.add(str(key))
                 pool_per[owner] = pool_per.get(owner, 0) + 1
