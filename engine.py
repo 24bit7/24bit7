@@ -911,6 +911,8 @@ def done_line(queued, misses=0, started=None):
     tracks = f"{queued} track{'' if queued == 1 else 's'}"
     if LAST_OUTPUT == "YouTube":
         return f"Done: {tracks} sent to YouTube{took}."
+    if REVIEW_MODE and not VOICE_TAKEOVER:
+        return f"Done: {tracks} ready in Review, nothing played. {misses} not in library{took}."
     where = f"{tracks} queued in {LAST_OUTPUT}" if queued and LAST_OUTPUT else (
         f"{tracks} queued" if queued else "nothing queued")
     return f"Done: {where}, {misses} not in library{took}."
@@ -922,6 +924,8 @@ def run_after_building(report=print):
     background once the playlist is in JRiver. It isn't told anything about the
     playlist. A device with settings of its own uses its own (voice).
     """
+    if REVIEW_MODE and not VOICE_TAKEOVER:
+        return   # Review: nothing is in JRiver yet
     on, path = RUN_AFTER.get(NONSTOP_CONTEXT.get("kind"), (False, ""))
     if not on or not path:
         return
@@ -2746,7 +2750,15 @@ def jriver_is_stopped(zone=ACTIVE_ZONE):
 VOICE_TAKEOVER = False   # True while a voice build runs
 MIX_ROWS = None          # the Play tab's added playlists for this build; None for voice, shortcuts, non-stop
 MIX_KEEP = set()         # keys from those playlists: the hidden-track check leaves them alone
-REVIEW_MODE = False      # True while an app build runs in Review Mode: load the playlist, don't play it
+REVIEW_MODE = False      # True while an app build runs as Review: tracks are collected, JRiver is left alone
+REVIEW_KEYS = []         # the tracks a Review build found, in order, for the Review view
+REVIEW_ZONE = None       # the zone they'd go to (the Output zone)
+
+
+def review_reset():
+    """Called as a Review build starts: an empty list, and nothing in JRiver touched."""
+    globals()["REVIEW_KEYS"] = []
+    globals()["REVIEW_ZONE"] = None
 MIX_FAST_KEY = None      # an Add before playlist's first track, started by fast start
 MIX_NOTED = False        # the "left out on YouTube" note has been logged this build
 CANCEL_CHECK = None      # set by voice.py: returns True once a newer command has taken over
@@ -2871,6 +2883,12 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
     keys = [str(k) for k in keys]
     seed_key = str((seed_info or {}).get("FileKey") or "")
     keys = drop_long_closers(keys, keep=[seed_key, *MIX_KEEP], report=report, group=closer_group)
+    if REVIEW_MODE and not VOICE_TAKEOVER and not NONSTOP_APPEND:   # Review: collect, send nothing
+        globals()["REVIEW_ZONE"] = zone
+        for k in keys:
+            if k not in REVIEW_KEYS:
+                REVIEW_KEYS.append(k)
+        return
     if NONSTOP_APPEND:   # a non-stop top-up only ever adds, and never repeats what the zone already had
         sent = nonstop_sent(zone)
         fresh_keys = [k for k in keys if k not in sent]
@@ -2896,9 +2914,6 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
             debug(f"{zone_label(zone)} was stopped, so the playlist starts there now")
         requests.get(f"{JRIVER_BASE}/Playback/PlayByKey",
                      params={"Key": ",".join(keys), "Zone": zone}, auth=AUTH)
-        if REVIEW_MODE and not VOICE_TAKEOVER:   # Review Mode: loaded, then stopped on track one
-            requests.get(f"{JRIVER_BASE}/Playback/Stop", params={"Zone": zone}, auth=AUTH)
-            report(f"  Loaded for review in {zone_label(zone)}: press play in JRiver when you're ready.")
         return
     report(f"  Queued in {zone_label(zone)} after the current track.")
     clear_around_current(zone)

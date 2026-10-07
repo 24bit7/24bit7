@@ -30,7 +30,7 @@ import engine
 GOOD = 0.80              # a match at least this close counts as found
 REFRESH_MINUTES = 30     # how often the library is re-read in the background
 AUDIO = "[Media Type]=[Audio]"
-FIELDS = ("Key,Name,Artist,Album,Album Artist (auto),Disc #,Track #,Duration,Last Played,"
+FIELDS = ("Key,Name,Artist,Album,Album Artist (auto),Disc #,Track #,Duration,BPM,Last Played,"
           # for Settings > Filters rules
           "Rating,Date (year),Number Plays,Date Imported,Genre,File Type,Bit Depth,Sample Rate,Filename")
 

@@ -632,7 +632,7 @@ def test_variety_is_settings_only(app, ui):
 
 def test_play_tab_behaviour_saves_and_greys_out_for_youtube(app, ui):
     play = ui.play
-    assert play.behaviour_var.get() == "Play Instantly"
+    assert play.behaviour_var.get() == "Play"
     play.behaviour_var.set("Review")
     play._on_behaviour_changed()
     ui.pump(0.2)

@@ -64,7 +64,7 @@ DRIFT_GROUPS = ("artists", "tracks", "vibe")            # Top Tracks has no Drif
 NONSTOP_GROUPS = ("artists", "tracks", "top", "vibe")
 PLAY_RESEED = [("last", "Last track"), ("second", "2nd track")]
 PLAY_NONSTOP = [("off", "Off"), ("tight", "Keep It Tight"), ("journey", "Wander")]
-PLAY_BEHAVIOUR = [("instant", "Play Instantly"), ("review", "Review")]   # every build from the app, not voice
+PLAY_BEHAVIOUR = [("instant", "Play"), ("review", "Review")]   # every build from the app, not voice
 PLAY_DRIFT = [("off", "Off"), ("close", "Keep It Tight"), ("spread", "Spread")]   # as Settings > Playlist shows them   # as Settings > Playlist shows them
 
 
@@ -288,16 +288,16 @@ class PlayTab(tk.Frame):
         tk.Label(self.extras_row, text="Behaviour", font=("Segoe UI", 9, "bold"),
                  fg=PALETTE["text_secondary"]).pack(side="left", padx=(0, 6))
         saved = read_env().get("PLAY_BEHAVIOUR", "instant").strip().lower()
-        self.behaviour_var = tk.StringVar(value=dict(PLAY_BEHAVIOUR).get(saved, "Play Instantly"))
+        self.behaviour_var = tk.StringVar(value=dict(PLAY_BEHAVIOUR).get(saved, "Play"))
         self.behaviour_cb = ttk.Combobox(self.extras_row, textvariable=self.behaviour_var, state="readonly",
-                                         width=13, values=[shown for _, shown in PLAY_BEHAVIOUR])
+                                         width=8, values=[shown for _, shown in PLAY_BEHAVIOUR])
         self.behaviour_cb.pack(side="left")
         self.behaviour_cb.bind("<<ComboboxSelected>>", self._on_behaviour_changed)
-        help_mark(self.extras_row, "Play Instantly: the playlist starts as soon as it's found.\n"
-                                   "Review: the playlist is loaded into Playing Now and left stopped on track "
-                                   "one, so you can remove tracks, change the order or add them to another "
-                                   "playlist in JRiver, then press play. If the zone is already playing, the "
-                                   "playlist is queued after the current track either way.\n"
+        help_mark(self.extras_row, "Play: the playlist starts as soon as it's found.\n"
+                                   "Review: nothing is sent to JRiver. The tracks found are listed in Review, "
+                                   "in the console area, where you tick the ones you want in the order you "
+                                   "want them, then add them to Playing Now, load them as new or save them "
+                                   "as a playlist. A Preview zone lets you listen first.\n"
                                    "For every build from the app, Now Playing and Search. Voice commands, "
                                    "keyboard shortcuts and Non-stop always play straight away. Not used when "
                                    "Output is YouTube.").pack(side="left", padx=(8, 0))
@@ -1253,6 +1253,8 @@ class PlayTab(tk.Frame):
         def worker():
             engine.MIX_ROWS, engine.MIX_KEEP, engine.MIX_FAST_KEY, engine.MIX_NOTED = rows, set(), None, False
             engine.REVIEW_MODE = review
+            if review:
+                engine.review_reset()
             engine.BUILD_STARTED, engine.LAST_OUTPUT = time.time(), None
             engine.LAST_OUTPUT_ID, engine.LAST_BUILD = None, None
             try:
