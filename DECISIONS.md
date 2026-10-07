@@ -175,3 +175,9 @@ Fetching prices online (a file on GitHub, or Claude with web search) would add a
 
 **6 Oct 2026: The title bar is 24bit7's own, with a way back.**
 The tab strip runs to the top of the window, and Windows is told it's the title bar, so dragging, snapping and maximising still work. Because it can't be tested on every PC, Use the Windows title bar brings the normal one back after a restart.
+
+**7 Oct 2026: Variety is off by default.**
+A new user wants to see every match first, then decide whether they want variety. The closest matches in order is also what Similar Tracks did before 1.13.0. Voice devices with their own settings can keep it on, since a playlist asked for from the sofa is better different each time.
+
+**7 Oct 2026: Review Mode loads the playlist, then stops it.**
+JRiver is a better playlist editor than 24bit7 would ever be: removing tracks, reordering and adding to other playlists are all there already. So Review Mode hands over rather than building an editor, and reuses the normal send step with fast start off, stopping the zone straight after, so at most a fraction of a second plays.

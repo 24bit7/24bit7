@@ -55,7 +55,7 @@ Your settings and history live in two files next to the app: `.env` (settings an
 Every playlist starts from a seed. The seed is whichever of the two small tabs is showing when you press a button.
 
 - **Now Playing** shows what JRiver is playing. **Zone** picks which JRiver zone you seed from. If that zone's Playing Now is empty, the buttons seed from the last track JRiver played.
-- **Search** lets you type any artist and track, whether you own it or not. Press Enter for Similar Artists.
+- **Search** lets you type any artist and track, whether you own it or not. Press Enter for Similar Artists. **Behaviour**, beside Track, is **Play Instantly** or **Review Mode**. Review Mode loads the playlist into Playing Now and leaves it stopped on track one, so you can remove tracks, change the order or add them to another playlist in JRiver before you press play. If the zone is already playing, the playlist queues after the current track either way. It's for builds from Search only: Now Playing, voice commands, shortcuts and Non-stop always play straight away, and it isn't used when Output is YouTube.
 
 ![The Search tab](images/play_search.png)
 
@@ -84,6 +84,7 @@ Every playlist starts from a seed. The seed is whichever of the two small tabs i
 
 - **AI Moderator** checks each playlist for tracks that clash with the seed's mood. See [AI Moderator](#ai-moderator).
 - **Drift** (Off, Keep It Tight or Spread) and **Non-stop** (Off, Keep It Tight or Let's See Where This Goes) set those settings for every Play option at once. See [Drift](#drift) and [Non-stop](#non-stop).
+- **Variety** (Yes or No), for Similar Tracks only. No takes the closest matches in order; Yes picks at random from a wider pool, so the same seed gives a different playlist each time. It's the same setting as in Settings > Playlist, for the Main Window. See [Similar Tracks](#similar-tracks).
 - **Show Credits** lists the producer, engineer and other credits for the album that's playing, from Discogs. It needs a Discogs token.
 - **+ Add Playlist** joins one of your JRiver playlists to the next build. See [Adding your own playlists](#adding-your-own-playlists).
 
@@ -183,7 +184,7 @@ How each Play option builds its playlist, with a tab for each option.
 
 ![Settings, Playlist](images/settings_playlist_similar_artists.png)
 
-- **Playlist**: how many tracks, how many artists, how many of each artist's top tracks to draw from, and how many to pick per artist. Similar Tracks sets the most tracks any one artist gets and the order. Artist's Top Tracks sets shuffled or popular order.
+- **Playlist**: Similar Artists sets **Limit total tracks to**, how many artists, how many of each artist's top tracks to draw from, and how many to pick per artist. Untick the limit to keep every track found; with the last two the same (say 5 of 5) as well, there's no random pick at all. Similar Tracks sets how many tracks, the most any one artist gets, the order and **Variety**. Artist's Top Tracks sets shuffled or popular order.
 - **Skip tracks played in the last ... days** leaves out anything JRiver has played recently, so a favourite doesn't come round again the same evening. The seed track is never left out. Off by default.
 - **Drift** (Off, Keep It Tight or Spread) searches again when your library falls short of the target length. Similar Artists and Similar Tracks also have **AI Moderator on Drift tracks**. See [Drift](#drift).
 - **Non-stop** (Off, Keep It Tight or Let's See Where This Goes) keeps a playlist going when it reaches its last track. See [Non-stop](#non-stop).
@@ -264,7 +265,7 @@ Each ticked source returns a ranked list. 24bit7 merges them with position weigh
 
 ### Similar Tracks
 
-Similar Artists asks "who sounds like this artist?". Similar Tracks asks "what sounds like this song?", which follows the mood of the seed far more closely: two songs by the same artist lead to different places. Its sources are Last.fm, ListenBrainz, YouTube Music and, if ticked, AI. A track two or three sources agree on ranks above one only a single source suggests. It collects up to twice as many matches as it needs and picks at random, the closest the most likely, so the same seed gives a different playlist each time.
+Similar Artists asks "who sounds like this artist?". Similar Tracks asks "what sounds like this song?", which follows the mood of the seed far more closely: two songs by the same artist lead to different places. Its sources are Last.fm, ListenBrainz, YouTube Music and, if ticked, AI. A track two or three sources agree on ranks above one only a single source suggests. By default it takes the closest matches in order, so the same seed gives the same playlist. With **Variety** on, it collects up to twice as many matches as it needs and picks at random, the closest the most likely, so the same seed gives a different playlist each time.
 
 ### YouTube Music as a source
 
@@ -277,7 +278,7 @@ It needs no key and no sign-in. It relies on an unofficial library, ytmusicapi, 
 
 ### Fast start
 
-With nothing playing on the output zone, the first track found starts straight away and the rest follows into Playing Now as it's found, so music starts within a second or two. If something is already playing, it carries on and the new playlist queues behind it. YouTube output waits for the full list, since the link is made once.
+With nothing playing on the output zone, the first track found starts straight away and the rest follows into Playing Now as it's found, so music starts within a second or two. If something is already playing, it carries on and the new playlist queues behind it. YouTube output waits for the full list, since the link is made once. Review Mode on the Search tab turns fast start off: the playlist loads at the end and stays stopped.
 
 ### Queueing
 

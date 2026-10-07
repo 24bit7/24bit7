@@ -294,7 +294,14 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.13.0
+## What's new in 1.14.0
+
+- **Review before you play**: Behaviour on the Search tab is Play Instantly or **Review Mode**, which loads the playlist into JRiver's Playing Now and leaves it stopped on track one, ready to edit in JRiver. Now Playing, voice, shortcuts and Non-stop still play straight away.
+- **Variety is optional for Similar Tracks**, and off by default: the closest matches, in order. Turn it on in Settings > Playlist or under More Options, per device.
+- **Limit total tracks** for Similar Artists: untick it to keep every track found; with 5 of 5 (or any equal pair) there's no random pick at all.
+- **Cleaner boxes and buttons**: thin flat borders instead of 3D edges.
+
+### Earlier: 1.13.0
 
 - **A new look**: black and green in the dark theme, blue and grey in the light, with header bars on every Settings section and table, and new tick boxes.
 - **A built-in title bar**: the tabs run to the top of the window, with minimise, maximise and close. Settings > Other > **Use the Windows title bar** brings Windows' own back.
@@ -302,7 +309,7 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 - **Keep It Tight**: Drift is Off, Keep It Tight or Spread; Non-stop is Off, Keep It Tight or Let's See Where This Goes; JRiver playlists can reseed from the **Whole playlist**.
 - **AI Moderator on Drift tracks** for Similar Artists and Similar Tracks, a moderator that compares with the playlist so far, and chains that went off course dropped.
 - **AI Usage** in Settings > Keys: tokens per feature, estimated costs, a per-run guide and a Query, with an optional total in Now Playing.
-- **More variety** from Similar Tracks.
+- **More variety** from Similar Tracks (optional from 1.14.0).
 - **Set as Default** on JRiver Playlists; dropped-g titles match; the cache can be kept for a month, a year or permanently, and cleared by age; Discover opens on the latest session; Label is an option; **Support** replaces Buy me a coffee.
 
 ### Earlier: 1.12.0
