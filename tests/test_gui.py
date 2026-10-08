@@ -1304,3 +1304,34 @@ def test_review_column_same_as_play_then_own_figures(app, ui):
     play.on_similar_tracks()
     ui.wait_idle()
     assert "(target 30" in console(ui).split("Similar Tracks:")[-1]
+
+
+def test_cost_note_wraps_inside_the_window(app, ui):
+    """The 'costs are estimates' note under the AI Usage table wraps to the window, not past it."""
+    ui.root.geometry("760x700")
+    ui.nb.select(ui.settings)
+    ui.pump(0.3)
+    visit_every_page(ui)
+    label = ui.settings.usage_rates
+    child = label
+    while child.master is not None:   # open the page the note is on
+        parent = child.master
+        if hasattr(parent, "select") and hasattr(parent, "add") and hasattr(parent, "remove"):
+            parent.select(child)
+        child = parent
+    ui.pump(0.6)
+    page = label
+    while not isinstance(page.master, tk.Canvas):
+        page = page.master
+    right = page.winfo_rootx() + page.winfo_width()
+    assert label.winfo_rootx() + label.winfo_reqwidth() <= right, "the note runs past the window's edge"
+
+
+def test_about_thanks_everyone_in_the_readme(app):
+    """Settings > About and the README thank the same people."""
+    gui_settings = __import__("settings_gui")
+    readme = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "README.md"),
+                  encoding="utf-8").read()
+    thanks = readme.split("## Thanks", 1)[1].split("\n## ", 1)[0]
+    for name, _ in gui_settings.THANKS:
+        assert f"**{name}**" in thanks

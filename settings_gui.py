@@ -70,6 +70,12 @@ CREDITS = [
     ("JRiver Media Center", "https://jriver.com"),
 ]
 
+THANKS = [   # Settings > About > Thanks, and the README's Thanks section
+    ("datdude", "Early testing and ideas, including Switch Profiles."),
+    ("Helmut", "Shaping Review."),
+    ("Denis", "The local AI work, and testing 24bit7 against a 187,000-track library."),
+]
+
 
 # Listed alphabetically by display name
 SOURCE_NAMES = [("ai", "AI"), ("deezer", "Deezer"),
@@ -2341,7 +2347,7 @@ class SettingsTab(tk.Frame):
         self.usage_guide.grid(row=7, column=0, sticky="w")
         self.usage_legend = tk.Label(usage, text="", fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w")
         self.usage_legend.grid(row=8, column=0, sticky="w", pady=(6, 0))
-        rates = tk.Label(usage, text=ai_usage.rates_line(), fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w",
+        rates = self.usage_rates = tk.Label(usage, text=ai_usage.rates_line(), fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w",
                          justify="left")
         rates.grid(row=9, column=0, sticky="w", pady=(10, 0))
         self._wrap_to_width(usage, [self.usage_dollar, rates])
@@ -2383,10 +2389,21 @@ class SettingsTab(tk.Frame):
             Tooltip(button, KEY_HELP[key][1].replace("\n", " ") + "\nClick for these steps in a window.")
 
     def _wrap_to_width(self, frame, labels):
-        """Text lines wrap to the width their frame has, rather than a fixed figure."""
-        def fit(event):
+        """
+        Text lines wrap to the visible width of the Settings page they're on, not to
+        their own frame: a wide table beside them makes that frame wider than the window.
+        """
+        page = frame
+        while page.master is not None and not isinstance(page.master, tk.Canvas):
+            page = page.master
+
+        def fit(_event=None):
+            right = page.winfo_rootx() + page.winfo_width()
             for lab in labels:
-                lab.config(wraplength=max(300, event.width - 4))
+                width = max(300, right - lab.winfo_rootx() - 24)
+                if int(float(str(lab.cget("wraplength")) or 0)) != width:
+                    lab.config(wraplength=width)
+        page.bind("<Configure>", fit, add="+")
         frame.bind("<Configure>", fit, add="+")
 
     def _usage_grid(self, frame, headings, rows, left=(0,)):
@@ -2917,6 +2934,13 @@ class SettingsTab(tk.Frame):
             row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
         for r, (name, url) in enumerate(CREDITS, start=1):
             self._about_link(box, name, url, r)
+
+        # --- Thanks ---
+        box = section(tab, "Thanks")
+        for r, (name, why) in enumerate(THANKS):
+            tk.Label(box, text=name, font=LABEL_FONT, anchor="w").grid(row=r, column=0, sticky="nw", pady=1)
+            tk.Label(box, text=why, anchor="w", justify="left", wraplength=420).grid(
+                row=r, column=1, sticky="w", padx=(16, 0), pady=1)
 
         # --- Licence ---
         box = section(tab, "Licence")

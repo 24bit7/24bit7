@@ -487,6 +487,12 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 - More players and outputs beyond JRiver and YouTube (distant)
 - A shared recommendation database built from the hit/miss data (very distant)
 
+## Thanks
+
+- **datdude**, for early testing and ideas, including Switch Profiles.
+- **Helmut**, for shaping Review.
+- **Denis**, for the local AI work and for testing 24bit7 against a 187,000-track library.
+
 ---
 
 ## Licence
