@@ -77,7 +77,7 @@ In an AI Playlist, Drift using similar artists or similar tracks tops up from yo
 
 ### AI Moderator
 
-Most playlists are right apart from one track: the stadium anthem in the middle of a run of acoustic songs. The AI Moderator is an optional check that catches it. When it's on, each playlist (and each Drift round) goes to Claude Haiku once, with the seed and the list of tracks, and it removes the ones that would jolt a listener out of the mood. It judges tone, energy and mood only, and genre is never a reason on its own: a folk song and an electronic track can sit together, and two songs in the same genre can clash. It keeps anything it doesn't know well enough to judge, and logs each removal with its reason. How hard it looks is up to you:
+Most playlists are right apart from one track: the stadium anthem in the middle of a run of acoustic songs. The AI Moderator is an optional check that catches it. When it's on, each playlist (and each Drift round) goes to the AI's quick model once (Claude Haiku on Anthropic), with the seed and the list of tracks, and it removes the ones that would jolt a listener out of the mood. It judges tone, energy and mood only, and genre is never a reason on its own: a folk song and an electronic track can sit together, and two songs in the same genre can clash. It keeps anything it doesn't know well enough to judge, and logs each removal with its reason. How hard it looks is up to you:
 
 - **Relaxed** removes only clear clashes, at most a fifth of the tracks.
 - **Balanced** removes anything that noticeably shifts the tone, energy or mood away from the seed, at most two fifths.
@@ -85,7 +85,7 @@ Most playlists are right apart from one track: the stadium anthem in the middle 
 
 It's **Off** by default. A few extra tracks are found up front, more at the stricter levels, so the ones it removes are replaced. The fast start track is never checked, and Artist's Top Tracks isn't moderated, since it's one artist.
 
-It needs an Anthropic key and uses a little credit each time, a fraction of a penny per playlist; the first time you switch it on, 24bit7 says so. Without a key the option is greyed out. If the check fails or the credit runs out, the playlist builds as normal and the log says why. Pick the level as you go from **More Options** on the Play tab. It applies to Similar Artists and Similar Tracks. An AI Playlist's own picks are never checked, because the AI has already picked every track against your description, but its Drift section has **AI Moderator on Drift tracks** for what Drift adds from your sources. It's greyed out unless Drift is on and isn't using the AI. A voice device with settings of its own keeps its own choice under Settings > Sources; one copying Windows (Main) follows the Play tab (see Voice Commands below).
+It needs the AI set up under Settings > Keys and uses a little credit each time, a fraction of a penny per playlist (nothing with Ollama); the first time you switch it on, 24bit7 says so. Without that the option is greyed out. If the check fails or the credit runs out, the playlist builds as normal and the log says why. Pick the level as you go from **More Options** on the Play tab. It applies to Similar Artists and Similar Tracks. An AI Playlist's own picks are never checked, because the AI has already picked every track against your description, but its Drift section has **AI Moderator on Drift tracks** for what Drift adds from your sources. It's greyed out unless Drift is on and isn't using the AI. A voice device with settings of its own keeps its own choice under Settings > Sources; one copying Windows (Main) follows the Play tab (see Voice Commands below).
 
 ### The console
 
@@ -97,7 +97,7 @@ A small green arrow at the top of the console opens its tabs: **All**, **Main Wi
 
 When a playlist comes out short or odd, you can ask why. Tick **Enable Console Query** in Settings > Other (it's off by default, and asks before it switches on), then click into the console and press **Query**. Type a question under the console and press Enter: "Why was this track included?", "Why was the playlist so short?", "What did the AI Moderator remove?". The answer appears in the console in magenta, and the box stays open for follow-ups.
 
-Claude Haiku is sent what's in the console, your settings with every key, token, password and user name left out, what's playing, and 24bit7's own code and README, so it knows the rules and the names of the settings. It explains what most likely happened and suggests up to three changes, named as they appear in Settings. Plain music questions, such as which album a song is from, are answered from general knowledge. Running from source, it reads the code in the folder; the packaged app downloads it once from GitHub, for the version you're running. Query reads the build on screen, which can be any of the last 50 opened from the Log; switching the console to Advanced first sends the debug lines too. It costs a few pence for the first question and much less for follow-ups within a few minutes. Clear empties the console, and with it what Claude can see.
+The AI's quick model is sent what's in the console, your settings with every key, token, password and user name left out, what's playing, and 24bit7's own code and README, so it knows the rules and the names of the settings. It explains what most likely happened and suggests up to three changes, named as they appear in Settings. Plain music questions, such as which album a song is from, are answered from general knowledge. Running from source, it reads the code in the folder; the packaged app downloads it once from GitHub, for the version you're running. Query reads the build on screen, which can be any of the last 50 opened from the Log; switching the console to Advanced first sends the debug lines too. It costs a few pence for the first question and, with Anthropic, much less for follow-ups within a few minutes. It isn't available with Ollama, as it sends more than a local model can hold. Clear empties the console, and with it what the AI can see.
 
 ### Reporting a problem
 
@@ -259,6 +259,7 @@ Every response from every source is cached in a local SQLite database with a con
 | YouTube Music | Similar artists and similar tracks from the up next queue, playlist output, Discover playlists | No | No sign-in. Uses the unofficial ytmusicapi library, so it may break now and then. |
 | Discogs | Album credits, record labels | Yes (free) | Credits, and a second source for the Label button. |
 | Anthropic (Claude) | AI-suggested similar artists and tracks, AI Playlist, AI Moderator, Console Query | Yes (paid, pennies per run) | Every suggestion is verified against Deezer before it is trusted. The moderator uses Claude Haiku, a fraction of a penny per playlist. |
+| OpenAI, Google Gemini or Ollama | The same, in place of Anthropic (Settings > Keys > AI) | OpenAI and Gemini: yes (paid). Ollama: none, it runs on your PC | Untested so far; reports welcome. Console Query isn't available with Ollama. |
 
 Enable any combination of similar-artist sources in Settings. One is enough; several are better. Deezer and YouTube Music need no keys, so 24bit7 works out of the box.
 
@@ -292,7 +293,15 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.15.0
+## What's new in 1.16.0
+
+- **AI from OpenAI, Google Gemini or your own PC**: Settings > Keys > AI has a **Provider** choice: Anthropic, OpenAI, Google Gemini or **Ollama**, which runs a model on your own computer for free. Every AI feature uses the one chosen. Only Anthropic has been fully tested so far; OpenAI, Gemini and Ollama should work, and reports on how they do are very welcome on the JRiver forum or GitHub. Console Query isn't available with Ollama.
+- **Show Credits, by track or album**: Settings > Other > **Show Credits** lists the playing track's credits or every track's, alongside the album's, in the order you choose. Credits Discogs marks for some tracks only now appear on those tracks.
+- **Switch Profiles**: a keyboard shortcut that loads the next profile ticked under **Enable Switch To**, waiting for any build in progress to finish.
+- **Thanks**, here and in Settings > About.
+- **Fixes**: Use AI and Run After Building are kept after a restart; hidden control characters in tags no longer stop a library loading; the AI cost note wraps inside the window.
+
+### Earlier: 1.15.0
 
 - **Review, in 24bit7**: with Behaviour on **Review** (under More Options, for every build from the Play tab), the tracks are listed in the console area instead of being sent. Tick them in the order you want, then **Add as Up Next**, **Add to End**, **Finish This Song, Load as New**, **Stop Song, Play Now** or **Save as Playlist**; the actions follow Output, and with YouTube they become **Play on YouTube**. **Preview in** plays a track in another zone (headphones, a Sonos) before you add it. The list follows the theme, with **A-** and **A+** for its text size.
 - **The AI Playlist window**: **Create** from a theme with idea chips, or **Steer** what's playing in a direction: a seed (the current track or Playing Now), an optional tone with **Assess Tone**, direction chips that combine (Dancier, Faster, Darker, Older...), your own words, and A Little or A Lot, with a BPM check on Faster and Slower. **Tracks** and **If Short** (Ask Again, Drift or Leave Short) in both modes, and everything remembered.

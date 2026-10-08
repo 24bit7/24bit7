@@ -84,7 +84,7 @@ The actions go wherever **Output** says when you press them (a zone, or the Now 
 | **Similar Artists** | A playlist from artists similar to the seed. Each artist, the seed included, adds a random pick from its top tracks, so the same seed gives a different playlist every time. |
 | **Similar Tracks** | Tracks like the seed track, suggested song by song, so the playlist follows the song rather than the artist's reputation. |
 | **Artist's Top Tracks** | The artist's most popular tracks that you own, shuffled or in popularity order. From Search it needs only the artist. |
-| **AI Playlist** | Opens the AI Playlist window, with two modes. **Create**: describe a mood or a scene, or click an idea chip (More tracks like the song that's playing, then the AI's suggestions), and the AI chooses a playlist from your library. **Steer**: move what's playing in a direction. Needs an Anthropic key. See below. |
+| **AI Playlist** | Opens the AI Playlist window, with two modes. **Create**: describe a mood or a scene, or click an idea chip (More tracks like the song that's playing, then the AI's suggestions), and the AI chooses a playlist from your library. **Steer**: move what's playing in a direction. Needs the AI set up under Settings > Keys. See below. |
 
 ### The AI Playlist window
 
@@ -113,7 +113,7 @@ Both modes ask the AI for about twice the count, since some picks won't be in yo
 - **AI Moderator** checks each playlist for tracks that clash with the seed's mood. See [AI Moderator](#ai-moderator).
 - **Drift** (Off, Keep It Tight or Spread) and **Non-stop** (Off, Keep It Tight or Let's See Where This Goes) set those settings for every Play option at once. See [Drift](#drift) and [Non-stop](#non-stop).
 - **Variety** (Yes or No), for Similar Tracks only. No takes the closest matches in order; Yes picks at random from a wider pool, so the same seed gives a different playlist each time. It's the same setting as in Settings > Playlist, for the Main Window. See [Similar Tracks](#similar-tracks).
-- **Show Credits** lists the producer, engineer and other credits for the album that's playing, from Discogs. It needs a Discogs token.
+- **Show Credits** lists the producer, engineer, musicians and other credits for what's playing, from Discogs, in two lists: the playing track's own credits (or every track's, under its number and title) and the album's. Credits Discogs marks for some tracks only, such as a drummer on tracks 2 to 4, go to those tracks. Settings > Other > Show Credits chooses the current track or all tracks, and which list comes first. It needs a Discogs token.
 - **+ Add Playlist** joins one of your JRiver playlists to the next build. See [Adding your own playlists](#adding-your-own-playlists).
 
 ### The console
@@ -131,7 +131,7 @@ Click into the console for a strip of buttons:
 - **Copy** copies what's on screen, or just what you've highlighted.
 - **Clear** empties the screen. Nothing kept in the Log is deleted.
 - **Export to Log** saves a report for when something goes wrong. See [Reporting a problem](#reporting-a-problem).
-- **Query** asks Claude why a playlist came out the way it did. It only shows once Console Query is switched on. See [Console Query](#console-query).
+- **Query** asks the AI why a playlist came out the way it did. It only shows once Console Query is switched on. See [Console Query](#console-query).
 - **Simple** or **Advanced**: Simple hides the debug lines, which are dim grey and start `[debug]`; Advanced shows them. They're always recorded, so switching works on the build already there, and Export to Log always includes them. Your choice is remembered.
 
 #### The console's tabs
@@ -249,7 +249,7 @@ Keys and passwords for each service, hidden until you tick **Show**. Each **?** 
 
 - **Last.fm** and **ListenBrainz**: free, and well worth adding.
 - **Discogs**: free, for album credits and a second source for Label.
-- **Anthropic**: paid, a few pence at most per build. Needed for AI Playlist, AI as a source, the AI Moderator and Console Query. It sits last, in its own box. **Use AI** under the key, On or Off, pauses everything that spends AI credits without removing the key: AI Playlist and the AI Moderator dropdown grey out, the AI as a source is skipped, Drift using the AI falls back to the sources, and Console Query and Assess Tone stand down, with one console line per build saying so. Switch back On and every setting is as you left it. **AI Usage** sits underneath: the tokens each AI feature has used since you last cleared the count, with estimated costs, and a **Guide** to what $1 buys and what each feature costs per run (your own average once you've used it three times). **Query** asks Claude where the tokens go and which settings would use fewer, and answers in the console. **Show in Now Playing** puts the total at the right of Now Playing, in dollars or tokens; click it to switch. The costs are estimates from Anthropic's standard rates on the date shown, which may have changed since; Anthropic's console has your actual bill.
+- **AI**: needed for AI Playlist, AI as a source, the AI Moderator and Console Query. It sits last, in its own box, starting with **Provider**: **Anthropic** (Claude), **OpenAI**, **Google Gemini** or **Ollama (Local)**. Only the chosen provider's fields show, and every key stays saved, so switching back loses nothing. The cloud providers are paid, a few pence at most per build, and each needs its own key (the **?** says where to get it). **Ollama** runs a model on your own PC for free: install it from ollama.com, pull a model (for example `ollama pull gemma3:4b`), then pick it under **OLLAMA_MODEL**, where **Refresh** lists what Ollama has installed. The address is filled in for you. Smaller local models give rougher results, and Console Query isn't available with Ollama, as it sends more than a local model can hold. If Ollama isn't running, or the model isn't installed, the console says so. Only Anthropic has been fully tested so far: OpenAI, Google Gemini and Ollama should work, and reports on how they do are very welcome on the JRiver forum or GitHub. **Use AI** under the provider, On or Off, pauses everything that spends AI credits without removing the key: AI Playlist and the AI Moderator dropdown grey out, the AI as a source is skipped, Drift using the AI falls back to the sources, and Console Query and Assess Tone stand down, with one console line per build saying so. Switch back On and every setting is as you left it. **AI Usage** sits underneath: the tokens each AI feature has used since you last cleared the count, with estimated costs, and a **Guide** to what $1 buys and what each feature costs per run (your own average once you've used it three times). **Query** asks the AI where the tokens go and which settings would use fewer, and answers in the console. **Show in Now Playing** puts the total at the right of Now Playing, in dollars or tokens; click it to switch. The costs are estimates from the chosen provider's standard rates on the date shown, which may have changed since; your provider's own console has your actual bill. With Ollama the Guide shows Free.
 - **JRiver** user name and password: only if you set them in JRiver under Tools > Options > Media Network > Authentication.
 
 Keys never leave your PC except to the service they belong to, and they never appear in a log.
@@ -270,17 +270,17 @@ How your own JRiver playlists and smartlists play when you ask for them by voice
 
 ![Settings, Other](images/settings_other.png)
 
-- **Profiles**: save your settings as a profile (DJ, Explore, No AI...) with **Save As**, and switch between them with **Load**, which restarts 24bit7 to apply the profile; JRiver keeps playing. A profile holds the Play tab options, Sources, Playlist settings, Filters, JRiver Playlists, Add Playlist rows, the Preview zone, the AI Playlist window's choices, Use AI, cache and console settings for Windows (Main). Keys, the JRiver connection, Alexa devices with their own settings, keyboard shortcuts and appearance stay as they are. **Current** names the profile in use, with "(changed)" once anything differs from it. Profiles are small files in a `profiles` folder beside 24bit7, so they survive updates and can be copied to another PC.
-- **General**: **Keep Cache For** (1 Month, 1 Year or Permanent) with **Clear Cache...** (older than a month, older than a year, or everything), the JRiver host if JRiver runs on another PC, the YouTube playlist length (up to 50), **Prefer official music videos**, the **Theme** (Light or Dark, applied on restart), **Use the Windows title bar** (unticked, the tabs run to the top of the window with their own minimise, maximise and close), and **Enable Console Query**.
+- **Profiles**: save your settings as a profile (DJ, Explore, No AI...) with **Save As**, and switch between them with **Load**, which restarts 24bit7 to apply the profile; JRiver keeps playing. Tick **Enable Switch To** beside the profiles you want the **Switch Profiles** keyboard shortcut to step through (new profiles start ticked). A profile holds the Play tab options, Sources, Playlist settings, Filters, JRiver Playlists, Add Playlist rows, the Preview zone, the AI Playlist window's choices, Use AI, cache and console settings for Windows (Main). Keys, the JRiver connection, Alexa devices with their own settings, keyboard shortcuts and appearance stay as they are. **Current** names the profile in use, with "(changed)" once anything differs from it. Profiles are small files in a `profiles` folder beside 24bit7, so they survive updates and can be copied to another PC.
+- **General**: **Keep Cache For** (1 Month, 1 Year or Permanent) with **Clear Cache...** (older than a month, older than a year, or everything), the JRiver host if JRiver runs on another PC, the YouTube playlist length (up to 50), **Prefer official music videos**, the **Theme** (Light or Dark, applied on restart), **Use the Windows title bar** (unticked, the tabs run to the top of the window with their own minimise, maximise and close), **Show Credits** (Album/Current Track or Album/All Tracks, with **Show First** set to Tracks or Album), and **Enable Console Query**.
 - **Zones**: which JRiver zones appear in the Zone and Output lists, which zone Now Playing opens on, and whether it follows JRiver's active zone. A DLNA speaker such as a Sonos only appears once DLNA Controller is ticked in JRiver (Tools > Options > Media Network > Advanced); press **Rescan** after ticking it.
 - **Windows**: **Start with Windows** launches 24bit7 when you sign in. **Start in the tray** keeps it hidden when Windows starts it. **Close to tray** makes the window's close button hide 24bit7 instead of quitting, so voice keeps listening; quit from the tray icon.
-- **Keyboard Shortcuts**: a key each for Similar Tracks, Similar Artists, Artist's Top Tracks, Shuffle Songs by Artist, **Switch Zones** (moves what's playing to the next zone ticked under Enable Switch To) and **Keep It Going** (Non-stop, once, for whatever the shortcut zone is playing). They work anywhere in Windows, even with 24bit7 in the tray, so a remote that sends key presses (a Flirc, a Harmony, a phone app) can start a playlist from the sofa. Click a box and press the keys; Esc cancels. Letters and numbers need Ctrl, Alt, Shift or Win; F-keys and media keys work on their own. If another program already owns a combination, 24bit7 says so.
+- **Keyboard Shortcuts**: a key each for Similar Tracks, Similar Artists, Artist's Top Tracks, Shuffle Songs by Artist, **Switch Zones** (moves what's playing to the next zone ticked under Enable Switch To), **Switch Profiles** (loads the next profile ticked under Enable Switch To in Profiles, A to Z, restarting 24bit7 while JRiver keeps playing; pressed during a build, the console says it will switch once the build has finished) and **Keep It Going** (Non-stop, once, for whatever the shortcut zone is playing). They work anywhere in Windows, even with 24bit7 in the tray, so a remote that sends key presses (a Flirc, a Harmony, a phone app) can start a playlist from the sofa. Click a box and press the keys; Esc cancels. Letters and numbers need Ctrl, Alt, Shift or Win; F-keys and media keys work on their own. If another program already owns a combination, 24bit7 says so.
 
 ### About
 
 ![Settings, About](images/settings_about.png)
 
-The version you're running, links to this manual, GitHub and the release notes, the voice commands at a glance, and credits for the services 24bit7 uses.
+The version you're running, links to this manual, GitHub and the release notes, the voice commands at a glance, credits for the services 24bit7 uses, and thanks to the people who have helped shape it.
 
 ---
 
@@ -326,7 +326,7 @@ In an AI Playlist, Drift can top up from your music sources, which uses no credi
 
 ### AI Moderator
 
-Most playlists are right apart from one track: the stadium anthem in the middle of a run of acoustic songs. The AI Moderator sends each playlist to Claude once, with the seed, and removes tracks that would jolt a listener out of the mood. It judges tone, energy and mood, never genre on its own. Tracks it doesn't know well enough to judge are kept, and each removal is logged with its reason.
+Most playlists are right apart from one track: the stadium anthem in the middle of a run of acoustic songs. The AI Moderator sends each playlist to the AI once (the chosen provider's quick model), with the seed, and removes tracks that would jolt a listener out of the mood. It judges tone, energy and mood, never genre on its own. Tracks it doesn't know well enough to judge are kept, and each removal is logged with its reason.
 
 - **Relaxed** removes only clear clashes, at most a fifth of the tracks.
 - **Balanced** removes anything that noticeably shifts the tone, energy or mood, at most two fifths.
@@ -382,7 +382,7 @@ Open the skill first ("Alexa, open needle drop"), then say the command, or say i
 | "songs by *artist*" | Artist's Top Tracks |
 | "music like *artist*" | Similar Artists, seeded from the artist's most popular track |
 | "tracks like *song*", or "tracks like *song* by *artist*" | Similar Tracks |
-| "genre *anything*", such as "genre nu metal with grunge" | AI Playlist (needs an Anthropic key) |
+| "genre *anything*", such as "genre nu metal with grunge" | AI Playlist (needs the AI set up) |
 | "album *name*" | Plays the album now, in track order |
 | "song *title*" | Plays the song now, then stops |
 | "playlist *name*" | Plays one of your JRiver playlists or smartlists now, with its settings from Settings > JRiver Playlists |
@@ -586,7 +586,7 @@ A reply with `ok: True` and 24bit7's version means everything on the PC side wor
 |---|---|
 | Now Playing says nothing is playing, or the Zone list is empty | Check JRiver is running with Media Network on. If JRiver runs on another PC, set its address under Settings > Other > JRiver host. If you set a user name and password in JRiver, add them under Settings > Keys. |
 | A source is skipped, with "no key" in the console | Add its key under Settings > Keys, or untick it under Settings > Sources. |
-| AI options are greyed out | They need an Anthropic key, and credit on the Anthropic account. |
+| AI options are greyed out | They need the chosen provider set up under Settings > Keys > AI: its key and credit on the account, or for Ollama a model. |
 | YouTube Music stops returning anything | YouTube has probably changed something. It usually comes back with the next update of the ytmusicapi library; untick it meanwhile. |
 | A playlist comes out short | Your library may not hold enough of what the sources suggest. Lower **Sources that must agree**, tick more sources, or switch on **Drift**. |
 | One track sounds out of place | Try the **AI Moderator** on Relaxed or Balanced. |
@@ -595,9 +595,9 @@ A reply with `ok: True` and 24bit7's version means everything on the PC side wor
 
 ### Console Query
 
-When a playlist comes out short or odd, you can ask why. Tick **Enable Console Query** under Settings > Other (it asks first, as it uses Anthropic credit), click into the console and press **Query**. Type a question and press Enter: "Why was this track included?", "Why was the playlist so short?", "What did the AI Moderator remove?". The answer appears in the console in magenta, and the box stays open for follow-ups.
+When a playlist comes out short or odd, you can ask why. Tick **Enable Console Query** under Settings > Other (it asks first, as it uses AI credit; it isn't available with Ollama), click into the console and press **Query**. Type a question and press Enter: "Why was this track included?", "Why was the playlist so short?", "What did the AI Moderator remove?". The answer appears in the console in magenta, and the box stays open for follow-ups.
 
-Claude is sent the build on screen, your settings with every key and password left out, what's playing, and 24bit7's own code and README, so it knows the rules and the names of the settings. It suggests up to three changes, named as they appear in Settings. The build on screen can be any of the last 50, opened from the Log. Switch the console to **Advanced** first and Claude gets the debug lines too. The first question costs a few pence; follow-ups soon after cost much less.
+The AI is sent the build on screen, your settings with every key and password left out, what's playing, and 24bit7's own code and README, so it knows the rules and the names of the settings. It suggests up to three changes, named as they appear in Settings. The build on screen can be any of the last 50, opened from the Log. Switch the console to **Advanced** first and it gets the debug lines too. The first question costs a few pence; with Anthropic, follow-ups soon after cost much less.
 
 ### Reporting a problem
 
@@ -618,6 +618,6 @@ Claude is sent the build on screen, your settings with every key and password le
 | Deezer | Similar artists, top tracks, checking names | None |
 | YouTube Music | Similar artists and tracks, YouTube output | None |
 | Discogs | Album credits, record labels | Free |
-| Anthropic (Claude) | AI suggestions, AI Playlist, AI Moderator, Console Query | Paid, pennies per build |
+| Your chosen AI: Anthropic (Claude), OpenAI, Google Gemini or Ollama | AI suggestions, AI Playlist, AI Moderator, Console Query | Paid, pennies per build; Ollama is free and runs on your PC |
 
 Your music files never leave your PC. Services are sent the artist and track names they're asked about, and Console Query sends the console as described above. Everything 24bit7 learns is kept in `24bit7.db` beside the app, and your keys in `.env`. Neither file is ever included in a log or a release.
