@@ -129,11 +129,17 @@ def ask(question, console_text, playing, on_done):
     questions within a few minutes cost much less than the first.
     """
     def work():
-        try:
-            import anthropic
-        except ImportError:
-            on_done(None, "the anthropic package isn't installed")
+        engine.refresh_settings_if_changed()
+        if engine.AI_PROVIDER == "ollama":
+            on_done(None, "Console Query isn't available with Ollama: it sends the console and 24bit7's code, "
+                          "far more than a local model can hold")
             return
+        if engine.AI_PROVIDER == "anthropic":
+            try:
+                import anthropic
+            except ImportError:
+                on_done(None, "the anthropic package isn't installed")
+                return
         code = _code_bundle()
         if not code:
             on_done(None, "24bit7's code couldn't be read (no copy here and GitHub didn't answer)")
@@ -149,14 +155,18 @@ def ask(question, console_text, playing, on_done):
                 f"Console:\n{console}\n\n"
                 f"Question: {question}")
         try:
-            client = anthropic.Anthropic(api_key=engine.ANTHROPIC_API_KEY)
-            message = client.messages.create(
-                model=QUERY_MODEL, max_tokens=1200,
-                system=[{"type": "text", "text": SYSTEM},
-                        {"type": "text", "text": code, "cache_control": {"type": "ephemeral"}}],
-                messages=[{"role": "user", "content": user}])
-            engine.record_ai("Console Query", QUERY_MODEL, message)
-            answer = "".join(b.text for b in message.content if getattr(b, "type", "") == "text").strip()
+            if engine.AI_PROVIDER == "anthropic":   # the code in a cached block: follow-ups cost a tenth
+                client = anthropic.Anthropic(api_key=engine.ANTHROPIC_API_KEY)
+                message = client.messages.create(
+                    model=QUERY_MODEL, max_tokens=1200,
+                    system=[{"type": "text", "text": SYSTEM},
+                            {"type": "text", "text": code, "cache_control": {"type": "ephemeral"}}],
+                    messages=[{"role": "user", "content": user}])
+                engine.record_ai("Console Query", QUERY_MODEL, message)
+                answer = "".join(b.text for b in message.content if getattr(b, "type", "") == "text").strip()
+            else:   # OpenAI and Gemini cache a repeated start of a request by themselves
+                answer = engine.ai_request(user, 1200, "Console Query", tier="quick",
+                                           system=f"{SYSTEM}\n\n{code}", announce=False).text.strip()
             answer = plain(answer)
             on_done(answer or "(no answer came back)", None)
         except Exception as e:

@@ -313,9 +313,9 @@ class PlayTab(tk.Frame):
         self.moderator_cb.pack(side="left")
         self.moderator_cb.bind("<<ComboboxSelected>>", self._on_moderator_changed)
         self._moderator_tip = Tooltip(self.moderator_cb, NO_KEY_TEXT, when=lambda: not engine.ai_enabled())
-        help_mark(self.extras_row, "Checks Similar Artists and Similar Tracks playlists with Claude Haiku "
-                                   "and removes tracks that clash with the seed's tone, energy and mood. "
-                                   "Uses a little Anthropic credit, a fraction of a penny per playlist.\n"
+        help_mark(self.extras_row, "Checks Similar Artists and Similar Tracks playlists with the AI's quick "
+                                   "model and removes tracks that clash with the seed's tone, energy and mood. "
+                                   "Uses a little AI credit, a fraction of a penny per playlist.\n"
                                    + MODERATOR_LEVELS_HELP + "\n"
                                    "Voice devices with settings of their own keep their own choice "
                                    "(Settings > Sources).").pack(side="left", padx=(8, 0))
@@ -424,7 +424,7 @@ class PlayTab(tk.Frame):
         return getattr(self, "behaviour_var", None) is not None and self.behaviour_var.get() == "Review"
 
     def sync_moderator(self):
-        """Shows Windows (Main)'s moderator choice, greyed out until there's an Anthropic key."""
+        """Shows Windows (Main)'s moderator choice, greyed out until the AI is set up."""
         if self.running:
             return   # a voice build may have a device's settings loaded
         engine.refresh_settings_if_changed()
@@ -432,7 +432,7 @@ class PlayTab(tk.Frame):
         levels = {by.get("artists", "off"), by.get("tracks", "off")}
         self.moderator_var.set(levels.pop().title() if len(levels) == 1 else "Off")   # Off unless both agree
         self.moderator_cb.state(["!disabled"] if engine.ai_enabled() else ["disabled"])
-        self._moderator_tip.text = (NO_KEY_TEXT if not engine.ANTHROPIC_API_KEY
+        self._moderator_tip.text = (NO_KEY_TEXT if not engine.ai_configured()
                                     else "Paused: Use AI is Off under Settings > Keys.")
         self._sync_ai_button()
         self._sync_play_switches()
@@ -448,8 +448,8 @@ class PlayTab(tk.Frame):
             button.config(state="normal" if on else "disabled")
         if not hasattr(self, "_ai_button_tip"):
             self._ai_button_tip = Tooltip(button, "", when=lambda: not engine.ai_enabled())
-        self._ai_button_tip.text = ("AI Playlist needs an Anthropic key under Settings > Keys."
-                                    if not engine.ANTHROPIC_API_KEY else
+        self._ai_button_tip.text = (f"AI Playlist needs {engine.ai_missing_text()} under Settings > Keys."
+                                    if not engine.ai_configured() else
                                     "Paused: Use AI is Off under Settings > Keys.")
 
     def _sync_play_switches(self):
@@ -621,7 +621,7 @@ class PlayTab(tk.Frame):
         if getattr(self, "_query_busy", False):
             return
         engine.refresh_settings_if_changed()
-        if not engine.ANTHROPIC_API_KEY:
+        if not engine.ai_configured():
             messagebox.showinfo("AI Usage", NO_KEY_TEXT, parent=self)
             return
         try:
@@ -1038,13 +1038,13 @@ class PlayTab(tk.Frame):
         self._sync_head_query()
         if self.console_strip.winfo_manager():
             self._show_console_strip()
-        elif not (getattr(engine, "CONSOLE_QUERY", False) and engine.ai_enabled()):
+        elif not (getattr(engine, "CONSOLE_QUERY", False) and engine.console_query_ready()):
             self.console_buttons["Query"].pack_forget()
 
     def _sync_head_query(self):
         engine.refresh_settings_if_changed()
         query = self.head_buttons["Query"]
-        if getattr(engine, "CONSOLE_QUERY", False) and engine.ai_enabled() and self.view != "log":
+        if getattr(engine, "CONSOLE_QUERY", False) and engine.console_query_ready() and self.view != "log":
             if not query.winfo_manager():
                 query.pack(side="left", padx=(4, 0), before=self.head_buttons["Export to Log"])
         else:
@@ -1125,7 +1125,7 @@ class PlayTab(tk.Frame):
             return   # with the tabs open, the strip sits in the tab row instead
         engine.refresh_settings_if_changed()
         query = self.console_buttons["Query"]
-        if getattr(engine, "CONSOLE_QUERY", False) and engine.ai_enabled():
+        if getattr(engine, "CONSOLE_QUERY", False) and engine.console_query_ready():
             if not query.winfo_manager():
                 query.pack(side="left", padx=(0, 4), before=self.console_buttons["Export to Log"])
         else:
@@ -1205,7 +1205,7 @@ class PlayTab(tk.Frame):
         self.query_panel = tk.Frame(frame)
         row = tk.Frame(self.query_panel)
         row.pack(fill="x", pady=(8, 0))
-        tk.Label(row, text="Ask Claude", font=("Segoe UI", 9, "bold"),
+        tk.Label(row, text="Ask the AI", font=("Segoe UI", 9, "bold"),
                  fg=PALETTE["ai_purple"]).pack(side="left", padx=(0, 8))
         self.query_var = tk.StringVar()
         self.query_entry = tk.Entry(row, textvariable=self.query_var, font=("Segoe UI", 10))
@@ -1245,7 +1245,7 @@ class PlayTab(tk.Frame):
         if not question or self._query_busy:
             return
         engine.refresh_settings_if_changed()
-        if not engine.ANTHROPIC_API_KEY:
+        if not engine.ai_configured():
             messagebox.showinfo("Console Query", NO_KEY_TEXT, parent=self)
             return
         self._greeting_active = False

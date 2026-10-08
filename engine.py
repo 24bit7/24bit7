@@ -10,6 +10,7 @@ import csv
 import unicodedata
 import json
 import contextlib
+import types as _types
 import sqlite3
 from datetime import datetime
 
@@ -206,6 +207,33 @@ def moderator_settings(get):
     return levels
 
 
+# --- AI providers (Settings > Keys > AI) -----------------------------------------
+# Anthropic is the one fully tested; OpenAI, Google Gemini and Ollama (a local model)
+# are offered untested, for people to try and report back. Each cloud provider has a
+# main model (the AI as a source, AI Playlist, Steer, Assess Tone) and a quick one
+# (the AI Moderator and the two Queries), checked with ai_usage.PRICES before each release.
+AI_PROVIDERS = [("anthropic", "Anthropic"), ("openai", "OpenAI"), ("gemini", "Google Gemini"),
+                ("ollama", "Ollama (Local)")]
+AI_PROVIDER_NAMES = dict(AI_PROVIDERS)
+AI_MODELS = {   # provider: (main, quick)
+    "anthropic": ("claude-sonnet-5", "claude-haiku-4-5-20251001"),
+    "openai": ("gpt-6.1-sol", "gpt-6-luna"),
+    "gemini": ("gemini-3.8-flash", "gemini-3.5-flash-lite"),
+}
+AI_REASONING = {   # reasoning_effort sent to OpenAI and Gemini: these calls recall names, which needs little
+    ("openai", "main"): "low", ("openai", "quick"): "none",   # gpt-6.1-sol's lowest is "low"
+    ("gemini", "main"): "low", ("gemini", "quick"): "low",    # Gemini 3 can't switch thinking off
+}
+AI_REASONING_ROOM = 4000   # extra output allowance for that reasoning, which counts against the limit
+OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
+GEMINI_CHAT_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+OLLAMA_DEFAULT_URL = "http://127.0.0.1:11434"
+OLLAMA_CONTEXT = 8192   # Ollama's working memory per request; its own default is too small for the Moderator
+AI_TIMEOUT = 120        # seconds per request (a local model can take a while)
+AI_PROVIDER, OPENAI_API_KEY, GEMINI_API_KEY = "anthropic", "", ""   # set by load_settings()
+OLLAMA_URL, OLLAMA_MODEL = OLLAMA_DEFAULT_URL, ""
+
+
 def load_settings():
     """
     (Re)reads every setting from .env into module-level globals. Called once at
@@ -213,7 +241,7 @@ def load_settings():
     so both the GUI and the CLI pick up changes without a restart.
     """
     global AUTH, JRIVER_HOST, JRIVER_BASE, LASTFM_KEY, LISTENBRAINZ_TOKEN
-    global DISCOGS_TOKEN, ANTHROPIC_API_KEY
+    global DISCOGS_TOKEN, ANTHROPIC_API_KEY, AI_PROVIDER, OPENAI_API_KEY, GEMINI_API_KEY, OLLAMA_URL, OLLAMA_MODEL
     global SIMILAR_SOURCES, TOP_TRACK_SOURCES, LISTENBRAINZ_ALGORITHM_SETTING
     global DIGITAL_STORES, REFERENCE_SITES, DEBUG, SIMILAR_ARTIST_LIMIT, TRACKS_PER_ARTIST_POOL
     global SIMILAR_MIN_AGREEMENT
@@ -244,6 +272,14 @@ def load_settings():
     LISTENBRAINZ_TOKEN = os.getenv("LISTENBRAINZ_TOKEN")
     DISCOGS_TOKEN = os.getenv("DISCOGS_TOKEN")
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+    # Settings > Keys > AI: which provider the AI features use, and what each one needs
+    AI_PROVIDER = os.getenv("AI_PROVIDER", "anthropic").strip().lower()
+    if AI_PROVIDER not in AI_PROVIDER_NAMES:
+        AI_PROVIDER = "anthropic"
+    OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY") or "").strip()
+    GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY") or "").strip()
+    OLLAMA_URL = ((os.getenv("OLLAMA_URL") or "").strip() or OLLAMA_DEFAULT_URL).rstrip("/")
+    OLLAMA_MODEL = (os.getenv("OLLAMA_MODEL") or "").strip()
 
     SIMILAR_SOURCES = [x.strip().lower() for x in os.getenv("SIMILAR_SOURCES", "lastfm").split(",") if x.strip()]
     TOP_TRACK_SOURCES = [x.strip().lower() for x in os.getenv("TOP_TRACK_SOURCES", "lastfm").split(",") if x.strip()]
@@ -481,6 +517,14 @@ LASTFM_API_KEY=
 LISTENBRAINZ_TOKEN=
 DISCOGS_TOKEN=
 ANTHROPIC_API_KEY=
+
+# AI provider (Settings > Keys > AI): anthropic, openai, gemini or ollama.
+# Only Anthropic has been fully tested; the others should work.
+AI_PROVIDER=anthropic
+OPENAI_API_KEY=
+GEMINI_API_KEY=
+OLLAMA_URL=http://127.0.0.1:11434
+OLLAMA_MODEL=
 
 # Recommendation sources (comma-separated: lastfm, listenbrainz, deezer, ai, youtube)
 # youtube is for SIMILAR_SOURCES only and needs no key.
@@ -1781,7 +1825,7 @@ def listenbrainz_top_tracks(artist_name, limit=10):
 
 # --- AI (Anthropic API, LLM knowledge of music) ----------------------------
 
-AI_MODEL = "claude-sonnet-5"   # switch here if a cheaper or stronger model suits better
+AI_MODEL = AI_MODELS["anthropic"][0]   # every provider's models are in AI_MODELS, near the top
 AI_SIMILAR_PROMPT = (
     "List the {limit} musical artists most similar to \"{artist}\", most similar first. "
     "Consider sound, era, scene and audience. Use each artist's most common spelling. "
@@ -1839,7 +1883,7 @@ def record_ai(feature, model, message):
         debug(f"AI usage not recorded ({e})")
 
 
-def _ai_create(client, feature="AI", **kwargs):
+def _ai_create(client, feature="AI", announce=True, **kwargs):
     """
     One request to Claude with thinking switched off: these calls recall lists
     of names, which thinking doesn't improve and which it was crowding out of
@@ -1848,7 +1892,8 @@ def _ai_create(client, feature="AI", **kwargs):
     Prints a waiting line, and the time taken at Debug level.
     """
     global _AI_THINKING_OFF_OK
-    print("  Asking the AI...")
+    if announce:
+        print("  Asking the AI...")
     started = time.time()
     try:
         message = None
@@ -1869,26 +1914,197 @@ def _ai_create(client, feature="AI", **kwargs):
         debug(f"AI replied in {time.time() - started:.1f} s")
 
 
+# --- one request to whichever provider is chosen --------------------------------
+
+class AIError(Exception):
+    """A request the provider refused or couldn't answer, with a reason fit for the console."""
+
+
+def ai_provider_name(provider=None):
+    return AI_PROVIDER_NAMES.get(provider or AI_PROVIDER, "Anthropic")
+
+
+def ai_model(tier="main"):
+    """The model the chosen provider uses for a tier: "main" or "quick". Ollama uses the one picked."""
+    if AI_PROVIDER == "ollama":
+        return OLLAMA_MODEL
+    main, quick = AI_MODELS.get(AI_PROVIDER, AI_MODELS["anthropic"])
+    return quick if tier == "quick" else main
+
+
+def ai_key():
+    return {"anthropic": ANTHROPIC_API_KEY, "openai": OPENAI_API_KEY, "gemini": GEMINI_API_KEY}.get(AI_PROVIDER) or ""
+
+
+def ai_configured():
+    """True when the chosen provider has what it needs: its key, or for Ollama a model."""
+    return bool(OLLAMA_MODEL) if AI_PROVIDER == "ollama" else bool(ai_key())
+
+
+def ai_missing_text():
+    """What the chosen provider still needs, to finish 'needs ...': 'an Anthropic key', 'an Ollama model'."""
+    if AI_PROVIDER == "ollama":
+        return "an Ollama model"
+    name = ai_provider_name()
+    return f"{'an' if name[0] in 'AEIOU' else 'a'} {name} key"
+
+
+def console_query_ready():
+    """Console Query sends the console and 24bit7's code, far more than a local model can hold."""
+    return ai_enabled() and AI_PROVIDER != "ollama"
+
+
+class AIReply:
+    """A provider's answer in the shape the rest of 24bit7 reads: text, why it stopped, tokens used."""
+    def __init__(self, text, stop, input_tokens=0, output_tokens=0, cache_read=0):
+        self.text, self.stop_reason = text or "", stop or ""
+        self.usage = _types.SimpleNamespace(input_tokens=input_tokens, output_tokens=output_tokens,
+                                            cache_creation_input_tokens=0, cache_read_input_tokens=cache_read)
+
+
+def _api_error(r, provider):
+    """A short reason from a refused request, with the usual fixes named."""
+    detail = ""
+    try:
+        data = r.json()
+        data = data[0] if isinstance(data, list) and data else data
+        err = data.get("error") if isinstance(data, dict) else None
+        detail = (err.get("message") if isinstance(err, dict) else err) or ""
+    except ValueError:
+        detail = (r.text or "")[:200]
+    name = ai_provider_name(provider)
+    if r.status_code in (401, 403):
+        return f"{name} refused the key ({r.status_code}). Check it under Settings > Keys"
+    if r.status_code == 429:
+        return f"{name} says the rate limit or quota is reached ({str(detail)[:120]})"
+    if r.status_code == 404 and provider == "ollama":
+        return f"Ollama doesn't have {OLLAMA_MODEL}: run  ollama pull {OLLAMA_MODEL}"
+    return f"{name} answered {r.status_code}: {str(detail)[:200]}"
+
+
+_OLLAMA_CHECKED = set()   # (address, model) pairs confirmed this session
+
+
+def ollama_models(url=None):
+    """The models installed in Ollama, A to Z, or None if Ollama doesn't answer at that address."""
+    url = (url or OLLAMA_URL).rstrip("/")
+    try:
+        r = requests.get(f"{url}/api/tags", timeout=5)
+        r.raise_for_status()
+        return sorted({m.get("name") or m.get("model") for m in r.json().get("models", [])
+                       if m.get("name") or m.get("model")}, key=str.lower)
+    except (requests.RequestException, ValueError, AttributeError):
+        return None
+
+
+def ollama_check():
+    """None when Ollama answers and has the chosen model; otherwise why not, for the console."""
+    if not OLLAMA_MODEL:
+        return "no Ollama model is chosen. Pick one under Settings > Keys"
+    if (OLLAMA_URL, OLLAMA_MODEL) in _OLLAMA_CHECKED:
+        return None
+    names = ollama_models()
+    if names is None:
+        return f"Ollama isn't answering at {OLLAMA_URL}. Start Ollama, or check the address under Settings > Keys"
+    if OLLAMA_MODEL not in names and f"{OLLAMA_MODEL}:latest" not in names:
+        return f"{OLLAMA_MODEL} isn't installed in Ollama. Run  ollama pull {OLLAMA_MODEL}"
+    _OLLAMA_CHECKED.add((OLLAMA_URL, OLLAMA_MODEL))
+    return None
+
+
+def _chat_messages(prompt, system):
+    return ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": prompt}]
+
+
+def _openai_style_request(model, prompt, system, max_tokens, tier):
+    """OpenAI, and Gemini through its OpenAI-compatible address: the same request and reply."""
+    provider = AI_PROVIDER
+    url, key = (OPENAI_CHAT_URL, OPENAI_API_KEY) if provider == "openai" else (GEMINI_CHAT_URL, GEMINI_API_KEY)
+    body = {"model": model, "messages": _chat_messages(prompt, system)}
+    body["max_completion_tokens" if provider == "openai" else "max_tokens"] = max_tokens + AI_REASONING_ROOM
+    effort = AI_REASONING.get((provider, tier))
+    if effort:
+        body["reasoning_effort"] = effort
+    r = requests.post(url, headers={"Authorization": f"Bearer {key}"}, json=body, timeout=AI_TIMEOUT)
+    if r.status_code != 200:
+        raise AIError(_api_error(r, provider))
+    data = r.json()
+    choice = (data.get("choices") or [{}])[0]
+    text = ((choice.get("message") or {}).get("content")) or ""
+    finish = choice.get("finish_reason") or ""
+    usage = data.get("usage") or {}
+    cached = int(((usage.get("prompt_tokens_details") or {}).get("cached_tokens")) or 0)
+    prompt_tokens = int(usage.get("prompt_tokens") or 0)
+    return AIReply(text, "max_tokens" if finish == "length" else finish, max(0, prompt_tokens - cached),
+                   int(usage.get("completion_tokens") or 0), cached)
+
+
+def _ollama_request(model, prompt, system, max_tokens):
+    """Ollama's own chat interface, so the working memory can be set (its default is small)."""
+    problem = ollama_check()
+    if problem:
+        raise AIError(problem)
+    body = {"model": model, "messages": _chat_messages(prompt, system), "stream": False,
+            "options": {"num_ctx": OLLAMA_CONTEXT, "num_predict": max_tokens + 2048}}
+    r = requests.post(f"{OLLAMA_URL}/api/chat", json=body, timeout=AI_TIMEOUT)
+    if r.status_code != 200:
+        _OLLAMA_CHECKED.discard((OLLAMA_URL, OLLAMA_MODEL))
+        raise AIError(_api_error(r, "ollama"))
+    data = r.json()
+    text = (data.get("message") or {}).get("content") or ""
+    return AIReply(text, "max_tokens" if data.get("done_reason") == "length" else (data.get("done_reason") or ""),
+                   int(data.get("prompt_eval_count") or 0), int(data.get("eval_count") or 0))
+
+
+def ai_request(prompt, max_tokens, feature="AI", tier="main", system=None, announce=True):
+    """
+    One request to the chosen provider, its tokens recorded for AI Usage. Returns an
+    AIReply (text, stop_reason, usage). Raises ImportError when the anthropic package
+    is missing, AIError when a provider refuses, and requests' errors when it can't be reached.
+    """
+    model = ai_model(tier)
+    if AI_PROVIDER == "anthropic":
+        import anthropic
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        kwargs = {"model": model, "max_tokens": max_tokens, "messages": [{"role": "user", "content": prompt}]}
+        if system:
+            kwargs["system"] = system
+        message = _ai_create(client, feature, announce=announce, **kwargs)
+        text = "".join(b.text for b in message.content if getattr(b, "type", "") == "text")
+        reply = AIReply(text, getattr(message, "stop_reason", ""))
+        reply.usage = getattr(message, "usage", reply.usage)
+        return reply
+    if announce:
+        print("  Asking the AI...")
+    started = time.time()
+    try:
+        if AI_PROVIDER == "ollama":
+            reply = _ollama_request(model, prompt, system, max_tokens)
+        else:
+            reply = _openai_style_request(model, prompt, system, max_tokens, tier)
+        record_ai(feature, model, reply)
+        return reply
+    except requests.Timeout:
+        raise AIError(f"{ai_provider_name()} didn't answer within {AI_TIMEOUT} seconds")
+    except requests.ConnectionError:
+        raise AIError(f"{ai_provider_name()} couldn't be reached"
+                      + (f" at {OLLAMA_URL}. Is Ollama running?" if AI_PROVIDER == "ollama" else ""))
+    finally:
+        debug(f"AI ({ai_provider_name()}, {model}) replied in {time.time() - started:.1f} s")
+
+
 def ai_ask_list(prompt, feature="AI"):
     """Sends a prompt expecting a JSON array of strings; returns the list or []."""
     global AI_LAST_ERROR
-    AI_LAST_ERROR = "no API key"
-    if not ANTHROPIC_API_KEY:
-        debug("AI: no Anthropic key")
+    AI_LAST_ERROR = "no AI set up" if AI_PROVIDER == "ollama" else "no API key"
+    if not ai_configured():
+        debug(f"AI: {ai_provider_name()} isn't set up")
         return []
     if not USE_AI:
         AI_LAST_ERROR = "Use AI is Off"
         return []
     try:
-        import anthropic
-    except ImportError:
-        print("  Problem: the AI can't run because the anthropic package isn't installed (pip install anthropic).")
-        return []
-    try:
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        message = _ai_create(client, feature, model=AI_MODEL, max_tokens=1500,
-                             messages=[{"role": "user", "content": prompt}])
-        text = "".join(block.text for block in message.content if getattr(block, "type", "") == "text")
+        text = ai_request(prompt, 1500, feature).text
         text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
         try:
             data = json.loads(text)
@@ -1902,6 +2118,9 @@ def ai_ask_list(prompt, feature="AI"):
         AI_LAST_ERROR = "reply couldn't be read"
         print("  Problem: the AI's reply couldn't be read.")
         debug(f"AI reply: {text[:200]}")
+    except ImportError:
+        AI_LAST_ERROR = "anthropic package not installed"
+        print("  Problem: the AI can't run because the anthropic package isn't installed (pip install anthropic).")
     except Exception as e:
         AI_LAST_ERROR = f"request failed: {e.__class__.__name__}"
         print(f"  Problem: the AI request failed ({e}).")
@@ -1936,19 +2155,16 @@ def _json_body(text):
 def ai_ask_text(prompt, max_tokens=200, feature="AI"):
     """Sends a prompt expecting a short plain answer; returns the text, or '' if it couldn't be had."""
     global AI_LAST_ERROR
-    if not ANTHROPIC_API_KEY:
-        AI_LAST_ERROR = "no API key"
+    if not ai_configured():
+        AI_LAST_ERROR = "no AI set up" if AI_PROVIDER == "ollama" else "no API key"
         return ""
     if not USE_AI:
         AI_LAST_ERROR = "Use AI is Off"
         return ""
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        message = _ai_create(client, feature, model=AI_MODEL, max_tokens=max_tokens,
-                             messages=[{"role": "user", "content": prompt}])
+        text = ai_request(prompt, max_tokens, feature).text
         AI_LAST_ERROR = ""
-        return "".join(b.text for b in message.content if getattr(b, "type", "") == "text")
+        return text
     except ImportError:
         AI_LAST_ERROR = "anthropic package not installed"
     except Exception as e:
@@ -1960,29 +2176,27 @@ def ai_ask_text(prompt, max_tokens=200, feature="AI"):
 def ai_ask_json(prompt, max_tokens=4000, feature="AI"):
     """Sends a prompt expecting JSON; returns the parsed value, what could be salvaged, or None."""
     global AI_LAST_ERROR
-    AI_LAST_ERROR = "no API key"
-    if not ANTHROPIC_API_KEY:
-        debug("AI: no Anthropic key")
+    AI_LAST_ERROR = "no AI set up" if AI_PROVIDER == "ollama" else "no API key"
+    if not ai_configured():
+        debug(f"AI: {ai_provider_name()} isn't set up")
         return None
     if not USE_AI:
         AI_LAST_ERROR = "Use AI is Off"
         debug("AI: Use AI is Off")
         return None
-    try:
-        import anthropic
-    except ImportError:
-        AI_LAST_ERROR = "anthropic package not installed"
-        print("  Problem: the AI can't run because the anthropic package isn't installed (pip install anthropic).")
-        return None
+    if AI_PROVIDER == "anthropic":
+        try:
+            import anthropic  # noqa: F401  (checked once here, so a missing package isn't retried)
+        except ImportError:
+            AI_LAST_ERROR = "anthropic package not installed"
+            print("  Problem: the AI can't run because the anthropic package isn't installed (pip install anthropic).")
+            return None
     for attempt in (1, 2):
         text, stop = "", ""
         try:
-            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-            message = _ai_create(client, feature, model=AI_MODEL, max_tokens=max_tokens,
-                                 messages=[{"role": "user", "content": prompt}])
-            text = "".join(b.text for b in message.content if getattr(b, "type", "") == "text")
-            stop = getattr(message, "stop_reason", "")
-            usage = getattr(message, "usage", None)
+            reply = ai_request(prompt, max_tokens, feature)
+            text, stop = reply.text, reply.stop_reason
+            usage = reply.usage
             debug(f"AI reply: {len(text)} chars, stop_reason {stop}, tokens in "
                   f"{getattr(usage, 'input_tokens', '?')} out {getattr(usage, 'output_tokens', '?')}")
             data = json.loads(_json_body(text))
@@ -2235,8 +2449,9 @@ def missing_key_notes(similar=False, top_tracks=False):
     notes = []
     if "lastfm" in (ticked_similar | ticked_top) and not LASTFM_KEY:
         notes.append("Last.fm is ticked but has no key, so it was skipped. " + KEY_HELP_LINE)
-    if "ai" in (ticked_similar | ticked_top) and not ANTHROPIC_API_KEY:
-        notes.append("AI is ticked but has no Anthropic key, so it was skipped. " + KEY_HELP_LINE)
+    if "ai" in (ticked_similar | ticked_top) and not ai_configured():
+        notes.append(f"AI is ticked but has no {ai_missing_text().split(' ', 1)[1]}, so it was skipped. "
+                     + KEY_HELP_LINE)
     elif "ai" in (ticked_similar | ticked_top) and not USE_AI:
         notes.append("AI is ticked but Use AI is Off (Settings > Keys), so it was skipped.")
     if "listenbrainz" in ticked_top and not LISTENBRAINZ_TOKEN:
@@ -2256,8 +2471,8 @@ _AI_OFF_NOTED = set()    # which features have had their "Use AI is Off" line th
 
 
 def ai_enabled():
-    """True when the AI can be used: a key, and Use AI On."""
-    return bool(ANTHROPIC_API_KEY) and USE_AI
+    """True when the AI can be used: the chosen provider set up, and Use AI On."""
+    return ai_configured() and USE_AI
 
 
 def note_ai_off(report, feature):
@@ -2274,8 +2489,8 @@ def ai_off_reset():
 def vibe_blocker():
     """None if Vibe Playlist can run, otherwise the line to show the user."""
     refresh_settings_if_changed()
-    if not ANTHROPIC_API_KEY:
-        return "AI Playlist needs an Anthropic key. Add it under Settings > Keys."
+    if not ai_configured():
+        return f"AI Playlist needs {ai_missing_text()}. Add it under Settings > Keys."
     if not USE_AI:
         return "AI Playlist is paused: Use AI is Off under Settings > Keys."
     return None
@@ -3283,7 +3498,7 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
 # AI Moderator (Play tab Off/Relaxed/Balanced/Strict; per device in Settings > Sources)
 # ---------------------------------------------------------------------------
 
-MODERATOR_MODEL = "claude-haiku-4-5-20251001"   # quick and cheap: one call per playlist (and per Drift round)
+MODERATOR_MODEL = AI_MODELS["anthropic"][1]   # the quick model: one call per playlist (and per Drift round)
 MODERATOR_CAP = {"relaxed": 0.2, "balanced": 0.4, "strict": 1.0}     # most of the tracks checked that can go
 MODERATOR_EXTRA = {"relaxed": 0.2, "balanced": 0.4, "strict": 0.5}   # extra found up front, to replace removals
 
@@ -3338,7 +3553,7 @@ def moderator_level():
     if MODERATOR_OVERRIDE is not None:   # True/False for one run; a level name also works
         level = (MODERATOR_OVERRIDE if MODERATOR_OVERRIDE in MODERATOR_LEVELS else
                  (level if level != "off" else "balanced") if MODERATOR_OVERRIDE else "off")
-    return level if (level in MODERATOR_LEVELS and ANTHROPIC_API_KEY) else "off"
+    return level if (level in MODERATOR_LEVELS and ai_configured()) else "off"
 
 
 def moderator_on():
@@ -3424,10 +3639,10 @@ def moderate(tracks, seed, report=print, level=None, reference=None):
     reference: [(key, artist, title)] already in the playlist, shown as what fits.
     """
     level = level or moderator_level()
-    if ANTHROPIC_API_KEY and not USE_AI and level in MODERATOR_LEVELS and level != "off":
+    if ai_configured() and not USE_AI and level in MODERATOR_LEVELS and level != "off":
         note_ai_off(report, "AI Moderator")
         level = "off"
-    if not ANTHROPIC_API_KEY or level not in MODERATOR_LEVELS:
+    if not ai_configured() or level not in MODERATOR_LEVELS:
         level = "off"
     if level == "off" or len(tracks) < 2:
         return set()
@@ -3443,15 +3658,10 @@ def moderate(tracks, seed, report=print, level=None, reference=None):
     report(f"  AI Moderator ({level.title()}): checking {len(tracks)} tracks against the seed"
            + (" and the playlist so far..." if reference else "..."))
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        message = client.messages.create(
-            model=MODERATOR_MODEL, max_tokens=2000,
-            system=MODERATOR_PROMPT.format(level_rules=MODERATOR_RULES[level], limit_rule=limit_rule),
-            messages=[{"role": "user", "content": f"{seed_line}{ref_text}\n\nCandidates:\n{listing}"}])
-        record_ai("AI Moderator", MODERATOR_MODEL, message)
-        text = "".join(b.text for b in message.content if getattr(b, "type", "") == "text")
-        flagged = moderator_reply(text)
+        reply = ai_request(f"{seed_line}{ref_text}\n\nCandidates:\n{listing}", 2000, "AI Moderator", tier="quick",
+                           system=MODERATOR_PROMPT.format(level_rules=MODERATOR_RULES[level], limit_rule=limit_rule),
+                           announce=False)
+        flagged = moderator_reply(reply.text)
     except ImportError:
         report("  Problem: AI Moderator didn't run, as the anthropic package isn't installed.")
         return set()
@@ -4656,8 +4866,8 @@ def create_vibe_playlist(vibe, report=print, count=None, prompt=None, if_short=N
     if not vibe:
         report("Problem: no description was given.")
         return
-    if not ANTHROPIC_API_KEY:
-        report("Problem: AI Playlist needs an Anthropic key. " + KEY_HELP_LINE)
+    if not ai_configured():
+        report(f"Problem: AI Playlist needs {ai_missing_text()}. " + KEY_HELP_LINE)
         return
     target = VIBE_TRACK_COUNT if count is None else min(100, max(5, int(count)))
     report(f"AI Playlist: {vibe}  (target {target} tracks"

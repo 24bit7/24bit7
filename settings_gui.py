@@ -46,7 +46,7 @@ VOICE_COMMAND_LIST = [
     ("songs by <artist>", "Artist's Top Tracks"),
     ("music like <artist>", "Similar Artists, seeded from the artist's most popular track"),
     ("tracks like <song>  (by <artist>)", "Similar Tracks"),
-    ("genre <anything>", "AI Playlist, e.g. \"genre nu metal with grunge\" (needs an Anthropic key)"),
+    ("genre <anything>", "AI Playlist, e.g. \"genre nu metal with grunge\" (needs the AI set up)"),
     ("album <name>", "Plays the album now, in track order"),
     ("song <title>  (by <artist>)", "Plays the song now, then stops"),
     ("playlist <name>", "Plays one of your JRiver playlists or smartlists now"),
@@ -67,6 +67,9 @@ CREDITS = [
     ("YouTube Music (via ytmusicapi)", "https://github.com/sigma67/ytmusicapi"),
     ("Discogs", "https://www.discogs.com"),
     ("Anthropic (Claude)", "https://www.anthropic.com"),
+    ("OpenAI", "https://openai.com"),
+    ("Google Gemini", "https://ai.google.dev"),
+    ("Ollama", "https://ollama.com"),
     ("JRiver Media Center", "https://jriver.com"),
 ]
 
@@ -100,17 +103,32 @@ KEY_HELP = {
     "ANTHROPIC_API_KEY": ("Anthropic API key",
         "At platform.claude.com, add billing credit under Settings,\n"
         "then create a key under API keys. Copy it once at creation."),
+    "OPENAI_API_KEY": ("OpenAI API key",
+        "At platform.openai.com, add billing credit under Settings,\n"
+        "then create a key under API keys. Copy it once at creation."),
+    "GEMINI_API_KEY": ("Google Gemini API key",
+        "At aistudio.google.com, choose Get API key and create one.\n"
+        "There's a free tier with lower limits; add billing for more."),
+    "OLLAMA_URL": ("Ollama",
+        "Install Ollama from ollama.com, then pull a model, for example\n"
+        "ollama pull gemma3:4b. Ollama's address is usually the one filled\n"
+        "in here; change it only if Ollama runs on another computer."),
     "JRIVER_PASS": ("JRiver Media Network",
         "Set the username and password in JRiver under\n"
         "Tools > Options > Media Network > Authentication."),
 }
 
 KEY_FIELDS = ["LASTFM_API_KEY", "LISTENBRAINZ_TOKEN", "DISCOGS_TOKEN",
-              "ANTHROPIC_API_KEY", "JRIVER_USER", "JRIVER_PASS"]
+              "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "OLLAMA_URL", "OLLAMA_MODEL",
+              "JRIVER_USER", "JRIVER_PASS"]
+AI_FIELDS = {"anthropic": ["ANTHROPIC_API_KEY"], "openai": ["OPENAI_API_KEY"], "gemini": ["GEMINI_API_KEY"],
+             "ollama": ["OLLAMA_URL", "OLLAMA_MODEL"]}   # Settings > Keys > AI shows the chosen provider's
+AI_KEY_FIELDS = {k for fields in AI_FIELDS.values() for k in fields}
+UNTESTED_NOTE = "Untested so far: please report how it goes on the JRiver forum or GitHub."
 
-NO_KEY_TEXT = "You need to add an Anthropic key to use this function"
+NO_KEY_TEXT = "You need to set up the AI under Settings > Keys to use this function"
 CONSOLE_QUERY_WARNING = ("Console Query sends the console, your settings (without keys) and 24bit7's "
-                         "code to Claude each time you ask a question. The first question costs a few "
+                         "code to your AI provider each time you ask a question. The first question costs a few "
                          "pence, more than the AI Moderator.\n\nTurn it on?")
 MODERATOR_CHOICES = ["Off", "Relaxed", "Balanced", "Strict"]
 MODERATOR_LEVELS_HELP = (
@@ -575,12 +593,12 @@ def sync_drift(p):
         for cb in boxes:
             cb.config(state="readonly" if on.get() else "disabled")
     sync_drift_sources(p)
-    # AI Playlist's moderator: only for Drift from the sources, and only with an Anthropic key
+    # AI Playlist's moderator: only for Drift from the sources, and only with the AI set up
     mod_cb = getattr(p, "vibe_mod_cb", None)
     if mod_cb is not None and "vibe" in p.drift:
         on, using, _, _ = p.drift["vibe"]
         ok = (on.get() and option_code(drift_using_options("vibe"), using.get()) != "ai"
-              and bool(engine.ANTHROPIC_API_KEY))
+              and engine.ai_configured())
         mod_cb.config(state="readonly" if ok else "disabled")
 
 
@@ -684,6 +702,7 @@ class SettingsTab(tk.Frame):
         updates["CREDITS_FIRST"] = option_code(CREDITS_FIRST_OPTIONS, self.vars["CREDITS_FIRST"].get())
         for key in ["JRIVER_HOST", "YOUTUBE_PLAYLIST_LENGTH"] + KEY_FIELDS:
             updates[key] = self.vars[key].get().strip()
+        updates["AI_PROVIDER"] = self._ai_provider()
         for group in ("DIGITAL_STORES", "REFERENCE_SITES"):
             updates[group] = ",".join(code for code, v in self.vars[group].items() if v.get())
         updates["DIGITAL_STORE"] = None   # pre-1.1.0 single-store key, superseded
@@ -726,7 +745,7 @@ class SettingsTab(tk.Frame):
         """Adds '(no key yet)' after a source whose key field is empty, and clears it once filled."""
         self._source_boxes = [b for b in self._source_boxes if b[0].winfo_exists()]   # device tabs rebuild theirs
         for box, code, label, purpose in self._source_boxes:
-            key = {"lastfm": "LASTFM_API_KEY", "ai": "ANTHROPIC_API_KEY"}.get(code)
+            key = {"lastfm": "LASTFM_API_KEY", "ai": AI_FIELDS[self._ai_provider()][-1]}.get(code)
             if code == "listenbrainz" and purpose == "top":
                 key = "LISTENBRAINZ_TOKEN"
             var = self.vars.get(key) if key else None
@@ -1625,11 +1644,12 @@ class SettingsTab(tk.Frame):
             cb.state(["!disabled"] if tick.get() else ["disabled"])
 
     def _moderator_section(self, p, page, group):
-        """An AI Moderator tick for one Play option, greyed out until there's an Anthropic key."""
+        """An AI Moderator tick for one Play option, greyed out until the AI is set up."""
         box = section(page, "AI Moderator",
-                      "Checks each playlist (and each Drift round) once with Claude Haiku, and removes tracks "
-                      "that clash with the seed's tone, energy and mood. Logs each removal with its reason. "
-                      "Uses a little Anthropic credit each time, a fraction of a penny per playlist.",
+                      "Checks each playlist (and each Drift round) once with the AI's quick model (Claude "
+                      "Haiku on Anthropic), and removes tracks that clash with the seed's tone, energy and mood. "
+                      "Logs each removal with its reason. Uses a little AI credit each time, a fraction of a "
+                      "penny per playlist (nothing with Ollama).",
                       title_fg=PALETTE["ai_purple"])
         key = f"AI_MODERATOR_{group.upper()}"
         p.vars[key] = tk.StringVar(value=engine.moderator_settings(p.env.get)[group].title())
@@ -1644,7 +1664,7 @@ class SettingsTab(tk.Frame):
         cb.pack(side="left")
         cb.bind("<<ComboboxSelected>>", chosen)
         help_mark(row, MODERATOR_LEVELS_HELP).pack(side="left", padx=(8, 0))
-        Tooltip(cb, NO_KEY_TEXT, when=lambda: not self._anthropic_key())
+        Tooltip(cb, NO_KEY_TEXT, when=lambda: not self._ai_set_up())
         p.moderator_boxes.append(cb)
 
     def _fill_sources(self, tab, p):
@@ -1722,24 +1742,36 @@ class SettingsTab(tk.Frame):
         p.loading = False
 
     def _on_console_query_toggled(self):
-        """Ticking Console Query asks first; with no Anthropic key it explains and stays off."""
+        """Ticking Console Query asks first; with no AI set up, or on Ollama, it explains and stays off."""
         var = self.vars["CONSOLE_QUERY"]
         if var.get():
-            if not self._anthropic_key():
+            if not self._ai_set_up():
                 messagebox.showinfo("Console Query", NO_KEY_TEXT, parent=self)
+                var.set(False)
+            elif self._ai_provider() == "ollama":
+                messagebox.showinfo("Console Query", "Console Query isn't available with Ollama: it sends the "
+                                    "console and 24bit7's code, far more than a local model can hold.", parent=self)
                 var.set(False)
             elif not messagebox.askyesno("Console Query", CONSOLE_QUERY_WARNING, parent=self):
                 var.set(False)
         self._save()
 
-    def _anthropic_key(self):
-        var = self.vars.get("ANTHROPIC_API_KEY")
-        return (var.get().strip() if var is not None else "") or engine.ANTHROPIC_API_KEY
+    def _ai_provider(self):
+        """The provider chosen under Settings > Keys > AI (the saved one until that page is built)."""
+        var = getattr(self, "ai_provider_var", None)
+        return option_code(engine.AI_PROVIDERS, var.get()) if var is not None else engine.AI_PROVIDER
+
+    def _ai_set_up(self):
+        """True when the chosen provider has what it needs (its key, or Ollama's model), a key just typed included."""
+        provider = self._ai_provider()
+        var = self.vars.get(AI_FIELDS[provider][-1])
+        typed = var.get().strip() if var is not None else ""
+        return bool(typed) or (provider == engine.AI_PROVIDER and engine.ai_configured())
 
     def _sync_moderator_box(self, p):
-        """Every AI Moderator tick is greyed out until there's an Anthropic key."""
+        """Every AI Moderator tick is greyed out until the AI is set up (Settings > Keys)."""
         for tick in getattr(p, "moderator_boxes", []):
-            tick.state(["!disabled"] if self._anthropic_key() else ["disabled"])
+            tick.state(["!disabled"] if self._ai_set_up() else ["disabled"])
 
     # --- the Playlist sections ---
 
@@ -1947,7 +1979,7 @@ class SettingsTab(tk.Frame):
                                   "first round. When most of what one seed brought in is off course, the rest of "
                                   "it goes too and Drift doesn't seed from that chain again.\n"
                                   + MODERATOR_LEVELS_HELP).pack(side="left", padx=(8, 0))
-                Tooltip(drift_mod_cb, NO_KEY_TEXT, when=lambda: not self._anthropic_key())
+                Tooltip(drift_mod_cb, NO_KEY_TEXT, when=lambda: not self._ai_set_up())
                 place(dm_row, pady=(0, 4))
             # Drift sources: the same as Settings > Sources, or Custom Sources of its own
             name = f"DRIFT_{group.upper()}"
@@ -2026,7 +2058,7 @@ class SettingsTab(tk.Frame):
                                    "your description, and removes any that clash. The AI's own picks are never "
                                    "checked. Only works when Drift is on and not using the AI.\n"
                                    + MODERATOR_LEVELS_HELP).pack(side="left", padx=(8, 0))
-                Tooltip(mod_cb, NO_KEY_TEXT, when=lambda: not self._anthropic_key())
+                Tooltip(mod_cb, NO_KEY_TEXT, when=lambda: not self._ai_set_up())
                 place(mod_row, pady=(0, 4))
                 p.vibe_mod_cb = mod_cb
 
@@ -2284,20 +2316,21 @@ class SettingsTab(tk.Frame):
     def _build_keys(self, nb):
         tab = self._scroll_tab(nb, "Keys")
         box = section(tab, "Keys and passwords")
-        for r, key in enumerate(k for k in KEY_FIELDS if k != "ANTHROPIC_API_KEY"):
+        for r, key in enumerate(k for k in KEY_FIELDS if k not in AI_KEY_FIELDS):
             self._key_row(box, r, key)
 
-        # --- Anthropic: the key last, in its own box, with what the AI has used under it ---
-        box = section(tab, "Anthropic",
-                      "Your Anthropic key, and the tokens 24bit7's AI features have used since you last "
-                      "cleared the count, with an estimated cost. Anthropic bills by tokens, and output "
-                      "tokens cost several times more than input. Answers reused from the cache cost "
-                      "nothing and aren't counted. Anthropic's console (platform.claude.com) has your "
-                      "actual bill.",
+        # --- AI: the provider and what it needs, in its own box, with what the AI has used under it ---
+        box = section(tab, "AI",
+                      "Which AI 24bit7's AI features use, and the tokens they have used since you last "
+                      "cleared the count, with an estimated cost. Providers bill by tokens, and output tokens "
+                      "cost several times more than input. Answers reused from the cache cost nothing and "
+                      "aren't counted. Your provider's own console has your actual bill. Anthropic is the "
+                      "one fully tested; OpenAI, Google Gemini and Ollama should work, and reports on how "
+                      "they do are welcome.",
                       title_fg=PALETTE["ai_purple"])
-        self._key_row(box, 0, "ANTHROPIC_API_KEY")
+        self._build_ai_provider(box)
         use = tk.Frame(box)
-        use.grid(row=1, column=0, columnspan=4, sticky="w", pady=(10, 0))
+        use.grid(row=2, column=0, columnspan=4, sticky="w", pady=(10, 0))
         use_title = tk.Label(use, text="Use AI", font=LABEL_FONT, fg=PALETTE["ai_purple"])
         use_title.pack(side="left", padx=(0, 12))
         help_mark(use, "Off pauses everything that spends AI credits, without removing your key: AI Playlist, "
@@ -2311,7 +2344,7 @@ class SettingsTab(tk.Frame):
             ttk.Radiobutton(use, text=choice, value=choice, variable=self.use_ai_var,
                             command=self._use_ai_changed).pack(side="left", padx=(0, 10))
         usage = tk.Frame(box)
-        usage.grid(row=2, column=0, columnspan=4, sticky="w", pady=(14, 0))
+        usage.grid(row=3, column=0, columnspan=4, sticky="w", pady=(14, 0))
         tk.Label(usage, text="AI Usage", font=LABEL_FONT, fg=PALETTE["ai_purple"]).grid(row=0, column=0, sticky="w")
         self.usage_total = tk.Label(usage, text="", anchor="w", justify="left")
         self.usage_total.grid(row=1, column=0, sticky="w", pady=(4, 8))
@@ -2351,23 +2384,144 @@ class SettingsTab(tk.Frame):
                          justify="left")
         rates.grid(row=9, column=0, sticky="w", pady=(10, 0))
         self._wrap_to_width(usage, [self.usage_dollar, rates])
-        link = tk.Label(usage, text="Anthropic's pricing page", fg=PALETTE.get("link", PALETTE["section_fg"]),
-                        cursor="hand2", font=("Segoe UI", 9, "underline"))
+        link = self.usage_link = tk.Label(usage, text="", fg=PALETTE.get("link", PALETTE["section_fg"]),
+                                          cursor="hand2", font=("Segoe UI", 9, "underline"))
         link.grid(row=10, column=0, sticky="w", pady=(2, 0))
-        link.bind("<Button-1>", lambda e: webbrowser.open_new_tab(ai_usage.PRICES_URL))
+        link.bind("<Button-1>", lambda e: ai_usage.pricing_page(self._ai_provider()) and
+                  webbrowser.open_new_tab(ai_usage.pricing_page(self._ai_provider())))
+        self._sync_pricing_note()
         tab.bind("<<Shown>>", lambda e: self._fill_usage(), add="+")
         self._fill_usage()
+
+    def _build_ai_provider(self, box):
+        """The Provider dropdown, and under it the chosen provider's key (or Ollama's address and model)."""
+        purple = PALETTE["ai_purple"]
+        row = tk.Frame(box)
+        row.grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 4))
+        title = tk.Label(row, text="Provider", font=LABEL_FONT, fg=purple)
+        title.pack(side="left", padx=(0, 12))
+        self.ai_provider_var = tk.StringVar(value=option_label(engine.AI_PROVIDERS, engine.AI_PROVIDER))
+        cb = ttk.Combobox(row, textvariable=self.ai_provider_var, state="readonly", width=18,
+                          values=[name for _, name in engine.AI_PROVIDERS])
+        cb.pack(side="left")
+        cb.bind("<<ComboboxSelected>>", lambda e: (cb.selection_clear(), self._ai_provider_chosen()))
+        help_mark(row, "The AI that AI Playlist, the AI Moderator, the AI as a source, Steer, Assess Tone and "
+                       "the Queries use. Anthropic (Claude) is the one fully tested. OpenAI and Google Gemini "
+                       "need their own key and should work the same way. Ollama runs a model on your own PC "
+                       "for free; smaller models give rougher results, and Console Query isn't available with "
+                       "it. Keys for every provider stay saved, so switching back loses nothing.",
+                  on=title).pack(side="left", padx=(8, 0))
+        self.ai_untested = tk.Label(row, text=UNTESTED_NOTE, fg=PALETTE["help_fg"], font=HELP_FONT)
+        self.ai_untested.pack(side="left", padx=(12, 0))
+        self.ai_field_frames = {}
+        for provider, fields in AI_FIELDS.items():
+            frame = tk.Frame(box)
+            frame.grid(row=1, column=0, columnspan=4, sticky="w")
+            if provider == "ollama":
+                self._ollama_rows(frame)
+            else:
+                self._key_row(frame, 0, fields[0])
+            self.ai_field_frames[provider] = frame
+        self._show_ai_fields()
+
+    def _ollama_rows(self, frame):
+        """Ollama: its address, the model (filled from what Ollama has installed) and Refresh."""
+        purple = PALETTE["ai_purple"]
+        tk.Label(frame, text="OLLAMA_URL", anchor="w", fg=purple).grid(row=0, column=0, sticky="w", pady=4)
+        url = tk.StringVar(value=self.env.get("OLLAMA_URL", "") or engine.OLLAMA_DEFAULT_URL)
+        self.vars["OLLAMA_URL"] = url
+        entry = tk.Entry(frame, textvariable=url, width=32)
+        entry.grid(row=0, column=1, padx=(8, 4))
+        entry.bind("<FocusOut>", self._save)
+        button = tk.Button(frame, text="?", width=2, command=lambda: self._show_help("OLLAMA_URL"))
+        button.grid(row=0, column=3, padx=(4, 0))
+        Tooltip(button, KEY_HELP["OLLAMA_URL"][1].replace("\n", " ") + "\nClick for these steps in a window.")
+        tk.Label(frame, text="OLLAMA_MODEL", anchor="w", fg=purple).grid(row=1, column=0, sticky="w", pady=4)
+        model = tk.StringVar(value=self.env.get("OLLAMA_MODEL", ""))
+        self.vars["OLLAMA_MODEL"] = model
+        self.ollama_cb = ttk.Combobox(frame, textvariable=model, width=30)
+        self.ollama_cb.grid(row=1, column=1, padx=(8, 4))
+        self.ollama_cb.bind("<<ComboboxSelected>>", lambda e: (self.ollama_cb.selection_clear(), self._save(),
+                                                                self._sync_play_ai()))
+        self.ollama_cb.bind("<FocusOut>", lambda e: (self._save(), self._sync_play_ai()))
+        tk.Button(frame, text="Refresh", width=8, command=self._ollama_refresh).grid(row=1, column=2, padx=(4, 0))
+        self.ollama_note = tk.Label(frame, text="Refresh lists the models Ollama has installed.",
+                                    fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w")
+        self.ollama_note.grid(row=2, column=1, columnspan=3, sticky="w")
+
+    def _ollama_refresh(self):
+        """Asks Ollama which models it has, and offers them in the Model list."""
+        url = self.vars["OLLAMA_URL"].get().strip() or engine.OLLAMA_DEFAULT_URL
+        names = engine.ollama_models(url)
+        if names is None:
+            self.ollama_note.config(text=f"Ollama isn't answering at {url}. Is it running?")
+            return
+        self.ollama_cb.config(values=names)
+        if not names:
+            self.ollama_note.config(text="Ollama is running but has no models yet. Try: ollama pull gemma3:4b")
+            return
+        self.ollama_note.config(text=f"{len(names)} model{'' if len(names) == 1 else 's'} installed in Ollama.")
+        if not self.vars["OLLAMA_MODEL"].get().strip():
+            self.vars["OLLAMA_MODEL"].set(names[0])
+            self._save()
+            self._sync_play_ai()
+
+    def _show_ai_fields(self):
+        provider = self._ai_provider()
+        for name, frame in self.ai_field_frames.items():
+            if name == provider:
+                frame.grid()
+            else:
+                frame.grid_remove()
+        if provider == "anthropic":
+            self.ai_untested.pack_forget()
+        elif not self.ai_untested.winfo_manager():
+            self.ai_untested.pack(side="left", padx=(12, 0))
+
+    def _sync_pricing_note(self):
+        """The rates line and the pricing link follow the chosen provider (Ollama has no prices)."""
+        provider = self._ai_provider()
+        if getattr(self, "usage_rates", None) is not None:
+            self.usage_rates.config(text=ai_usage.rates_line(provider))
+        link = getattr(self, "usage_link", None)
+        if link is not None:
+            if ai_usage.pricing_page(provider):
+                link.config(text=f"{engine.ai_provider_name(provider)}'s pricing page")
+                link.grid()
+            else:
+                link.grid_remove()
+
+    def _ai_provider_chosen(self):
+        """A new provider: show what it needs, save, and bring the costs and the Play tab up to date."""
+        self._show_ai_fields()
+        self._save()
+        engine.refresh_settings_if_changed()
+        if self._ai_provider() == "ollama" and not self.ollama_cb.cget("values"):
+            self._ollama_refresh()
+        self._sync_pricing_note()
+        if getattr(self, "usage_table", None) is not None:
+            self._fill_usage()
+        if self._ai_provider() == "ollama" and self.vars.get("CONSOLE_QUERY") is not None \
+                and self.vars["CONSOLE_QUERY"].get():
+            self.vars["CONSOLE_QUERY"].set(False)   # not available with a local model
+            self._save()
+        self._sync_play_ai()
 
     def _use_ai_changed(self):
         """Settings > Keys > Use AI: saved at once; the Play tab greys its AI pieces out or back in."""
         write_env({"USE_AI": "1" if self.use_ai_var.get() == "On" else "0"})
+        self._sync_play_ai()
+
+    def _sync_play_ai(self):
+        """The Play tab greys its AI pieces out or back in, after Use AI or the provider changes."""
         engine.refresh_settings_if_changed()
+        self._sync_moderator_box(self._main_sources)
         play = getattr(self, "play", None)
         if play is not None and hasattr(play, "sync_moderator"):
             try:
                 play.sync_moderator()
                 play.sync_console_buttons()   # the Query button comes and goes with Use AI
-                if not engine.ai_enabled() and play.query_panel.winfo_manager():
+                if not engine.console_query_ready() and play.query_panel.winfo_manager():
                     play._close_query()
             except Exception:
                 pass
@@ -2375,7 +2529,7 @@ class SettingsTab(tk.Frame):
     def _key_row(self, box, r, key):
         """One key: its name, the hidden entry, Show, and the ? with where to get it."""
         tk.Label(box, text=key, anchor="w",
-                 **({"fg": PALETTE["ai_purple"]} if key == "ANTHROPIC_API_KEY" else {})
+                 **({"fg": PALETTE["ai_purple"]} if key in AI_KEY_FIELDS else {})
                  ).grid(row=r, column=0, sticky="w", pady=4)
         var = tk.StringVar(value=self.env.get(key, ""))
         self.vars[key] = var
@@ -2452,9 +2606,15 @@ class SettingsTab(tk.Frame):
             self.usage_dollar.grid()
         else:
             self.usage_dollar.grid_remove()   # no gap when there's nothing to say yet
+        provider = self._ai_provider()
+
+        def note_for(feature, note):   # Console Query's caching note is Anthropic's; Ollama can't run it
+            if feature != "Console Query" or provider == "anthropic":
+                return note or ""
+            return "not available with Ollama" if provider == "ollama" else "per question"
         self._usage_grid(self.usage_guide, ("Feature", "Tokens per run", "", "Cost per run", "Note"),
                          [((f, ""), (f"about {tokens:,}", ""), ("\u25cf" if yours else "", "dot"),
-                           (self._cost(c), ""), (note or "", "note"))
+                           ("Free" if provider == "ollama" else self._cost(c), ""), (note_for(f, note), "note"))
                           for f, tokens, c, note, yours in guide])
         self.usage_legend.config(text="\u25cf  your own average, from your recorded runs"
                                  if any(yours for *_, yours in guide) else "")
@@ -2473,7 +2633,7 @@ class SettingsTab(tk.Frame):
     def _usage_query(self):
         self._save()   # a key just typed counts
         engine.refresh_settings_if_changed()
-        if not engine.ANTHROPIC_API_KEY:
+        if not engine.ai_configured():
             messagebox.showinfo("AI Usage", NO_KEY_TEXT, parent=self)
             return
         if ai_usage.query():
@@ -2751,10 +2911,10 @@ class SettingsTab(tk.Frame):
             self.vars["CONSOLE_QUERY"].set(not self.vars["CONSOLE_QUERY"].get())
             self._on_console_query_toggled()
         cq_label.bind("<Button-1>", label_clicked)
-        help_mark(row, "Adds Query to the console's Copy and Clear strip. Ask Claude why a playlist came "
+        help_mark(row, "Adds Query to the console's Copy and Clear strip. Ask the AI why a playlist came "
                        "out the way it did, and get suggested setting changes. Each question sends the "
-                       "console, your settings (without keys) and 24bit7's code, so it uses more Anthropic "
-                       "credit than AI Moderator."
+                       "console, your settings (without keys) and 24bit7's code, so it uses more AI "
+                       "credit than AI Moderator. Not available with Ollama."
                   ).pack(side="left", padx=(8, 0))
 
         # Show Credits: the playing track's credits or every track's, and which list comes first
@@ -2880,7 +3040,8 @@ class SettingsTab(tk.Frame):
         tk.Label(tab, justify="left", wraplength=640, anchor="w",
                  text=("Builds playlists from your own JRiver library around whatever is playing, using "
                        "Last.fm, ListenBrainz, Deezer and YouTube Music. It runs without AI; the AI "
-                       "features are optional and need your own Anthropic key.")).grid(
+                       "features are optional and need your own key for Anthropic, OpenAI or Google Gemini, "
+                       "or a local model through Ollama.")).grid(
             row=2, column=0, sticky="w", pady=(6, 14))
 
         # --- Links ---

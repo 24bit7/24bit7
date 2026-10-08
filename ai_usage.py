@@ -19,34 +19,47 @@ from datetime import datetime
 
 import engine
 
-# Anthropic's standard API rates in US dollars per million tokens (input, output),
-# by model name prefix. Check https://claude.com/pricing when preparing a release.
+# Each provider's standard API rates in US dollars per million tokens (input, output), by
+# model name prefix. Check every provider's pricing page (PRICING_PAGES) before each release.
+# Ollama runs on the user's own PC, so its models have no price and cost nothing here.
 PRICES = {
     "claude-sonnet-5": (2.00, 10.00),
     "claude-haiku-4-5": (1.00, 5.00),
+    "gpt-6.1-sol": (2.00, 10.00),
+    "gpt-6-luna": (0.10, 0.50),
+    "gemini-3.8-flash": (0.75, 3.75),        # rises to 1.50 / 7.50 on 1 January 2027
+    "gemini-3.5-flash-lite": (0.30, 2.50),
 }
-PRICES_CHECKED = "6 Oct 2026"
-PRICES_URL = "https://claude.com/pricing"
+PRICES_CHECKED = "8 Oct 2026"
+PRICING_PAGES = {
+    "anthropic": "https://claude.com/pricing",
+    "openai": "https://developers.openai.com/api/docs/pricing",
+    "gemini": "https://ai.google.dev/gemini-api/docs/pricing",
+}
+PRICES_URL = PRICING_PAGES["anthropic"]
+MODEL_NAMES = {"claude-sonnet-5": "Sonnet 5", "claude-haiku-4-5": "Haiku 4.5", "gpt-6.1-sol": "GPT-6.1 Sol",
+               "gpt-6-luna": "GPT-6 Luna", "gemini-3.8-flash": "Gemini 3.8 Flash",
+               "gemini-3.5-flash-lite": "Gemini 3.5 Flash-Lite"}
 CACHE_WRITE, CACHE_READ = 1.25, 0.10   # prompt caching, as multiples of the input rate
-SONNET, HAIKU = "claude-sonnet-5", "claude-haiku-4-5"
+MAIN, QUICK = "main", "quick"   # the guide names a tier; the chosen provider's model for it is priced
 
 # What each feature typically uses per run, until there are enough of your own runs to
 # average: (model, input, cache writes, cache reads, output, note)
 GUIDE = [
-    ("Similar Tracks (AI source)", SONNET, 400, 0, 0, 1000, ""),
-    ("Similar Artists (AI source)", SONNET, 150, 0, 0, 250, ""),
-    ("Top Tracks (AI source)", SONNET, 100, 0, 0, 150,
+    ("Similar Tracks (AI source)", MAIN, 400, 0, 0, 1000, ""),
+    ("Similar Artists (AI source)", MAIN, 150, 0, 0, 250, ""),
+    ("Top Tracks (AI source)", MAIN, 100, 0, 0, 150,
      "per artist: a Similar Artists build asks for around 20"),
-    ("AI Playlist", SONNET, 300, 0, 0, 1000, ""),
-    ("AI Playlist ideas", SONNET, 100, 0, 0, 50, ""),
-    ("AI Moderator", HAIKU, 1000, 0, 0, 300, ""),
-    ("Console Query", HAIKU, 5000, 65000, 0, 400,
+    ("AI Playlist", MAIN, 300, 0, 0, 1000, ""),
+    ("AI Playlist ideas", MAIN, 100, 0, 0, 50, ""),
+    ("AI Moderator", QUICK, 1000, 0, 0, 300, ""),
+    ("Console Query", QUICK, 5000, 65000, 0, 400,
      "first question; follow-ups within 5 minutes cost about a tenth"),
-    ("Usage Query", HAIKU, 1500, 0, 0, 400, ""),
+    ("Usage Query", QUICK, 1500, 0, 0, 400, ""),
 ]
 OWN_AFTER = 3   # runs of a feature before the guide shows your own average
 
-QUERY_MODEL = "claude-haiku-4-5-20251001"   # the same model as Console Query and the AI Moderator
+QUERY_MODEL = "claude-haiku-4-5-20251001"   # Anthropic's quick model, as Console Query and the AI Moderator use
 SINCE_KEY = "ai_usage_since"
 QUESTION = "Where are my AI tokens going, and how could I use fewer?"
 
@@ -125,15 +138,28 @@ def money(dollars):
     return "under 0.01 cents"
 
 
-def rates_line():
-    """Says what the estimates are based on, and that they may be out of date."""
+def rates_line(provider=None):
+    """Says what the estimates are based on for the chosen provider, and that they may be out of date."""
+    provider = provider or engine.AI_PROVIDER
+    if provider == "ollama":
+        return ("Ollama runs on your own PC, so it costs nothing to use. Its tokens are still counted, "
+                "and any costs above are from requests made through a cloud provider.")
+    name = engine.ai_provider_name(provider)
     parts = []
-    for prefix, (rate_in, rate_out) in PRICES.items():
-        name = {"claude-sonnet-5": "Sonnet 5", "claude-haiku-4-5": "Haiku 4.5"}.get(prefix, prefix)
-        parts.append(f"{name} ${rate_in:g} in and ${rate_out:g} out")
-    return (f"Costs are estimates. They use Anthropic's standard API rates as checked on {PRICES_CHECKED} "
+    for model in engine.AI_MODELS.get(provider, ()):
+        price = price_for(model)
+        if price:
+            label = next((MODEL_NAMES[p] for p in sorted(MODEL_NAMES, key=len, reverse=True)
+                          if model.startswith(p)), model)
+            parts.append(f"{label} ${price[0]:g} in and ${price[1]:g} out")
+    return (f"Costs are estimates. They use {name}'s standard API rates as checked on {PRICES_CHECKED} "
             f"({'; '.join(parts)}, per million tokens), and rates may have changed since. "
-            f"Anthropic's pricing page has the current rates.")
+            f"{name}'s pricing page has the current rates.")
+
+
+def pricing_page(provider=None):
+    """The chosen provider's pricing page, or None for Ollama."""
+    return PRICING_PAGES.get(provider or engine.AI_PROVIDER)
 
 
 # --- totals ----------------------------------------------------------------------------
@@ -221,7 +247,8 @@ def guide():
         f[1] += int(i or 0) + int(cw or 0) + int(cr or 0) + int(o or 0)
         f[2] += cost(model, int(i or 0), int(cw or 0), int(cr or 0), int(o or 0))
     out = []
-    for feature, model, i, cw, cr, o, note in GUIDE:
+    for feature, tier, i, cw, cr, o, note in GUIDE:
+        model = engine.ai_model(tier)
         n, tokens, dollars = mine.get(feature, (0, 0, 0.0))
         if n >= OWN_AFTER:
             out.append((feature, tokens // n, dollars / n, note, True))
@@ -246,7 +273,7 @@ def dollar_line(rows=None):
 
 # --- Query -----------------------------------------------------------------------------
 
-SYSTEM = """You help someone keep the Anthropic token use of 24bit7 down. 24bit7 is a Windows app that \
+SYSTEM = """You help someone keep the AI token use of 24bit7 down. 24bit7 is a Windows app that \
 builds playlists from their own music library; the AI is optional, and its features are: the AI as a \
 source for Similar Artists, Similar Tracks and Artist's Top Tracks, AI Playlist (and its ideas), the \
 AI Moderator (Off, Relaxed, Balanced, Strict), and Console Query. You get the token counts since they \
@@ -279,24 +306,18 @@ def _usage_text(t):
 def ask(on_done):
     """Asks Claude about the counts in the background; on_done(answer, error) is called from that thread."""
     def work():
-        try:
-            import anthropic
-            import console_query
-        except ImportError:
-            on_done(None, "the anthropic package isn't installed")
-            return
+        import console_query
         engine.refresh_settings_if_changed()
-        if not engine.ANTHROPIC_API_KEY:
-            on_done(None, "there's no Anthropic key")
+        if not engine.ai_configured():
+            on_done(None, f"there's no {engine.ai_missing_text().split(' ', 1)[1]}")
             return
         user = f"{_usage_text(totals())}\n\nCurrent settings:\n{console_query.settings_text()}"
         try:
-            client = anthropic.Anthropic(api_key=engine.ANTHROPIC_API_KEY)
-            message = client.messages.create(model=QUERY_MODEL, max_tokens=700, system=SYSTEM,
-                                             messages=[{"role": "user", "content": user}])
-            record("Usage Query", QUERY_MODEL, message)
-            answer = "".join(b.text for b in message.content if getattr(b, "type", "") == "text").strip()
+            answer = engine.ai_request(user, 700, "Usage Query", tier="quick", system=SYSTEM,
+                                       announce=False).text.strip()
             on_done(console_query.plain(answer) or "(no answer came back)", None)
+        except ImportError:
+            on_done(None, "the anthropic package isn't installed")
         except Exception as e:
             text = str(e)
             on_done(None, "your Anthropic credit balance is too low" if "credit balance" in text.lower()

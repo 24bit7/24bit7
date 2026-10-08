@@ -389,7 +389,7 @@ class FakeWeb:
         host, path = u.netloc, u.path
         service = {"ws.audioscrobbler.com": "lastfm", "api.deezer.com": "deezer", "musicbrainz.org": "musicbrainz",
                    "labs.api.listenbrainz.org": "listenbrainz", "api.listenbrainz.org": "listenbrainz",
-                   "api.discogs.com": "discogs"}.get(host)
+                   "api.discogs.com": "discogs", "127.0.0.1:11434": "ollama"}.get(host)
         if service is None:
             raise AssertionError(f"Unexpected network call: {method} {url}")
         self.calls.append((service, path, dict(params or {})))
@@ -420,6 +420,10 @@ class FakeWeb:
                     return Resp(data={"data": [{"name": n} for n in names]})
                 titles = [] if empty else self.top_tracks(name)
                 return Resp(data={"data": [{"title": t} for t in titles]})
+        if service == "ollama":   # a local Ollama with one model, for Settings > Keys > AI's Refresh
+            if path == "/api/tags":
+                return Resp(data={"models": [] if empty else [{"name": "gemma3:4b"}]})
+            return Resp(status=404, data={"error": "not faked"})
         if service == "musicbrainz":
             if path.startswith("/ws/2/artist"):
                 name = re.sub(r'^artist:"|"$', "", params.get("query", ""))
