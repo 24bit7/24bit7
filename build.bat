@@ -4,6 +4,17 @@ cd /d "%~dp0"
 
 rem Close the packaged 24bit7 before building, or its files can't be replaced.
 
+rem --- 0. Full test suite: a failure stops the release before anything else happens ---
+echo Running the tests (a few minutes)...
+python -m pytest -q
+if errorlevel 1 (
+    echo.
+    echo Tests FAILED, so nothing was built. Fix them and run build.bat again.
+    pause
+    exit /b 1
+)
+echo.
+
 rem --- 1. Back up settings and history (a rebuild deletes dist\24bit7) ---
 for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd_HHmm"') do set STAMP=%%i
 set BK=backups\%STAMP%
