@@ -503,7 +503,7 @@ def switch_targets():
 def _info_items(zid):
     r = requests.get(f"{engine.JRIVER_BASE}/Playback/Info", params={"Zone": zid}, auth=engine.AUTH, timeout=10)
     import xml.etree.ElementTree as ET
-    return {i.get("Name"): (i.text or "").strip() for i in ET.fromstring(r.text).findall("Item")}
+    return {i.get("Name"): (i.text or "").strip() for i in ET.fromstring(engine.xml_safe(r.text)).findall("Item")}
 
 
 def _playing(zid):
@@ -547,7 +547,7 @@ def _is_dlna(zid):
     try:
         import xml.etree.ElementTree as ET
         r = _mcws("Playback/Zones")
-        items = {i.get("Name"): (i.text or "").strip() for i in ET.fromstring(r.text).findall("Item")}
+        items = {i.get("Name"): (i.text or "").strip() for i in ET.fromstring(engine.xml_safe(r.text)).findall("Item")}
         for n in range(int(items.get("NumberZones") or 0)):
             if items.get(f"ZoneID{n}") == str(zid):
                 return items.get(f"ZoneDLNA{n}") == "1"
@@ -561,7 +561,7 @@ def _volume(zid):
     try:
         import xml.etree.ElementTree as ET
         r = _mcws("Playback/Volume", Zone=zid)
-        items = {i.get("Name"): (i.text or "").strip() for i in ET.fromstring(r.text).findall("Item")}
+        items = {i.get("Name"): (i.text or "").strip() for i in ET.fromstring(engine.xml_safe(r.text)).findall("Item")}
         return float(items["Level"])
     except Exception:
         return None

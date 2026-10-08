@@ -214,7 +214,7 @@ def playlist_keys(playlist_id):
                      params={"Playlist": playlist_id, "PlaylistType": "ID", "Fields": "Key"},
                      auth=engine.AUTH, timeout=30)
     keys = []
-    for item in ET.fromstring(r.text).findall(".//Item"):
+    for item in ET.fromstring(engine.xml_safe(r.text)).findall(".//Item"):
         for field in item.findall("Field"):
             if field.get("Name") == "Key" and field.text:
                 keys.append(field.text.strip())

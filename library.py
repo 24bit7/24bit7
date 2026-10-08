@@ -175,20 +175,22 @@ def _read_tracks():
     r = _get("Files/Search", Query=AUDIO, Action="JSON", Fields=FIELDS)
     answered = time.time()
     try:
-        rows = [{k: str(v) for k, v in row.items()} for row in json.loads(r.text)]
+        # strict=False: a control character in a tag (a pasted line break, a stray byte from an
+        # old ripper) is kept as it is, instead of making the whole library unreadable
+        rows = [{k: str(v) for k, v in row.items()} for row in json.loads(r.text, strict=False)]
         engine.debug(f"Library: JRiver answered in {answered - started:.1f} s, "
                      f"decoding {len(rows):,} tracks took {time.time() - answered:.1f} s")
         return rows
-    except ValueError:
-        pass
+    except ValueError as e:
+        print(f"Note: JRiver's library list couldn't be read as JSON ({e}), so reading it as MPL instead.")
     r = _get("Files/Search", Query=AUDIO, Action="MPL")
     return [{f.get("Name"): f.text or "" for f in item.findall("Field")}
-            for item in ET.fromstring(r.text).findall(".//Item")]
+            for item in ET.fromstring(engine.xml_safe(r.text)).findall(".//Item")]
 
 
 def _read_playlists():
     out = []
-    for item in ET.fromstring(_get("Playlists/List").text).findall("Item"):
+    for item in ET.fromstring(engine.xml_safe(_get("Playlists/List").text)).findall("Item"):
         fields = {f.get("Name"): f.text or "" for f in item.findall("Field")}
         if fields.get("Type") in ("Playlist", "Smartlist"):
             out.append(fields)

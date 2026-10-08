@@ -628,6 +628,17 @@ def debug(msg):
         print(f"    [debug] {msg}")
 
 
+# Control characters XML can't hold at all (tab, line feed and carriage return are fine).
+# A stray one in any tag, pasted in from a web page or left by old ripping software,
+# would otherwise make a whole JRiver reply unreadable.
+_XML_UNSAFE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
+
+
+def xml_safe(text):
+    """A JRiver XML reply with the characters XML forbids turned into spaces, so it can be read."""
+    return _XML_UNSAFE.sub(" ", text or "")
+
+
 AI_LAST_ERROR = ""   # why the last AI request returned nothing, for the source result lines
 
 
@@ -884,7 +895,7 @@ def playing_now_rows(zone):
         r = requests.get(f"{JRIVER_BASE}/Playback/Playlist", params={"Zone": zone, "Fields": "Key,Name,Artist,Album"},
                          auth=AUTH, timeout=10)
         return [{f.get("Name"): f.text or "" for f in item.findall("Field")}
-                for item in ET.fromstring(r.text).findall(".//Item")]
+                for item in ET.fromstring(xml_safe(r.text)).findall(".//Item")]
     except Exception:
         return []
 
@@ -1089,7 +1100,7 @@ def _read_zones():
     """JRiver's zones as [(id, name)] in JRiver's order, plus the active zone's ID. ([], None) if unreachable."""
     try:
         r = requests.get(f"{JRIVER_BASE}/Playback/Zones", auth=AUTH, timeout=5)
-        items = {i.get("Name"): (i.text or "").strip() for i in ET.fromstring(r.text).findall("Item")}
+        items = {i.get("Name"): (i.text or "").strip() for i in ET.fromstring(xml_safe(r.text)).findall("Item")}
         count = int(items.get("NumberZones") or 0)
     except Exception:
         return [], None
@@ -1147,7 +1158,7 @@ def get_playing_info(zone=None):
         if zone is None:
             return None
         r = requests.get(f"{JRIVER_BASE}/Playback/Info", params={"Zone": zone}, auth=AUTH, timeout=10)
-        root = ET.fromstring(r.text)
+        root = ET.fromstring(xml_safe(r.text))
         info = {"Artist": "Unknown", "Album": "Unknown", "Name": "Unknown",
                 "PlayingNowPosition": "-1", "PlayingNowTracks": "0", "FileKey": "", "ZoneID": ""}
         for item in root.findall('Item'):
@@ -1175,7 +1186,7 @@ def last_played_seed(zone=None, report=print):
         r = requests.get(f"{JRIVER_BASE}/Files/Search",
                          params={"Query": "[Media Type]=[Audio] ~sort=[Last Played]-d ~n=1", "Action": "JSON",
                                  "Fields": "Key,Name,Artist,Album,Last Played"}, auth=AUTH, timeout=30)
-        for row in json.loads(r.text):
+        for row in json.loads(r.text, strict=False):   # strict=False: control characters in tags are kept
             when = library.played_time(str(row.get("Last Played") or "").strip())
             if when and (best is None or when > best[0]):
                 best = (when, {k: str(v) for k, v in row.items()})
@@ -1426,7 +1437,7 @@ def jriver_search_artist_items(artist_name):
         )
         if r.status_code != 200 or not r.text:
             continue
-        for item in ET.fromstring(r.text).findall(".//Item"):
+        for item in ET.fromstring(xml_safe(r.text)).findall(".//Item"):
             key = next((f.text for f in item.findall("Field") if f.get("Name") == "Key"), None)
             if key is not None and key in seen_keys:
                 continue
@@ -2846,7 +2857,7 @@ def jriver_is_stopped(zone=ACTIVE_ZONE):
     """True only when the zone clearly reports it is stopped. Any doubt counts as 'not stopped'."""
     try:
         r = requests.get(f"{JRIVER_BASE}/Playback/Info", params={"Zone": zone}, auth=AUTH)
-        for item in ET.fromstring(r.text).findall("Item"):
+        for item in ET.fromstring(xml_safe(r.text)).findall("Item"):
             if item.get("Name") == "State":
                 return (item.text or "").strip() == "0"
     except Exception:
@@ -2952,7 +2963,7 @@ def playlist_exists(name):
     """True when JRiver already has a playlist (not a smartlist) with this name or path."""
     try:
         r = requests.get(f"{JRIVER_BASE}/Playlists/List", auth=AUTH, timeout=10)
-        for item in ET.fromstring(r.text).findall(".//Item"):
+        for item in ET.fromstring(xml_safe(r.text)).findall(".//Item"):
             f = {x.get("Name"): (x.text or "") for x in item.findall("Field")}
             if f.get("Type") == "Playlist" and name.lower() in (f.get("Name", "").lower(), f.get("Path", "").lower()):
                 return True
@@ -2968,7 +2979,7 @@ def review_save(keys, name):
                      params={"Type": "Playlist", "Path": name, "CreateMode": "Overwrite"}, auth=AUTH, timeout=10)
     pid = ""
     try:
-        pid = next((i.text or "").strip() for i in ET.fromstring(r.text).findall("Item")
+        pid = next((i.text or "").strip() for i in ET.fromstring(xml_safe(r.text)).findall("Item")
                    if i.get("Name") == "PlaylistID")
     except (ET.ParseError, StopIteration):
         pass
@@ -3010,7 +3021,7 @@ def zone_state(zone=ACTIVE_ZONE):
     """JRiver's playback state for a zone: 0 stopped, 1 paused, 2 playing, 3 waiting; None if unknown."""
     try:
         r = requests.get(f"{JRIVER_BASE}/Playback/Info", params={"Zone": zone}, auth=AUTH, timeout=10)
-        for item in ET.fromstring(r.text).findall("Item"):
+        for item in ET.fromstring(xml_safe(r.text)).findall("Item"):
             if item.get("Name") == "State":
                 return int((item.text or "").strip())
     except Exception:
