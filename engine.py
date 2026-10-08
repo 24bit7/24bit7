@@ -820,7 +820,8 @@ import threading as _threading
 NONSTOP_KINDS = {"similar": "artists", "youtube_queue": "artists", "similar_tracks": "tracks",
                  "top_tracks": "top", "vibe": "vibe"}
 NONSTOP_CONTEXT = {}     # the build in progress (set by session_start)
-RUN_AFTER = {}           # group -> (on, path), from Settings > Playlist > Run After Building
+# RUN_AFTER: group -> (on, path), from Settings > Playlist > Run After Building. Set only by load_settings():
+# a default here would undo the startup load.
 NONSTOP_APPEND = False   # True while a non-stop top-up builds: it only ever adds, never repeats
 FILTER_DEVICE = None     # the Alexa device a build is for (None: Windows (Main)), for Settings > Filters
 NONSTOP_ZONES = {}       # zone ID -> {"keys", "build", "kind", "vibe", "top_artist", "top_first", "stage", "fired"}
@@ -2238,7 +2239,8 @@ def report_missing_keys(report, similar=False, top_tracks=False):
         report("  Note: " + note)
 
 
-USE_AI = True            # Settings > Keys > Use AI: Off pauses every feature that spends AI credits
+# USE_AI: Settings > Keys > Use AI, Off pauses every feature that spends AI credits. Set only by
+# load_settings(): a default here would undo the startup load.
 _AI_OFF_NOTED = set()    # which features have had their "Use AI is Off" line this build
 
 
