@@ -10,8 +10,6 @@ dist/
 # installer leftovers and dev helpers
 *.bak_*
 apply_*.py
-check_24bit7.py
-Curated.py
 *.zip
 # build.bat's copies of .env (keys) and the database
 backups/
@@ -21,3 +19,5 @@ logs/
 # the user manual PDF, rebuilt by build_manual.py
 24bit7_Manual.pdf
 profiles/
+*_log.txt
+singles_undo.json

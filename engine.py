@@ -232,7 +232,7 @@ def load_settings():
     global AI_MODERATOR, MODERATOR_WARNED, SKIP_PLAYED
     global NONSTOP, NONSTOP_USING, NONSTOP_RESEED, NONSTOP_TOP_REST, NONSTOP_TOP_REST_COUNT, NONSTOP_VIBE
     global NONSTOP_BY, LONG_CLOSERS, AI_MODERATOR_BY, RUN_AFTER
-    global CONSOLE_QUERY, USE_AI
+    global CONSOLE_QUERY, USE_AI, CREDITS_SCOPE, CREDITS_FIRST
 
     load_dotenv(ENV_FILE, override=True)
     os.environ.update(PROFILE)   # a device's own settings, for the voice command being built
@@ -336,6 +336,13 @@ def load_settings():
         CACHE_KEEP = "month" if _int_setting("CACHE_DAYS", 30, 1, 3650) <= 30 else "year"
     CACHE_DAYS = {"month": 30, "year": 365}.get(CACHE_KEEP)   # None: kept until cleared
     TABLE_FONT_SIZE = _int_setting("TABLE_FONT_SIZE", 9, 6, 16)   # Discover table font
+    # Show Credits (Settings > Other): the playing track's credits or every track's, and which list comes first
+    CREDITS_SCOPE = os.getenv("CREDITS_SCOPE", "current").strip().lower()
+    if CREDITS_SCOPE not in ("current", "all"):
+        CREDITS_SCOPE = "current"
+    CREDITS_FIRST = os.getenv("CREDITS_FIRST", "track").strip().lower()
+    if CREDITS_FIRST not in ("track", "album"):
+        CREDITS_FIRST = "track"
     VIBE_TRACK_COUNT = _int_setting("VIBE_TRACK_COUNT", 20, 5, 100)  # target size for vibe playlists
     # Hidden-track check: leave out an album's last track when it runs longer than this
     # AI Moderator (Play tab Yes/No) and whether its one-off credits warning has been shown
@@ -5004,21 +5011,14 @@ def _discogs_find_release_for(artist, album):
     return None
 
 
-def discogs_release_credits(release_id, seed_artist):
+def _discogs_people(credits, seed_artist):
     """
-    Collects credited people from a release (release-level and per-track),
-    excluding the seed artist (every name in a multi-value field). Returns
-    a list of (name, roles) sorted so the most useful roles come first.
+    (name, roles) for a list of Discogs credits, leaving out the seed artist
+    (every name in a multi-value field), sorted so the most useful roles come first.
     """
-    data = discogs_get(f"/releases/{release_id}")
-    if not data:
-        return []
     people = {}
-    sources = list(data.get("extraartists", []))
-    for track in data.get("tracklist", []):
-        sources.extend(track.get("extraartists", []))
     seed_cleans = {strip_accents(s).lower() for s in (split_values(seed_artist) or [seed_artist])}
-    for credit in sources:
+    for credit in credits:
         name = discogs_clean_name(credit.get("name", ""))
         if not name or strip_accents(name).lower() in seed_cleans:
             continue
@@ -5029,20 +5029,93 @@ def discogs_release_credits(release_id, seed_artist):
                 roles.add(role)
 
     def rank(item):
-        name, roles = item
-        joined = " ".join(roles)
+        joined = " ".join(item[1]).lower()
         for i, key in enumerate(DISCOGS_ROLE_PRIORITY):
-            if key.lower() in joined.lower():
+            if key.lower() in joined:
                 return i
         return len(DISCOGS_ROLE_PRIORITY)
 
     return sorted(people.items(), key=rank)
 
 
+def _discogs_tracks(data):
+    """The release's tracks in order, with headings skipped and index tracks opened up."""
+    out = []
+    for entry in data.get("tracklist", []):
+        kind = entry.get("type_", "track")
+        if kind == "heading":
+            continue
+        if kind == "index":
+            out.extend(t for t in entry.get("sub_tracks", []) if t.get("type_", "track") == "track")
+        else:
+            out.append(entry)
+    return out
+
+
+def _discogs_covers(spec, positions):
+    """
+    Which track positions an album credit's 'tracks' field covers, e.g. '1 to 3, 5'
+    or 'A1 to B2'. Ranges follow the tracklist's order; a position that isn't on
+    the release is ignored.
+    """
+    index = {p.strip().lower(): i for i, p in enumerate(positions)}
+    covered = set()
+    for part in spec.split(","):
+        ends = [e.strip().lower() for e in part.split(" to ")]
+        if len(ends) == 2 and ends[0] in index and ends[1] in index:
+            lo, hi = sorted((index[ends[0]], index[ends[1]]))
+            covered.update(positions[lo:hi + 1])
+        elif len(ends) == 1 and ends[0] in index:
+            covered.add(positions[index[ends[0]]])
+    return covered
+
+
+def discogs_credit_lists(data, seed_artist):
+    """
+    Splits a release's credits into album-wide and per-track lists. Returns
+    (album people, [(position, title, people), ...] for every track). A track's
+    people are its own credits plus any album credit tagged for it
+    ('Drums [Tracks 2 to 4]'); album people are the credits tagged for no track.
+    """
+    tracks = _discogs_tracks(data)
+    positions = [t.get("position", "") for t in tracks]
+    album, tagged = [], []
+    for credit in data.get("extraartists", []):
+        spec = (credit.get("tracks") or "").strip()
+        if spec:
+            tagged.append((_discogs_covers(spec, positions), credit))
+        else:
+            album.append(credit)
+    per_track = []
+    for t in tracks:
+        pos = t.get("position", "")
+        own = list(t.get("extraartists", [])) + [c for covered, c in tagged if pos in covered]
+        per_track.append((pos, t.get("title", ""), _discogs_people(own, seed_artist)))
+    return _discogs_people(album, seed_artist), per_track
+
+
+def discogs_release_credits(release_id, seed_artist):
+    """Every credited person on a release, album-wide and per-track, in one list."""
+    data = discogs_get(f"/releases/{release_id}")
+    if not data:
+        return []
+    sources = list(data.get("extraartists", []))
+    for track in _discogs_tracks(data):
+        sources.extend(track.get("extraartists", []))
+    return _discogs_people(sources, seed_artist)
+
+
+def _report_people(people, report, indent="    "):
+    for name, roles in people:
+        report(f"{indent}{name} ({', '.join(sorted(roles))})")
+
+
 def explore_credits(report=print):
     """
     Mode 3. Shows the Discogs credits for the playing album: producer,
-    engineers, musicians and so on. Information only; the queue is untouched.
+    engineers, musicians and so on, split into album-wide credits and track
+    credits (the playing track's, or every track's), in the order chosen in
+    Settings > Other. Information only; the queue is untouched.
     """
     refresh_settings_if_changed()
     seed_info = get_playing_info()
@@ -5053,7 +5126,7 @@ def explore_credits(report=print):
     if not DISCOGS_TOKEN:
         report("Problem: Show Credits needs a Discogs token. " + KEY_HELP_LINE)
         return
-    artist, album = seed_info["Artist"], seed_info["Album"]
+    artist, album, title = seed_info["Artist"], seed_info["Album"], seed_info.get("Name", "")
     report(f"Show Credits: {artist} - {album}")
 
     found = discogs_find_release(artist, album)
@@ -5063,11 +5136,39 @@ def explore_credits(report=print):
     release_id, release_label = found
     report(f"  Using release: {release_label}")
 
-    credits = discogs_release_credits(release_id, artist)
-    if not credits:
-        report("  Note: this release lists no credits beyond the artist.")
+    data = discogs_get(f"/releases/{release_id}")
+    if not data:
         return
+    album_people, per_track = discogs_credit_lists(data, artist)
 
-    report("  Credited on this record:")
-    for name, roles in credits:
-        report(f"    {name} ({', '.join(sorted(roles))})")
+    def album_section():
+        if album_people:
+            report("  Credited on the album:")
+            _report_people(album_people, report)
+        else:
+            report("  Note: no album-wide credits beyond the artist.")
+
+    def track_section():
+        if CREDITS_SCOPE == "all":
+            credited = [(pos, name, people) for pos, name, people in per_track if people]
+            if not credited:
+                report("  Note: no track has credits of its own on this release.")
+                return
+            report("  Credited on each track:")
+            for pos, name, people in credited:
+                report(f"    {pos} {name}".rstrip())
+                _report_people(people, report, indent="      ")
+            return
+        want = clean_name(title or "")
+        match = next((t for t in per_track if want and clean_name(t[1]) == want), None)
+        if not match:
+            report(f"  Note: \"{title}\" isn't on this Discogs release, so there are no track credits.")
+        elif not match[2]:
+            report(f"  Note: \"{match[1]}\" has no credits of its own beyond the artist.")
+        else:
+            report(f"  Credited on this track ({match[1]}):")
+            _report_people(match[2], report)
+
+    sections = (track_section, album_section) if CREDITS_FIRST == "track" else (album_section, track_section)
+    for section in sections:
+        section()

@@ -492,6 +492,8 @@ SAVED_NONSTOP_OPTIONS = [("no", "No"), ("artists", "Similar artists"), ("tracks"
 SAVED_SKIP_OPTIONS = [("0", "Off"), ("1", "1 day"), ("2", "2 days"), ("3", "3 days"), ("7", "7 days"),
                       ("14", "14 days"), ("30", "30 days")]
 CACHE_KEEP_OPTIONS = [("month", "1 Month"), ("year", "1 Year"), ("permanent", "Permanent")]
+CREDITS_SCOPE_OPTIONS = [("current", "Album/Current Track"), ("all", "Album/All Tracks")]
+CREDITS_FIRST_OPTIONS = [("track", "Tracks"), ("album", "Album")]
 CLEAR_CACHE_OPTIONS = [("month", "Older Than 1 Month"), ("year", "Older Than 1 Year"), ("all", "Clear All")]
 ALL_FOLDERS = "All folders"   # the JRiver Playlists folder filter's first choice
 
@@ -672,6 +674,8 @@ class SettingsTab(tk.Frame):
         updates.update(self._main_playlist.values())
         updates["CACHE_KEEP"] = option_code(CACHE_KEEP_OPTIONS, self.vars["CACHE_KEEP"].get())
         updates["CACHE_DAYS"] = None   # replaced by Keep Cache For
+        updates["CREDITS_SCOPE"] = option_code(CREDITS_SCOPE_OPTIONS, self.vars["CREDITS_SCOPE"].get())
+        updates["CREDITS_FIRST"] = option_code(CREDITS_FIRST_OPTIONS, self.vars["CREDITS_FIRST"].get())
         for key in ["JRIVER_HOST", "YOUTUBE_PLAYLIST_LENGTH"] + KEY_FIELDS:
             updates[key] = self.vars[key].get().strip()
         for group in ("DIGITAL_STORES", "REFERENCE_SITES"):
@@ -2711,6 +2715,27 @@ class SettingsTab(tk.Frame):
                        "console, your settings (without keys) and 24bit7's code, so it uses more Anthropic "
                        "credit than AI Moderator."
                   ).pack(side="left", padx=(8, 0))
+
+        # Show Credits: the playing track's credits or every track's, and which list comes first
+        tk.Label(box, text="Show Credits", anchor="w").grid(row=6, column=0, sticky="w", pady=(8, 4))
+        cell = tk.Frame(box)
+        cell.grid(row=6, column=1, columnspan=2, sticky="w", padx=(12, 0), pady=(8, 4))
+        self.vars["CREDITS_SCOPE"] = tk.StringVar(value=option_label(CREDITS_SCOPE_OPTIONS, engine.CREDITS_SCOPE))
+        scope_cb = ttk.Combobox(cell, textvariable=self.vars["CREDITS_SCOPE"], state="readonly", width=20,
+                                values=[s for _, s in CREDITS_SCOPE_OPTIONS])
+        scope_cb.pack(side="left")
+        scope_cb.bind("<<ComboboxSelected>>", lambda e: (scope_cb.selection_clear(), self._save()))
+        tk.Label(cell, text="Show First").pack(side="left", padx=(16, 6))
+        self.vars["CREDITS_FIRST"] = tk.StringVar(value=option_label(CREDITS_FIRST_OPTIONS, engine.CREDITS_FIRST))
+        first_cb = ttk.Combobox(cell, textvariable=self.vars["CREDITS_FIRST"], state="readonly", width=8,
+                                values=[s for _, s in CREDITS_FIRST_OPTIONS])
+        first_cb.pack(side="left")
+        first_cb.bind("<<ComboboxSelected>>", lambda e: (first_cb.selection_clear(), self._save()))
+        help_mark(cell, "What the Show Credits button lists from Discogs. Album/Current Track shows the "
+                        "playing track's credits and the album's. Album/All Tracks lists every track that has "
+                        "credits of its own, under its number and title, then the album's. Track credits "
+                        "include album credits marked for that track, such as a drummer on tracks 2 to 4. "
+                        "Show First picks which list comes first.").pack(side="left", padx=(8, 0))
 
         # --- Zones: which JRiver zones appear in the Play tab's Zone and Output lists ---
         # Filled when the tab is first shown, so a slow JRiver never delays startup.

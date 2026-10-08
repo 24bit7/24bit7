@@ -49,8 +49,6 @@ Two supporting tabs:
 - `gui.pyw` is the Tkinter desktop app: the main window with its three tabs, the Now Playing and Search panel, and a log pane fed by the engine. `settings_gui.py` and `discover_gui.py` hold the Settings and Discover tabs.
 - `tabs.py` draws the tab bars. Windows flattens the standard ones and ignores their colours, so the app draws its own. Every tab colour lives in one palette in that file.
 
-A thin command-line front end (`Twentyfourbitseven.py`) is also included.
-
 ### Blending
 
 Each enabled source returns a ranked list of similar artists. 24bit7 merges them with position weighting: an artist near the top of one list scores well, an artist appearing on several lists scores better. It fetches deeper than it needs and trims the result, so the final list reflects agreement between sources rather than the quirks of any one of them.
