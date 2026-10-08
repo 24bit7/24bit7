@@ -2549,6 +2549,9 @@ class SettingsTab(tk.Frame):
             tk.Button(row, text=text, width=width, command=command).pack(side="left", padx=(10, 0))
         self.profile_status = tk.Label(box, text="", anchor="w", fg=PALETTE["help_fg"], font=HELP_FONT)
         self.profile_status.grid(row=1, column=0, sticky="w", pady=(2, 0))
+        # Enable Switch To: the profiles the Switch Profiles shortcut steps through
+        self.profile_switch_row = tk.Frame(box)
+        self.profile_switch_row.grid(row=2, column=0, sticky="w", pady=(8, 0))
         self._fill_profiles(profiles.current())
         self.after(2000, self._poll_profile_status)
 
@@ -2561,6 +2564,27 @@ class SettingsTab(tk.Frame):
         elif self.profile_var.get() not in names:
             self.profile_var.set(names[0] if names else "")
         self._show_profile_status()
+        self._fill_profile_switch(names)
+
+    def _fill_profile_switch(self, names):
+        """One tick per profile: the ones the Switch Profiles shortcut steps through."""
+        import profiles
+        row = getattr(self, "profile_switch_row", None)
+        if row is None:
+            return
+        for child in row.winfo_children():
+            child.destroy()
+        if not names:
+            return
+        tk.Label(row, text="Enable Switch To", anchor="w").pack(side="left", padx=(0, 12))
+        for name in names:
+            var = tk.BooleanVar(value=profiles.in_switch(name))
+            ttk.Checkbutton(row, text=name, variable=var,
+                            command=lambda n=name, v=var: profiles.set_in_switch(n, v.get())).pack(
+                side="left", padx=(0, 12))
+        help_mark(row, "The profiles the Switch Profiles keyboard shortcut steps through, A to Z "
+                       "(Settings > Other > Keyboard Shortcuts). With two ticked it flips between them. "
+                       "A switch during a build waits for the build to finish.").pack(side="left")
 
     def _show_profile_status(self):
         import profiles

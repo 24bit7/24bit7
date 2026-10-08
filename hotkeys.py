@@ -30,6 +30,7 @@ ACTIONS = [   # (code, label): the order they appear in Settings
     ("TOP_TRACKS", "Artist's Top Tracks"),
     ("SHUFFLE_ARTIST", "Shuffle Songs by Artist"),
     ("SWITCH_ZONES", "Switch Zones"),
+    ("SWITCH_PROFILES", "Switch Profiles"),
     ("KEEP_GOING", "Keep It Going"),
 ]
 LABELS = dict(ACTIONS)
@@ -184,10 +185,22 @@ class _Listener(threading.Thread):
         self.join(2)
 
 
-def attach(submit):
-    """The GUI hands over how to queue a build on the Play tab."""
-    global _submit
-    _submit = submit
+_busy = None            # set by the GUI: True while a build is running or waiting
+_note = None            # set by the GUI: writes a line to the console straight away
+_restart_wanted = False   # Switch Profiles asked for a restart once its job is done
+
+
+def attach(submit, busy=None, note=None):
+    """The GUI hands over how to queue a build on the Play tab, how to tell it's busy, and its console."""
+    global _submit, _busy, _note
+    _submit, _busy, _note = submit, busy, note
+
+
+def take_restart():
+    """True once, after Switch Profiles has queued a profile: the GUI then restarts 24bit7."""
+    global _restart_wanted
+    wanted, _restart_wanted = _restart_wanted, False
+    return wanted
 
 
 def stop():
@@ -230,6 +243,8 @@ def _pressed(code):
     """Runs on the listener thread: queue the build on the Play tab and get straight back to listening."""
     if _submit is None:
         return
+    if code == "SWITCH_PROFILES" and _busy is not None and _note is not None and _busy():
+        _note("Switch Profiles requested: it will switch once the current build has finished.")
     _submit(_job(code), f"Shortcut: {LABELS[code]}", {"from": "shortcut"})
 
 
@@ -245,8 +260,31 @@ def _device_for_zone(zone_name):
     return None, None, {}
 
 
+def _switch_profiles(report):
+    """Loads the next profile ticked under Enable Switch To; 24bit7 restarts once this job is done."""
+    global _restart_wanted
+    import profiles
+    target, problem = profiles.switch_target()
+    if problem:
+        report(f"  Problem: {problem}")
+        return
+    current = profiles.current()
+    if current and profiles.changed(current):
+        report(f'  Note: settings changed since "{current}" was loaded weren\'t saved to it.')
+    try:
+        profiles.queue_load(target)
+    except Exception as e:
+        report(f"  Problem: couldn't load the profile ({e}).")
+        return
+    report(f'  Switching to the profile "{target}". 24bit7 restarts to apply it; JRiver keeps playing.')
+    _restart_wanted = True
+
+
 def _job(code):
     def run(report):
+        if code == "SWITCH_PROFILES":   # no zone or seed needed
+            _switch_profiles(report)
+            return
         engine.refresh_settings_if_changed()
         wanted = target_zone_setting()
         if wanted:

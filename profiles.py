@@ -21,6 +21,7 @@ import engine
 PROFILE_DIR = os.path.join(engine.APP_DIR, "profiles")
 PENDING = os.path.join(PROFILE_DIR, "_pending.json")
 CURRENT_KEY = "PROFILE_CURRENT"   # in .env: the profile last loaded or saved
+SWITCH_OFF_KEY = "PROFILE_SWITCH_OFF"   # in .env: profiles unticked under Enable Switch To (new ones start ticked)
 
 # .env settings beyond Settings > Sources and Playlist (engine.PROFILE_KEYS)
 EXTRA_ENV_KEYS = ["PLAY_BEHAVIOUR", "OUTPUT_TARGET", "YOUTUBE_PLAYLIST_LENGTH", "PREFER_OFFICIAL_VIDEOS",
@@ -135,6 +136,43 @@ def delete(name):
         pass
     if (_read_env().get(CURRENT_KEY) or "").strip() == name:
         _write_env({CURRENT_KEY: None})
+    if name in _switch_off():
+        set_in_switch(name, True)   # forget it from the unticked list too
+
+
+# --- Switch Profiles: the keyboard shortcut steps through the ticked profiles ----------------
+
+def _switch_off():
+    return [n for n in (_read_env().get(SWITCH_OFF_KEY) or "").split("|") if n]
+
+
+def in_switch(name):
+    return name not in _switch_off()
+
+
+def set_in_switch(name, on):
+    off = [n for n in _switch_off() if n != name] + ([] if on else [name])
+    _write_env({SWITCH_OFF_KEY: "|".join(off) or None})
+
+
+def switch_names():
+    """The profiles ticked under Enable Switch To, A to Z."""
+    off = set(_switch_off())
+    return [n for n in names() if n not in off]
+
+
+def switch_target():
+    """(the profile Switch Profiles loads next, None) or (None, why there isn't one)."""
+    ticked = switch_names()
+    if not ticked:
+        return None, "no profiles are ticked under Enable Switch To (Settings > Other > Profiles)."
+    cur = current()
+    others = [n for n in ticked if n != cur]
+    if not others:
+        return None, (f'"{cur}" is the only profile ticked under Enable Switch To, so there\'s nothing to '
+                      "switch to. Tick another in Settings > Other > Profiles.")
+    after = [n for n in others if n.lower() > cur.lower()] if cur else []
+    return (after or others)[0], None
 
 
 def queue_load(name):

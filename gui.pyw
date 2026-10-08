@@ -1328,6 +1328,8 @@ class PlayTab(tk.Frame):
         except Exception as e:
             print(f"Note: couldn't keep this build in the Log ({e}).")
         self._fill_tabs()   # a device's first build gives it a tab
+        if hotkeys.take_restart():   # Switch Profiles queued a profile: restart now the job is done
+            self.root.after(500, lambda: self.root.event_generate("<<Restart24bit7>>"))
         if getattr(self, "view", None) == "log":
             self._fill_log_table()
         self.running = False
@@ -1567,7 +1569,8 @@ def main():
                  lambda: play.running or not play.voice_jobs.empty())
     voice.restart()
     # Keyboard shortcuts (Settings > Other): queued on the Play tab like voice commands
-    hotkeys.attach(lambda job, heading, origin=None: play.voice_jobs.put((job, heading, origin)))
+    hotkeys.attach(lambda job, heading, origin=None: play.voice_jobs.put((job, heading, origin)),
+                   busy=lambda: play.running or not play.voice_jobs.empty(), note=play.report)
     problems = hotkeys.restart()
     # Non-stop (Settings > Playlist): tops up 24bit7 playlists as they reach their last track
     nonstop.attach(lambda job, heading, origin=None: play.voice_jobs.put((job, heading, origin)))
