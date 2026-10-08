@@ -68,6 +68,7 @@ class Lines(list):
 
 @pytest.fixture
 def app(tmp_path, monkeypatch):
+    saved_environ = dict(os.environ)   # engine.load_settings() writes .env into os.environ; put it all back after
     folder = tmp_path / "24bit7"
     folder.mkdir()
     for name in os.listdir(REPO):
@@ -130,6 +131,8 @@ def app(tmp_path, monkeypatch):
         pass
     if engine._db is not None:
         engine._db.close()
+    os.environ.clear()
+    os.environ.update(saved_environ)
 
 
 def load_gui(folder):
