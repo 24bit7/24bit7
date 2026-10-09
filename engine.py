@@ -3045,6 +3045,22 @@ def typed_seed_info(artist, track=""):
             "PlayingNowPosition": "0", "PlayingNowTracks": "0", "Typed": True}
 
 
+SIMILAR_NEEDS_TRACK_TEXT = ("YouTube is the only Similar Artists source ticked, and it plays YouTube's "
+                            "up next queue for a track, so type a track too. Or tick another source "
+                            "in Settings > Sources to search by artist alone.")
+
+
+def similar_needs_track():
+    """True when Similar Artists can't run from an artist alone: YouTube is its only source."""
+    return [s for s in SIMILAR_SOURCES if s in PROVIDERS] == ["youtube"]
+
+
+def seed_label(seed_info):
+    """'Artist - Track', or just 'Artist' for a seed typed without a track."""
+    artist, name = seed_info.get("Artist", ""), seed_info.get("Name", "")
+    return f"{artist} - {name}" if name else artist
+
+
 def typed_seed_key(seed_info, seeds, session_id, report=print):
     """
     For a searched (typed) seed: the seed track's library key, so it can open
@@ -4337,9 +4353,9 @@ def create_similar_playlist(report=print, seed_info=None, topup=False):
         return
 
     seeds = seed_artists(seed_info)
-    report(f"Similar Artists: {seed_info['Artist']} - {seed_info['Name']}")
+    report(f"Similar Artists: {seed_label(seed_info)}")
     # YouTube ticked on its own: play its up next queue as is, no artist blend
-    if [s for s in SIMILAR_SOURCES if s in PROVIDERS] == ["youtube"]:
+    if similar_needs_track():
         create_youtube_queue_playlist(seed_info, seeds, report=report)
         return
     if len(seeds) > 1:
@@ -4356,7 +4372,7 @@ def create_similar_playlist(report=print, seed_info=None, topup=False):
     played = PlayedFilter("artists", keep=[seed_info.get("FileKey"), first_key], report=report, filters=True)
     drift = Drift("artists", target, session_id, report, per_artist=TRACKS_PER_ARTIST_PICK,
                   exclude_keys=[seed_info.get("FileKey"), first_key],
-                  seed=f"{seed_info['Artist']} - {seed_info['Name']}", played=played)
+                  seed=seed_label(seed_info), played=played)
     for seed in seeds:
         drift.mark_seed(seed, seed_info.get("Name") or "")
 

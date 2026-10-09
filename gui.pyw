@@ -183,7 +183,8 @@ class PlayTab(tk.Frame):
         self.search_track = ttk.Entry(self.search_tab, width=34, font=("Segoe UI", 11), style="Field.TEntry")
         self.search_track.grid(row=0, column=3, sticky="w", padx=(8, 0))
         tk.Label(self.search_tab, text="Build a playlist from any track, even one you don't own. "
-                                       "Press Enter for Similar Artists.",
+                                       "Similar Artists and Artist's Top Tracks need only the "
+                                       "artist. Press Enter for Similar Artists.",
                  font=("Segoe UI", 8), fg=PALETTE["text_muted"]).grid(row=1, column=0, columnspan=4, sticky="w", pady=(6, 0))
         for entry in (self.search_artist, self.search_track):
             entry.bind("<Return>", lambda e: self.on_similar())
@@ -241,13 +242,15 @@ class PlayTab(tk.Frame):
             return
         button.config(state="disabled" if self._seed_is_search() else "normal")
 
-    def _typed_seed(self, need_track):
+    def _typed_seed(self, need_track, why=None):
         """The Search tab's seed, or None (after a prompt) if the fields aren't filled in."""
         artist = self.search_artist.get().strip()
         track = self.search_track.get().strip()
         if not artist or (need_track and not track):
-            messagebox.showinfo("Search", "Type an artist and a track first." if need_track
-                                else "Type an artist first.")
+            text = "Type an artist and a track first." if need_track else "Type an artist first."
+            if need_track and why and artist:
+                text = why
+            messagebox.showinfo("Search", text)
             return None
         return engine.typed_seed_info(artist, track)
 
@@ -1351,7 +1354,8 @@ class PlayTab(tk.Frame):
 
     def on_similar(self):
         if self._seed_is_search():
-            seed = self._typed_seed(need_track=True)
+            seed = self._typed_seed(need_track=engine.similar_needs_track(),
+                                    why=engine.SIMILAR_NEEDS_TRACK_TEXT)
             if seed:
                 self._run_job(lambda: engine.create_similar_playlist(report=self.report, seed_info=seed),
                               needs_playing=False, review=True)
