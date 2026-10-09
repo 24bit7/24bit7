@@ -821,11 +821,12 @@ class ClickThrough(FlatButton):
 class RoundedEntry(tk.Frame):
     """
     A text box with fully rounded ends, drawn like the buttons so it looks the same on any PC.
-    Answers like a ttk.Entry for what 24bit7 uses: get, delete, insert, bind, focus_set.
-    width is in characters, as on ttk.Entry.
+    Answers like a ttk.Entry for what 24bit7 uses: get, delete, insert, bind, focus_set, and
+    textvariable. width is in characters, as on ttk.Entry. placeholder is a faint hint shown
+    while the box is empty; it's drawn over the box, so it's never part of the text.
     """
 
-    def __init__(self, master, width=30, font=("Segoe UI", 11), placeholder="", **kw):
+    def __init__(self, master, width=30, font=("Segoe UI", 11), placeholder="", textvariable=None, **kw):
         back = master.cget("bg")
         super().__init__(master, bg=back, **kw)
         try:
@@ -834,7 +835,8 @@ class RoundedEntry(tk.Frame):
             scale = 1.0
         px = lambda n: max(1, int(round(n * scale)))
         f = tkfont.Font(font=font)
-        h = max(px(32), f.metrics("linespace") + px(14))
+        line = f.metrics("linespace")
+        h = max(px(24), line + px(10))
         w = f.measure("0") * width + h
         fill = PALETTE.get("field_bg") or "#ffffff"
         fg = PALETTE.get("field_fg") or PALETTE.get("text") or "#000000"
@@ -843,42 +845,52 @@ class RoundedEntry(tk.Frame):
         self._shape = lambda colour: rounded_shape(self, w, h, h // 2, fill, colour, px(1))
         self._back = tk.Label(self, image=self._shape(edge), bd=0, highlightthickness=0, bg=back)
         self._back.pack()
+        options = {"textvariable": textvariable} if textvariable is not None else {}
         self.entry = tk.Entry(self, font=font, bd=0, relief="flat", highlightthickness=0, bg=fill, fg=fg,
-                              insertbackground=fg, disabledbackground=fill)
-        self.entry.place(x=h // 2, y=(h - f.metrics("linespace")) // 2 - px(1), width=w - h,
-                         height=f.metrics("linespace") + px(2))
-        self._back.bind("<Button-1>", lambda e: self.entry.focus_set())
-        self.entry.bind("<FocusIn>", lambda e: self._back.config(image=self._shape(self._edges[1])), add="+")
-        self.entry.bind("<FocusOut>", lambda e: self._back.config(image=self._shape(self._edges[0])), add="+")
-        self._placeholder, self._hint_fg, self._fg = placeholder, PALETTE.get("text_faint") or "#999999", fg
-        self._showing_hint = False
+                              insertbackground=fg, disabledbackground=fill, **options)
+        place = dict(x=h // 2, y=(h - line) // 2 - px(1), width=w - h, height=line + px(2))
+        self.entry.place(**place)
+        self._hint, self._var = None, textvariable
         if placeholder:
-            self.entry.bind("<FocusIn>", lambda e: self._hint(False), add="+")
-            self.entry.bind("<FocusOut>", lambda e: self._hint(True), add="+")
-            self._hint(True)
+            self._hint = tk.Label(self, text=placeholder, font=font, bd=0, padx=0, pady=0, anchor="w", bg=fill,
+                                  fg=PALETTE.get("text_faint") or "#999999", cursor="xterm")
+            self._hint.bind("<Button-1>", lambda e: self.entry.focus_set())
+            self._hint_at = place
+            if textvariable is not None:
+                textvariable.trace_add("write", lambda *a: self._sync_hint())
+            self.entry.bind("<KeyRelease>", lambda e: self._sync_hint(), add="+")
+        self._back.bind("<Button-1>", lambda e: self.entry.focus_set())
+        self.entry.bind("<FocusIn>", lambda e: self._focus(True), add="+")
+        self.entry.bind("<FocusOut>", lambda e: self._focus(False), add="+")
+        self._sync_hint()
 
-    def _hint(self, show):
-        if show and not self.entry.get():
-            self.entry.insert(0, self._placeholder)
-            self.entry.config(fg=self._hint_fg)
-            self._showing_hint = True
-        elif not show and self._showing_hint:
-            self.entry.delete(0, "end")
-            self.entry.config(fg=self._fg)
-            self._showing_hint = False
+    def _focus(self, on):
+        self._back.config(image=self._shape(self._edges[1 if on else 0]))
+        self._sync_hint()
+
+    def _sync_hint(self):
+        if self._hint is None:
+            return
+        text = self._var.get() if self._var is not None else self.entry.get()   # the variable is ahead of the box
+        try:
+            empty = not text and self.focus_get() is not self.entry
+        except (tk.TclError, KeyError):
+            empty = not text
+        if empty:
+            self._hint.place(**self._hint_at)
+        else:
+            self._hint.place_forget()
 
     def get(self):
-        return "" if self._showing_hint else self.entry.get()
+        return self.entry.get()
 
     def delete(self, first, last=None):
-        if self._showing_hint:
-            self._hint(False)
         self.entry.delete(first, last)
+        self._sync_hint()
 
     def insert(self, index, text):
-        if self._showing_hint:
-            self._hint(False)
         self.entry.insert(index, text)
+        self._sync_hint()
 
     def bind(self, sequence=None, func=None, add=None):
         return self.entry.bind(sequence, func, add)

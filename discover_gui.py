@@ -22,7 +22,7 @@ from tkinter import font as tkfont
 from datetime import datetime
 
 import engine
-from tabs import PALETTE
+from tabs import PALETTE, FlatButton, RoundedEntry
 
 # Search URL builders per store. Each takes an "artist track" query string.
 STORE_SEARCH = {
@@ -169,12 +169,41 @@ class DiscoverTab(tk.Frame):
         self.session_menu.bind("<<ComboboxSelected>>", self._on_session_picked)
 
         search_bar = tk.Frame(self, padx=22)
-        search_bar.pack(fill="x", pady=(8, 2))
+        search_bar.pack(fill="x", pady=(8, 4))
         tk.Label(search_bar, text="Search:").pack(side="left")
         self.search_var = tk.StringVar()
         self.search_var.trace_add("write", lambda *a: self._populate())
-        ttk.Entry(search_bar, textvariable=self.search_var, width=36,
-                  style="Field.TEntry").pack(side="left", padx=(4, 0))
+        self.search_box = RoundedEntry(search_bar, width=36, font=("Segoe UI", 9),
+                                       placeholder="Artist, track or seed", textvariable=self.search_var)
+        self.search_box.pack(side="left", padx=(8, 0))
+        # Text size for the table, right-aligned on the search row: A- and A+ (6 to 16, remembered)
+        self.font_var = tk.StringVar(value=str(getattr(engine, "TABLE_FONT_SIZE", 9)))
+        self.font_var.trace_add("write", lambda *a: self._on_font_change())
+        sizes = tk.Frame(search_bar)
+        sizes.pack(side="right")
+        self.smaller_button = FlatButton(sizes, text="A-", quiet=True, height=1, command=lambda: self._step_font(-1))
+        self.smaller_button.pack(side="left", padx=(0, 6))
+        self.larger_button = FlatButton(sizes, text="A+", quiet=True, height=1, command=lambda: self._step_font(1))
+        self.larger_button.pack(side="left")
+        self._sync_font_buttons()
+
+    def _step_font(self, by):
+        """A- and A+: one size smaller or larger, between 6 and 16."""
+        try:
+            size = int(self.font_var.get())
+        except ValueError:
+            size = getattr(engine, "TABLE_FONT_SIZE", 9)
+        self.font_var.set(str(max(6, min(16, size + by))))
+        self._sync_font_buttons()
+
+    def _sync_font_buttons(self):
+        """A- greys out at the smallest size, A+ at the largest."""
+        try:
+            size = int(self.font_var.get())
+        except ValueError:
+            return
+        self.smaller_button.config(state="disabled" if size <= 6 else "normal")
+        self.larger_button.config(state="disabled" if size >= 16 else "normal")
 
     def _on_session_picked(self, _event=None):
         """A session picked by hand stays chosen; until then Discover follows the latest session."""
@@ -217,36 +246,36 @@ class DiscoverTab(tk.Frame):
         btnbar = tk.Frame(self, padx=22, pady=8)
         btnbar.pack(fill="x")
 
-        # One row: Font size on the left, the site buttons after it, Refresh and CSV
-        # pinned right. Only if the site buttons can't fit do they drop to a second row.
+        # One row: the site buttons on the left, Refresh and CSV pinned right.
+        # Only if the site buttons can't fit do they drop to a second row.
         self._bar_top = tk.Frame(btnbar)
         self._bar_top.pack(fill="x")
         self._bar_left = tk.Frame(self._bar_top)
         self._bar_left.pack(side="left")
-        # Font size control lives here, where its effect is visible.
-        tk.Label(self._bar_left, text="Font size:").pack(side="left")
-        self.font_var = tk.StringVar(value=str(getattr(engine, "TABLE_FONT_SIZE", 9)))
-        tk.Spinbox(self._bar_left, from_=6, to=16, textvariable=self.font_var, width=4,
-                   command=self._on_font_change).pack(side="left", padx=(4, 0))
-        self.font_var.trace_add("write", lambda *a: self._on_font_change())
 
         self._bar_right = tk.Frame(self._bar_top)
         self._bar_right.pack(side="right")
-        tk.Button(self._bar_right, text="CSV", command=self.export_csv).pack(side="right")
-        tk.Button(self._bar_right, text="Refresh", command=self.refresh).pack(side="right", padx=(0, 8))
-        tk.Button(self._bar_right, text="Select None", command=self.select_none).pack(side="right", padx=(0, 8))
-        self._select_all_button = tk.Button(self._bar_right, text="Select All", command=self.select_all)
+        FlatButton(self._bar_right, text="CSV", quiet=True, height=1, command=self.export_csv).pack(side="right")
+        FlatButton(self._bar_right, text="Refresh", quiet=True, height=1,
+                   command=self.refresh).pack(side="right", padx=(0, 8))
+        FlatButton(self._bar_right, text="Select None", quiet=True, height=1,
+                   command=self.select_none).pack(side="right", padx=(0, 8))
+        self._select_all_button = FlatButton(self._bar_right, text="Select All", quiet=True, height=1,
+                                             command=self.select_all)
         self._select_all_button.pack(side="right", padx=(0, 4))
         # Appears once a row is ticked; the status line beside it says how the last playlist went
-        self._yt_button = tk.Button(self._bar_right, text="", command=self.create_youtube_playlist)
+        self._yt_button = FlatButton(self._bar_right, text="Create YouTube Playlist", quiet=True, height=1,
+                                     command=self.create_youtube_playlist)
         # Clear all always shows, at the far left of the group; Clear selected appears with the ticks
-        tk.Button(self._bar_right, text="Clear All", command=self.clear_all).pack(side="right", padx=(0, 16))
-        self._clear_sel_button = tk.Button(self._bar_right, text="", command=self.clear_selected)
+        FlatButton(self._bar_right, text="Clear All", quiet=True, height=1,
+                   command=self.clear_all).pack(side="right", padx=(0, 16))
+        self._clear_sel_button = FlatButton(self._bar_right, text="Clear Selected", quiet=True, height=1,
+                                            command=self.clear_selected)
         self._yt_note = ""   # how the last YouTube playlist went, shown after the row count
         self._last_view = None
 
         self._sites_inline = tk.Frame(self._bar_top)   # the site buttons, when they fit on the row
-        self._sites_inline.pack(side="left", padx=(16, 0))
+        self._sites_inline.pack(side="left")
         self._sites_below = tk.Frame(btnbar)           # ...or here, as a second row, when they don't
         self._site_buttons = []
         self._label_button = None
@@ -311,6 +340,8 @@ class DiscoverTab(tk.Frame):
         seed = r.get("seed_artist") or "?"
         if r.get("seed_track"):
             seed += f" - {r['seed_track']}"
+        if r.get("seed"):   # a Playing Now build: the sampled track this row came from
+            seed = r["seed"]
         return seed
 
     def _populate(self):
@@ -420,7 +451,7 @@ class DiscoverTab(tk.Frame):
             self._clear_sel_button.pack_forget()
         self._clear_sel_button.config(text=f"Clear Selected ({count})")
         if str(self._yt_button.cget("state")) != "disabled":
-            self._yt_button.config(text=f"Create YouTube playlist ({count})")
+            self._yt_button.config(text=f"Create YouTube Playlist ({count})")
         self._place_site_buttons()
 
     def create_youtube_playlist(self):
@@ -532,12 +563,14 @@ class DiscoverTab(tk.Frame):
         self._site_buttons = []
         self._label_button = None
         if show_label:   # Settings > Search Sites > Record Label
-            self._label_button = tk.Button(parent, text="Finding label..." if self._label_busy else "Label",
+            self._label_button = FlatButton(parent, text="Finding label..." if self._label_busy else "Label",
+                                            quiet=True, height=1,
                                            command=self.find_label)
             self._label_button.pack(side="left", padx=(0, 12))
             self._site_buttons.append(self._label_button)
         for label, kind, builder in sites:
-            b = tk.Button(parent, text=label, command=lambda k=kind, f=builder: self.open_site(k, f))
+            b = FlatButton(parent, text=label, quiet=True, height=1,
+                           command=lambda k=kind, f=builder: self.open_site(k, f))
             b.pack(side="left", padx=(0, 6))
             self._site_buttons.append(b)
         self.update_idletasks()

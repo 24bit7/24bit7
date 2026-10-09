@@ -799,6 +799,8 @@ def db():
             id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER,
             artist TEXT, track TEXT, sources TEXT, found INTEGER)""")
         _db.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
+        if "seed" not in [c[1] for c in _db.execute("PRAGMA table_info(discoveries)")]:
+            _db.execute("ALTER TABLE discoveries ADD COLUMN seed TEXT")   # 1.17.0: the sample a row came from
         _db.commit()
         import_legacy_csv()
     return _db
@@ -975,12 +977,13 @@ def session_start(mode, seed_info, sources=""):
     return cur.lastrowid
 
 
-def session_log(session_id, artist, track, sources, found):
+def session_log(session_id, artist, track, sources, found, seed=None):
+    """One track checked, hit or miss. seed: the Playing Now track it came from, shown in Discover's Seed."""
     if output_is_youtube() and not found:
         return   # nothing was checked against the library, so there is no miss to record
-    db().execute("INSERT INTO discoveries (session_id, artist, track, sources, found) VALUES (?,?,?,?,?)",
+    db().execute("INSERT INTO discoveries (session_id, artist, track, sources, found, seed) VALUES (?,?,?,?,?,?)",
                  (session_id, artist, track, ", ".join(sources) if isinstance(sources, list) else sources,
-                  1 if found else 0))
+                  1 if found else 0, seed))
 
 
 def session_finish(session_id, queued, sources=None, report=print):
@@ -1089,7 +1092,7 @@ def list_discoveries(found=None, session_id=None):
     session_id: restrict to one session, or None for all.
     """
     q = ("SELECT d.artist, d.track, d.sources, d.found, s.started_at, d.session_id, "
-         "s.seed_artist, s.seed_track, d.id "
+         "s.seed_artist, s.seed_track, d.id, d.seed "
          "FROM discoveries d JOIN sessions s ON s.id = d.session_id")
     conds, args = [], []
     if found is not None:
@@ -1103,7 +1106,8 @@ def list_discoveries(found=None, session_id=None):
     q += " ORDER BY d.session_id DESC, d.id ASC"
     rows = db().execute(q, args).fetchall()
     return [{"artist": r[0], "track": r[1], "sources": r[2], "found": bool(r[3]),
-             "date": r[4], "session_id": r[5], "seed_artist": r[6], "seed_track": r[7], "id": r[8]}
+             "date": r[4], "session_id": r[5], "seed_artist": r[6], "seed_track": r[7], "id": r[8],
+             "seed": r[9]}
             for r in rows]
 
 
@@ -2847,7 +2851,7 @@ def find_jriver_key_by_track(artist_name, track_name):
 
 def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
                                exclude_track=None, consider=None, pick=None, defer=None, found=None,
-                               skip_keys=None):
+                               skip_keys=None, seed=None):
     """
     The per-artist step shared by Similar Artists and the Vibe backfill:
     ask the Top-track sources for the artist's top `consider` tracks, randomly
@@ -2897,7 +2901,7 @@ def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
         else:
             report(f"    Not in library: {track_name}")
             misses += 1
-        session_log(session_id, artist, track_name, suggested_by, found=bool(key))
+        session_log(session_id, artist, track_name, suggested_by, found=bool(key), seed=seed)
     return keys, misses
 
 
@@ -4369,6 +4373,7 @@ PLAYING_NOW_ARTIST_FIGURES = {   # Similar Artists' Playing Now column (Settings
     "PN_TRACKS_PER_ARTIST_PICK": (3, 1, 20),      # Tracks per artist selection
     "PN_SIMILAR_ARTIST_TRACK_COUNT": (30, 5, 100),  # Limit total tracks to
 }
+PLAYING_NOW_SESSION = "Playing Now (Multiple Tracks)"   # a Playing Now build's seed, in Discover's Session list
 DELIVER_DEPTH = 3   # a similar artist that gives no library track is skipped; read at most this many times the share
 
 
@@ -4498,8 +4503,13 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
         limited = figs["PN_SIMILAR_ARTIST_TRACK_LIMIT"] or topup
         count = figs["PN_SIMILAR_ARTIST_TRACK_COUNT"]
         label = "Playing Now: " + ", ".join(sample)
-        session_seed = dict(seed_info, Artist="Playing Now", Name="", Album="")
+        session_seed = dict(seed_info, Artist=PLAYING_NOW_SESSION, Name="", Album="")
     pn_keys = {str(r.get("Key")) for r in pn_rows if r.get("Key")}
+    seed_tracks = {}   # sampled artist -> its track in Playing Now, as Discover's Seed for what it brought
+    for r in pn_rows:
+        a = deinvert_the((r.get("Artist") or "").split(";")[0].strip())
+        if a and r.get("Name"):
+            seed_tracks.setdefault(artist_key(a), f"{a} - {r['Name']}")
 
     report_missing_keys(report, similar=True, top_tracks=True)
     target = count if limited else 0   # 0: no limit, and nothing for Drift to fill
@@ -4532,7 +4542,7 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
 
     used = {artist_key(s) for s in seeds}   # artists already taken, seeds included
 
-    def take(candidates, want):
+    def take(candidates, want, seed=None):
         """
         Reads candidates from the top and keeps going until `want` artists have each given a track
         from the library, skipping any artist already used, checking at most DELIVER_DEPTH x want.
@@ -4563,7 +4573,8 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
             report(f"  {artist} ({', '.join(suggested_by)})...")
             found = []
             pick_top_tracks_for_artist(artist, session_id, suggested_by, report=report,
-                                       consider=pool, pick=pick, defer=deferred, found=found, skip_keys=pn_keys)
+                                       consider=pool, pick=pick, defer=deferred, found=found, skip_keys=pn_keys,
+                                       seed=seed)
             if add(found, len(suggested_by)) or deferred is not None:
                 got += 1
             else:
@@ -4577,7 +4588,8 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
         found = []
         pick_top_tracks_for_artist(seed, session_id, ["seed"], report=report,
                                    exclude_track=None if sample else seed_info['Name'],
-                                   consider=pool, pick=pick, defer=deferred, found=found, skip_keys=pn_keys)
+                                   consider=pool, pick=pick, defer=deferred, found=found, skip_keys=pn_keys,
+                                   seed=seed_tracks.get(artist_key(seed)))
         add(found, 1)
 
     # --- Similar artists ---
@@ -4603,7 +4615,7 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
             if source_label not in labels and source_label != "none":
                 labels.append(source_label)
             report(f"  Similar to {seed}, taking {need}:")
-            got, _ = take(similar, need)
+            got, _ = take(similar, need, seed=seed_tracks.get(artist_key(seed)))
             total += got
             if got < need:
                 report(f"    {need - got} short for {seed}, passed on to the next artist.")
@@ -4862,7 +4874,7 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
     report(f"Similar Tracks: Playing Now ({len(rows)} tracks)  (target {target}, at most {per_artist} per artist)")
     report("  Tracks sampled from Playing Now: " + "; ".join(f"{a} - {t}" for a, t in samples))
     label = "Playing Now: " + "; ".join(f"{a} - {t}" for a, t in samples)
-    session_id = session_start("similar_tracks", dict(seed_info, Artist="Playing Now", Name="", Album=""))
+    session_id = session_start("similar_tracks", dict(seed_info, Artist=PLAYING_NOW_SESSION, Name="", Album=""))
     fast = FastStart(seed_info, report)
     pn_keys = {str(r.get("Key")) for r in rows if r.get("Key")}
     played = PlayedFilter("tracks", keep=[seed_info.get("FileKey")], report=report, filters=True)
@@ -4899,7 +4911,7 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
                 checked.add(ident)
                 key = (find_jriver_key_by_track(c_artist, c_title) if use_youtube
                        else library.find_track_key(c_artist, c_title))
-                session_log(session_id, c_artist, c_title, sources, found=bool(key))
+                session_log(session_id, c_artist, c_title, sources, found=bool(key), seed=f"{artist} - {title}")
                 if key and str(key) in pn_keys:
                     report(f"    Already in Playing Now: {c_artist} - {c_title}")
                     continue
