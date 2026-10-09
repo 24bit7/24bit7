@@ -114,6 +114,7 @@ def test_source_down_build_still_completes(app):
 def test_every_source_down(app):
     for s in ("lastfm", "deezer", "listenbrainz", "musicbrainz"):
         app.web.down.add(s)
+    app.set_env(IF_ALL_ELSE_FAILS_ARTISTS="1")   # off to start since the If All Else Fails options
     r = app.Lines()
     app.engine.create_similar_playlist(report=r, seed_info=seed(app, "The Beatles", "Here Comes The Sun"))
     # every source down: nothing beyond the seed, so If All Else Fails shuffles its genre

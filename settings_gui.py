@@ -453,6 +453,10 @@ class ProfilePage:
             out[f"SKIP_LONG_CLOSERS_{g}"] = "1" if v[f"SKIP_LONG_CLOSERS_{g}"].get() else "0"
             if f"IF_ALL_ELSE_FAILS_{g}" in v:
                 out[f"IF_ALL_ELSE_FAILS_{g}"] = "1" if v[f"IF_ALL_ELSE_FAILS_{g}"].get() else "0"
+                out[f"IF_ALL_ELSE_FAILS_{g}_MODE"] = option_code(FALLBACK_MODE_OPTIONS,
+                                                                 v[f"IF_ALL_ELSE_FAILS_{g}_MODE"].get())
+                for part in ("PATH", "PLAYLIST", "PLAYLIST_NAME"):
+                    out[f"IF_ALL_ELSE_FAILS_{g}_{part}"] = v[f"IF_ALL_ELSE_FAILS_{g}_{part}"].get().strip()
             out[f"LONG_CLOSER_MINUTES_{g}"] = v[f"LONG_CLOSER_MINUTES_{g}"].get().strip()
             out[f"NONSTOP_{g}"] = "1" if v[f"NONSTOP_{g}"].get() else "0"
             out[f"NONSTOP_{g}_RESEED"] = option_code(NONSTOP_RESEED_OPTIONS, v[f"NONSTOP_{g}_RESEED"].get())
@@ -482,6 +486,75 @@ DRIFT_USING_OPTIONS = [("artists", "Similar artists"), ("tracks", "Similar track
 VIBE_DRIFT_USING_OPTIONS = [("artists", "Similar artists (no AI)"), ("tracks", "Similar tracks (no AI)"),
                             ("ai", "AI (uses credits)")]
 DRIFT_SOURCE_MODES = [("same", "Same as Settings > Sources"), ("custom", "Custom Sources")]
+# If All Else Fails: what happens when a build finds nothing at all
+FALLBACK_MODE_OPTIONS = [("shuffle", "Shuffle Genre"), ("file", "Run File"), ("playlist", "Play Playlist")]
+FALLBACK_HELP = ("When a build finds nothing at all. Shuffle Genre plays songs from your library in the seed "
+                 "track's genre (or the artist's most common genre), at a similar tempo when the seed has a BPM "
+                 "tag, leaving out the seed artist and anything played recently. Run File starts a file of your "
+                 "own, such as a .bat, and Run After Building is skipped for that build. Play Playlist plays one "
+                 "of your JRiver playlists or smartlists, as JRiver gives it. A voice command hears why first, "
+                 "in the room. Unticked, the build ends with a message.")
+NO_PLAYLIST = "No playlist chosen"
+
+
+def choose_playlist(parent, on_pick):
+    """A small window to pick a JRiver playlist or smartlist: most used first, then the rest, with a search."""
+    import playmix
+    try:
+        playlists = saved_playlists.scan()
+    except Exception:
+        playlists = None
+    win = tk.Toplevel(parent)
+    win.title("Choose a Playlist")
+    win.transient(parent.winfo_toplevel())
+    win.resizable(False, False)
+    search = ttk.Entry(win, width=48)
+    search.pack(fill="x", padx=10, pady=(10, 6))
+    lb = tk.Listbox(win, height=14, width=52, activestyle="none", exportselection=False, font=("Segoe UI", 9))
+    lb.pack(fill="both", expand=True, padx=10)
+    items = []
+
+    def fill(*_):
+        lb.delete(0, "end")
+        items.clear()
+        if playlists is None:
+            lb.insert("end", "JRiver isn't answering, so there are no playlists to show.")
+            items.append(None)
+            return
+        used, rest = playmix.picker_order(playlists, search.get())
+        for p, _count in used:
+            lb.insert("end", p["Name"])
+            items.append(p)
+        if used and rest:
+            lb.insert("end", "")
+            items.append(None)
+        for p in rest:
+            lb.insert("end", p["Name"] + (f"   ({p['Folder']})" if p.get("Folder") not in (None, "", saved_playlists.ROOT)
+                                          else ""))
+            items.append(p)
+        if not items:
+            lb.insert("end", "No playlists match")
+            items.append(None)
+
+    def pick(_e=None):
+        sel = lb.curselection()
+        item = items[sel[0]] if sel else next((x for x in items if x is not None), None)
+        if item is None:
+            return
+        on_pick(item)
+        win.destroy()
+
+    buttons = tk.Frame(win)
+    buttons.pack(fill="x", padx=10, pady=10)
+    ttk.Button(buttons, text="Cancel", command=win.destroy).pack(side="right")
+    ttk.Button(buttons, text="Choose", command=pick).pack(side="right", padx=(0, 6))
+    search.bind("<KeyRelease>", lambda e: fill() if e.keysym != "Return" else None)
+    search.bind("<Return>", pick)
+    lb.bind("<Double-Button-1>", pick)
+    win.bind("<Escape>", lambda e: win.destroy())
+    fill()
+    search.focus_set()
+    return win
 # Drift: Off, or how each round picks its seeds
 DRIFT_MODE_OPTIONS = [("off", "Off"), ("close", "Keep It Tight"), ("spread", "Spread")]
 DRIFT_MODE_HELP = ("When a playlist comes up short, Drift searches again using what's already been found.\n"
@@ -497,6 +570,8 @@ DRIFT_ARTIST_SOURCE_NAMES = [s for s in SOURCE_NAMES if s[0] != "ai"]   # Drift 
 DRIFT_SOURCES_HELP = ("Same as Settings > Sources uses the sources you picked for this Play option. Custom "
                       "Sources lets the top-up rounds use different ones, for example steadier sources first "
                       "and more adventurous ones to fill the gaps.")
+DRIFT_SAME_WARNING = ("Drift is using the same sources as the playlist, so if they find nothing, Drift "
+                      "won't either. Choose Custom Sources to give Drift a different route.")
 
 
 def drift_using_options(group):
@@ -615,14 +690,21 @@ def sync_drift_sources(p):
     for group, (mode, mode_row, panel, frames) in getattr(p, "drift_src", {}).items():
         _, using, _, _ = p.drift[group]
         code = option_code(drift_using_options(group), using.get())
+        warn = getattr(p, "drift_warn", {}).get(group)
         if code == "ai":
             mode_row.grid_remove()
             panel.grid_remove()
+            if warn is not None:
+                warn.grid_remove()
             continue
         mode_row.grid()
         if option_code(DRIFT_SOURCE_MODES, mode.get()) != "custom":
             panel.grid_remove()
+            if warn is not None:
+                warn.grid()
             continue
+        if warn is not None:
+            warn.grid_remove()
         panel.grid()
         for kind, frame in frames.items():
             if (kind == "ARTIST") == (code == "artists"):
@@ -1790,6 +1872,7 @@ class SettingsTab(tk.Frame):
         """
         p.loading = True
         p.drift = {}           # group -> (on, using, rounds, (dropdowns))
+        p.drift_warn = {}      # group -> the Same as Settings > Sources note
         p.drift_src = {}       # group -> (mode, its row, the Custom Sources panel, {kind: frame})
         p.played_boxes = {}    # group -> its days box
         p.closer_sbs = {}      # GROUP -> its minutes box
@@ -2086,6 +2169,12 @@ class SettingsTab(tk.Frame):
             mode_cb.pack(side="left", padx=(6, 0))
             help_mark(mode_row, DRIFT_SOURCES_HELP).pack(side="left", padx=(8, 0))
             place(mode_row, pady=(0, 4))
+            if group in ("artists", "tracks"):   # an empty build is only picked up with Custom Sources
+                warn = tk.Label(box, text=DRIFT_SAME_WARNING, fg=PALETTE["text_secondary"], font=HELP_FONT,
+                                wraplength=440, justify="left")
+                place(warn, pady=(0, 4))
+                warn.grid_configure(padx=(16, 0))
+                p.drift_warn[group] = warn
             panel = tk.Frame(box)
             frames = {}
             for kind, names, agree_values, main in (
@@ -2279,19 +2368,63 @@ class SettingsTab(tk.Frame):
             place(row)
 
         def fallback(group):
-            """The If All Else Fails section: when a build finds nothing, shuffle the seed's genre."""
+            """The If All Else Fails section: when a build finds nothing, shuffle, run a file or play a playlist."""
             key = f"IF_ALL_ELSE_FAILS_{group.upper()}"
             begin(group, "If All Else Fails")
-            p.vars[key] = tk.BooleanVar(value=str(p.env.get(key, "1")).strip().lower() not in ("0", "false", "no"))
+            p.vars[key] = tk.BooleanVar(value=str(p.env.get(key, "0")).strip().lower() in ("1", "true", "yes"))
+            mode = tk.StringVar(value=option_label(FALLBACK_MODE_OPTIONS,
+                                                   p.env.get(f"{key}_MODE", "shuffle").strip().lower()))
+            p.vars[f"{key}_MODE"] = mode
+            for part in ("PATH", "PLAYLIST", "PLAYLIST_NAME"):
+                p.vars[f"{key}_{part}"] = tk.StringVar(value=p.env.get(f"{key}_{part}", ""))
+            shown = tk.StringVar(value=p.vars[f"{key}_PLAYLIST_NAME"].get() or NO_PLAYLIST)
             row = tk.Frame(where["box"])
-            ttk.Checkbutton(row, text="If nothing is found, shuffle songs in the seed's genre",
-                            variable=p.vars[key], command=p.save).pack(side="left")
-            help_mark(row, "When a build finds nothing at all, 24bit7 shuffles songs from your library in the "
-                           "seed track's genre (or the artist's most common genre), at a similar tempo when "
-                           "the seed has a BPM tag, leaving out the seed artist and anything played "
-                           "recently. A voice command hears why first, in the room. Untick to end with a "
-                           "message instead.").pack(side="left", padx=(8, 0))
+            ttk.Checkbutton(row, text="If nothing is found", variable=p.vars[key],
+                            command=lambda: changed()).pack(side="left")
+            mode_cb = ttk.Combobox(row, textvariable=mode, values=[s for _, s in FALLBACK_MODE_OPTIONS],
+                                   state="readonly", width=14)
+            mode_cb.pack(side="left", padx=(8, 0))
+            help_mark(row, FALLBACK_HELP).pack(side="left", padx=(8, 0))
             place(row)
+            file_row = tk.Frame(where["box"])
+            entry = tk.Entry(file_row, textvariable=p.vars[f"{key}_PATH"], width=48)
+            entry.pack(side="left", padx=(0, 4))
+            entry.bind("<FocusOut>", p.save)
+
+            def browse():
+                path = filedialog.askopenfilename(
+                    parent=self, title="If All Else Fails",
+                    filetypes=[("Programs and scripts", "*.bat *.cmd *.exe *.ps1 *.py *.pyw"), ("All files", "*.*")])
+                if path:
+                    p.vars[f"{key}_PATH"].set(os.path.normpath(path))
+                    p.save()
+            ttk.Button(file_row, text="Browse...", command=browse).pack(side="left")
+            place(file_row, pady=(0, 4))
+            file_row.grid_configure(padx=(16, 0))
+            list_row = tk.Frame(where["box"])
+            tk.Label(list_row, textvariable=shown).pack(side="left", padx=(0, 8))
+
+            def picked(item):
+                p.vars[f"{key}_PLAYLIST"].set(str(item["ID"]))
+                p.vars[f"{key}_PLAYLIST_NAME"].set(item["Name"])
+                shown.set(item["Name"])
+                p.save()
+            ttk.Button(list_row, text="Choose...", command=lambda: choose_playlist(self, picked)).pack(side="left")
+            place(list_row, pady=(0, 4))
+            list_row.grid_configure(padx=(16, 0))
+
+            def sync():
+                on, code = p.vars[key].get(), option_code(FALLBACK_MODE_OPTIONS, mode.get())
+                mode_cb.config(state="readonly" if on else "disabled")
+                file_row.grid() if on and code == "file" else file_row.grid_remove()
+                list_row.grid() if on and code == "playlist" else list_row.grid_remove()
+
+            def changed(*_):
+                mode_cb.selection_clear()
+                sync()
+                p.save()
+            mode_cb.bind("<<ComboboxSelected>>", changed)
+            sync()
 
         def run_after(group):
             """The Run After Building section: a file to run once the playlist is in JRiver."""

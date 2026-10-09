@@ -10,7 +10,8 @@ import pytest
 from test_gui import ui  # noqa: F401  (the GUI fixture)
 
 QUIET = dict(DRIFT_ARTISTS="0", DRIFT_TRACKS="0", SKIP_PLAYED_ARTISTS="0", SKIP_PLAYED_TRACKS="0",
-             AI_MODERATOR="off")
+             AI_MODERATOR="off", IF_ALL_ELSE_FAILS_ARTISTS="1", IF_ALL_ELSE_FAILS_TRACKS="1",
+             IF_ALL_ELSE_FAILS_TOP="1", IF_ALL_ELSE_FAILS_VIBE="1")
 
 
 @pytest.fixture
@@ -147,15 +148,15 @@ def test_setting_on_every_playlist_tab(app, ui):
     for option in ("Similar Artists", "Similar Tracks", "Artist's Top Tracks", "AI Playlist"):
         page = option_page(ui, option=option)
         ticks = [w for w in walk(page) if isinstance(w, ttk.Checkbutton)
-                 and w.cget("text") == "If nothing is found, shuffle songs in the seed's genre"]
+                 and w.cget("text") == "If nothing is found"]
         assert len(ticks) == 1, option
     page = option_page(ui, option="Similar Artists")
     tick = next(w for w in walk(page) if isinstance(w, ttk.Checkbutton)
-                and w.cget("text") == "If nothing is found, shuffle songs in the seed's genre")
+                and w.cget("text") == "If nothing is found")
     tick.invoke()
     ui.pump(0.3)
-    assert settings_gui.read_env().get("IF_ALL_ELSE_FAILS_ARTISTS") == "0"
+    assert settings_gui.read_env().get("IF_ALL_ELSE_FAILS_ARTISTS") == "1"   # off to start, so one click turns it on
     device = option_page(ui, device="Kitchen Echo", option="Similar Artists")
-    assert any(isinstance(w, ttk.Checkbutton) and w.cget("text") == "If nothing is found, shuffle songs in the seed's genre"
+    assert any(isinstance(w, ttk.Checkbutton) and w.cget("text") == "If nothing is found"
                for w in walk(device))
     assert "IF_ALL_ELSE_FAILS_ARTISTS" in app.engine.PROFILE_KEYS["playlist"]

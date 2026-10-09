@@ -48,6 +48,8 @@ PROFILE_KEYS = {
                  "TOP_TRACKS_COUNT", "TOP_TRACKS_ORDER", "VIBE_TRACK_COUNT",
                  "IF_ALL_ELSE_FAILS_ARTISTS", "IF_ALL_ELSE_FAILS_TRACKS", "IF_ALL_ELSE_FAILS_TOP",
                  "IF_ALL_ELSE_FAILS_VIBE",
+                 *[f"IF_ALL_ELSE_FAILS_{g}_{part}" for g in ("ARTISTS", "TRACKS", "TOP", "VIBE")
+                   for part in ("MODE", "PATH", "PLAYLIST", "PLAYLIST_NAME")],
                  "DRIFT_ARTISTS", "DRIFT_ARTISTS_USING", "DRIFT_ARTISTS_ROUNDS",
                  "DRIFT_TRACKS", "DRIFT_TRACKS_USING", "DRIFT_TRACKS_ROUNDS",
                  "DRIFT_VIBE", "DRIFT_VIBE_USING", "DRIFT_VIBE_ROUNDS", "AI_MODERATOR_VIBE",
@@ -1024,14 +1026,25 @@ def run_after_building(report=print):
     background once the playlist is in JRiver. It isn't told anything about the
     playlist. A device with settings of its own uses its own (voice).
     """
+    global FALLBACK_RAN_FILE
+    if FALLBACK_RAN_FILE:   # If All Else Fails ran its own file instead
+        FALLBACK_RAN_FILE = False
+        if RUN_AFTER.get(NONSTOP_CONTEXT.get("kind"), (False, ""))[0]:
+            report("  Run After Building skipped, as If All Else Fails ran a file instead.")
+        return
     if REVIEW_MODE and not VOICE_TAKEOVER:
         return   # Review: nothing is in JRiver yet
     on, path = RUN_AFTER.get(NONSTOP_CONTEXT.get("kind"), (False, ""))
     if not on or not path:
         return
+    run_file(path, report)
+
+
+def run_file(path, report=print, label="Run After Building"):
+    """Starts a file in the background, by its type. Returns True when it started."""
     if not os.path.isfile(path):
-        report(f"  Problem: Run After Building: {path} wasn't found, so nothing ran.")
-        return
+        report(f"  Problem: {label}: {path} wasn't found, so nothing ran.")
+        return False
     import subprocess
     ext = os.path.splitext(path)[1].lower()
     folder = os.path.dirname(path) or None
@@ -1049,9 +1062,11 @@ def run_after_building(report=print):
         else:
             os.startfile(path)   # anything else opens as Windows would open it
     except Exception as e:
-        report(f"  Problem: Run After Building: {os.path.basename(path)} didn't start ({e}).")
-        return
-    report(f"  Ran after building: {os.path.basename(path)}.")
+        report(f"  Problem: {label}: {os.path.basename(path)} didn't start ({e}).")
+        return False
+    report(f"  Ran after building: {os.path.basename(path)}." if label == "Run After Building"
+           else f"  Ran {os.path.basename(path)} ({label}).")
+    return True
 
 
 def import_legacy_csv():
@@ -3991,12 +4006,14 @@ class Drift:
         self.base_set = set()
         self.checked = set()      # (artist key, title) already looked up
         self.used = set()         # seeds already drifted from
+        self.seed_pairs = []      # (artist, title) the playlist was seeded from, for a rescue round
 
     def saw_artist(self, artist):
         self.seen_artists.add(artist_key(artist))
 
     def mark_seed(self, artist, title=""):
         """The playlist's own seed: never drifted from again, never re-added."""
+        self.seed_pairs.append((artist, title or ""))
         self.saw_artist(artist)
         self.used.add(artist_key(artist))
         if title:
@@ -4140,6 +4157,54 @@ class Drift:
                         + (f", so the other {len(rest)} went too" if rest else "")
                         + ". Drift won't seed from that chain again.")
         return extra
+
+    def rescue(self, keys):
+        """
+        The first round found nothing: one round seeded from the playlist's own seed (up to
+        DRIFT_SEEDS_PER_ROUND of them), with Drift's Custom Sources, after which Drift carries on
+        as usual from what it found. On Same as Settings > Sources it would only repeat the search
+        that just failed, so it says so instead. Returns True when it found something.
+        """
+        if (not self.on or self.finds or self.group not in ("artists", "tracks")
+                or self.using not in ("artists", "tracks")):
+            return False
+        if not drift_custom_sources(self.cfg, self.using):
+            self.report("  Drift: nothing to start from, and it uses the same sources as the playlist, so "
+                        "there was nothing new to try. Custom Sources (Settings > Playlist) gives Drift "
+                        "a different route.")
+            return False
+        seeds, idents = [], set()
+        for artist, title in self.seed_pairs:
+            if self.using == "tracks" and not title:
+                continue
+            ident = artist_key(artist) if self.using == "artists" else (artist_key(artist), clean_name(title))
+            if ident not in idents:
+                idents.add(ident)
+                seeds.append((artist, title, None))
+        seeds = seeds[:DRIFT_SEEDS_PER_ROUND]
+        if not seeds:
+            self.report("  Drift: nothing to start from, as there's no seed track to search from.")
+            return False
+        names = ", ".join(a if self.using == "artists" else f"{a} - {t}" for a, t, _ in seeds)
+        self.report(f"  Drift: nothing found, so it starts from the seed, using {self.using} similar to "
+                    f"{names}{self._from_label()}...")
+        saved, before = self.target, len(keys)
+        self.target = self.target or 10 ** 6   # no limit on total tracks: everything it finds
+        try:
+            with drift_sources(self.cfg, self.using):
+                if self.using == "artists":
+                    self._round_artists(seeds, keys)
+                else:
+                    self._round_tracks(seeds, keys)
+        finally:
+            self.target = saved
+        new = keys[before:]
+        if new:
+            self.moderate(keys, new)
+        found = len(keys) - before
+        self.report(f"  Drift: {found} found from the seed." if found
+                    else "  Drift: nothing found from the seed either.")
+        return found > 0
 
     def run(self, keys, on_round=None):
         """
@@ -4415,8 +4480,19 @@ LAST_NO_MATCH = False        # this build ended with nothing at all and no fallb
 
 
 def fallback_on(kind):
-    """If All Else Fails for this playlist type, as set (a device's own settings included). On to start."""
-    return os.getenv(FALLBACK_SETTINGS.get(kind, ""), "1").strip().lower() not in ("0", "false", "no")
+    """If All Else Fails for this playlist type, as set (a device's own settings included). Off to start."""
+    return os.getenv(FALLBACK_SETTINGS.get(kind, ""), "0").strip().lower() in ("1", "true", "yes")
+
+
+FALLBACK_MODES = ("shuffle", "file", "playlist")   # Shuffle Genre, Run File, Play Playlist
+FALLBACK_RAN_FILE = False    # If All Else Fails ran its file this build, so Run After Building doesn't run it too
+FALLBACK_HANDLED = False     # If All Else Fails did something this build (tracks sent, or a file run)
+
+
+def fallback_mode(kind):
+    """What If All Else Fails does for this playlist type: shuffle, file or playlist."""
+    mode = os.getenv(f"{FALLBACK_SETTINGS.get(kind, '')}_MODE", "shuffle").strip().lower()
+    return mode if mode in FALLBACK_MODES else "shuffle"
 
 
 def _genres(row):
@@ -4525,19 +4601,78 @@ def speak_in_zone(text, zone, report=print):
         return 0.0
 
 
+def _say_first(spoken, seed_info, report):
+    """A voice command: say why in the room first, then carry on once the message has played."""
+    if not OUTPUT_OVERRIDE or (REVIEW_MODE and not VOICE_TAKEOVER):
+        return
+    seconds = speak_in_zone(spoken, output_zone(seed_info, None, report), report)
+    for _ in range(int(min(seconds + 0.5, 12) * 10) if seconds else 0):
+        check_cancelled()
+        time.sleep(0.1)
+
+
 def if_all_else_fails(kind, seed_info, report=print, why="nothing suggested is in your library"):
     """
-    A build found nothing at all: shuffle songs in the seed's genre (at a similar tempo where
-    BPM tags allow) when If All Else Fails is on for this type. Returns how many tracks went out.
-    Not when an added playlist already played (the caller only asks when nothing did).
+    A build found nothing at all. When If All Else Fails is on for this type, it does what it's set
+    to: shuffle songs in the seed's genre (at a similar tempo where BPM tags allow), run a file, or
+    play a JRiver playlist. Returns how many tracks went out (0 for a file; FALLBACK_HANDLED says it
+    ran). Not when an added playlist already played (the caller only asks when nothing did).
     """
-    global LAST_NO_MATCH
+    global LAST_NO_MATCH, FALLBACK_RAN_FILE, FALLBACK_HANDLED
     check_cancelled()
+    FALLBACK_RAN_FILE = FALLBACK_HANDLED = False
     if not fallback_on(kind):
         report(f"{NO_MATCH} The build was empty because {why}, and If All Else Fails is off for this "
                f"playlist type (Settings > Playlist).")
         LAST_NO_MATCH = True
         return 0
+    mode, setting = fallback_mode(kind), FALLBACK_SETTINGS.get(kind, "")
+    if mode == "file":
+        path = os.getenv(f"{setting}_PATH", "").strip().strip('"')
+        if REVIEW_MODE and not VOICE_TAKEOVER:
+            report(f"{NO_MATCH} The build was empty because {why}. If All Else Fails is set to run a file, "
+                   f"which doesn't happen in Review Mode.")
+            LAST_NO_MATCH = True
+            return 0
+        if not path or not os.path.isfile(path):
+            report(f"{NO_MATCH} The build was empty because {why}, and If All Else Fails' file "
+                   + (f"{path} wasn't found." if path else "hasn't been chosen (Settings > Playlist)."))
+            LAST_NO_MATCH = True
+            return 0
+        spoken = f"I couldn't find a match, running {os.path.splitext(os.path.basename(path))[0]}"
+        report(spoken + ".")
+        report(f"  Why: {why}. If All Else Fails: {os.path.basename(path)}.")
+        _say_first(spoken, seed_info, report)
+        if run_file(path, report, "If All Else Fails"):
+            FALLBACK_RAN_FILE = FALLBACK_HANDLED = True
+        else:
+            LAST_NO_MATCH = True
+        return 0
+    if mode == "playlist":
+        pid = os.getenv(f"{setting}_PLAYLIST", "").strip()
+        name = os.getenv(f"{setting}_PLAYLIST_NAME", "").strip() or "the chosen playlist"
+        if not pid:
+            report(f"{NO_MATCH} The build was empty because {why}, and no playlist has been chosen for "
+                   f"If All Else Fails (Settings > Playlist).")
+            LAST_NO_MATCH = True
+            return 0
+        try:
+            import saved_playlists
+            keys = saved_playlists.playlist_keys(pid)
+        except Exception:
+            keys = None
+        if not keys:
+            report(f"{NO_MATCH} The build was empty because {why}, and If All Else Fails' playlist {name} "
+                   + ("couldn't be read from JRiver." if keys is None else "is empty or no longer there."))
+            LAST_NO_MATCH = True
+            return 0
+        spoken = f"I couldn't find a match, playing {name}"
+        report(spoken + ".")
+        report(f"  Why: {why}. If All Else Fails: {len(keys)} tracks from {name}, as JRiver gives them.")
+        _say_first(spoken, seed_info, report)
+        send_to_jriver(keys, seed_info=seed_info, report=report)
+        FALLBACK_HANDLED = True
+        return len(keys)
     genre, bpm, source = seed_genre(seed_info)
     if not genre:
         report(f"{NO_MATCH} The build was empty because {why}, and there's no genre for the seed in your "
@@ -4554,14 +4689,9 @@ def if_all_else_fails(kind, seed_info, report=print, why="nothing suggested is i
     report(f"  Why: {why}. Genre from {source}"
            + (f", {bpm:.0f} BPM give or take {int(FALLBACK_BPM_SPREAD * 100)}%." if at_tempo else ".")
            + f" If All Else Fails: {len(keys)} tracks.")
-    voice = bool(OUTPUT_OVERRIDE) and not (REVIEW_MODE and not VOICE_TAKEOVER)
-    if voice:   # a voice command: say why in the room first, then the music once the message has played
-        seconds = speak_in_zone(spoken, output_zone(seed_info, None, report), report)
-        if seconds:
-            for _ in range(int(min(seconds + 0.5, 12) * 10)):
-                check_cancelled()
-                time.sleep(0.1)
+    _say_first(spoken, seed_info, report)
     send_to_jriver(keys, seed_info=seed_info, report=report)
+    FALLBACK_HANDLED = True
     return len(keys)
 
 
@@ -4830,13 +4960,15 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
         add(found, 1)
     if collected_keys:   # before trimming, so anything removed is replaced from the rest
         drift.moderate(collected_keys, [k for k in collected_keys if str(k) != fast.key])
+    if not collected_keys:   # nothing found: Drift may pick it up from the seed
+        drift.rescue(collected_keys)
     queued = 0
     if not collected_keys and first_key and fallback_on("artists") and not mix_active():
         # only the seed track itself was found: If All Else Fails rather than a one-track playlist
         played.done()
         queued = if_all_else_fails("artists", seed_info, report,
                                    why="nothing was found beyond the seed track itself")
-        if queued:
+        if queued or FALLBACK_HANDLED:
             session_finish(session_id, queued, sources=source_label, report=report)
             return
     if collected_keys or first_key:
@@ -5158,6 +5290,8 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
     source_label = " + ".join(labels) or "none"
     if len(keys) < target and drift.on:
         source_label += f" (drift: similar {drift.using})"
+    if not keys:   # nothing found: Drift may pick it up from the seeds
+        drift.rescue(keys)
     queued = 0
     if keys:
         kept = {str(k) for k in keys}
@@ -5294,13 +5428,15 @@ def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=Fal
     if len(keys) < target and drift.on:
         source_label += f" (drift: similar {drift.using})"
 
+    if not [k for k in keys if k != first_key]:   # nothing beyond the seed: Drift may pick it up
+        drift.rescue(keys)
     queued = 0
     if keys and all(k == first_key for k in keys) and fallback_on("tracks") and not mix_active():
         # only the seed track itself was found: If All Else Fails rather than a one-track playlist
         played.done()
         queued = if_all_else_fails("tracks", seed_info, report,
                                    why="nothing was found beyond the seed track itself")
-        if queued:
+        if queued or FALLBACK_HANDLED:
             session_finish(session_id, queued, sources=source_label, report=report)
             return
     if keys:
