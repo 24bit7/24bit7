@@ -101,7 +101,8 @@ def record_job(origin, text):
     zone_id = str(engine.LAST_OUTPUT_ID or origin.get("zone") or "")
     row = {"at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "tab": MAIN, "from_label": "Main Window",
            "zone": engine.LAST_OUTPUT or "", "zone_id": zone_id,
-           "kind": KINDS.get(built.get("mode")) or _kind_from_text(text),
+           "kind": (KINDS.get(built.get("mode")) or _kind_from_text(text))
+                   + (" (Cancelled)" if _count(text, "Cancelled:") else ""),
            "sources": (built.get("sources") or "").replace(" + ", ", "),
            "queued": built.get("queued"), "misses": built.get("misses"),
            "moderator": _moderator(text), "problems": _count(text, "Problem:"), "notes": _count(text, "Note:"),

@@ -456,7 +456,7 @@ def use_profile(values=None):
 REVIEW_SETTINGS = {   # Settings > Playlist's Review column: group -> the Play keys it can override
     "artists": ["SIMILAR_ARTIST_TRACK_COUNT", "SIMILAR_ARTIST_TRACK_LIMIT", "SIMILAR_ARTIST_LIMIT",
                 "TRACKS_PER_ARTIST_POOL", "TRACKS_PER_ARTIST_PICK"],
-    "tracks": ["SIMILAR_TRACK_COUNT"],
+    "tracks": ["SIMILAR_TRACK_COUNT", "SIMILAR_TRACK_PER_ARTIST"],
     "top": ["TOP_TRACKS_COUNT"],
 }
 
@@ -2056,7 +2056,23 @@ def _ollama_request(model, prompt, system, max_tokens):
                    int(data.get("prompt_eval_count") or 0), int(data.get("eval_count") or 0))
 
 
+AI_BUSY = 0                # AI requests in flight, so Cancel can say it waits for the reply
+_ai_busy_lock = threading.Lock()
+
+
 def ai_request(prompt, max_tokens, feature="AI", tier="main", system=None, announce=True):
+    """One request to the chosen provider (see _ai_request), counted in AI_BUSY while it's out."""
+    global AI_BUSY
+    with _ai_busy_lock:
+        AI_BUSY += 1
+    try:
+        return _ai_request(prompt, max_tokens, feature=feature, tier=tier, system=system, announce=announce)
+    finally:
+        with _ai_busy_lock:
+            AI_BUSY -= 1
+
+
+def _ai_request(prompt, max_tokens, feature="AI", tier="main", system=None, announce=True):
     """
     One request to the chosen provider, its tokens recorded for AI Usage. Returns an
     AIReply (text, stop_reason, usage). Raises ImportError when the anthropic package
@@ -3240,15 +3256,30 @@ def review_preview_stop(zone):
 MIX_FAST_KEY = None      # an Add before playlist's first track, started by fast start
 MIX_NOTED = False        # the "left out on YouTube" note has been logged this build
 CANCEL_CHECK = None      # set by voice.py: returns True once a newer command has taken over
+CANCEL_REQUESTED = threading.Event()   # set by the console's Cancel while a build runs
+SENT_ANY = False         # this build has sent tracks to JRiver or YouTube (for the Cancelled line)
 
 
 class BuildCancelled(BaseException):
-    """A newer voice command took over. BaseException so no 'except Exception' swallows it."""
+    """A newer voice command took over, or Cancel was pressed. BaseException so no 'except Exception'
+    swallows it."""
 
 
 def check_cancelled():
-    if CANCEL_CHECK is not None and CANCEL_CHECK():
+    if CANCEL_REQUESTED.is_set() or (CANCEL_CHECK is not None and CANCEL_CHECK()):
         raise BuildCancelled()
+
+
+def cancel_message():
+    """The console's last line for a cancelled build: what, if anything, had already gone out."""
+    if REVIEW_MODE and not VOICE_TAKEOVER:
+        return "Cancelled: nothing was sent, and this Review list was dropped."
+    if SENT_ANY and LAST_OUTPUT:
+        return f"Cancelled: the tracks already sent to {LAST_OUTPUT} stay there. Nothing more was added."
+    if LAST_OUTPUT:
+        return (f"Cancelled: the first track was already playing in {LAST_OUTPUT}, so it carries on. "
+                "Nothing else was sent.")
+    return "Cancelled: nothing was sent to JRiver."
 
 
 def zone_state(zone=ACTIVE_ZONE):
@@ -3350,6 +3381,7 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
         LAST_OUTPUT = "YouTube"
         if keys and not append:
             open_youtube_playlist(keys)
+            globals()["SENT_ANY"] = True
         return
     if seed_info is not None:
         typed = bool(seed_info.get("Typed"))
@@ -3358,6 +3390,7 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
         return
     LAST_OUTPUT = zone_label(zone)
     globals()["LAST_OUTPUT_ID"] = zone
+    globals()["SENT_ANY"] = True
     keys = [str(k) for k in keys]
     seed_key = str((seed_info or {}).get("FileKey") or "")
     keys = drop_long_closers(keys, keep=[seed_key, *MIX_KEEP], report=report, group=closer_group)
@@ -4513,6 +4546,7 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
         for i, (artist, suggested_by) in enumerate(queue):
             if got >= want or checked >= ceiling:
                 break
+            check_cancelled()
             key = artist_key(artist)
             if key in used:
                 continue
@@ -4845,6 +4879,7 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
     checked = {(artist_key(a), clean_name(t)) for a, t in samples}
     owed = 0
     for i, (artist, title) in enumerate(samples):
+        check_cancelled()
         owed += per_sample + extra_each   # this sample's share, plus any shortfall passed on
         report(f"  Similar to {artist} - {title}, taking {owed}:")
         blended, responding = similar_track_candidates([artist], title, report)

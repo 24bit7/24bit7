@@ -34,7 +34,12 @@ EXTRA_ENV_KEYS = ["PLAY_BEHAVIOUR", "OUTPUT_TARGET", "YOUTUBE_PLAYLIST_LENGTH", 
                   "REVIEW_SAME_ARTISTS", "REVIEW_SAME_TRACKS", "REVIEW_SAME_TOP",
                   "REVIEW_SIMILAR_ARTIST_TRACK_COUNT", "REVIEW_SIMILAR_ARTIST_TRACK_LIMIT",
                   "REVIEW_SIMILAR_ARTIST_LIMIT", "REVIEW_TRACKS_PER_ARTIST_POOL", "REVIEW_TRACKS_PER_ARTIST_PICK",
-                  "REVIEW_SIMILAR_TRACK_COUNT", "REVIEW_TOP_TRACKS_COUNT"]
+                  "REVIEW_SIMILAR_TRACK_COUNT", "REVIEW_TOP_TRACKS_COUNT", "REVIEW_SIMILAR_TRACK_PER_ARTIST",
+                  # the Seed setting and the Playing Now columns (Settings > Playlist), with Review Mode's twins
+                  "PLAY_SEED", "PN_SIMILAR_ARTIST_TRACK_LIMIT",
+                  *engine.PLAYING_NOW_ARTIST_FIGURES, *engine.PLAYING_NOW_TRACK_FIGURES,
+                  "REVIEW_SAME_ARTISTS_PN", "REVIEW_SAME_TRACKS_PN", "REVIEW_PN_SIMILAR_ARTIST_TRACK_LIMIT",
+                  *[f"REVIEW_{k}" for k in (*engine.PLAYING_NOW_ARTIST_FIGURES, *engine.PLAYING_NOW_TRACK_FIGURES)]]
 # kept in the database's meta table: Filters, JRiver Playlists (Windows Main), Add Playlist rows
 META_KEYS = ["filters", "saved_playlists", "play_mix"]
 

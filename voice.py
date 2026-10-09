@@ -228,6 +228,8 @@ def _job(intent, value, zone, profile=None, device=None):
             engine.FILTER_DEVICE = device   # Settings > Filters ticked for this device apply
             _build(intent, value, guarded)
         except engine.BuildCancelled:
+            if engine.CANCEL_REQUESTED.is_set():
+                raise   # Cancel: the console worker says what had already gone out
             report(f"  Stopped: a newer voice command for {zone} took over.")
         finally:
             engine.OUTPUT_OVERRIDE = None

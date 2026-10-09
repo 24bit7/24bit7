@@ -773,6 +773,8 @@ class PlayTab(tk.Frame):
         self.log.config(state="disabled")
 
     def report(self, message):
+        if engine.CANCEL_REQUESTED.is_set() and threading.current_thread() is getattr(self, "_worker", None):
+            raise engine.BuildCancelled()   # Cancel: the build stops at its next console line
         self.log_queue.put(message)
 
     def _drain_log_queue(self):
@@ -814,7 +816,7 @@ class PlayTab(tk.Frame):
         self.console_frame = frame
         for name, command in (("Copy", self._copy_log), ("Clear", self._clear_from_strip),
                               ("Query", self._open_query), ("Export to Log", self._export_log),
-                              ("Mode", self._toggle_console_mode)):
+                              ("Mode", self._toggle_console_mode), ("Cancel", self._cancel_build)):
             b = tk.Label(self.console_strip, text=name, font=("Segoe UI", 8, "bold"), bg=black, fg=green,
                          padx=8, pady=1, cursor="hand2", highlightthickness=1,
                          highlightbackground=green, highlightcolor=green)
@@ -828,6 +830,7 @@ class PlayTab(tk.Frame):
                                              highlightcolor=AI_MAGENTA)
         self.console_buttons["Mode"].config(text=self.console_mode.title())
         self.console_buttons["Query"].pack_forget()
+        self.console_buttons["Cancel"].pack_forget()   # shown on its own while a build runs
         self._build_query_panel(frame)
         self.log.bind("<Button-1>", lambda e: self._show_console_strip(), add="+")
         self.root.bind_all("<Button-1>", self._maybe_hide_console_strip, add="+")
@@ -857,12 +860,13 @@ class PlayTab(tk.Frame):
         self.head_buttons = {}
         for name, command in (("Copy", self._copy_log), ("Clear", self._clear_from_strip),
                               ("Query", self._open_query), ("Export to Log", self._export_log),
-                              ("Mode", self._toggle_console_mode)):
+                              ("Mode", self._toggle_console_mode), ("Cancel", self._cancel_build)):
             b = self._head_box(self.head_strip, name, command)
             b.pack(side="left", padx=(4, 0))
             self.head_buttons[name] = b
         self.head_buttons["Query"].config(fg=AI_MAGENTA, highlightbackground=AI_MAGENTA, highlightcolor=AI_MAGENTA)
         self.head_buttons["Mode"].config(text=self.console_mode.title())
+        self.head_buttons["Cancel"].pack_forget()   # shown on its own while a build runs
         self.head_line = tk.Frame(self.console_head, bg=green, height=1)
         self.view = "all"                     # the tab on screen: "all", "main" or a device ID
         self._live, self._live_tab = [], "main"   # the build running (or last run) and the tab it files under
@@ -909,6 +913,8 @@ class PlayTab(tk.Frame):
 
     def _sync_head_strip(self):
         """On the Log tab only Simple/Advanced shows; on a console tab, the whole strip."""
+        if getattr(self, "running", False):
+            return   # a build is running: Cancel shows on its own
         on_log = self.view == "log"
         for name in ("Copy", "Clear", "Export to Log"):
             self.head_buttons[name].pack_forget()
@@ -1047,6 +1053,9 @@ class PlayTab(tk.Frame):
     def _sync_head_query(self):
         engine.refresh_settings_if_changed()
         query = self.head_buttons["Query"]
+        if getattr(self, "running", False):
+            query.pack_forget()   # a build is running: Cancel shows on its own
+            return
         if getattr(engine, "CONSOLE_QUERY", False) and engine.console_query_ready() and self.view != "log":
             if not query.winfo_manager():
                 query.pack(side="left", padx=(4, 0), before=self.head_buttons["Export to Log"])
@@ -1128,13 +1137,43 @@ class PlayTab(tk.Frame):
             return   # with the tabs open, the strip sits in the tab row instead
         engine.refresh_settings_if_changed()
         query = self.console_buttons["Query"]
-        if getattr(engine, "CONSOLE_QUERY", False) and engine.console_query_ready():
+        if getattr(engine, "CONSOLE_QUERY", False) and engine.console_query_ready() and not self.running:
             if not query.winfo_manager():
                 query.pack(side="left", padx=(0, 4), before=self.console_buttons["Export to Log"])
         else:
             query.pack_forget()
         self.console_strip.place(in_=self.log, relx=1.0, x=-6, y=6, anchor="ne")
         self.console_strip.lift()
+
+    def _sync_cancel_strip(self):
+        """While a build runs, both console strips show Cancel on its own; afterwards, the usual buttons."""
+        running = getattr(self, "running", False)
+        for buttons, pad in ((self.console_buttons, (0, 4)), (getattr(self, "head_buttons", {}), (4, 0))):
+            if not buttons:
+                continue
+            for b in buttons.values():
+                b.pack_forget()
+            buttons["Cancel"].config(text="Cancel")
+            if running:
+                buttons["Cancel"].pack(side="left", padx=pad)
+            else:
+                for name in ("Copy", "Clear", "Export to Log", "Mode"):
+                    buttons[name].pack(side="left", padx=pad)
+        if not running:
+            if hasattr(self, "head_buttons"):
+                self._sync_head_strip()
+            if self.console_strip.winfo_manager():
+                self._show_console_strip()
+
+    def _cancel_build(self):
+        """The console's Cancel: the build stops at its next step and says what had already gone out."""
+        if not self.running or engine.CANCEL_REQUESTED.is_set():
+            return
+        engine.CANCEL_REQUESTED.set()
+        self.log_queue.put("Cancelling after the AI replies..." if engine.AI_BUSY else "Cancelling...")
+        for buttons in (self.console_buttons, getattr(self, "head_buttons", {})):
+            if "Cancel" in buttons:
+                buttons["Cancel"].config(text="Cancelling...")
 
     def _maybe_hide_console_strip(self, event):
         """A click anywhere but the console or the strip hides the strip."""
@@ -1278,6 +1317,8 @@ class PlayTab(tk.Frame):
                                 "Start a track in JRiver first, then try again.")
             return
         self.running = True
+        engine.CANCEL_REQUESTED.clear()
+        self._sync_cancel_strip()
         self._job_origin = origin   # who asked, for the build's record: None is the Main Window
         self._greeting_active = False
         for b in self.buttons:
@@ -1292,6 +1333,9 @@ class PlayTab(tk.Frame):
             self.review_panel.show_console()   # a build from the window: watch it run in the console
 
         def worker():
+            self._worker = threading.current_thread()
+            self._job_cancelled = False
+            engine.SENT_ANY = False
             engine.MIX_ROWS, engine.MIX_KEEP, engine.MIX_FAST_KEY, engine.MIX_NOTED = rows, set(), None, False
             engine.REVIEW_MODE = review
             overrides = {}
@@ -1307,6 +1351,9 @@ class PlayTab(tk.Frame):
                 target()
                 if review:
                     engine.REVIEW_ROWS = engine.review_rows(engine.REVIEW_KEYS)
+            except engine.BuildCancelled:
+                self._job_cancelled = True
+                self.log_queue.put(engine.cancel_message())
             except Exception as e:
                 self.log_queue.put(f"Problem: something went wrong ({e}). Press Export to Log "
                                    f"and attach the file when you report it.")
@@ -1316,6 +1363,9 @@ class PlayTab(tk.Frame):
                     engine.use_profile({})   # back to Windows (Main)'s own figures
                 engine.REVIEW_MODE = False
                 engine.BUILD_STARTED = None
+                if engine.CANCEL_REQUESTED.is_set():
+                    self._job_cancelled = True   # a voice build catches its own cancel and says so
+                self._worker = None
                 self.root.after(0, self._job_done)
 
         threading.Thread(target=worker, daemon=True).start()
@@ -1336,10 +1386,14 @@ class PlayTab(tk.Frame):
         if getattr(self, "view", None) == "log":
             self._fill_log_table()
         self.running = False
+        engine.CANCEL_REQUESTED.clear()
+        self._sync_cancel_strip()
         for b in self.buttons:
             b.config(state="normal")
         self._sync_ai_button()
         self._sync_seed_buttons()
+        if getattr(self, "_job_review", False) and getattr(self, "_job_cancelled", False):
+            self._job_review = False   # cancelled: the Review list is dropped
         if getattr(self, "_job_review", False):   # a Review build: its tracks go to the Review list
             self._job_review = False
             self.review_panel.load(getattr(engine, "REVIEW_ROWS", []), self._review_title(),

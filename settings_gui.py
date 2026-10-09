@@ -1799,46 +1799,91 @@ class SettingsTab(tk.Frame):
             widget.grid(row=where["r"], column=0, columnspan=3, sticky="w", pady=pady)
             where["r"] += 1
 
-        review = {"same": {}, "boxes": {}}   # Windows (Main): the Review column's Same as Play ticks and spinboxes
+        review = {"same": {}, "boxes": {}}   # Windows (Main): Review Mode's Mirror ticks and its spinboxes
+        review_fg = "#f28c28" if engine.THEME == "dark" else "#a85400"   # Review Mode's orange, as on the Play tab
+        ROW_PAD = 7   # a little more room between rows than other pages: four columns are a lot to scan
 
         def review_header(group):
-            """Play | Review column headings, with the Review column's Same as Play tick (Main only)."""
+            """Current Track | Review Mode column headings, with Review Mode's Mirror tick (Main only)."""
             if p.device_id is not None:
                 return
             box, r = where["box"], where["r"]
-            tk.Label(box, text="Play", font=LABEL_FONT, fg=PALETTE["help_fg"]).grid(row=r, column=1, sticky="w",
-                                                                                       padx=(12, 0))
+            tk.Label(box, text="Current Track", font=LABEL_FONT, fg=PALETTE["help_fg"]).grid(
+                row=r, column=1, sticky="w", padx=(12, 0))
             cell = tk.Frame(box)
             cell.grid(row=r, column=2, sticky="w", padx=(24, 0))
             var = tk.BooleanVar(value=read_env().get(f"REVIEW_SAME_{group.upper()}", "1").strip().lower()
                                 not in ("0", "false", "no"))
             review["same"][group] = var
-            title = tk.Label(cell, text="Review", font=LABEL_FONT, fg=PALETTE["help_fg"])
+            title = tk.Label(cell, text="Review Mode", font=LABEL_FONT, fg=review_fg)
             title.pack(side="left", padx=(0, 10))
-            ttk.Checkbutton(cell, text="Same as Play", variable=var).pack(side="left")
+            ttk.Checkbutton(cell, text="Mirror Current Track", variable=var).pack(side="left")
             var.trace_add("write", lambda *a, g=group: review_same_changed(g))   # saves however it's changed
-            help_mark(cell, "With Behaviour on Review you're choosing from a list, so a shortlist is often "
-                            "better than a full playlist. Untick Same as Play to give Review its own figures "
+            help_mark(cell, "In Review Mode you're choosing from a list, so a shortlist is often better than a "
+                            "full playlist. Untick Mirror Current Track to give Review Mode its own figures "
                             "for this section; everything else here (sources, Drift, hidden tracks) is shared. "
                             "Windows (Main) only, as voice builds never review.", on=title)
             where["r"] += 1
 
-        def review_same_changed(group):
+        def seed_header(group):
+            """
+            The four columns for Similar Artists and Similar Tracks (Main only): Seed over Current Track and
+            Playing Now, Review Mode over its own Current Track and Playing Now, each Review Mode column with
+            a Mirror tick above its heading.
+            """
+            if p.device_id is not None:
+                return
+            box, r = where["box"], where["r"]
+            for text, col, colour in (("SEED", 1, PALETTE["help_fg"]), ("REVIEW MODE", 3, review_fg)):
+                cell = tk.Frame(box)
+                cell.grid(row=r, column=col, columnspan=2, sticky="ew", padx=(12 if col == 1 else 24, 0),
+                          pady=(0, 6))
+                tk.Label(cell, text=text, font=("Segoe UI", 8, "bold"), fg=colour).pack(anchor="w")
+                tk.Frame(cell, height=1, bg=colour).pack(fill="x")
+            for col, key, text in ((3, f"REVIEW_SAME_{group.upper()}", "Mirror Current Track"),
+                                   (4, f"REVIEW_SAME_{group.upper()}_PN", "Mirror Playing Now")):
+                var = tk.BooleanVar(value=read_env().get(key, "1").strip().lower() not in ("0", "false", "no"))
+                name = group if col == 3 else f"{group}_pn"
+                review["same"][name] = var
+                ttk.Checkbutton(box, text=text, variable=var).grid(row=r + 1, column=col, sticky="w",
+                                                                   padx=(24, 0))
+                var.trace_add("write", lambda *a, g=name, k=key: review_same_changed(g, k))
+            heads = ((1, "Current Track", PALETTE["help_fg"]), (2, "Playing Now", PALETTE["help_fg"]),
+                     (3, "Current Track", review_fg), (4, "Playing Now", review_fg))
+            for col, text, colour in heads:
+                label = tk.Label(box, text=text, font=LABEL_FONT, fg=colour)
+                label.grid(row=r + 2, column=col, sticky="w", padx=(12 if col == 1 else 24, 0), pady=(10, 4))
+                if col == 2:
+                    help_mark(box, "Playing Now: the Play tab's Seed set to Playing Now. A few artists or tracks "
+                                   "are picked at random from the whole list, and each in turn brings its own "
+                                   "share of similar ones, so the results are usually broader than Current "
+                                   "Track. Tracks already in Playing Now are left out. Windows (Main) only.",
+                              on=label)
+                if col == 3:
+                    help_mark(box, "In Review Mode you're choosing from a list, so a shortlist is often better "
+                                   "than a full playlist. Untick a Mirror tick to give Review Mode its own "
+                                   "figures for that seed; everything else here (sources, Drift, hidden "
+                                   "tracks) is shared. Windows (Main) only, as voice builds never review.",
+                              on=label)
+            where["r"] += 3
+
+        def review_same_changed(group, key=None):
             same = review["same"][group].get()
-            write_env({f"REVIEW_SAME_{group.upper()}": "1" if same else "0"})
+            write_env({key or f"REVIEW_SAME_{group.upper()}": "1" if same else "0"})
             for sb in review["boxes"].get(group, []):
                 sb.config(state="disabled" if same else "normal")
 
-        def review_twin(group, key, default, lo, hi, row=None):
-            """A Review-column spinbox for key, saved as REVIEW_<key> (Main only)."""
+        def review_twin(group, key, default, lo, hi, row=None, col=2):
+            """A Review Mode spinbox for key, saved as REVIEW_<key> (Main only)."""
             if p.device_id is not None:
                 return None
             box = where["box"]
             r = where["r"] - 1 if row is None else row
             rkey = f"REVIEW_{key}"
-            var = tk.StringVar(value=read_env().get(rkey, "").strip() or p.env.get(key, default))
+            var = tk.StringVar(value=read_env().get(rkey, "").strip() or read_env().get(key, "").strip()
+                               or p.env.get(key, default))
             cell = tk.Frame(box)
-            cell.grid(row=r, column=2, sticky="w", padx=(24, 0))
+            cell.grid(row=r, column=col, sticky="w", padx=(24, 0), pady=ROW_PAD)
             sb = tk.Spinbox(cell, from_=lo, to=hi, textvariable=var, width=6,
                             command=lambda k=rkey, v=var: write_env({k: v.get().strip()}))
             sb.pack(side="left")
@@ -1848,9 +1893,37 @@ class SettingsTab(tk.Frame):
                 sb.config(state="disabled")
             return cell
 
+        def pn_cell(key, default, lo, hi, row=None, note=None):
+            """A Playing Now spinbox for key (PN_...), saved straight to .env (Main only)."""
+            if p.device_id is not None:
+                return None
+            box = where["box"]
+            r = where["r"] - 1 if row is None else row
+            var = tk.StringVar(value=read_env().get(key, "").strip() or default)
+            cell = tk.Frame(box)
+            cell.grid(row=r, column=2, sticky="w", padx=(24, 0), pady=ROW_PAD)
+            tk.Spinbox(cell, from_=lo, to=hi, textvariable=var, width=6,
+                       command=lambda k=key, v=var: write_env({k: v.get().strip()})).pack(side="left")
+            var.trace_add("write", lambda *a, k=key, v=var: write_env({k: v.get().strip()}))
+            if note:
+                tk.Label(cell, text=note, fg=PALETTE["help_fg"]).pack(side="left", padx=(8, 0))
+            return cell
+
+        def limit_tick(cell, key, group=None):
+            """A Limit tick after a column's number, saved as key ("1" or "0"), ticked to start."""
+            var = tk.BooleanVar(value=read_env().get(key, "1").strip().lower() in ("1", "true", "yes"))
+            tick = ttk.Checkbutton(cell, text="Limit", variable=var)
+            var.trace_add("write", lambda *a: write_env({key: "1" if var.get() else "0"}))
+            tick.pack(side="left", padx=(8, 0))
+            if group is not None:
+                review["boxes"].setdefault(group, []).append(tick)
+                if review["same"].get(group) is not None and review["same"][group].get():
+                    tick.config(state="disabled")
+            return var
+
         def spin(label, key, default, lo, hi, help_text=None):
             box, r = where["box"], where["r"]
-            tk.Label(box, text=label, anchor="w").grid(row=r, column=0, sticky="w", pady=4)
+            tk.Label(box, text=label, anchor="w").grid(row=r, column=0, sticky="w", pady=ROW_PAD)
             var = tk.StringVar(value=p.env.get(key, default))
             p.vars[key] = var
             cell = tk.Frame(box)   # the control with its ? right beside it
@@ -1863,17 +1936,29 @@ class SettingsTab(tk.Frame):
             where["r"] += 1
             return var, sb
 
-        def choice(label, key, default, values, help_text=None):
+        def label_row(label, help_text=None):
+            """A row title with nothing under Current Track (a Playing Now-only row). Returns its grid row."""
             box, r = where["box"], where["r"]
-            tk.Label(box, text=label, anchor="w").grid(row=r, column=0, sticky="w", pady=4)
+            title = tk.Label(box, text=label, anchor="w")
+            title.grid(row=r, column=0, sticky="w", pady=ROW_PAD)
+            if help_text:
+                help_mark(box, help_text, on=title)
+            where["r"] += 1
+            return r
+
+        def choice(label, key, default, values, help_text=None, note=None):
+            box, r = where["box"], where["r"]
+            tk.Label(box, text=label, anchor="w").grid(row=r, column=0, sticky="w", pady=ROW_PAD)
             p.vars[key] = tk.StringVar(value=p.env.get(key, default))
             cell = tk.Frame(box)
-            cell.grid(row=r, column=1, sticky="w", padx=(12, 0))
+            cell.grid(row=r, column=1, columnspan=4, sticky="w", padx=(12, 0))
             cb = ttk.Combobox(cell, textvariable=p.vars[key], values=values, state="readonly", width=12)
             cb.pack(side="left")
             cb.bind("<<ComboboxSelected>>", p.save)
             if help_text:
                 help_mark(cell, help_text).pack(side="left", padx=(8, 0))
+            if note and p.device_id is None:
+                tk.Label(cell, text=note, fg=PALETTE["help_fg"]).pack(side="left", padx=(10, 0))
             where["r"] += 1
 
         def recent(group):
@@ -2214,7 +2299,7 @@ class SettingsTab(tk.Frame):
 
         # --- Similar Artists ---
         begin("artists", "Playlist")
-        review_header("artists")
+        seed_header("artists")
         # Limit total tracks to: a tick box in the label column, the number beside it
         box, r = where["box"], where["r"]
         limit_var = tk.BooleanVar(value=p.env.get("SIMILAR_ARTIST_TRACK_LIMIT", "1") in ("1", "true", "yes"))
@@ -2232,33 +2317,46 @@ class SettingsTab(tk.Frame):
             if save:
                 p.save()
         ttk.Checkbutton(box, text="Limit total tracks to", variable=limit_var,
-                        command=limit_toggled).grid(row=r, column=0, sticky="w", pady=4)
+                        command=limit_toggled).grid(row=r, column=0, sticky="w", pady=ROW_PAD)
         limit_toggled(save=False)
         p.vars["SIMILAR_ARTIST_TRACK_COUNT"].trace_add("write", p.save)
-        rcell = review_twin("artists", "SIMILAR_ARTIST_TRACK_COUNT", "30", 5, 100, row=r)
-        if rcell is not None:   # Review's own Limit tick, before its number
-            rlimit = tk.BooleanVar(value=read_env().get("REVIEW_SIMILAR_ARTIST_TRACK_LIMIT", "1").strip().lower()
-                                   in ("1", "true", "yes"))
-            rtick = ttk.Checkbutton(rcell, text="Limit", variable=rlimit)
-            rlimit.trace_add("write", lambda *a: write_env({"REVIEW_SIMILAR_ARTIST_TRACK_LIMIT":
-                                                            "1" if rlimit.get() else "0"}))
-            rtick.pack(side="left", padx=(8, 0))
-            review["boxes"]["artists"].append(rtick)   # greyed with the rest while Same as Play is ticked
-            if review["same"]["artists"].get():
-                rtick.config(state="disabled")
+        pcell = pn_cell("PN_SIMILAR_ARTIST_TRACK_COUNT", "30", 5, 100, row=r)
+        if pcell is not None:
+            limit_tick(pcell, "PN_SIMILAR_ARTIST_TRACK_LIMIT")
+        rcell = review_twin("artists", "SIMILAR_ARTIST_TRACK_COUNT", "30", 5, 100, row=r, col=3)
+        if rcell is not None:   # Review Mode's own Limit ticks, after their numbers
+            rlimit = limit_tick(rcell, "REVIEW_SIMILAR_ARTIST_TRACK_LIMIT", "artists")
             self._review_vars = {"same": review["same"], "limit": rlimit}
+            rpcell = review_twin("artists_pn", "PN_SIMILAR_ARTIST_TRACK_COUNT", "30", 5, 100, row=r, col=4)
+            limit_tick(rpcell, "REVIEW_PN_SIMILAR_ARTIST_TRACK_LIMIT", "artists_pn")
         where["r"] += 1
-        spin("Number of artists", "SIMILAR_ARTIST_LIMIT", "20", 1, 50)
-        review_twin("artists", "SIMILAR_ARTIST_LIMIT", "20", 1, 50)
+        if p.device_id is None:
+            r = label_row("Artists sampled from Playing Now",
+                          "How many artists are picked at random from Playing Now. Each one in turn finds its "
+                          "share of similar artists, so no artist is used twice. With fewer artists in "
+                          "Playing Now than this, every one of them is used.")
+            pn_cell("PN_SAMPLE_ARTISTS", "5", 1, 20, row=r)
+            review_twin("artists_pn", "PN_SAMPLE_ARTISTS", "5", 1, 20, row=r, col=4)
+        spin("Number of artists", "SIMILAR_ARTIST_LIMIT", "20", 1, 50,
+             "Similar artists to take, read from the top of the sources' lists. An artist only counts once it "
+             "gives a track from your library; one that doesn't is skipped and the next one down is read "
+             "instead. Under Playing Now, this many for each sampled artist.")
+        pn_cell("PN_ARTISTS_PER_SAMPLE", "4", 1, 20, note="per sampled artist")
+        review_twin("artists", "SIMILAR_ARTIST_LIMIT", "20", 1, 50, col=3)
+        review_twin("artists_pn", "PN_ARTISTS_PER_SAMPLE", "4", 1, 20, col=4)
         pool_var, _ = spin("Number of artist's top tracks", "TRACKS_PER_ARTIST_POOL", "5", 1, 20)
-        review_twin("artists", "TRACKS_PER_ARTIST_POOL", "5", 1, 20)
+        pn_cell("PN_TRACKS_PER_ARTIST_POOL", "5", 1, 20)
+        review_twin("artists", "TRACKS_PER_ARTIST_POOL", "5", 1, 20, col=3)
+        review_twin("artists_pn", "PN_TRACKS_PER_ARTIST_POOL", "5", 1, 20, col=4)
         _, p.pick_sb = spin("Tracks per artist selection", "TRACKS_PER_ARTIST_PICK", "3", 1, 20,
                             "Top tracks come from your Top-track sources (Last.fm, Deezer and so on), for "
                             "the seed artist and each similar artist. Selecting fewer than the top tracks "
                             "(say 3 of 5) means the same seed gives a different playlist each run, as the "
                             "selection is random. For no random pick at all, set both numbers the "
                             "same and untick Limit total tracks to.")
-        review_twin("artists", "TRACKS_PER_ARTIST_PICK", "3", 1, 20)
+        pn_cell("PN_TRACKS_PER_ARTIST_PICK", "3", 1, 20)
+        review_twin("artists", "TRACKS_PER_ARTIST_PICK", "3", 1, 20, col=3)
+        review_twin("artists_pn", "PN_TRACKS_PER_ARTIST_PICK", "3", 1, 20, col=4)
         pool_var.trace_add("write", lambda *a: sync_pick_limit(p))
         recent("artists")
         drift("artists")
@@ -2268,19 +2366,36 @@ class SettingsTab(tk.Frame):
 
         # --- Similar Tracks ---
         begin("tracks", "Playlist")
-        review_header("tracks")
+        seed_header("tracks")
+        if p.device_id is None:
+            r = label_row("Tracks sampled from Playing Now",
+                          "How many tracks are picked at random from Playing Now, each from a different artist "
+                          "while there are artists left. Each one in turn finds its share of similar tracks.")
+            pn_cell("PN_SAMPLE_TRACKS", "5", 1, 20, row=r)
+            review_twin("tracks_pn", "PN_SAMPLE_TRACKS", "5", 1, 20, row=r, col=4)
         spin("Number of tracks", "SIMILAR_TRACK_COUNT", "30", 5, 100, TARGET_HELP)
-        review_twin("tracks", "SIMILAR_TRACK_COUNT", "30", 5, 100)
-        spin("Most tracks per artist", "SIMILAR_TRACK_PER_ARTIST", "3", 1, 20, "Includes the seed artist.")
+        pn_cell("PN_TRACKS_PER_SAMPLE", "6", 1, 50, note="per sampled track")
+        review_twin("tracks", "SIMILAR_TRACK_COUNT", "30", 5, 100, col=3)
+        review_twin("tracks_pn", "PN_TRACKS_PER_SAMPLE", "6", 1, 50, col=4)
+        spin("Most tracks per artist", "SIMILAR_TRACK_PER_ARTIST", "3", 1, 20,
+             "Includes the seed artist. Under Playing Now it counts across the whole new list.")
+        pn_cell("PN_SIMILAR_TRACK_PER_ARTIST", "3", 1, 20)
+        review_twin("tracks", "SIMILAR_TRACK_PER_ARTIST", "3", 1, 20, col=3)
+        review_twin("tracks_pn", "PN_SIMILAR_TRACK_PER_ARTIST", "3", 1, 20, col=4)
+        if p.device_id is None:   # Variety and Order apply to every column
+            tk.Frame(where["box"], height=1, bg=PALETTE["section_edge"]).grid(
+                row=where["r"], column=0, columnspan=5, sticky="ew", pady=(8, 4))
+            where["r"] += 1
         choice("Variety", "SIMILAR_TRACK_VARIETY", "no", ["yes", "no"],
                "Yes: gathers up to twice the matches it needs and picks from them at random, the closest "
                "the most likely, so the same seed gives a different playlist each run.\n"
                "No: takes the closest matches in order and stops at the number of tracks, so the same "
                "seed gives the same playlist.\n"
-               "Also on the Play tab under More Options, which changes Windows (Main).")
+               "Also on the Play tab under More Options, which changes Windows (Main).", note="Every column")
         choice("Order", "SIMILAR_TRACK_ORDER", "shuffled", ["shuffled", "similar first"],
-               "Similar first keeps the order the sources agreed on, strongest matches first. "
-               "Shuffled mixes them up.")
+               "Similar first keeps the order the sources agreed on, strongest matches first. Under Playing "
+               "Now, each sampled track's best match comes first, then each one's second best, and so on. "
+               "Shuffled mixes them up.", note="Every column")
         recent("tracks")
         drift("tracks")
         nonstop("tracks")
