@@ -950,7 +950,7 @@ def test_note_waits_before_showing(app, ui):
     import settings_gui
     ui.pump(1.5)
     behaviour = next(w for w in _widgets(ui.play.root)
-                     if getattr(w, "_note_text", "").startswith("Play: the playlist"))._note_target
+                     if getattr(w, "_note_text", "").startswith("Play Mode: the playlist"))._note_target
     note = behaviour._tooltip
     note._wait()   # as the pointer arrives
     ui.pump(0.1)

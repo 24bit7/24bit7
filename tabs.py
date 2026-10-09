@@ -711,3 +711,177 @@ def _tick_images(root, size, scale, edge, dim):
     images = (box(edge, inside, None), box(fill, fill, mark), box(dim, inside, None), box(dim, dim, inside))
     root._tick_images = images
     return images
+
+
+def mix_colour(widget, colour, base, amount):
+    """colour blended into base: amount 0 gives base, 1 gives colour. As a #rrggbb string."""
+    a, b = _rgba(widget, colour), _rgba(widget, base)
+    return "#%02x%02x%02x" % tuple(round(b[i] + (a[i] - b[i]) * amount) for i in range(3))
+
+
+class ClickThrough(FlatButton):
+    """
+    A button that shows its setting as "Label: Value" and steps to the next value on a
+    click, back round to the first after the last. A right-click steps back. It sizes to
+    its text, so the row grows and shrinks as values change. Off (or the first value of a
+    two-way choice, such as Play Mode) is drawn plain; any other value is lit in its colour.
+      ClickThrough(parent, "Drift", var, ["Off", "Keep It Tight", "Spread"], command=handler)
+    var holds the value as shown ("Keep It Tight"); setting it from code redraws the button.
+    For older code it also answers like the dropdown it replaced: set(), state(), instate(),
+    selection_clear(), and <<ComboboxSelected>> runs the command.
+    """
+
+    def __init__(self, master, prefix, variable, values, command=None, lit=None, plain=("Off",),
+                 labels=None, **kw):
+        self._var, self._values, self._prefix = variable, list(values), prefix
+        self._user_command = command
+        self._lit = lit or {}             # value -> colour; values not listed use the button text colour
+        self._plain = set(plain)          # values drawn plain
+        self._labels = labels or {}       # value -> what the button says instead of "Prefix: Value"
+        super().__init__(master, text=self._text(), command=lambda: self._step(1), quiet=True, height=1, **kw)
+        for widget in (self, self._label):
+            widget.bind("<Button-3>", lambda e: self._step(-1) if self._state == "normal" else None)
+        self.bind("<<ComboboxSelected>>", lambda e: self._changed())
+        variable.trace_add("write", lambda *a: self._refresh())
+
+    def _text(self):
+        value = self._var.get()
+        if value in self._labels:
+            return self._labels[value]
+        return f"{self._prefix}: {value}" if self._prefix else value
+
+    def _step(self, by):
+        value = self._var.get()
+        i = self._values.index(value) if value in self._values else 0
+        self._var.set(self._values[(i + by) % len(self._values)])
+        self._changed()
+
+    def _changed(self):
+        if self._user_command:
+            self._user_command()
+
+    def _refresh(self):
+        try:
+            self.config(text=self._text())
+        except tk.TclError:
+            pass   # closing
+
+    def _draw(self):
+        on = self._state == "normal"
+        value = self._var.get()
+        back = self.master.cget("bg")
+        base = PALETTE["button_quiet_bg"] or back
+        if on and value not in self._plain:
+            colour = self._lit.get(value) or PALETTE["button_fg"]
+            fill, edge, text = mix_colour(self, colour, base, 0.16), colour, colour
+        else:
+            fill, edge = base, PALETTE["button_outline"]
+            text = PALETTE["button_fg"] if on else PALETTE["button_off_fg"]
+            if on and value in self._plain and self._prefix:
+                text = PALETTE["text_muted"]   # Off reads quieter than a lit value
+        if on and (self._inside or self._pressed):
+            fill = mix_colour(self, edge if edge != PALETTE["button_outline"] else PALETTE["button_fg"],
+                              base, 0.28 if self._pressed else 0.10)
+        w, h = self._size
+        image = rounded_shape(self, w, h, self._px(CORNER), fill, edge, self._px(1))
+        # a button with a note takes the question-mark pointer, as every title with a note does
+        pointer = "question_arrow" if hasattr(self._label, "_tooltip") else "hand2"
+        self._label.config(image=image, fg=text, cursor=pointer if on else "")
+
+    # --- answering like the dropdown this replaced ---
+    def set(self, value):
+        self._var.set(value)
+
+    def get(self):
+        return self._var.get()
+
+    def state(self, flags=None):
+        if flags:
+            for flag in flags:
+                if flag == "disabled":
+                    self.config(state="disabled")
+                elif flag == "!disabled":
+                    self.config(state="normal")
+        return ("disabled",) if self._state == "disabled" else ()
+
+    def instate(self, flags):
+        disabled = self._state == "disabled"
+        return all((not disabled) if f == "!disabled" else disabled if f == "disabled" else False for f in flags)
+
+    def selection_clear(self):
+        pass
+
+    def event_generate(self, sequence, **kw):
+        if sequence == "<<ComboboxSelected>>":   # as a dropdown would: run the command
+            self._changed()
+            return None
+        return super().event_generate(sequence, **kw)
+
+
+class RoundedEntry(tk.Frame):
+    """
+    A text box with fully rounded ends, drawn like the buttons so it looks the same on any PC.
+    Answers like a ttk.Entry for what 24bit7 uses: get, delete, insert, bind, focus_set.
+    width is in characters, as on ttk.Entry.
+    """
+
+    def __init__(self, master, width=30, font=("Segoe UI", 11), placeholder="", **kw):
+        back = master.cget("bg")
+        super().__init__(master, bg=back, **kw)
+        try:
+            scale = max(1.0, self.winfo_fpixels("1i") / 96.0)
+        except tk.TclError:
+            scale = 1.0
+        px = lambda n: max(1, int(round(n * scale)))
+        f = tkfont.Font(font=font)
+        h = max(px(32), f.metrics("linespace") + px(14))
+        w = f.measure("0") * width + h
+        fill = PALETTE.get("field_bg") or "#ffffff"
+        fg = PALETTE.get("field_fg") or PALETTE.get("text") or "#000000"
+        edge = PALETTE.get("field_edge") or PALETTE["button_outline"]
+        self._edges = (edge, PALETTE["button_fg"])
+        self._shape = lambda colour: rounded_shape(self, w, h, h // 2, fill, colour, px(1))
+        self._back = tk.Label(self, image=self._shape(edge), bd=0, highlightthickness=0, bg=back)
+        self._back.pack()
+        self.entry = tk.Entry(self, font=font, bd=0, relief="flat", highlightthickness=0, bg=fill, fg=fg,
+                              insertbackground=fg, disabledbackground=fill)
+        self.entry.place(x=h // 2, y=(h - f.metrics("linespace")) // 2 - px(1), width=w - h,
+                         height=f.metrics("linespace") + px(2))
+        self._back.bind("<Button-1>", lambda e: self.entry.focus_set())
+        self.entry.bind("<FocusIn>", lambda e: self._back.config(image=self._shape(self._edges[1])), add="+")
+        self.entry.bind("<FocusOut>", lambda e: self._back.config(image=self._shape(self._edges[0])), add="+")
+        self._placeholder, self._hint_fg, self._fg = placeholder, PALETTE.get("text_faint") or "#999999", fg
+        self._showing_hint = False
+        if placeholder:
+            self.entry.bind("<FocusIn>", lambda e: self._hint(False), add="+")
+            self.entry.bind("<FocusOut>", lambda e: self._hint(True), add="+")
+            self._hint(True)
+
+    def _hint(self, show):
+        if show and not self.entry.get():
+            self.entry.insert(0, self._placeholder)
+            self.entry.config(fg=self._hint_fg)
+            self._showing_hint = True
+        elif not show and self._showing_hint:
+            self.entry.delete(0, "end")
+            self.entry.config(fg=self._fg)
+            self._showing_hint = False
+
+    def get(self):
+        return "" if self._showing_hint else self.entry.get()
+
+    def delete(self, first, last=None):
+        if self._showing_hint:
+            self._hint(False)
+        self.entry.delete(first, last)
+
+    def insert(self, index, text):
+        if self._showing_hint:
+            self._hint(False)
+        self.entry.insert(index, text)
+
+    def bind(self, sequence=None, func=None, add=None):
+        return self.entry.bind(sequence, func, add)
+
+    def focus_set(self):
+        self.entry.focus_set()

@@ -32,7 +32,7 @@ import nonstop
 from settings_gui import SettingsTab, write_env, read_env, warn_moderator_once, Tooltip, NO_KEY_TEXT, help_mark
 from settings_gui import MODERATOR_CHOICES, MODERATOR_LEVELS_HELP
 from discover_gui import DiscoverTab
-from tabs import TabbedPane, PALETTE, FlatButton, InfoLine, apply_theme
+from tabs import TabbedPane, PALETTE, FlatButton, InfoLine, apply_theme, ClickThrough, RoundedEntry
 from mix_gui import MixRows
 from review_gui import ReviewPanel
 import console_query
@@ -177,10 +177,10 @@ class PlayTab(tk.Frame):
         self.search_tab = tk.Frame(self.seed_nb, padx=26, pady=8)
         self.seed_nb.add(self.search_tab, text="Search")
         tk.Label(self.search_tab, text="Artist", font=("Segoe UI", 10)).grid(row=0, column=0, sticky="w")
-        self.search_artist = ttk.Entry(self.search_tab, width=34, font=("Segoe UI", 11), style="Field.TEntry")
+        self.search_artist = RoundedEntry(self.search_tab, width=30, font=("Segoe UI", 11))
         self.search_artist.grid(row=0, column=1, sticky="w", padx=(8, 20))
         tk.Label(self.search_tab, text="Track", font=("Segoe UI", 10)).grid(row=0, column=2, sticky="w")
-        self.search_track = ttk.Entry(self.search_tab, width=34, font=("Segoe UI", 11), style="Field.TEntry")
+        self.search_track = RoundedEntry(self.search_tab, width=30, font=("Segoe UI", 11))
         self.search_track.grid(row=0, column=3, sticky="w", padx=(8, 0))
         tk.Label(self.search_tab, text="Build a playlist from any track, even one you don't own. "
                                        "Similar Artists and Artist's Top Tracks need only the "
@@ -237,6 +237,7 @@ class PlayTab(tk.Frame):
 
     def _sync_seed_buttons(self):
         """Show Credits needs an album, which a typed seed doesn't have, so it greys out on Search."""
+        self._sync_seed_bars()   # a typed seed ignores Seed, so the bars go back to orange on Search
         button = getattr(self, "credits_button", None)
         if button is None or self.running:
             return
@@ -285,81 +286,93 @@ class PlayTab(tk.Frame):
         self.output_cb.bind("<<ComboboxSelected>>", self._on_output_changed)
         self._sync_behaviour()
 
-        # The More options row: Show Credits, AI Moderator, Add playlist, with the playlist
-        # rows under it. Held in a frame that's always packed, so it opens in the same place.
+        # The More Options row: click-through buttons (Seed, Mode, AI Moderator, Drift, Non-stop), then
+        # + Add Playlist and Show Credits, with the playlist rows under it. Held in a frame that's always
+        # packed, so it opens in the same place, under a thin line that separates it from the buttons above.
         self.more_box = tk.Frame(self)
         self.more_box.pack(fill="x")
-        self.extras_row = tk.Frame(self.more_box, padx=16, pady=4)
-        # Behaviour: play straight away, or Review first. Every build from the app; voice always plays.
-        tk.Label(self.extras_row, text="Behaviour", font=("Segoe UI", 9, "bold"),
-                 fg=PALETTE["text_secondary"]).pack(side="left", padx=(0, 6))
+        self.more_line = tk.Frame(self.more_box, height=1, bg=PALETTE["line"])
+        self.extras_row = tk.Frame(self.more_box, padx=16, pady=6)
+        dark = engine.THEME == "dark"
+        self.seed_colour = "#22d3ee" if dark else "#0e7490"     # teal: Seed on Playing Now
+        review_colour = "#f28c28" if dark else "#a85400"         # orange: Review Mode
+        click_note = "Click to step through the choices; right-click steps back."
+
+        def note(button, text):
+            help_mark(self.extras_row, text + "\n" + click_note, on=button._label)
+
+        # Seed: where Similar Artists and Similar Tracks start from. Windows (Main) app builds only.
+        saved = read_env().get("PLAY_SEED", "current").strip().lower()
+        self.seed_var = tk.StringVar(value="Playing Now" if saved == "playing_now" else "Current Track")
+        self.seed_cb = ClickThrough(self.extras_row, "Seed", self.seed_var, ["Current Track", "Playing Now"],
+                                    command=self._on_seed_changed, plain=("Current Track",),
+                                    lit={"Playing Now": self.seed_colour})
+        self.seed_cb.pack(side="left", padx=(0, 8))
+        note(self.seed_cb, "Current Track: Similar Artists and Similar Tracks start from the track that's "
+                           "playing.\nPlaying Now: they start from artists or tracks picked at random from the "
+                           "whole list (Settings > Playlist, the Playing Now column), and the buttons' bars turn "
+                           "teal. Artist's Top Tracks, AI Playlist, Search, voice commands, keyboard shortcuts "
+                           "and Non-stop always use the current (or typed) track.")
+        # Mode (Behaviour): play straight away, or Review first. Every build from the app; voice always plays.
         saved = read_env().get("PLAY_BEHAVIOUR", "instant").strip().lower()
         self.behaviour_var = tk.StringVar(value=dict(PLAY_BEHAVIOUR).get(saved, "Play"))
-        self.behaviour_cb = ttk.Combobox(self.extras_row, textvariable=self.behaviour_var, state="readonly",
-                                         width=8, values=[shown for _, shown in PLAY_BEHAVIOUR])
-        self.behaviour_cb.pack(side="left")
-        self.behaviour_cb.bind("<<ComboboxSelected>>", self._on_behaviour_changed)
-        help_mark(self.extras_row, "Play: the playlist starts as soon as it's found.\n"
-                                   "Review: nothing is sent to JRiver. The tracks found are listed in Review, "
-                                   "in the console area, where you tick the ones you want in the order you "
-                                   "want them, then add them to Playing Now, load them as new or save them "
-                                   "as a playlist. A Preview zone lets you listen first.\n"
-                                   "For every build from the app, Now Playing and Search. Voice commands, "
-                                   "keyboard shortcuts and Non-stop always play straight away. Not used when "
-                                   "Output is YouTube.").pack(side="left", padx=(8, 0))
+        self.behaviour_cb = ClickThrough(self.extras_row, "", self.behaviour_var,
+                                         [shown for _, shown in PLAY_BEHAVIOUR], command=self._on_behaviour_changed,
+                                         plain=("Play",), lit={"Review": review_colour},
+                                         labels={"Play": "Play Mode", "Review": "Review Mode"})
+        self.behaviour_cb.pack(side="left", padx=(0, 8))
+        note(self.behaviour_cb, "Play Mode: the playlist starts as soon as it's found.\n"
+                                "Review Mode: nothing is sent to JRiver. The tracks found are listed in Review, "
+                                "in the console area, where you tick the ones you want in the order you want "
+                                "them, then add them to Playing Now, load them as new or save them as a "
+                                "playlist. A Preview zone lets you listen first.\n"
+                                "For every build from the app, Now Playing and Search. Voice commands, keyboard "
+                                "shortcuts and Non-stop always play straight away.")
         # AI Moderator sets Windows (Main)'s moderator; devices with settings of their own keep theirs.
-        tk.Label(self.extras_row, text="AI Moderator", font=("Segoe UI", 9, "bold"),
-                 fg=PALETTE["ai_purple"]).pack(side="left", padx=(24, 6))
         self.moderator_var = tk.StringVar(value="Off")
-        self.moderator_cb = ttk.Combobox(self.extras_row, textvariable=self.moderator_var,
-                                         values=MODERATOR_CHOICES, state="readonly", width=9)
-        self.moderator_cb.pack(side="left")
-        self.moderator_cb.bind("<<ComboboxSelected>>", self._on_moderator_changed)
+        self.moderator_cb = ClickThrough(self.extras_row, "AI Moderator", self.moderator_var, MODERATOR_CHOICES,
+                                         command=self._on_moderator_changed,
+                                         lit={v: PALETTE["ai_purple"] for v in MODERATOR_CHOICES})
+        self.moderator_cb.pack(side="left", padx=(0, 8))
         self._moderator_tip = Tooltip(self.moderator_cb, NO_KEY_TEXT, when=lambda: not engine.ai_enabled())
-        help_mark(self.extras_row, "Checks Similar Artists and Similar Tracks playlists with the AI's quick "
-                                   "model and removes tracks that clash with the seed's tone, energy and mood. "
-                                   "Uses a little AI credit, a fraction of a penny per playlist.\n"
-                                   + MODERATOR_LEVELS_HELP + "\n"
-                                   "Voice devices with settings of their own keep their own choice "
-                                   "(Settings > Sources).").pack(side="left", padx=(8, 0))
+        note(self.moderator_cb, "Checks Similar Artists and Similar Tracks playlists with the AI's quick model "
+                                "and removes tracks that clash with the seed's tone, energy and mood. Uses a "
+                                "little AI credit, a fraction of a penny per playlist.\n"
+                                + MODERATOR_LEVELS_HELP + "\n"
+                                "Voice devices with settings of their own keep their own choice "
+                                "(Settings > Sources).")
         # Drift and Non-stop: a second door onto Settings > Playlist for Windows (Main).
         # Changing them here changes them there, for every Play option at once.
-        tk.Label(self.extras_row, text="Drift", font=("Segoe UI", 9, "bold"),
-                 fg=PALETTE["text_secondary"]).pack(side="left", padx=(24, 6))
         self.drift_var = tk.StringVar(value="Off")
-        self.drift_cb = ttk.Combobox(self.extras_row, textvariable=self.drift_var,
-                                     values=[shown for _, shown in PLAY_DRIFT], state="readonly", width=13)
-        self.drift_cb.pack(side="left")
-        self.drift_cb.bind("<<ComboboxSelected>>", self._on_drift_changed)
-        help_mark(self.extras_row, "Searches again when a playlist comes up short, for Similar Artists, "
-                                   "Similar Tracks and AI Playlist. Keep It Tight seeds only from the first "
-                                   "round, so nothing strays far (it can finish short); Spread seeds from across "
-                                   "the whole playlist and can travel further. Drift using and Rounds are set for "
-                                   "each in Settings > Playlist, and changing Drift here changes it there too. "
-                                   "Shows a mode only when all three agree. Voice devices with settings of their "
-                                   "own keep theirs.").pack(side="left", padx=(8, 0))
-        tk.Label(self.extras_row, text="Non-stop", font=("Segoe UI", 9, "bold"),
-                 fg=PALETTE["text_secondary"]).pack(side="left", padx=(24, 6))
+        self.drift_cb = ClickThrough(self.extras_row, "Drift", self.drift_var, [s for _, s in PLAY_DRIFT],
+                                     command=self._on_drift_changed)
+        self.drift_cb.pack(side="left", padx=(0, 8))
+        note(self.drift_cb, "Searches again when a playlist comes up short, for Similar Artists, Similar Tracks "
+                            "and AI Playlist. Keep It Tight seeds only from the first round, so nothing strays "
+                            "far (it can finish short); Spread seeds from across the whole playlist and can "
+                            "travel further. Drift using and Rounds are set for each in Settings > Playlist, "
+                            "and changing Drift here changes it there too. Shows a mode only when all three "
+                            "agree. Voice devices with settings of their own keep theirs.")
         self.nonstop_var = tk.StringVar(value="Off")
-        self.nonstop_cb = ttk.Combobox(self.extras_row, textvariable=self.nonstop_var,
-                                       values=[shown for _, shown in PLAY_NONSTOP],
-                                       state="readonly", width=14)
-        self.nonstop_cb.pack(side="left")
-        self.nonstop_cb.bind("<<ComboboxSelected>>", self._on_nonstop_changed)
-        help_mark(self.extras_row, "Keeps the music going: when the last track of a playlist 24bit7 built "
-                                   "starts, more are added. Keep It Tight reseeds from the original playlist's "
-                                   "tracks, so the evening stays close to where it started; Wander "
-                                   "follows the music wherever it leads. Applies to all four Play options. "
-                                   "The rest of the Non-stop settings are in Settings > Playlist, and changing "
-                                   "Non-stop here changes it there too. Shows a mode only when all four agree. "
-                                   "Voice devices with settings of their own keep theirs.").pack(side="left", padx=(8, 0))
-        self.credits_button = FlatButton(self.extras_row, text="Show Credits", command=self.on_credits,
-                                         quiet=True, width=14, height=1)
-        self.credits_button.pack(side="left", padx=(24, 0))
-        self.buttons.append(self.credits_button)   # greyed out during a build, and on the Search tab
+        self.nonstop_cb = ClickThrough(self.extras_row, "Non-stop", self.nonstop_var, [s for _, s in PLAY_NONSTOP],
+                                       command=self._on_nonstop_changed)
+        self.nonstop_cb.pack(side="left", padx=(0, 8))
+        note(self.nonstop_cb, "Keeps the music going: when the last track of a playlist 24bit7 built starts, "
+                              "more are added. Keep It Tight reseeds from the original playlist's tracks, so the "
+                              "evening stays close to where it started; Wander follows the music wherever it "
+                              "leads. Applies to all four Play options. The rest of the Non-stop settings are "
+                              "in Settings > Playlist, and changing Non-stop here changes it there too. Shows a "
+                              "mode only when all four agree. Voice devices with settings of their own keep "
+                              "theirs.")
+        tk.Frame(self.extras_row, width=1, height=24, bg=PALETTE["line"]).pack(side="left", padx=(8, 16))
         # Add playlist: JRiver playlists joined to the next build from the app (not voice)
         FlatButton(self.extras_row, text="+ Add Playlist", quiet=True, width=14, height=1,
-                   command=lambda: self.mix_rows.add()).pack(side="left", padx=(8, 0))
+                   command=lambda: self.mix_rows.add()).pack(side="left", padx=(0, 8))
+        self.credits_button = FlatButton(self.extras_row, text="Show Credits", command=self.on_credits,
+                                         quiet=True, width=14, height=1)
+        self.credits_button.pack(side="left")
+        self.buttons.append(self.credits_button)   # greyed out during a build, and on the Search tab
+        self._sync_seed_bars()
         self.mix_rows = MixRows(self.more_box, padx=16)
         self.mix_rows.on_change = self._update_more_label
         self._show_more(playmix.is_open(), save=False)
@@ -370,11 +383,13 @@ class PlayTab(tk.Frame):
     def _show_more(self, open_, save=True):
         """Opens or closes the More options row. Open or closed is remembered between launches."""
         if open_:
+            self.more_line.pack(fill="x", padx=16, pady=(6, 0))
             self.extras_row.pack(fill="x")
             self.mix_rows.pack(fill="x")
         else:
             self.mix_rows.pack_forget()
             self.extras_row.pack_forget()
+            self.more_line.pack_forget()
             self.more_box.configure(height=1)   # Tk keeps an emptied frame's size otherwise
         if save:
             playmix.set_open(open_)
@@ -414,6 +429,56 @@ class PlayTab(tk.Frame):
         """Review works with any Output, YouTube included (it opens the ticked tracks there)."""
         if getattr(self, "behaviour_cb", None) is not None:
             self.behaviour_cb.state(["!disabled"])
+
+    def _on_seed_changed(self, *_):
+        """The Seed button: saved straight to .env, the bars follow, and the first switch to Playing Now explains it."""
+        playing_now = self.seed_var.get() == "Playing Now"
+        try:
+            write_env({"PLAY_SEED": "playing_now" if playing_now else "current"})
+        except Exception as e:
+            messagebox.showerror("Save failed", str(e), parent=self)
+        self._sync_seed_bars()
+        if playing_now and read_env().get("SEED_PLAYING_NOW_SEEN", "").strip() != "1":
+            try:
+                write_env({"SEED_PLAYING_NOW_SEEN": "1"})
+            except Exception:
+                pass
+
+            def explain():
+                for line in self._seed_explainer():
+                    self.log_queue.put(line)
+            # after the greeting has cleared the console, so the note isn't wiped with it
+            self.after(13000 if self._greeting_active else 0, explain)
+
+    def _seed_explainer(self):
+        """The once-only console note for Seed: Playing Now, with the figures as they're set now."""
+        a, t = engine.playing_now_artist_figures(), engine.playing_now_track_figures()
+        return [
+            "Seed: Playing Now",
+            "  Builds now start from your whole Playing Now list instead of the track that's playing.",
+            f"  Similar Artists picks {a['PN_SAMPLE_ARTISTS']} artists from the list at random, then finds "
+            f"{a['PN_ARTISTS_PER_SAMPLE']} similar artists for each, taking them in turn so nobody repeats. "
+            f"Similar Tracks picks {t['PN_SAMPLE_TRACKS']} tracks at random, each from a different artist, "
+            f"and finds {t['PN_TRACKS_PER_SAMPLE']} similar tracks for each.",
+            "  Only artists and tracks in your library count. If one isn't there, 24bit7 moves further down "
+            "the list.",
+            "  Tracks already in Playing Now are left out, and the new list replaces Playing Now as usual. Use "
+            "Review Mode if you want to add to it instead.",
+            "  Results are usually broader than Current Track, and each build differs because the sample is "
+            "random.",
+            "  Only Similar Artists and Similar Tracks follow Seed. Change these figures in Settings > "
+            "Playlist, Playing Now column.",
+        ]
+
+    def _sync_seed_bars(self):
+        """Similar Artists and Similar Tracks get teal bars while Seed is Playing Now (and Now Playing is up)."""
+        if not getattr(self, "buttons", None) or not hasattr(self, "seed_var"):
+            return
+        teal = self.seed_var.get() == "Playing Now" and not self._seed_is_search()
+        for b in self.buttons:
+            if b.cget("text") in ("Similar Artists", "Similar Tracks"):
+                b._accent = self.seed_colour if teal else None
+                b._draw()
 
     def _on_behaviour_changed(self, *_):
         code = {shown: c for c, shown in PLAY_BEHAVIOUR}.get(self.behaviour_var.get(), "instant")
