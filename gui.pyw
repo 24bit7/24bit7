@@ -29,7 +29,7 @@ import tray
 import voice
 import hotkeys
 import nonstop
-from settings_gui import SettingsTab, write_env, read_env, warn_moderator_once, Tooltip, NO_KEY_TEXT, help_mark
+from settings_gui import SettingsTab, write_env, read_env, warn_moderator_once, Tooltip, NO_KEY_TEXT
 from settings_gui import MODERATOR_CHOICES, MODERATOR_LEVELS_HELP
 from discover_gui import DiscoverTab
 from tabs import TabbedPane, PALETTE, FlatButton, InfoLine, apply_theme, ClickThrough, RoundedEntry
@@ -176,12 +176,14 @@ class PlayTab(tk.Frame):
 
         self.search_tab = tk.Frame(self.seed_nb, padx=26, pady=8)
         self.seed_nb.add(self.search_tab, text="Search")
-        tk.Label(self.search_tab, text="Artist", font=("Segoe UI", 10)).grid(row=0, column=0, sticky="w")
-        self.search_artist = RoundedEntry(self.search_tab, width=30, font=("Segoe UI", 9))
-        self.search_artist.grid(row=0, column=1, sticky="w", padx=(8, 20))
-        tk.Label(self.search_tab, text="Track", font=("Segoe UI", 10)).grid(row=0, column=2, sticky="w")
-        self.search_track = RoundedEntry(self.search_tab, width=30, font=("Segoe UI", 9))
-        self.search_track.grid(row=0, column=3, sticky="w", padx=(8, 0))
+        fields = tk.Frame(self.search_tab)   # one row, so each title sits right beside its box
+        fields.grid(row=0, column=0, columnspan=4, sticky="w")
+        tk.Label(fields, text="Artist", font=("Segoe UI", 10)).pack(side="left")
+        self.search_artist = RoundedEntry(fields, width=30, font=("Segoe UI", 9))
+        self.search_artist.pack(side="left", padx=(4, 24))
+        tk.Label(fields, text="Track", font=("Segoe UI", 10)).pack(side="left")
+        self.search_track = RoundedEntry(fields, width=30, font=("Segoe UI", 9))
+        self.search_track.pack(side="left", padx=(4, 0))
         tk.Label(self.search_tab, text="Build a playlist from any track, even one you don't own. "
                                        "Similar Artists and Artist's Top Tracks need only the "
                                        "artist. Press Enter for Similar Artists.",
@@ -296,10 +298,6 @@ class PlayTab(tk.Frame):
         dark = engine.THEME == "dark"
         self.seed_colour = "#22d3ee" if dark else "#0e7490"     # teal: Seed on Playing Now
         review_colour = "#f28c28" if dark else "#a85400"         # orange: Review Mode
-        click_note = "Click to step through the choices; right-click steps back."
-
-        def note(button, text):
-            help_mark(self.extras_row, text + "\n" + click_note, on=button._label)
 
         # Seed: where Similar Artists and Similar Tracks start from. Windows (Main) app builds only.
         saved = read_env().get("PLAY_SEED", "current").strip().lower()
@@ -308,11 +306,6 @@ class PlayTab(tk.Frame):
                                     command=self._on_seed_changed, plain=("Current Track",),
                                     lit={"Playing Now": self.seed_colour})
         self.seed_cb.pack(side="left", padx=(0, 8))
-        note(self.seed_cb, "Current Track: Similar Artists and Similar Tracks start from the track that's "
-                           "playing.\nPlaying Now: they start from artists or tracks picked at random from the "
-                           "whole list (Settings > Playlist, the Playing Now column), and the buttons' bars turn "
-                           "teal. Artist's Top Tracks, AI Playlist, Search, voice commands, keyboard shortcuts "
-                           "and Non-stop always use the current (or typed) track.")
         # Mode (Behaviour): play straight away, or Review first. Every build from the app; voice always plays.
         saved = read_env().get("PLAY_BEHAVIOUR", "instant").strip().lower()
         self.behaviour_var = tk.StringVar(value=dict(PLAY_BEHAVIOUR).get(saved, "Play"))
@@ -321,13 +314,6 @@ class PlayTab(tk.Frame):
                                          plain=("Play",), lit={"Review": review_colour},
                                          labels={"Play": "Play Mode", "Review": "Review Mode"})
         self.behaviour_cb.pack(side="left", padx=(0, 8))
-        note(self.behaviour_cb, "Play Mode: the playlist starts as soon as it's found.\n"
-                                "Review Mode: nothing is sent to JRiver. The tracks found are listed in Review, "
-                                "in the console area, where you tick the ones you want in the order you want "
-                                "them, then add them to Playing Now, load them as new or save them as a "
-                                "playlist. A Preview zone lets you listen first.\n"
-                                "For every build from the app, Now Playing and Search. Voice commands, keyboard "
-                                "shortcuts and Non-stop always play straight away.")
         # AI Moderator sets Windows (Main)'s moderator; devices with settings of their own keep theirs.
         self.moderator_var = tk.StringVar(value="Off")
         self.moderator_cb = ClickThrough(self.extras_row, "AI Moderator", self.moderator_var, MODERATOR_CHOICES,
@@ -335,35 +321,16 @@ class PlayTab(tk.Frame):
                                          lit={v: PALETTE["ai_purple"] for v in MODERATOR_CHOICES})
         self.moderator_cb.pack(side="left", padx=(0, 8))
         self._moderator_tip = Tooltip(self.moderator_cb, NO_KEY_TEXT, when=lambda: not engine.ai_enabled())
-        note(self.moderator_cb, "Checks Similar Artists and Similar Tracks playlists with the AI's quick model "
-                                "and removes tracks that clash with the seed's tone, energy and mood. Uses a "
-                                "little AI credit, a fraction of a penny per playlist.\n"
-                                + MODERATOR_LEVELS_HELP + "\n"
-                                "Voice devices with settings of their own keep their own choice "
-                                "(Settings > Sources).")
         # Drift and Non-stop: a second door onto Settings > Playlist for Windows (Main).
         # Changing them here changes them there, for every Play option at once.
         self.drift_var = tk.StringVar(value="Off")
         self.drift_cb = ClickThrough(self.extras_row, "Drift", self.drift_var, [s for _, s in PLAY_DRIFT],
                                      command=self._on_drift_changed)
         self.drift_cb.pack(side="left", padx=(0, 8))
-        note(self.drift_cb, "Searches again when a playlist comes up short, for Similar Artists, Similar Tracks "
-                            "and AI Playlist. Keep It Tight seeds only from the first round, so nothing strays "
-                            "far (it can finish short); Spread seeds from across the whole playlist and can "
-                            "travel further. Drift using and Rounds are set for each in Settings > Playlist, "
-                            "and changing Drift here changes it there too. Shows a mode only when all three "
-                            "agree. Voice devices with settings of their own keep theirs.")
         self.nonstop_var = tk.StringVar(value="Off")
         self.nonstop_cb = ClickThrough(self.extras_row, "Non-stop", self.nonstop_var, [s for _, s in PLAY_NONSTOP],
                                        command=self._on_nonstop_changed)
         self.nonstop_cb.pack(side="left", padx=(0, 8))
-        note(self.nonstop_cb, "Keeps the music going: when the last track of a playlist 24bit7 built starts, "
-                              "more are added. Keep It Tight reseeds from the original playlist's tracks, so the "
-                              "evening stays close to where it started; Wander follows the music wherever it "
-                              "leads. Applies to all four Play options. The rest of the Non-stop settings are "
-                              "in Settings > Playlist, and changing Non-stop here changes it there too. Shows a "
-                              "mode only when all four agree. Voice devices with settings of their own keep "
-                              "theirs.")
         tk.Frame(self.extras_row, width=1, height=24, bg=PALETTE["line"]).pack(side="left", padx=(8, 16))
         # Add playlist: JRiver playlists joined to the next build from the app (not voice)
         FlatButton(self.extras_row, text="+ Add Playlist", quiet=True, width=14, height=1,

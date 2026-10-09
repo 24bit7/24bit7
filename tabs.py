@@ -837,18 +837,19 @@ class RoundedEntry(tk.Frame):
         f = tkfont.Font(font=font)
         line = f.metrics("linespace")
         h = max(px(24), line + px(10))
-        w = f.measure("0") * width + h
+        inset = px(10)   # text starts this far in from the left edge
+        w = f.measure("0") * width + 2 * inset
         fill = PALETTE.get("field_bg") or "#ffffff"
         fg = PALETTE.get("field_fg") or PALETTE.get("text") or "#000000"
         edge = PALETTE.get("field_edge") or PALETTE["button_outline"]
         self._edges = (edge, PALETTE["button_fg"])
-        self._shape = lambda colour: rounded_shape(self, w, h, h // 2, fill, colour, px(1))
+        self._shape = lambda colour: rounded_shape(self, w, h, px(CORNER), fill, colour, px(1))   # as the buttons
         self._back = tk.Label(self, image=self._shape(edge), bd=0, highlightthickness=0, bg=back)
         self._back.pack()
         options = {"textvariable": textvariable} if textvariable is not None else {}
         self.entry = tk.Entry(self, font=font, bd=0, relief="flat", highlightthickness=0, bg=fill, fg=fg,
                               insertbackground=fg, disabledbackground=fill, **options)
-        place = dict(x=h // 2, y=(h - line) // 2 - px(1), width=w - h, height=line + px(2))
+        place = dict(x=inset, y=(h - line) // 2 - px(1), width=w - 2 * inset, height=line + px(2))
         self.entry.place(**place)
         self._hint, self._var = None, textvariable
         if placeholder:

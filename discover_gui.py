@@ -175,7 +175,7 @@ class DiscoverTab(tk.Frame):
         self.search_var.trace_add("write", lambda *a: self._populate())
         self.search_box = RoundedEntry(search_bar, width=36, font=("Segoe UI", 9),
                                        placeholder="Artist, track or seed", textvariable=self.search_var)
-        self.search_box.pack(side="left", padx=(8, 0))
+        self.search_box.pack(side="left", padx=(4, 0))
         # Text size for the table, right-aligned on the search row: A- and A+ (6 to 16, remembered)
         self.font_var = tk.StringVar(value=str(getattr(engine, "TABLE_FONT_SIZE", 9)))
         self.font_var.trace_add("write", lambda *a: self._on_font_change())
