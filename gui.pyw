@@ -1371,8 +1371,9 @@ class PlayTab(tk.Frame):
                 self._run_job(lambda: engine.create_similar_tracks_playlist(report=self.report, seed_info=seed),
                               needs_playing=False, review=True)
             return
-        self._run_job(lambda: self._seeded(engine.create_similar_tracks_playlist), needs_playing=False,
-                      review=True)
+        playing_now = engine.play_seed_is_playing_now()   # the Seed setting: Current Track or Playing Now
+        self._run_job(lambda: self._seeded(engine.create_similar_tracks_playlist, playing_now=playing_now),
+                      needs_playing=False, review=True)
 
     def on_top_tracks(self):
         if self._seed_is_search():

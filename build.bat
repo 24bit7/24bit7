@@ -77,7 +77,7 @@ if exist "%BK%\app\24bit7.db" copy /y "%BK%\app\24bit7.db" "dist\24bit7\" >nul
 rem --- 5. Keep the ten most recent backups ---
 powershell -NoProfile -Command "Get-ChildItem backups -Directory | Sort-Object Name -Descending | Select-Object -Skip 10 | Remove-Item -Recurse -Force"
 
-rem --- 6. Keyless test, then publish to GitHub if you say so (release.ps1) ---
+rem --- 6. Publish to GitHub (release.ps1), only reached once tests, build and zip have all worked ---
 if exist "%ZIP%" powershell -NoProfile -ExecutionPolicy Bypass -File release.ps1 -Version %VER% -Zip "%ZIP%"
 
 echo.

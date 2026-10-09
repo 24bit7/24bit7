@@ -199,3 +199,6 @@ The AI's sense of tempo is approximate. Where the seed and a pick both carry BPM
 
 **7 Oct 2026: The top strip reaches the top.**
 Windows 10 paints a light edge above a caption-less window's frame. Rather than live with it, the window has no top frame at all, the top few pixels still resize, the strip's colour fills anything Windows hasn't drawn yet, and the frame is re-measured after a snap or a focus change, which is where the edge crept back. It was proved in a standalone window first, because it runs during every drag.
+
+**9 Oct 2026: build.bat publishes without a keyless test.**
+The keyless test (unzipping a clean copy to the Desktop and opening it before a Y/N) had passed on every release, so it was a step to click through rather than a check. build.bat now publishes as its last step. It still can't publish a broken release: failing tests, a failed build or a missing zip stop it before publishing is reached, and release.ps1's own checks (gh signed in, notes committed, everything pushed, no release with this tag) stop it before anything goes online.

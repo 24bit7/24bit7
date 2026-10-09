@@ -2830,7 +2830,8 @@ def find_jriver_key_by_track(artist_name, track_name):
 
 
 def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
-                               exclude_track=None, consider=None, pick=None, defer=None, found=None):
+                               exclude_track=None, consider=None, pick=None, defer=None, found=None,
+                               skip_keys=None):
     """
     The per-artist step shared by Similar Artists and the Vibe backfill:
     ask the Top-track sources for the artist's top `consider` tracks, randomly
@@ -2870,7 +2871,9 @@ def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
     keys, misses = [], 0
     for track_name in chosen:
         key = find_jriver_key_by_track(artist, track_name)
-        if key:
+        if key and skip_keys and str(key) in skip_keys:
+            report(f"    Already in Playing Now: {track_name}")
+        elif key:
             report(f"    In library: {track_name}")
             keys.append(key)
             if found is not None:
@@ -4526,7 +4529,7 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
             report(f"  {artist} ({', '.join(suggested_by)})...")
             found = []
             pick_top_tracks_for_artist(artist, session_id, suggested_by, report=report,
-                                       consider=pool, pick=pick, defer=deferred, found=found)
+                                       consider=pool, pick=pick, defer=deferred, found=found, skip_keys=pn_keys)
             if add(found, len(suggested_by)) or deferred is not None:
                 got += 1
             else:
@@ -4540,7 +4543,7 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
         found = []
         pick_top_tracks_for_artist(seed, session_id, ["seed"], report=report,
                                    exclude_track=None if sample else seed_info['Name'],
-                                   consider=pool, pick=pick, defer=deferred, found=found)
+                                   consider=pool, pick=pick, defer=deferred, found=found, skip_keys=pn_keys)
         add(found, 1)
 
     # --- Similar artists ---
@@ -4769,7 +4772,158 @@ def pick_varied(pool, n, per, per_artist, keep=None):
     return [p for _, p in sorted(chosen, key=lambda x: x[0])]
 
 
-def create_similar_tracks_playlist(report=print, seed_info=None):
+PLAYING_NOW_TRACK_FIGURES = {   # Similar Tracks' Playing Now column (Settings > Playlist): key -> (default, low, high)
+    "PN_SAMPLE_TRACKS": (5, 1, 20),               # Tracks sampled from Playing Now
+    "PN_TRACKS_PER_SAMPLE": (6, 1, 50),           # Number of tracks, per sampled track
+    "PN_SIMILAR_TRACK_PER_ARTIST": (3, 1, 20),    # Most tracks per artist
+}
+
+
+def playing_now_track_figures(review=False):
+    """
+    Similar Tracks' Playing Now figures. A Review build uses Review Mode's Playing Now column
+    when its Mirror Playing Now is unticked (REVIEW_SAME_TRACKS_PN=0).
+    """
+    env = _env_now()
+    use_review = review and env.get("REVIEW_SAME_TRACKS_PN", "1").strip().lower() in ("0", "false", "no")
+    out = {}
+    for key, (default, low, high) in PLAYING_NOW_TRACK_FIGURES.items():
+        value = _figure(env, key, default, low, high)
+        out[key] = _figure(env, "REVIEW_" + key, value, low, high) if use_review else value
+    return out
+
+
+def sample_playing_now_tracks(rows, count):
+    """
+    count tracks picked at random from Playing Now rows, each from a different artist
+    while there are artists left, as [(artist, title)].
+    """
+    rows = [r for r in rows if (r.get("Name") or "").strip() and r.get("Name") != "Unknown"]
+    random.shuffle(rows)
+    first, rest, seen = [], [], set()
+    for r in rows:
+        artist = deinvert_the((r.get("Artist") or "").split(";")[0].strip())
+        pair = (artist, r["Name"].strip())
+        if artist_key(artist) in seen:
+            rest.append(pair)
+        else:
+            seen.add(artist_key(artist))
+            first.append(pair)
+    return (first + rest)[:count]
+
+
+def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
+    """
+    Similar Tracks seeded from Playing Now: PN_SAMPLE_TRACKS tracks sampled at random (different
+    artists where possible), each in turn finding PN_TRACKS_PER_SAMPLE similar tracks in the
+    library, read from the top of its own blended list. A sample that comes up short passes the
+    rest on to the next. Most tracks per artist counts across the whole list. Tracks already in
+    Playing Now are left out. Variety and Order work as for the current track; 'similar first'
+    takes each sample's best, then each sample's second best, and so on.
+    """
+    import library
+    samples = sample_playing_now_tracks(rows, figs["PN_SAMPLE_TRACKS"])
+    per_sample, per_artist = figs["PN_TRACKS_PER_SAMPLE"], figs["PN_SIMILAR_TRACK_PER_ARTIST"]
+    target = per_sample * len(samples)
+    report(f"Similar Tracks: Playing Now ({len(rows)} tracks)  (target {target}, at most {per_artist} per artist)")
+    report("  Tracks sampled from Playing Now: " + "; ".join(f"{a} - {t}" for a, t in samples))
+    label = "Playing Now: " + "; ".join(f"{a} - {t}" for a, t in samples)
+    session_id = session_start("similar_tracks", dict(seed_info, Artist="Playing Now", Name="", Album=""))
+    fast = FastStart(seed_info, report)
+    pn_keys = {str(r.get("Key")) for r in rows if r.get("Key")}
+    played = PlayedFilter("tracks", keep=[seed_info.get("FileKey")], report=report, filters=True)
+    drift = Drift("tracks", target, session_id, report, per_artist=per_artist,
+                  exclude_keys=[seed_info.get("FileKey"), *pn_keys], seed=label, played=played)
+    for artist, title in samples:
+        drift.mark_seed(artist, title)
+    use_youtube = output_is_youtube()
+    variety = VARIETY_POOL if SIMILAR_TRACK_VARIETY else 1
+    extra = moderator_extra(target)   # with the AI Moderator on, a few extra, so its removals are replaced
+    extra_each = -(-extra // len(samples)) if extra else 0
+
+    keys, per, groups, labels = [], {}, [], []
+    checked = {(artist_key(a), clean_name(t)) for a, t in samples}
+    owed = 0
+    for i, (artist, title) in enumerate(samples):
+        owed += per_sample + extra_each   # this sample's share, plus any shortfall passed on
+        report(f"  Similar to {artist} - {title}, taking {owed}:")
+        blended, responding = similar_track_candidates([artist], title, report)
+        for name in responding:
+            if name not in labels:
+                labels.append(name)
+        need = max(1, min(SIMILAR_TRACK_MIN_AGREEMENT, len(responding)))
+        pool, pool_keys, pool_per = [], set(), dict(per)
+        pool_size = owed * variety
+        while blended:
+            for (c_artist, c_title), sources in blended:
+                if len(pool) >= pool_size:
+                    break
+                ident = (artist_key(c_artist), clean_name(c_title))
+                if ident in checked or len(sources) < need or pool_per.get(ident[0], 0) >= per_artist * variety:
+                    continue
+                checked.add(ident)
+                key = (find_jriver_key_by_track(c_artist, c_title) if use_youtube
+                       else library.find_track_key(c_artist, c_title))
+                session_log(session_id, c_artist, c_title, sources, found=bool(key))
+                if key and str(key) in pn_keys:
+                    report(f"    Already in Playing Now: {c_artist} - {c_title}")
+                    continue
+                owner = owner_key(c_artist, key) if key else ident[0]   # counted as tagged in the library
+                if (key and key not in keys and str(key) not in pool_keys and played.fresh(key)
+                        and pool_per.get(owner, 0) < per_artist * variety):
+                    pool.append((c_artist, c_title, key, sources, owner))
+                    pool_keys.add(str(key))
+                    pool_per[owner] = pool_per.get(owner, 0) + 1
+                    fast.play(key)
+                    report(f"    In library: {c_artist} - {c_title}  ({', '.join(sources)})")
+                elif not key:
+                    report(f"    Not in library: {c_artist} - {c_title}")
+            if len(pool) >= owed or need <= 1:
+                break
+            report(f"    {len(pool)} tracks with {need} or more sources agreeing, so relaxed to {need - 1}.")
+            need -= 1
+        picks = pick_varied(pool, owed, per, per_artist, keep=fast.key)
+        group = []
+        for c_artist, c_title, key, sources, owner in picks:
+            keys.append(key)
+            group.append(key)
+            per[owner] = per.get(owner, 0) + 1
+            drift.note(c_artist, c_title, key, len(sources))
+        groups.append(group)
+        if len(picks) < len(pool):
+            report(f"    Picked {len(picks)} of {len(pool)} at random, the closest the most likely, for variety.")
+        owed -= len(picks)
+        if owed > 0 and i < len(samples) - 1:
+            report(f"    {owed} short, passed on to the next sampled track.")
+    report(f"  Similar tracks in your library: {min(len(keys), target)} of {target}.")
+    drift.checked |= checked
+    drift.moderate(keys, [k for k in keys if str(k) != fast.key])
+
+    source_label = " + ".join(labels) or "none"
+    if len(keys) < target and drift.on:
+        source_label += f" (drift: similar {drift.using})"
+    queued = 0
+    if keys:
+        kept = {str(k) for k in keys}
+        if SIMILAR_TRACK_ORDER == "shuffled":
+            body = list(keys)
+            random.shuffle(body)
+        else:   # similar first: each sample's best, then each sample's second best, and so on
+            groups = [[k for k in g if str(k) in kept] for g in groups]
+            body = [g[n] for n in range(max((len(g) for g in groups), default=0)) for g in groups if n < len(g)]
+        keys = fast.lead(body)[:target]
+        queued = finish_playlist(keys, drift, fast, seed_info, report,
+                                 "" if SIMILAR_TRACK_ORDER == "shuffled" else ", most similar first")
+        played.done()
+        debug("Queue refreshed")
+    else:
+        played.done()
+        report("Problem: nothing suggested is in your library.")
+        queued = send_mix_only(fast, seed_info, report)
+    session_finish(session_id, queued, sources=source_label, report=report)
+
+
+def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=False):
     """
     Builds a playlist of tracks like the seed track, not just by similar artists:
       1. Each ticked Similar Tracks source (Last.fm, ListenBrainz, YouTube Music)
@@ -4782,6 +4936,9 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
     With nothing playing on the output zone (a search or a voice command), the
     first track found starts playing straight away (fast start).
     Every track checked is logged to the session, hit or miss, for Discover.
+    playing_now=True (the Play tab's Seed on Playing Now): seeds from tracks sampled from
+    Playing Now instead (see _similar_tracks_from_playing_now). Fewer than two tracks in
+    Playing Now: the current track seeds as usual.
     """
     import library   # here rather than at the top: library imports engine
     refresh_settings_if_changed()
@@ -4790,6 +4947,14 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
     if not seed_info or seed_info["PlayingNowPosition"] == "-1":
         report(NOTHING_PLAYING)
         return
+    fell_back = False
+    if playing_now and not seed_info.get("Typed"):
+        rows = playing_now_rows(seed_info.get("ZoneID") or seed_zone())
+        if len(rows) >= 2:
+            figs = playing_now_track_figures(review=REVIEW_MODE and not VOICE_TAKEOVER)
+            _similar_tracks_from_playing_now(report, seed_info, rows, figs)
+            return
+        fell_back = True
     track = seed_info.get("Name") or ""
     if not track or track == "Unknown":
         report("Problem: Similar Tracks needs a track to seed from. Type one on the Search tab.")
@@ -4797,6 +4962,9 @@ def create_similar_tracks_playlist(report=print, seed_info=None):
     seeds = seed_artists(seed_info)
     target, per_artist = SIMILAR_TRACK_COUNT, SIMILAR_TRACK_PER_ARTIST
     report(f"Similar Tracks: {seed_info['Artist']} - {track}  (target {target}, at most {per_artist} per artist)")
+    if fell_back:
+        report("  Note: Seed is Playing Now, but it has fewer than 2 tracks, so the current track seeds "
+               "this build instead.")
     session_id = session_start("similar_tracks", seed_info)
     fast = FastStart(seed_info, report)
     first_key = typed_seed_key(seed_info, seeds, session_id, report)
