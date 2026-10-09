@@ -1367,6 +1367,7 @@ class PlayTab(tk.Frame):
         def worker():
             self._worker = threading.current_thread()
             self._job_cancelled = False
+            engine.LAST_NO_MATCH = False
             engine.SENT_ANY = False
             engine.MIX_ROWS, engine.MIX_KEEP, engine.MIX_FAST_KEY, engine.MIX_NOTED = rows, set(), None, False
             engine.REVIEW_MODE = review
@@ -1420,6 +1421,10 @@ class PlayTab(tk.Frame):
         self.running = False
         engine.CANCEL_REQUESTED.clear()
         self._sync_cancel_strip()
+        if (engine.LAST_NO_MATCH and getattr(self, "_job_origin", None) is None
+                and not getattr(self, "_job_cancelled", False)):   # a build from the app found nothing at all
+            engine.LAST_NO_MATCH = False
+            self.after(50, lambda: messagebox.showinfo("No Match", engine.APP_NO_MATCH, parent=self))
         for b in self.buttons:
             b.config(state="normal")
         self._sync_ai_button()

@@ -445,6 +445,8 @@ class ProfilePage:
             g = group.upper()
             out[f"SKIP_PLAYED_{g}"] = "1" if v[f"SKIP_PLAYED_{g}"].get() else "0"
             out[f"SKIP_LONG_CLOSERS_{g}"] = "1" if v[f"SKIP_LONG_CLOSERS_{g}"].get() else "0"
+            if f"IF_ALL_ELSE_FAILS_{g}" in v:
+                out[f"IF_ALL_ELSE_FAILS_{g}"] = "1" if v[f"IF_ALL_ELSE_FAILS_{g}"].get() else "0"
             out[f"LONG_CLOSER_MINUTES_{g}"] = v[f"LONG_CLOSER_MINUTES_{g}"].get().strip()
             out[f"NONSTOP_{g}"] = "1" if v[f"NONSTOP_{g}"].get() else "0"
             out[f"NONSTOP_{g}_RESEED"] = option_code(NONSTOP_RESEED_OPTIONS, v[f"NONSTOP_{g}_RESEED"].get())
@@ -2269,6 +2271,21 @@ class SettingsTab(tk.Frame):
             p.closer_sbs[g] = sb
             place(row)
 
+        def fallback(group):
+            """The If All Else Fails section: when a build finds nothing, shuffle the seed's genre."""
+            key = f"IF_ALL_ELSE_FAILS_{group.upper()}"
+            begin(group, "If All Else Fails")
+            p.vars[key] = tk.BooleanVar(value=str(p.env.get(key, "1")).strip().lower() not in ("0", "false", "no"))
+            row = tk.Frame(where["box"])
+            ttk.Checkbutton(row, text="If nothing is found, shuffle songs in the seed's genre",
+                            variable=p.vars[key], command=p.save).pack(side="left")
+            help_mark(row, "When a build finds nothing at all, 24bit7 shuffles songs from your library in the "
+                           "seed track's genre (or the artist's most common genre), at a similar tempo when "
+                           "the seed has a BPM tag, leaving out the seed artist and anything played "
+                           "recently. A voice command hears why first, in the room. Untick to end with a "
+                           "message instead.").pack(side="left", padx=(8, 0))
+            place(row)
+
         def run_after(group):
             """The Run After Building section: a file to run once the playlist is in JRiver."""
             key = f"RUN_AFTER_{group.upper()}"
@@ -2362,6 +2379,7 @@ class SettingsTab(tk.Frame):
         drift("artists")
         nonstop("artists")
         hidden("artists")
+        fallback("artists")
         run_after("artists")
 
         # --- Similar Tracks ---
@@ -2400,6 +2418,7 @@ class SettingsTab(tk.Frame):
         drift("tracks")
         nonstop("tracks")
         hidden("tracks")
+        fallback("tracks")
         run_after("tracks")
 
         # --- Artist's Top Tracks ---
@@ -2412,6 +2431,7 @@ class SettingsTab(tk.Frame):
         recent("top")
         nonstop("top")
         hidden("top")
+        fallback("top")
         run_after("top")
 
         # --- Vibe Playlist ---
@@ -2421,6 +2441,7 @@ class SettingsTab(tk.Frame):
         drift("vibe")
         nonstop("vibe")
         hidden("vibe")
+        fallback("vibe")
         run_after("vibe")
 
         p.resync = lambda: (sync_pick_limit(p), sync_drift(p), sync_long_closers(p), sync_played(p),

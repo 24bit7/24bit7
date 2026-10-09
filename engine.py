@@ -46,6 +46,8 @@ PROFILE_KEYS = {
                  "TRACKS_PER_ARTIST_PICK", "SIMILAR_TRACK_COUNT", "SIMILAR_TRACK_PER_ARTIST", "SIMILAR_TRACK_ORDER",
                  "SIMILAR_TRACK_VARIETY",
                  "TOP_TRACKS_COUNT", "TOP_TRACKS_ORDER", "VIBE_TRACK_COUNT",
+                 "IF_ALL_ELSE_FAILS_ARTISTS", "IF_ALL_ELSE_FAILS_TRACKS", "IF_ALL_ELSE_FAILS_TOP",
+                 "IF_ALL_ELSE_FAILS_VIBE",
                  "DRIFT_ARTISTS", "DRIFT_ARTISTS_USING", "DRIFT_ARTISTS_ROUNDS",
                  "DRIFT_TRACKS", "DRIFT_TRACKS_USING", "DRIFT_TRACKS_ROUNDS",
                  "DRIFT_VIBE", "DRIFT_VIBE_USING", "DRIFT_VIBE_ROUNDS", "AI_MODERATOR_VIBE",
@@ -3547,6 +3549,7 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
         debug("Queue refreshed")
     else:
         report("Problem: nothing suggested is in your library.")
+        queued = if_all_else_fails("artists", seed_info, report)
     session_finish(session_id, queued, sources="YouTube (up next queue)", report=report)
 
 
@@ -3601,15 +3604,21 @@ Reply with JSON only, no other text:
 If nothing clashes, reply {{"remove": []}}."""
 
 
-def moderator_level():
-    """The level for the build in progress ('off' with no Anthropic key)."""
+def moderator_wanted():
+    """The level set for the build in progress, whether or not the AI can run it."""
     # each Play option has its own level; the build in progress says which option it is
     kind = NONSTOP_CONTEXT.get("kind")
     level = AI_MODERATOR_BY.get(kind, "off") if kind else AI_MODERATOR
     if MODERATOR_OVERRIDE is not None:   # True/False for one run; a level name also works
         level = (MODERATOR_OVERRIDE if MODERATOR_OVERRIDE in MODERATOR_LEVELS else
                  (level if level != "off" else "balanced") if MODERATOR_OVERRIDE else "off")
-    return level if (level in MODERATOR_LEVELS and ai_configured()) else "off"
+    return level if level in MODERATOR_LEVELS else "off"
+
+
+def moderator_level():
+    """The level for the build in progress ('off' with no AI set up)."""
+    level = moderator_wanted()
+    return level if ai_configured() else "off"
 
 
 def moderator_on():
@@ -3694,13 +3703,22 @@ def moderate(tracks, seed, report=print, level=None, reference=None):
     level: a level for this check only (Drift's own); None uses the build's.
     reference: [(key, artist, title)] already in the playlist, shown as what fits.
     """
-    level = level or moderator_level()
-    if ai_configured() and not USE_AI and level in MODERATOR_LEVELS and level != "off":
-        note_ai_off(report, "AI Moderator")
-        level = "off"
-    if not ai_configured() or level not in MODERATOR_LEVELS:
-        level = "off"
-    if level == "off" or len(tracks) < 2:
+    level = level or moderator_wanted()   # what's set, before checking the AI can run it
+    if level in MODERATOR_LEVELS and level != "off":   # set, but it can't run: say why, once a build
+        if not ai_configured():
+            if "AI Moderator: no AI" not in _AI_OFF_NOTED:
+                _AI_OFF_NOTED.add("AI Moderator: no AI")
+                report("  Note: AI Moderator skipped: the AI isn't set up (Settings > Keys > AI).")
+            level = "off"
+        elif not USE_AI:
+            note_ai_off(report, "AI Moderator")
+            level = "off"
+    if level not in MODERATOR_LEVELS or level == "off" or not tracks:
+        return set()   # off by choice, or nothing to check: nothing to say
+    if len(tracks) == 1 and level == "relaxed":
+        # Relaxed removes at most a fifth of what it checks, which on one track is none of it
+        report(f"  AI Moderator (Relaxed): skipped {tracks[0][1]} - {tracks[0][2]}, as there's only 1 "
+               "track to check and Relaxed removes at most a fifth.")
         return set()
     cap = max(1, int(len(tracks) * MODERATOR_CAP[level]))
     limit_rule = ("Flag as many tracks as you need to." if level == "strict"
@@ -3711,7 +3729,8 @@ def moderate(tracks, seed, report=print, level=None, reference=None):
     if reference:   # what's already passed: the playlist's sound, not just the seed's
         ref_text = ("\n\nAlready in the playlist, and they fit, so judge the candidates against these as "
                     "well as the seed:\n" + "\n".join(f"- {artist} - {title}" for _, artist, title in reference[:15]))
-    report(f"  AI Moderator ({level.title()}): checking {len(tracks)} tracks against the seed"
+    report(f"  AI Moderator ({level.title()}): checking {len(tracks)} track{'' if len(tracks) == 1 else 's'} "
+           "against the seed"
            + (" and the playlist so far..." if reference else "..."))
     try:
         reply = ai_request(f"{seed_line}{ref_text}\n\nCandidates:\n{listing}", 2000, "AI Moderator", tier="quick",
@@ -4366,6 +4385,170 @@ def finish_playlist(keys, drift, fast, seed_info, report, detail=""):
     return len(keys)
 
 
+# --- If All Else Fails (Settings > Playlist, per playlist type and device) ---------------
+# When a build finds nothing at all, rather than ending silently: shuffle songs in the
+# seed's genre, at a similar tempo where BPM tags allow. A voice command hears why first.
+FALLBACK_SETTINGS = {"artists": "IF_ALL_ELSE_FAILS_ARTISTS", "tracks": "IF_ALL_ELSE_FAILS_TRACKS",
+                     "top": "IF_ALL_ELSE_FAILS_TOP", "vibe": "IF_ALL_ELSE_FAILS_VIBE"}
+FALLBACK_BPM_SPREAD = 0.10   # within 10% of the seed's BPM
+FALLBACK_BPM_MIN = 10        # fewer tracks than this (or than the playlist needs) at that tempo: genre only
+FALLBACK_SPEECH_WAIT = 4.0   # seconds between the spoken message starting and the music, when its length is unknown
+NO_MATCH = "I couldn't find a match. Please try another seed."
+APP_NO_MATCH = "Couldn't find a match. Please try another seed, see the console for more information."
+LAST_NO_MATCH = False        # this build ended with nothing at all and no fallback (the app shows APP_NO_MATCH)
+
+
+def fallback_on(kind):
+    """If All Else Fails for this playlist type, as set (a device's own settings included). On to start."""
+    return os.getenv(FALLBACK_SETTINGS.get(kind, ""), "1").strip().lower() not in ("0", "false", "no")
+
+
+def _genres(row):
+    return [g.strip() for g in (row.get("Genre") or "").split(";") if g.strip()]
+
+
+def _bpm(row):
+    try:
+        return float(str(row.get("BPM") or "0").strip() or 0)
+    except ValueError:
+        return 0.0
+
+
+def _row_artist(row):
+    return deinvert_the((row.get("Artist") or "").split(";")[0].strip())
+
+
+def seed_genre(seed_info):
+    """
+    (genre, bpm, where it came from) for a seed: the seed track's Genre tag when it's in the
+    library, otherwise the artist's most common genre there. (None, None, "") with neither.
+    """
+    import library
+    library.ensure_loaded()
+    seed_info = seed_info or {}
+    row = library.track_row(seed_info.get("FileKey")) if seed_info.get("FileKey") else None
+    if row is None and seed_info.get("Name"):
+        key = library.find_track_key(seed_info.get("Artist") or "", seed_info["Name"])
+        row = library.track_row(key) if key else None
+    bpm = (_bpm(row) or None) if row else None
+    if row and _genres(row):
+        return _genres(row)[0], bpm, "the seed track's Genre tag"
+    artist = _row_artist(seed_info) or (_row_artist(row) if row else "")
+    if not artist:
+        return None, None, ""
+    from collections import Counter
+    counts = Counter(_genres(r)[0] for r in list(library._by_key.values())
+                     if _genres(r) and artist_key(_row_artist(r)) == artist_key(artist))
+    if counts:
+        return counts.most_common(1)[0][0], bpm, f"{artist}'s most common genre in your library"
+    return None, None, ""
+
+
+def genre_shuffle(kind, genre, bpm, seed_info, report=print):
+    """
+    The fallback playlist: the playlist type's usual number of tracks in genre, shuffled, at most
+    the type's tracks per artist, with the seed artist, Skip Recently Played and Settings > Filters
+    left out. Within FALLBACK_BPM_SPREAD of bpm when enough tracks have a BPM tag that close.
+    Returns (keys, at_tempo).
+    """
+    import library
+    count = {"artists": SIMILAR_ARTIST_TRACK_COUNT, "tracks": SIMILAR_TRACK_COUNT, "top": TOP_TRACKS_COUNT,
+             "vibe": VIBE_TRACK_COUNT}.get(kind, 30)
+    per_artist = {"artists": TRACKS_PER_ARTIST_PICK, "tracks": SIMILAR_TRACK_PER_ARTIST}.get(kind, 3)
+    seed_artist = artist_key(_row_artist(seed_info or {}))
+    seed_key = str((seed_info or {}).get("FileKey") or "")
+    played = PlayedFilter(kind, report=report, filters=True)
+    wanted = genre.lower()
+    pool = [r for r in list(library._by_key.values())
+            if wanted in [g.lower() for g in _genres(r)] and str(r.get("Key")) != seed_key
+            and artist_key(_row_artist(r)) != seed_artist and played.fresh(r.get("Key"))]
+    at_tempo = False
+    if bpm:
+        near = [r for r in pool if _bpm(r) and abs(_bpm(r) - bpm) <= bpm * FALLBACK_BPM_SPREAD]
+        if len(near) >= min(count, FALLBACK_BPM_MIN):
+            pool, at_tempo = near, True
+    random.shuffle(pool)
+    keys, per = [], {}
+    for r in pool:
+        owner = artist_key(_row_artist(r))
+        if per.get(owner, 0) >= per_artist:
+            continue
+        per[owner] = per.get(owner, 0) + 1
+        keys.append(str(r["Key"]))
+        if len(keys) >= count:
+            break
+    played.done()
+    return keys, at_tempo
+
+
+def speak_in_zone(text, zone, report=print):
+    """
+    Says text in a JRiver zone: Windows' own text-to-speech saved as a WAV, then played there.
+    Returns how many seconds it lasts (0 if it couldn't be played), so the music waits for it.
+    """
+    if os.name != "nt" or zone is None:
+        return 0.0
+    import subprocess
+    import tempfile
+    import wave
+    path = os.path.join(tempfile.gettempdir(), "24bit7_message.wav")
+    said = text.replace("'", "''")
+    script = ("Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+              f"$s.SetOutputToWaveFile('{path}'); $s.Speak('{said}'); $s.Dispose()")
+    try:
+        subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], timeout=20, check=True,
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), capture_output=True)
+        with wave.open(path) as w:
+            seconds = w.getnframes() / float(w.getframerate() or 1)
+        r = requests.get(f"{JRIVER_BASE}/Playback/PlayByFilename", params={"Filenames": path, "Zone": zone},
+                         auth=AUTH, timeout=10)
+        r.raise_for_status()
+        return seconds or FALLBACK_SPEECH_WAIT
+    except Exception as e:
+        report(f"  Note: the message couldn't be spoken in the room ({str(e)[:100]}).")
+        return 0.0
+
+
+def if_all_else_fails(kind, seed_info, report=print, why="nothing suggested is in your library"):
+    """
+    A build found nothing at all: shuffle songs in the seed's genre (at a similar tempo where
+    BPM tags allow) when If All Else Fails is on for this type. Returns how many tracks went out.
+    Not when an added playlist already played (the caller only asks when nothing did).
+    """
+    global LAST_NO_MATCH
+    check_cancelled()
+    if not fallback_on(kind):
+        report(f"{NO_MATCH} The build was empty because {why}, and If All Else Fails is off for this "
+               f"playlist type (Settings > Playlist).")
+        LAST_NO_MATCH = True
+        return 0
+    genre, bpm, source = seed_genre(seed_info)
+    if not genre:
+        report(f"{NO_MATCH} The build was empty because {why}, and there's no genre for the seed in your "
+               f"library to fall back on.")
+        LAST_NO_MATCH = True
+        return 0
+    keys, at_tempo = genre_shuffle(kind, genre, bpm, seed_info, report)
+    if not keys:
+        report(f"{NO_MATCH} The build was empty because {why}, and nothing else in {genre} could be used.")
+        LAST_NO_MATCH = True
+        return 0
+    spoken = f"I couldn't find a match, shuffling songs in {genre}" + (" at a similar tempo" if at_tempo else "")
+    report(spoken + ".")
+    report(f"  Why: {why}. Genre from {source}"
+           + (f", {bpm:.0f} BPM give or take {int(FALLBACK_BPM_SPREAD * 100)}%." if at_tempo else ".")
+           + f" If All Else Fails: {len(keys)} tracks.")
+    voice = bool(OUTPUT_OVERRIDE) and not (REVIEW_MODE and not VOICE_TAKEOVER)
+    if voice:   # a voice command: say why in the room first, then the music once the message has played
+        seconds = speak_in_zone(spoken, output_zone(seed_info, None, report), report)
+        if seconds:
+            for _ in range(int(min(seconds + 0.5, 12) * 10)):
+                check_cancelled()
+                time.sleep(0.1)
+    send_to_jriver(keys, seed_info=seed_info, report=report)
+    return len(keys)
+
+
 PLAYING_NOW_ARTIST_FIGURES = {   # Similar Artists' Playing Now column (Settings > Playlist): key -> (default, low, high)
     "PN_SAMPLE_ARTISTS": (5, 1, 20),              # Artists sampled from Playing Now
     "PN_ARTISTS_PER_SAMPLE": (4, 1, 20),          # Number of artists, per sampled artist
@@ -4632,6 +4815,14 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
     if collected_keys:   # before trimming, so anything removed is replaced from the rest
         drift.moderate(collected_keys, [k for k in collected_keys if str(k) != fast.key])
     queued = 0
+    if not collected_keys and first_key and fallback_on("artists") and not mix_active():
+        # only the seed track itself was found: If All Else Fails rather than a one-track playlist
+        played.done()
+        queued = if_all_else_fails("artists", seed_info, report,
+                                   why="nothing was found beyond the seed track itself")
+        if queued:
+            session_finish(session_id, queued, sources=source_label, report=report)
+            return
     if collected_keys or first_key:
         body = [k for k in collected_keys if k != first_key]
         random.shuffle(body)
@@ -4643,6 +4834,8 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
         played.done()
         report("Problem: nothing suggested is in your library.")
         queued = send_mix_only(fast, seed_info, report)
+        if not queued:   # nothing found and no added playlist: If All Else Fails
+            queued = if_all_else_fails('artists', seed_info, report)
     session_finish(session_id, queued, sources=source_label, report=report)
 
 # ---------------------------------------------------------------------------
@@ -4967,6 +5160,8 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
         played.done()
         report("Problem: nothing suggested is in your library.")
         queued = send_mix_only(fast, seed_info, report)
+        if not queued:   # nothing found and no added playlist: If All Else Fails
+            queued = if_all_else_fails('tracks', seed_info, report)
     session_finish(session_id, queued, sources=source_label, report=report)
 
 
@@ -5084,6 +5279,14 @@ def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=Fal
         source_label += f" (drift: similar {drift.using})"
 
     queued = 0
+    if keys and all(k == first_key for k in keys) and fallback_on("tracks") and not mix_active():
+        # only the seed track itself was found: If All Else Fails rather than a one-track playlist
+        played.done()
+        queued = if_all_else_fails("tracks", seed_info, report,
+                                   why="nothing was found beyond the seed track itself")
+        if queued:
+            session_finish(session_id, queued, sources=source_label, report=report)
+            return
     if keys:
         body = [k for k in keys if k != first_key]
         if SIMILAR_TRACK_ORDER == "shuffled":
@@ -5096,6 +5299,8 @@ def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=Fal
     else:
         report("Problem: nothing suggested is in your library.")
         queued = send_mix_only(fast, seed_info, report)
+        if not queued:   # nothing found and no added playlist: If All Else Fails
+            queued = if_all_else_fails('tracks', seed_info, report)
     session_finish(session_id, queued, sources=source_label, report=report)
 
 
@@ -5315,7 +5520,11 @@ def create_vibe_playlist(vibe, report=print, count=None, prompt=None, if_short=N
 
     if not keys:
         report("Problem: nothing the AI picked is in your library. Try a different description.")
-        session_finish(session_id, send_mix_only(fast, None, report), report=report)
+        queued = send_mix_only(fast, None, report)
+        if not queued:   # If All Else Fails: the playing track's genre, if anything is playing
+            queued = if_all_else_fails("vibe", get_playing_info(), report,
+                                       why="nothing the AI picked is in your library")
+        session_finish(session_id, queued, report=report)
         return
 
     random.shuffle(keys)
@@ -5386,7 +5595,8 @@ def play_top_n(report=print, seed_info=None):
     if session_id is None:
         report("Problem: no source returned any top tracks.")
         nonstop_begin("top_tracks", seed_info)   # so Run After Building uses this group's file
-        send_mix_only(fast, seed_info, report)
+        if not send_mix_only(fast, seed_info, report):
+            if_all_else_fails("top", seed_info, report, why="no source returned any top tracks")
         run_after_building(report)
         return
     played.done()
@@ -5394,7 +5604,10 @@ def play_top_n(report=print, seed_info=None):
         report("Problem: none of the top tracks are in your library." if not played.skipped else
                "Note: every top track in your library was played recently, so there's nothing to play. "
                "Settings > Playlist > Artist's Top Tracks")
-        session_finish(session_id, send_mix_only(fast, seed_info, report), report=report)
+        queued = send_mix_only(fast, seed_info, report)
+        if not queued:
+            queued = if_all_else_fails("top", seed_info, report, why="none of the top tracks could be used")
+        session_finish(session_id, queued, report=report)
         return
 
     NONSTOP_CONTEXT["top_first"] = str(ordered_keys[0])   # the most popular found: non-stop seeds from it later

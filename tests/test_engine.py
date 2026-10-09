@@ -116,7 +116,8 @@ def test_every_source_down(app):
         app.web.down.add(s)
     r = app.Lines()
     app.engine.create_similar_playlist(report=r, seed_info=seed(app, "The Beatles", "Here Comes The Sun"))
-    assert app.jriver.titles("Speakers") == ["The Beatles - Here Comes The Sun"] or r.has("Problem"), r.text()
+    # every source down: nothing beyond the seed, so If All Else Fails shuffles its genre
+    assert r.has("I couldn't find a match, shuffling songs in Rock") or r.has("Problem"), r.text()
 
 
 def test_cache_serves_second_build(app):
