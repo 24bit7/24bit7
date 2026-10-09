@@ -55,9 +55,11 @@ Your settings and history live in two files next to the app: `.env` (settings an
 Every playlist starts from a seed. The seed is whichever of the two small tabs is showing when you press a button.
 
 - **Now Playing** shows what JRiver is playing. **Zone** picks which JRiver zone you seed from. If that zone's Playing Now is empty, the buttons seed from the last track JRiver played.
-- **Search** lets you type any artist and track, whether you own it or not. Press Enter for Similar Artists.
+- **Search** lets you type any artist and track, whether you own it or not. Similar Artists and Artist's Top Tracks need only the artist. Press Enter for Similar Artists.
 
-**Behaviour**, under **More Options**, is **Play** or **Review** for every build from the Play tab. Play sends the playlist to JRiver as it's found. Review sends nothing: the tracks are listed in 24bit7 instead, in the console area, with a **Console | Review** switch to flip between them. Voice commands, shortcuts and Non-stop always play straight away.
+**Seed**, under **More Options**, is **Current Track** or **Playing Now** for Similar Artists and Similar Tracks on the Now Playing tab. Current Track starts from the track that's playing. Playing Now starts from your whole Playing Now list: a few artists (or, for Similar Tracks, tracks from different artists) are picked at random, and each in turn brings its own share of similar ones, read from the top of its own list, so no artist is used twice. Tracks already in Playing Now are left out, and the new playlist replaces Playing Now as usual (use Review Mode to add to it instead). While it's on, the bars under the two buttons turn teal. With fewer than two tracks in Playing Now, the current track seeds instead. Artist's Top Tracks, AI Playlist, Search, voice commands, shortcuts and Non-stop always use the current (or typed) track. The figures are in Settings > Playlist, in the Playing Now column.
+
+**Play Mode** or **Review Mode**, also under More Options, applies to every build from the Play tab. Play Mode sends the playlist to JRiver as it's found. Review Mode sends nothing: the tracks are listed in 24bit7 instead, in the console area, with a **Console | Review** switch to flip between them. Voice commands, shortcuts and Non-stop always play straight away.
 
 ### Review
 
@@ -94,7 +96,7 @@ The actions go wherever **Output** says when you press them (a zone, or the Now 
 
 **Create** takes a theme, **Tracks** (how many to ask for) and **If Short**. **Steer** starts from a **Seed**, the current track or Playing Now (All, up to 50 tracks around the current one), with an optional **Tone**: **Assess Tone** asks the AI to describe the seed's tone and puts the phrase in the box, which you can edit; left empty, the AI works from the seed and direction alone. **Direction** is a row of chips that combine (Dancier, Calmer, Faster, Slower, Darker, Brighter, Older, Newer, Deeper Cuts, Better Known), a box for your own words, and **A Little** or **A Lot** for how far to move. Faster and Slower are checked against BPM tags where both the seed and a pick have them, and a pick heading the wrong way is left out with a console line.
 
-Both modes ask the AI for about twice the count, since some picks won't be in your library, and keep the first matches. **If Short** says what happens when fewer match than asked: **Ask Again** asks the AI for more, up to two more rounds, telling it what it already suggested; **Drift** tops up from your music sources with your Drift settings; **Leave Short** stops with what matched. Everything in the window is remembered for next time, the mode included, and it all belongs to Profiles. A build from the window follows Behaviour and Output like any other.
+Both modes ask the AI for about twice the count, since some picks won't be in your library, and keep the first matches. **If Short** says what happens when fewer match than asked: **Ask Again** asks the AI for more, up to two more rounds, telling it what it already suggested; **Drift** tops up from your music sources with your Drift settings; **Leave Short** stops with what matched. Everything in the window is remembered for next time, the mode included, and it all belongs to Profiles. A build from the window follows Play Mode / Review Mode and Output like any other.
 
 ### Output
 
@@ -106,13 +108,14 @@ Both modes ask the AI for about twice the count, since some picks won't be in yo
 
 ### More Options
 
-**More Options** opens a second row. It remembers whether it was open.
+**More Options** opens a second row, under a thin line. It remembers whether it was open. Its first five are buttons that show their setting and step through the choices with a click; a right-click steps back. Off reads plain, and anything else is lit.
 
 ![More Options open](images/play_more_options.png)
 
-- **AI Moderator** checks each playlist for tracks that clash with the seed's mood. See [AI Moderator](#ai-moderator).
-- **Drift** (Off, Keep It Tight or Spread) and **Non-stop** (Off, Keep It Tight or Let's See Where This Goes) set those settings for every Play option at once. See [Drift](#drift) and [Non-stop](#non-stop).
-- **Variety** (Yes or No), for Similar Tracks only. No takes the closest matches in order; Yes picks at random from a wider pool, so the same seed gives a different playlist each time. It's the same setting as in Settings > Playlist, for the Main Window. See [Similar Tracks](#similar-tracks).
+- **Seed: Current Track** or **Seed: Playing Now** (teal). See [The seed](#the-seed).
+- **Play Mode** or **Review Mode** (orange). See [The seed](#the-seed) and [Review](#review).
+- **AI Moderator: Off, Relaxed, Balanced or Strict** (magenta) checks each playlist for tracks that clash with the seed's mood. See [AI Moderator](#ai-moderator).
+- **Drift** (Off, Keep It Tight or Spread) and **Non-stop** (Off, Keep It Tight or Wander) set those settings for every Play option at once. Each shows a mode only when every option agrees. See [Drift](#drift) and [Non-stop](#non-stop).
 - **Show Credits** lists the producer, engineer, musicians and other credits for what's playing, from Discogs, in two lists: the playing track's own credits (or every track's, under its number and title) and the album's. Credits Discogs marks for some tracks only, such as a drummer on tracks 2 to 4, go to those tracks. Settings > Other > Show Credits chooses the current track or all tracks, and which list comes first. It needs a Discogs token.
 - **+ Add Playlist** joins one of your JRiver playlists to the next build. See [Adding your own playlists](#adding-your-own-playlists).
 
@@ -133,6 +136,8 @@ Click into the console for a strip of buttons:
 - **Export to Log** saves a report for when something goes wrong. See [Reporting a problem](#reporting-a-problem).
 - **Query** asks the AI why a playlist came out the way it did. It only shows once Console Query is switched on. See [Console Query](#console-query).
 - **Simple** or **Advanced**: Simple hides the debug lines, which are dim grey and start `[debug]`; Advanced shows them. They're always recorded, so switching works on the build already there, and Export to Log always includes them. Your choice is remembered.
+
+While a build runs, the strip shows **Cancel** on its own. It stops the build at its next step, usually within a second or two (an AI request already out finishes first, and the console says so), and the last line says what, if anything, had already gone out: nothing, the first track that fast start began, or tracks a Drift round had sent. A cancelled Review build's list is dropped, and the Log shows the build as Cancelled.
 
 #### The console's tabs
 
@@ -180,12 +185,12 @@ They are for the Play tab only, with JRiver output. Voice, keyboard shortcuts an
 Discover lists every track a build looked for and whether you own it.
 
 - **Show** picks Misses (tracks you don't own), Hits, or All.
-- **Session** narrows it to one build. It opens on the latest build until you pick one yourself, with **All sessions** first in the list and the rest newest first. **Search** looks across every column.
+- **Session** narrows it to one build. It opens on the latest build until you pick one yourself, with **All sessions** first in the list and the rest newest first. **Search** looks across every column. A build seeded from Playing Now reads **Playing Now (Multiple Tracks)**, and each of its rows shows the Playing Now track it came from as its Seed.
 - Select a row and each site you've ticked under Settings > Search has a button along the bottom. Stores and YouTube search for the artist and track; reference sites such as Wikipedia and Discogs search for the artist, for the discography.
 - **Label** finds who released the selected track and opens the label on Bandcamp, so you can buy from the people who put the record out. It asks MusicBrainz first, then Discogs if you have a token. A self-released track opens the artist on Bandcamp. Each answer is remembered, so a second click is instant. Untick it under Settings > Search > Record Label if you don't want it.
-- Tick rows, or **Select All**, and **Create YouTube playlist** opens them in your browser as one playlist, so you can hear the misses before you buy.
+- Tick rows, or **Select All**, and **Create YouTube Playlist** opens them in your browser as one playlist, so you can hear the misses before you buy.
 - **Clear All** empties the history and **Clear Selected** removes just the ticked rows. Both ask first.
-- **CSV** saves the list as a spreadsheet file. **Font size** sets the size of the table text.
+- **CSV** saves the list as a spreadsheet file. **A-** and **A+**, at the top right, set the size of the table text.
 
 ---
 
@@ -212,11 +217,13 @@ How each Play option builds its playlist, with a tab for each option.
 
 ![Settings, Playlist](images/settings_playlist_similar_artists.png)
 
-- **Playlist**: Similar Artists sets **Limit total tracks to**, how many artists, how many of each artist's top tracks to draw from, and how many to pick per artist. Untick the limit to keep every track found; with the last two the same (say 5 of 5) as well, there's no random pick at all. Similar Tracks sets how many tracks, the most any one artist gets, the order and **Variety**. Artist's Top Tracks sets shuffled or popular order. For Windows (Main) the figures come in two columns, **Play** and **Review**: with Behaviour on Review you're choosing from a list, so a shortlist is often better than a full playlist. Untick **Same as Play** at the top of the Review column to give Review its own figures for that section (Similar Artists gets its own limit, artist count and picks per artist); everything else in the section is shared, and the console says when the Review figures were used. Voice builds never review, so devices have no Review column.
+- **Playlist**: Similar Artists sets **Limit total tracks to**, how many artists, how many of each artist's top tracks to draw from, and how many to pick per artist. A similar artist only counts once it gives a track from your library; one that doesn't is skipped and the next one down is read instead. Untick the limit to keep every track found; with the last two the same (say 5 of 5) as well, there's no random pick at all. Similar Tracks sets how many tracks, the most any one artist gets, and, for every column, the order and **Variety**. Artist's Top Tracks sets shuffled or popular order.
+  On Windows (Main), Similar Artists and Similar Tracks have four columns: **Seed** (Current Track and Playing Now) and **Review Mode** (Current Track and Playing Now). Playing Now adds **Artists sampled from Playing Now** or **Tracks sampled from Playing Now**, and its Number of artists or tracks is per sampled artist or track; the defaults (5 artists with 4 similar each, or 5 tracks with 6 similar each) give about the same size of playlist as Current Track. Review Mode's columns follow their seed while **Mirror Current Track** or **Mirror Playing Now** is ticked; untick one to give Review Mode a shortlist of its own. Artist's Top Tracks has Current Track and Review Mode. Everything else in the section is shared, and voice builds never review or use Playing Now, so devices have the Current Track column only.
 - **Skip tracks played in the last ... days** leaves out anything JRiver has played recently, so a favourite doesn't come round again the same evening. The seed track is never left out. Off by default.
 - **Drift** (Off, Keep It Tight or Spread) searches again when your library falls short of the target length. Similar Artists and Similar Tracks also have **AI Moderator on Drift tracks**. See [Drift](#drift).
 - **Non-stop** (Off, Keep It Tight or Let's See Where This Goes) keeps a playlist going when it reaches its last track. See [Non-stop](#non-stop).
 - **Hidden Tracks** skips the last track on an album when it's longer than a set number of minutes (6 by default). Those are often a long silence and a hidden bonus track, which feel out of place in a playlist. Albums, songs and playlists you ask for by name always play in full.
+- **If All Else Fails**, ticked to start: when a build finds nothing, or nothing beyond the seed track itself, it shuffles songs from your library in the seed's genre instead of stopping. The genre comes from the seed track's Genre tag, or the artist's most common genre in your library; with a BPM tag on the seed and enough tracks within 10% of it, at a similar tempo. It plays that playlist type's usual number of tracks, with Skip Recently Played, Filters and the per-artist limit applied and the seed artist left out. A voice command hears "I couldn't find a match, shuffling songs in..." in the room first (Windows' own voice, played on that zone, which needs JRiver on the same PC). With no genre to go on, or the tick off, the console says "I couldn't find a match. Please try another seed." and a build from the app shows the same in a message. It doesn't run when an added playlist has already played.
 - **Run After Building** runs a file of your choice once a playlist is in JRiver: a .bat, an .exe, or a PowerShell or Python script. It's told nothing about the playlist, so it can do whatever you like. Non-stop top-ups don't run it.
 
 ![Settings, Playlist, AI Playlist](images/settings_playlist_ai_playlist.png)
@@ -332,7 +339,7 @@ Most playlists are right apart from one track: the stadium anthem in the middle 
 - **Balanced** removes anything that noticeably shifts the tone, energy or mood, at most two fifths.
 - **Strict** keeps only tracks close to the seed, however many that leaves. Drift can top a short playlist up.
 
-A few extra tracks are found up front so removals are replaced. It costs a fraction of a penny per playlist. If the check fails, the playlist builds as normal and the console says why.
+A few extra tracks are found up front so removals are replaced. It costs a fraction of a penny per playlist (nothing with Ollama). If the check fails, the playlist builds as normal and the console says why. A single track is checked too on Balanced and Strict; Relaxed skips it and says so, as at most a fifth of one track is none of it. Whenever the Moderator is set but can't run (no AI set up, or Use AI Off), the console says why once per build.
 
 Drift rounds are checked against the playlist so far as well as the seed, which makes an odd one out much easier to spot. **AI Moderator on Drift tracks** (Similar Artists and Similar Tracks) can check Drift harder than the first round, or not at all; Same as build follows the build's own level. When most of what one seed brought in is off course, the rest of it goes too and Drift doesn't seed from that chain again, within the level's limit.
 
@@ -589,6 +596,7 @@ A reply with `ok: True` and 24bit7's version means everything on the PC side wor
 | AI options are greyed out | They need the chosen provider set up under Settings > Keys > AI: its key and credit on the account, or for Ollama a model. |
 | YouTube Music stops returning anything | YouTube has probably changed something. It usually comes back with the next update of the ytmusicapi library; untick it meanwhile. |
 | A playlist comes out short | Your library may not hold enough of what the sources suggest. Lower **Sources that must agree**, tick more sources, or switch on **Drift**. |
+| "I couldn't find a match" | Nothing the sources suggested is in your library, and there was no genre to fall back on (or If All Else Fails is off). Try another seed, add a Genre tag to the seed's tracks, or tick **If All Else Fails** in Settings > Playlist. |
 | One track sounds out of place | Try the **AI Moderator** on Relaxed or Balanced. |
 | A speaker such as a Sonos is missing from the zones | Tick DLNA Controller in JRiver (Tools > Options > Media Network > Advanced), then press **Rescan** under Settings > Other > Zones. |
 | Windows says "Windows protected your PC" | Click **More info**, then **Run anyway**. The app isn't code-signed. |

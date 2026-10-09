@@ -293,7 +293,17 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.16.0
+## What's new in 1.17.0
+
+- **Seed: Playing Now**: under **More Options**, **Seed** switches Similar Artists and Similar Tracks between the track that's playing and your whole Playing Now list. A few artists or tracks are sampled at random and each brings its own share of similar ones, so nothing repeats; tracks already in Playing Now are left out. Settings > Playlist has **Playing Now** columns for the figures, and Review Mode its own pair. While it's on, the two buttons' bars turn teal.
+- **If All Else Fails**: a build that finds nothing (or only the seed) shuffles songs in the seed's genre, at a similar tempo where BPM tags allow, instead of stopping. A voice command hears why in the room first. On by default, per playlist type, in Settings > Playlist.
+- **Only library artists count**: a similar artist only counts towards Number of artists once it gives a track from your library; the next one down is read instead.
+- **Cancel**: while a build runs, the console's strip shows **Cancel**, which stops it at its next step and says what had already gone out.
+- **More Options as buttons**: Seed, Play Mode / Review Mode, AI Moderator, Drift and Non-stop step through their choices with a click (right-click steps back).
+- **Search by artist alone** for Similar Artists, rounded buttons and softer search boxes on Discover, with **A-** and **A+** for the text size.
+- **Fixes**: the AI Moderator now checks a Drift round that found a single track (Balanced and Strict; Relaxed says when it skips); with OpenAI, Google Gemini or Ollama chosen, nothing mentions Anthropic credit.
+
+### Earlier: 1.16.0
 
 - **AI from OpenAI, Google Gemini or your own PC**: Settings > Keys > AI has a **Provider** choice: Anthropic, OpenAI, Google Gemini or **Ollama**, which runs a model on your own computer for free. Every AI feature uses the one chosen. Only Anthropic has been fully tested so far; OpenAI, Gemini and Ollama should work, and reports on how they do are very welcome on the JRiver forum or GitHub. Console Query isn't available with Ollama.
 - **Show Credits, by track or album**: Settings > Other > **Show Credits** lists the playing track's credits or every track's, alongside the album's, in the order you choose. Credits Discogs marks for some tracks only now appear on those tracks.

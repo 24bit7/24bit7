@@ -36,15 +36,15 @@ COMMON = ["tabs.py"]   # every shot changes when the tab and button drawing chan
 
 # name, path of tab names to click through, files it depends on, optional before-shot action
 SHOTS = [
-    ("play", ["Play", "Now Playing"], ["gui.pyw", "mix_gui.py"], "more_closed"),
-    ("play_more_options", ["Play", "Now Playing"], ["gui.pyw", "mix_gui.py"], "more_open"),
-    ("play_search", ["Play", "Search"], ["gui.pyw"], "more_closed"),
+    ("play", ["Play", "Now Playing"], ["gui.pyw", "mix_gui.py", "tabs.py"], "more_closed"),
+    ("play_more_options", ["Play", "Now Playing"], ["gui.pyw", "mix_gui.py", "tabs.py"], "more_open"),
+    ("play_search", ["Play", "Search"], ["gui.pyw", "tabs.py"], "more_closed"),
     ("play_review", ["Play", "Now Playing"], ["gui.pyw", "review_gui.py"], "review"),
     ("ai_playlist_create", ["Play", "Now Playing"], ["ai_dialog.py"], "ai_create"),
     ("ai_playlist_steer", ["Play", "Now Playing"], ["ai_dialog.py"], "ai_steer"),
     ("console_tabs", ["Play", "Now Playing"], ["gui.pyw", "buildlog.py"], "tabs_kitchen"),
     ("console_log", ["Play", "Now Playing"], ["gui.pyw", "buildlog.py"], "tabs_log"),
-    ("discover", ["Discover"], ["discover_gui.py"], None),
+    ("discover", ["Discover"], ["discover_gui.py", "tabs.py"], None),
     ("settings_sources_similar_artists", ["Settings", "Sources", "Similar Artists"], ["settings_gui.py"], None),
     ("settings_sources_similar_tracks", ["Settings", "Sources", "Similar Tracks"], ["settings_gui.py"], None),
     ("settings_sources_top_tracks", ["Settings", "Sources", "Artist's Top Tracks"], ["settings_gui.py"], None),

@@ -202,3 +202,15 @@ Windows 10 paints a light edge above a caption-less window's frame. Rather than 
 
 **9 Oct 2026: build.bat publishes without a keyless test.**
 The keyless test (unzipping a clean copy to the Desktop and opening it before a Y/N) had passed on every release, so it was a step to click through rather than a check. build.bat now publishes as its last step. It still can't publish a broken release: failing tests, a failed build or a missing zip stop it before publishing is reached, and release.ps1's own checks (gh signed in, notes committed, everything pushed, no release with this tag) stop it before anything goes online.
+
+**9 Oct 2026: Seed: Playing Now gets settings of its own.**
+A Playing Now seed was parked on 8 Oct because it needed new settings, and the rule then was no new settings for features like it. It came back because the figures can't be shared: five sampled artists asking for twenty similar each would give a hundred, not thirty. So Settings > Playlist grew Playing Now columns, with defaults that land on the same size of playlist as Current Track, and Review Mode a Playing Now column of its own. Each sample takes its share in turn, from the top of its own list, skipping artists already used, so the list stays balanced across what you were listening to rather than leaning on whichever seed has the longest list.
+
+**9 Oct 2026: A similar artist only counts once it gives a library track.**
+Number of artists used to count every artist the sources suggested, whether you owned any of them or not, so the same setting gave very different playlists from library to library. Now an artist counts once one of its picks is in your library, and the next one down is read when it isn't (up to three times the number wanted). That's needed for Playing Now's per-sample shares to mean anything, and it applies to Current Track as well so the two columns mean the same thing. Playlists come out fuller; Limit total tracks still caps them.
+
+**9 Oct 2026: If All Else Fails, and how a voice command hears it.**
+A build that finds nothing used to end quietly, which on a voice command means silence in the room. Now it shuffles the seed's genre (at a similar tempo where tags allow). Alexa has to answer within eight seconds, long before a build knows it's empty, so the explanation is spoken through the zone with Windows' own text-to-speech rather than by Alexa, and the music waits for it to finish.
+
+**9 Oct 2026: The AI Moderator never skips silently.**
+A Drift round that found one track skipped the check with no log line, and on Spread that one track went on to seed a later round (datdude's report). Balanced and Strict check single tracks; Relaxed, whose cap is a fifth, skips them and says so; set but unable to run says why once a build.

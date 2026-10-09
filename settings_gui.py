@@ -2415,8 +2415,7 @@ class SettingsTab(tk.Frame):
                "Yes: gathers up to twice the matches it needs and picks from them at random, the closest "
                "the most likely, so the same seed gives a different playlist each run.\n"
                "No: takes the closest matches in order and stops at the number of tracks, so the same "
-               "seed gives the same playlist.\n"
-               "Also on the Play tab under More Options, which changes Windows (Main).", note="Every column")
+               "seed gives the same playlist.", note="Every column")
         choice("Order", "SIMILAR_TRACK_ORDER", "shuffled", ["shuffled", "similar first"],
                "Similar first keeps the order the sources agreed on, strongest matches first. Under Playing "
                "Now, each sampled track's best match comes first, then each one's second best, and so on. "
