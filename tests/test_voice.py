@@ -519,7 +519,7 @@ def test_genre(app, alexa):
 def test_genre_needs_key(app, alexa):
     app.set_env(ANTHROPIC_API_KEY="")
     r = alexa.say("GenreIntent", "jazz")
-    assert "Anthropic key" in r.ssml
+    assert "the AI set up" in r.ssml
 
 
 def test_busy_says_pending(app, alexa):

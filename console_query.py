@@ -138,7 +138,7 @@ def ask(question, console_text, playing, on_done):
             try:
                 import anthropic
             except ImportError:
-                on_done(None, "the anthropic package isn't installed")
+                on_done(None, "the anthropic package (needed for Anthropic) isn't installed")
                 return
         code = _code_bundle()
         if not code:
@@ -170,10 +170,6 @@ def ask(question, console_text, playing, on_done):
             answer = plain(answer)
             on_done(answer or "(no answer came back)", None)
         except Exception as e:
-            text = str(e)
-            if "credit balance" in text.lower():
-                on_done(None, "your Anthropic credit balance is too low")
-            else:
-                on_done(None, text[:200])
+            on_done(None, engine.ai_credit_text() if engine.ai_out_of_credit(e) else str(e)[:200])
 
     threading.Thread(target=work, daemon=True).start()

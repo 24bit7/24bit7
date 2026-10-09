@@ -307,7 +307,7 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 - **The AI Playlist window**: **Create** from a theme with idea chips, or **Steer** what's playing in a direction: a seed (the current track or Playing Now), an optional tone with **Assess Tone**, direction chips that combine (Dancier, Faster, Darker, Older...), your own words, and A Little or A Lot, with a BPM check on Faster and Slower. **Tracks** and **If Short** (Ask Again, Drift or Leave Short) in both modes, and everything remembered.
 - **Review's own figures**: Settings > Playlist has Play and Review columns for the track counts, so a Review build can aim for a shortlist (fewer artists, fewer picks per artist) while Play keeps the full playlist. Same as Play by default.
 - **Profiles** in Settings > Other: save your settings as DJ, Explore, No AI and so on, and Load switches between them.
-- **Use AI** under the Anthropic key: Off pauses every AI feature without removing the key.
+- **Use AI** in the AI box: Off pauses every AI feature without removing the key.
 - **Notes on titles**: the ? marks are gone; rest the pointer on a setting's title for its note, in wider, shorter popups.
 - **Polish**: the top strip runs to the very top of the window, Settings > Keys shows AI Usage and the Guide as proper tables, and the AI Playlist window opens in one go.
 

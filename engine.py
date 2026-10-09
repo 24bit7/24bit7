@@ -513,8 +513,8 @@ JRIVER_USER=
 JRIVER_PASS=
 
 # Service keys. Deezer and YouTube need no keys, so 24bit7 works out of the box.
-# The ? buttons in Settings > Keys explain how to get each of these (all free
-# except Anthropic, which is pay-as-you-go).
+# The notes in Settings > Keys explain how to get each of these (all free except
+# the paid AI providers, which are pay-as-you-go; Ollama is free).
 LASTFM_API_KEY=
 LISTENBRAINZ_TOKEN=
 DISCOGS_TOKEN=
@@ -552,8 +552,8 @@ TRACKS_PER_ARTIST_PICK=3
 TOP_TRACKS_COUNT=10
 TOP_TRACKS_ORDER=popular
 VIBE_TRACK_COUNT=20
-# AI Moderator: an Anthropic check that drops tracks clashing with the seed's
-# tone, energy and mood (0 or 1, set on the Play tab). Needs ANTHROPIC_API_KEY.
+# AI Moderator: an AI check that drops tracks clashing with the seed's tone,
+# energy and mood (set on the Play tab). Needs the AI set up in Settings > Keys > AI.
 AI_MODERATOR=0
 MODERATOR_WARNED=0
 # Drift: when a playlist comes up short, search again from what was found.
@@ -1928,6 +1928,21 @@ class AIError(Exception):
 
 def ai_provider_name(provider=None):
     return AI_PROVIDER_NAMES.get(provider or AI_PROVIDER, "Anthropic")
+
+
+OUT_OF_CREDIT = ("credit balance", "insufficient_quota", "exceeded your current quota", "resource_exhausted",
+                 "billing")   # how Anthropic, OpenAI and Google Gemini say an account has run dry
+
+
+def ai_out_of_credit(error):
+    """True when a provider's error says the account has no credit left."""
+    text = str(error).lower()
+    return any(words in text for words in OUT_OF_CREDIT)
+
+
+def ai_credit_text():
+    """'your OpenAI account is out of credit', for whichever provider is chosen."""
+    return f"your {ai_provider_name()} account is out of credit"
 
 
 def ai_model(tier="main"):
@@ -3738,11 +3753,12 @@ def moderate(tracks, seed, report=print, level=None, reference=None):
                            announce=False)
         flagged = moderator_reply(reply.text)
     except ImportError:
-        report("  Problem: AI Moderator didn't run, as the anthropic package isn't installed.")
+        report("  Problem: AI Moderator didn't run, as the anthropic package (needed for Anthropic) isn't "
+               "installed.")
         return set()
     except Exception as e:
-        if "credit balance" in str(e).lower():
-            report("  Problem: AI Moderator didn't run, as your Anthropic credit balance is too low.")
+        if ai_out_of_credit(e):
+            report(f"  Problem: AI Moderator didn't run, as {ai_credit_text()}.")
         else:
             report(f"  Problem: AI Moderator didn't run, as the check didn't come back ({str(e)[:120]}).")
         return set()

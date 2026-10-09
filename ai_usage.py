@@ -317,11 +317,9 @@ def ask(on_done):
                                        announce=False).text.strip()
             on_done(console_query.plain(answer) or "(no answer came back)", None)
         except ImportError:
-            on_done(None, "the anthropic package isn't installed")
+            on_done(None, "the anthropic package (needed for Anthropic) isn't installed")
         except Exception as e:
-            text = str(e)
-            on_done(None, "your Anthropic credit balance is too low" if "credit balance" in text.lower()
-                    else text[:200])
+            on_done(None, engine.ai_credit_text() if engine.ai_out_of_credit(e) else str(e)[:200])
     threading.Thread(target=work, daemon=True, name="usage-query").start()
 
 

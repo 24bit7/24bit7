@@ -137,8 +137,14 @@ MODERATOR_LEVELS_HELP = (
     "Strict: keeps only tracks close to the seed, however many that leaves. Drift can top a short "
     "playlist up.\n"
     "Tracks it doesn't know well enough to judge are always kept, and genre is never a reason on its own.")
-MODERATOR_WARNING = ("AI Moderator checks each playlist using the Anthropic API, which uses credits "
-                     "from your Anthropic account. Each playlist costs a fraction of a penny.")
+def moderator_warning():
+    """The one-off note when AI Moderator is first switched on, naming the chosen provider."""
+    if engine.AI_PROVIDER == "ollama":
+        return ("AI Moderator checks each playlist with your own AI model (Ollama), on your PC. "
+                "It costs nothing.")
+    name = engine.ai_provider_name()
+    return (f"AI Moderator checks each playlist using your chosen AI ({name}), which uses a little "
+            f"credit from your {name} account. Each playlist costs a fraction of a penny.")
 
 
 NOTE_DELAY_MS = 500   # a note waits this long, so passing the pointer over a title doesn't flash one up
@@ -210,7 +216,7 @@ def warn_moderator_once(parent):
     """The one-off credits warning, the first time AI Moderator is switched on anywhere."""
     if engine.MODERATOR_WARNED:
         return
-    messagebox.showinfo("AI Moderator", MODERATOR_WARNING, parent=parent)
+    messagebox.showinfo("AI Moderator", moderator_warning(), parent=parent)
     write_env({"MODERATOR_WARNED": "1"})
     engine.MODERATOR_WARNED = True
 
@@ -1623,7 +1629,7 @@ class SettingsTab(tk.Frame):
                 command()
             tick = ttk.Checkbutton(line, text=label, variable=v, command=ticked,
                                    style="AI.Big.TCheckbutton" if code == "ai" else "Big.TCheckbutton")
-            if code == "ai":   # purple: uses Anthropic credit
+            if code == "ai":   # magenta: uses AI credit
                 ttk.Style(line).configure("AI.Big.TCheckbutton", font=("Segoe UI", 11),
                                           foreground=PALETTE["ai_purple"])
             tick.pack(side="left")
@@ -1648,8 +1654,8 @@ class SettingsTab(tk.Frame):
     def _moderator_section(self, p, page, group):
         """An AI Moderator tick for one Play option, greyed out until the AI is set up."""
         box = section(page, "AI Moderator",
-                      "Checks each playlist (and each Drift round) once with the AI's quick model (Claude "
-                      "Haiku on Anthropic), and removes tracks that clash with the seed's tone, energy and mood. "
+                      "Checks each playlist (and each Drift round) once with your AI's quick model, and "
+                      "removes tracks that clash with the seed's tone, energy and mood. "
                       "Logs each removal with its reason. Uses a little AI credit each time, a fraction of a "
                       "penny per playlist (nothing with Ollama).",
                       title_fg=PALETTE["ai_purple"])
@@ -1995,8 +2001,8 @@ class SettingsTab(tk.Frame):
             if group == "vibe":
                 note = ("Tops the playlist up from your music sources (Last.fm and the others you've ticked), "
                         "not the AI, unless Drift using is set to AI. AI asks again with your description, "
-                        "leaving out what's already been found or tried, and uses a little Anthropic credit "
-                        "each round.")
+                        "leaving out what's already been found or tried, and uses a little AI credit "
+                        "each round (none with Ollama).")
             begin(group, "Drift", note)
             box = where["box"]
             cfg = drift_values(p.env, group)
@@ -2232,7 +2238,8 @@ class SettingsTab(tk.Frame):
             if group == "vibe":
                 option("Continues with", "NONSTOP_VIBE_WITH", NONSTOP_WITH_OPTIONS, cfg["with"],
                        "More from the AI asks the AI again with the original description (a little "
-                       "Anthropic credit each time). Similar artists or Similar tracks carry on from the "
+                       "AI credit each time, none with Ollama). Similar artists or Similar tracks carry on "
+                       "from the "
                        "music, with no credit used.")
             else:
                 option("Then play using" if group == "top" else "Play using", f"NONSTOP_{g}_USING",

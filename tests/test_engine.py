@@ -315,7 +315,7 @@ def test_moderator_failure_keeps_playlist(app):
     app.ai.fail = RuntimeError("Your credit balance is too low")
     r = app.Lines()
     app.engine.create_similar_tracks_playlist(report=r, seed_info=seed(app, "The Beatles", "Here Comes The Sun"))
-    assert r.has("credit balance is too low"), r.text()
+    assert r.has("your Anthropic account is out of credit"), r.text()
     assert len(app.jriver.zone("Speakers").playlist) > 10
 
 

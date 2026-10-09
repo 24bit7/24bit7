@@ -848,7 +848,7 @@ def handle_command(body, busy=False):
             print(f"[Voice] {intent} '{value}' failed: {e}")
             return "problem", "I couldn't reach the library in JRiver. Is JRiver running on the media PC?", {}
     if intent == "genre" and engine.vibe_blocker():
-        return "problem", "Genre playlists need an Anthropic key in 24bit7.", {}
+        return "problem", "Genre playlists need the AI set up in 24bit7.", {}
     if _submit is None:
         return "problem", "24bit7 isn't ready yet. Try again in a moment.", {}
     if intent == "tracks_like":
