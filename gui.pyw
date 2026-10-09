@@ -1360,7 +1360,9 @@ class PlayTab(tk.Frame):
                 self._run_job(lambda: engine.create_similar_playlist(report=self.report, seed_info=seed),
                               needs_playing=False, review=True)
             return
-        self._run_job(lambda: self._seeded(engine.create_similar_playlist), needs_playing=False, review=True)
+        playing_now = engine.play_seed_is_playing_now()   # the Seed setting: Current Track or Playing Now
+        self._run_job(lambda: self._seeded(engine.create_similar_playlist, playing_now=playing_now),
+                      needs_playing=False, review=True)
 
     def on_similar_tracks(self):
         if self._seed_is_search():
@@ -1381,11 +1383,11 @@ class PlayTab(tk.Frame):
             return
         self._run_job(lambda: self._seeded(engine.play_top_n), needs_playing=False, review=True)
 
-    def _seeded(self, build):
+    def _seeded(self, build, **options):
         """Seeds from the Now Playing zone's track, or the last track played when its Playing Now is empty."""
         seed = engine.seed_or_last_played(engine.seed_zone(), self.report)
         if seed:
-            build(report=self.report, seed_info=seed)
+            build(report=self.report, seed_info=seed, **options)
 
     def on_credits(self):
         self._run_job(lambda: engine.explore_credits(report=self.report))
