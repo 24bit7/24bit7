@@ -67,6 +67,7 @@ DEMO_ZONES = [("10001", "Speakers"), ("10002", "Kitchen")]
 DEMO_PLAYING = {"Artist": "The Beatles", "Album": "Abbey Road", "Name": "Here Comes The Sun",
                 "PlayingNowPosition": "4", "PlayingNowTracks": "17", "FileKey": "1001", "ZoneID": "10001"}
 DEMO_KEYS = {"LASTFM_API_KEY": "demo" * 8, "LISTENBRAINZ_TOKEN": "demo" * 9, "DISCOGS_TOKEN": "demo" * 10,
+             "TIDAL_CLIENT_ID": "demo" * 4, "TIDAL_CLIENT_SECRET": "demo" * 11,
              "ANTHROPIC_API_KEY": "demo" * 12, "JRIVER_USER": "demo", "JRIVER_PASS": "demo" * 3,
              "VOICE_KEY": "demo" * 8}
 DEMO_ENV = {"HIDDEN_ZONES": "", "DEFAULT_ZONE": "Speakers", "FOLLOW_ACTIVE_ZONE": "0", "VOICE_ENABLED": "1",

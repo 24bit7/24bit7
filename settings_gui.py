@@ -83,11 +83,17 @@ THANKS = [   # Settings > About > Thanks, and the README's Thanks section
 # Listed alphabetically by display name
 SOURCE_NAMES = [("ai", "AI"), ("deezer", "Deezer"),
                 ("lastfm", "Last.fm"), ("listenbrainz", "ListenBrainz"),
-                ("youtube", "YouTube")]
-# YouTube suggests artists only, so it isn't offered as a top-track source
-TOP_SOURCE_NAMES = [s for s in SOURCE_NAMES if s[0] != "youtube"]
+                ("tidal", "Tidal"), ("youtube", "YouTube")]
+# YouTube and Tidal suggest artists and tracks only, so neither is offered as a top-track source
+TOP_SOURCE_NAMES = [s for s in SOURCE_NAMES if s[0] not in ("youtube", "tidal")]
 # Sources that can suggest tracks like a track
-TRACK_SOURCE_NAMES = [("ai", "AI"), ("lastfm", "Last.fm"), ("listenbrainz", "ListenBrainz"), ("youtube", "YouTube")]
+TRACK_SOURCE_NAMES = [("ai", "AI"), ("lastfm", "Last.fm"), ("listenbrainz", "ListenBrainz"), ("tidal", "Tidal"),
+                      ("youtube", "YouTube")]
+# Similar-artist sources that are weaker than the rest: shown with a !! carrying this note
+WEAK_ARTIST_SOURCES = {
+    "tidal": "Tidal's similar artists are broader than its similar tracks and can wander off the seed. "
+             "Best used alongside Last.fm rather than on its own.",
+}
 
 
 KEY_HELP = {
@@ -97,6 +103,14 @@ KEY_HELP = {
     "LISTENBRAINZ_TOKEN": ("ListenBrainz token",
         "Sign in at listenbrainz.org (uses a MusicBrainz account),\n"
         "then copy your User Token from listenbrainz.org/settings."),
+    "TIDAL_CLIENT_ID": ("Tidal Client ID",
+        "At developer.tidal.com, sign in with a TIDAL account, open Dashboard\n"
+        "and choose Create App. Copy the Client ID and Client Secret from the\n"
+        "app's overview page into the two Tidal fields. It's free."),
+    "TIDAL_CLIENT_SECRET": ("Tidal Client Secret",
+        "At developer.tidal.com, sign in with a TIDAL account, open Dashboard\n"
+        "and choose Create App. Copy the Client ID and Client Secret from the\n"
+        "app's overview page into the two Tidal fields. It's free."),
     "DISCOGS_TOKEN": ("Discogs token",
         "Go to discogs.com/settings/developers and click\n"
         "'Generate new token' under Personal access token."),
@@ -118,7 +132,7 @@ KEY_HELP = {
         "Tools > Options > Media Network > Authentication."),
 }
 
-KEY_FIELDS = ["LASTFM_API_KEY", "LISTENBRAINZ_TOKEN", "DISCOGS_TOKEN",
+KEY_FIELDS = ["LASTFM_API_KEY", "LISTENBRAINZ_TOKEN", "DISCOGS_TOKEN", "TIDAL_CLIENT_ID", "TIDAL_CLIENT_SECRET",
               "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "OLLAMA_URL", "OLLAMA_MODEL",
               "JRIVER_USER", "JRIVER_PASS"]
 AI_FIELDS = {"anthropic": ["ANTHROPIC_API_KEY"], "openai": ["OPENAI_API_KEY"], "gemini": ["GEMINI_API_KEY"],
@@ -325,6 +339,14 @@ def _place_note(anchor):
                     bg=PALETTE["help_mark_bg"], width=2, cursor="question_arrow")
     mark.pack()
     _note_on(anchor, mark)
+
+
+def weak_mark(parent, text):
+    """A bold orange !! beside a source that's weaker than the rest; its note shows on hover or click."""
+    mark = tk.Label(parent, text="!!", font=("Segoe UI", 9, "bold"), fg=PALETTE["brand_orange"],
+                    cursor="question_arrow")
+    Tooltip(mark, text)
+    return mark
 
 
 def section(parent, title, help_text=None, row=None, title_fg=None):
@@ -840,6 +862,9 @@ class SettingsTab(tk.Frame):
                 key = "LISTENBRAINZ_TOKEN"
             var = self.vars.get(key) if key else None
             missing = var is not None and not var.get().strip()
+            if code == "tidal":   # needs both halves
+                missing = any(k in self.vars and not self.vars[k].get().strip()
+                              for k in ("TIDAL_CLIENT_ID", "TIDAL_CLIENT_SECRET"))
             try:
                 box.config(text=label + ("  (no key yet)" if missing else ""))
             except tk.TclError:
@@ -1715,6 +1740,8 @@ class SettingsTab(tk.Frame):
                 ttk.Style(line).configure("AI.Big.TCheckbutton", font=("Segoe UI", 11),
                                           foreground=PALETTE["ai_purple"])
             tick.pack(side="left")
+            if group == "SIMILAR_SOURCES" and code in WEAK_ARTIST_SOURCES:
+                weak_mark(line, WEAK_ARTIST_SOURCES[code]).pack(side="left", padx=(4, 0))
             self._source_boxes.append((tick, code, label, purpose))
             if help_text and n == 0:
                 help_mark(line, help_text).pack(side="left", padx=(10, 0))
@@ -2194,7 +2221,11 @@ class SettingsTab(tk.Frame):
                 for code, label in names:
                     var = tk.BooleanVar(value=code in chosen)
                     p.vars[f"{name}_{kind}_SOURCES"][code] = var
-                    ttk.Checkbutton(ticks, text=label, variable=var, command=p.save).pack(side="left", padx=(0, 12))
+                    tick = ttk.Checkbutton(ticks, text=label, variable=var, command=p.save)
+                    tick.pack(side="left", padx=(0, 12))
+                    if kind == "ARTIST" and code in WEAK_ARTIST_SOURCES:
+                        tick.pack_configure(padx=(0, 2))
+                        weak_mark(ticks, WEAK_ARTIST_SOURCES[code]).pack(side="left", padx=(0, 12))
                 agree_row = tk.Frame(frame)
                 agree_row.pack(anchor="w", pady=(2, 0))
                 tk.Label(agree_row, text="Sources that must agree").pack(side="left")

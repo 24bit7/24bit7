@@ -389,7 +389,8 @@ class FakeWeb:
         host, path = u.netloc, u.path
         service = {"ws.audioscrobbler.com": "lastfm", "api.deezer.com": "deezer", "musicbrainz.org": "musicbrainz",
                    "labs.api.listenbrainz.org": "listenbrainz", "api.listenbrainz.org": "listenbrainz",
-                   "api.discogs.com": "discogs", "127.0.0.1:11434": "ollama"}.get(host)
+                   "api.discogs.com": "discogs", "127.0.0.1:11434": "ollama",
+                   "openapi.tidal.com": "tidal", "auth.tidal.com": "tidal"}.get(host)
         if service is None:
             raise AssertionError(f"Unexpected network call: {method} {url}")
         self.calls.append((service, path, dict(params or {})))
@@ -420,6 +421,8 @@ class FakeWeb:
                     return Resp(data={"data": [{"name": n} for n in names]})
                 titles = [] if empty else self.top_tracks(name)
                 return Resp(data={"data": [{"title": t} for t in titles]})
+        if service == "tidal":
+            return self._tidal(method, path, params, empty)
         if service == "ollama":   # a local Ollama with one model, for Settings > Keys > AI's Refresh
             if path == "/api/tags":
                 return Resp(data={"models": [] if empty else [{"name": "gemma3:4b"}]})
@@ -446,6 +449,65 @@ class FakeWeb:
                 pairs = [] if empty else self.similar_tracks(a, t)[::-1]
                 return Resp(data=[{"recording_mbid": f"rec:{x}|{y}", "recording_name": y, "artist_credit_name": x}
                                   for x, y in pairs])
+        return Resp(404, "not faked")
+
+    # --- a fake Tidal: numeric ids handed out on first sight, pages of 20 -------------
+
+    def _tidal_id(self, kind, value):
+        reg = self.__dict__.setdefault("_tidal_reg", {"tracks": [], "artists": []})
+        if value not in reg[kind]:
+            reg[kind].append(value)
+        return str(reg[kind].index(value) + (1000 if kind == "tracks" else 1))
+
+    def _tidal_get(self, kind, ident):
+        return self.__dict__.setdefault("_tidal_reg", {"tracks": [], "artists": []})[kind][
+            int(ident) - (1000 if kind == "tracks" else 1)]
+
+    def _tidal_page(self, kind, ids, path, params):
+        start = int(params.get("page[cursor]", 0) or 0)
+        page = ids[start:start + 20]
+        links = {}
+        if start + 20 < len(ids):
+            links["next"] = f"{path[3:]}?countryCode=GB&page[cursor]={start + 20}"
+        return Resp(data={"data": [{"id": i, "type": kind} for i in page], "links": links})
+
+    def _tidal(self, method, path, params, empty):
+        if path == "/v1/oauth2/token":
+            return Resp(data={"access_token": "fake-tidal-token", "expires_in": 86400})
+        if path == "/v2/searchResults":
+            q, kind = params.get("filter[query]", ""), params.get("include", "tracks")
+            ids = []
+            if not empty and kind == "tracks":
+                for a in self.artists:
+                    for t in self.top_tracks(a):
+                        if f"{a} {t}".lower() == q.lower():   # a live take first, then the studio one
+                            ids = [self._tidal_id("tracks", (a, t, "Live")), self._tidal_id("tracks", (a, t, ""))]
+            elif not empty and kind == "artists":
+                ids = [self._tidal_id("artists", a) for a in self.artists if a.lower() == q.lower()]
+            return Resp(data={"data": [{"id": "s1", "type": "searchResults",
+                                        "relationships": {kind: {"data": [{"id": i, "type": kind} for i in ids]}}}]})
+        if path == "/v2/tracks":
+            data, included = [], []
+            for i in params.get("filter[id]", "").split(","):
+                a, t, version = self._tidal_get("tracks", i)
+                aid = self._tidal_id("artists", a)
+                data.append({"id": i, "type": "tracks", "attributes": {"title": t, "version": version or None},
+                             "relationships": {"artists": {"data": [{"id": aid, "type": "artists"}]}}})
+                included.append({"id": aid, "type": "artists", "attributes": {"name": a}})
+            return Resp(data={"data": data, "included": included})
+        if path == "/v2/artists":
+            return Resp(data={"data": [{"id": i, "type": "artists",
+                                        "attributes": {"name": self._tidal_get("artists", i)}}
+                                       for i in params.get("filter[id]", "").split(",")]})
+        m = re.match(r"/v2/tracks/(\d+)/relationships/similarTracks", path)
+        if m:
+            a, t, _ = self._tidal_get("tracks", m.group(1))
+            pairs = [] if empty else self.similar_tracks(a, t)
+            return self._tidal_page("tracks", [self._tidal_id("tracks", (x, y, "")) for x, y in pairs], path, params)
+        m = re.match(r"/v2/artists/(\d+)/relationships/similarArtists", path)
+        if m:
+            names = [] if empty else self.similar_artists(self._tidal_get("artists", m.group(1)))
+            return self._tidal_page("artists", [self._tidal_id("artists", n) for n in names], path, params)
         return Resp(404, "not faked")
 
     def _deezer_name(self, artist_id):

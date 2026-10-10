@@ -245,6 +245,7 @@ def load_settings():
     so both the GUI and the CLI pick up changes without a restart.
     """
     global AUTH, JRIVER_HOST, JRIVER_BASE, LASTFM_KEY, LISTENBRAINZ_TOKEN
+    global TIDAL_CLIENT_ID, TIDAL_CLIENT_SECRET
     global DISCOGS_TOKEN, ANTHROPIC_API_KEY, AI_PROVIDER, OPENAI_API_KEY, GEMINI_API_KEY, OLLAMA_URL, OLLAMA_MODEL
     global SIMILAR_SOURCES, TOP_TRACK_SOURCES, LISTENBRAINZ_ALGORITHM_SETTING
     global DIGITAL_STORES, REFERENCE_SITES, DEBUG, SIMILAR_ARTIST_LIMIT, TRACKS_PER_ARTIST_POOL
@@ -275,6 +276,8 @@ def load_settings():
     LASTFM_KEY = os.getenv("LASTFM_API_KEY")
     LISTENBRAINZ_TOKEN = os.getenv("LISTENBRAINZ_TOKEN")
     DISCOGS_TOKEN = os.getenv("DISCOGS_TOKEN")
+    TIDAL_CLIENT_ID = (os.getenv("TIDAL_CLIENT_ID") or "").strip()
+    TIDAL_CLIENT_SECRET = (os.getenv("TIDAL_CLIENT_SECRET") or "").strip()
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
     # Settings > Keys > AI: which provider the AI features use, and what each one needs
     AI_PROVIDER = os.getenv("AI_PROVIDER", "anthropic").strip().lower()
@@ -318,7 +321,7 @@ def load_settings():
     # Similar Tracks: its own sources (lastfm, listenbrainz, youtube), agreement and playlist settings
     SIMILAR_TRACK_SOURCES = [x.strip().lower() for x in
                              os.getenv("SIMILAR_TRACK_SOURCES", "lastfm,listenbrainz,youtube").split(",")
-                             if x.strip().lower() in ("ai", "lastfm", "listenbrainz", "youtube")]
+                             if x.strip().lower() in ("ai", "lastfm", "listenbrainz", "tidal", "youtube")]
     SIMILAR_TRACK_MIN_AGREEMENT = _int_setting("SIMILAR_TRACK_MIN_AGREEMENT", 2, 1, 4)
     SIMILAR_TRACK_COUNT = _int_setting("SIMILAR_TRACK_COUNT", 30, 5, 100)
     SIMILAR_TRACK_PER_ARTIST = _int_setting("SIMILAR_TRACK_PER_ARTIST", 3, 1, 20)
@@ -520,6 +523,8 @@ JRIVER_PASS=
 LASTFM_API_KEY=
 LISTENBRAINZ_TOKEN=
 DISCOGS_TOKEN=
+TIDAL_CLIENT_ID=
+TIDAL_CLIENT_SECRET=
 ANTHROPIC_API_KEY=
 
 # AI provider (Settings > Keys > AI): anthropic, openai, gemini or ollama.
@@ -530,7 +535,7 @@ GEMINI_API_KEY=
 OLLAMA_URL=http://127.0.0.1:11434
 OLLAMA_MODEL=
 
-# Recommendation sources (comma-separated: lastfm, listenbrainz, deezer, ai, youtube)
+# Recommendation sources (comma-separated: lastfm, listenbrainz, deezer, tidal, ai, youtube)
 # youtube is for SIMILAR_SOURCES only and needs no key.
 # A fresh install starts on the two sources that need no key. Once you add a
 # Last.fm or ListenBrainz key, tick that source under Settings > Sources.
@@ -2461,6 +2466,211 @@ def youtube_hints_for(artist, exclude_track=None):
     return hints[:YOUTUBE_HINTS_PER_ARTIST]
 
 
+# --- Tidal (official API: a client ID and secret, no user login) ---------------
+# Similar tracks and similar artists. The API is still in beta and has already changed
+# shape once (search moved to filter[query] in 2026), so every call fails soft: a
+# problem logs one line and the build carries on with the other sources.
+
+TIDAL_API = "https://openapi.tidal.com/v2"
+TIDAL_TOKEN_URL = "https://auth.tidal.com/v1/oauth2/token"
+TIDAL_TIMEOUT = 20
+TIDAL_PAGE_LIMIT = 10        # pages followed at most for one list
+_tidal_token = {"value": None, "expires": 0.0, "ident": None}
+_tidal_lock = threading.Lock()
+_tidal_country = None
+
+
+def tidal_country():
+    """
+    The catalogue country Tidal is asked about: TIDAL_COUNTRY in .env if set, otherwise
+    Windows' own region, otherwise US. Similarity barely changes by country; availability does.
+    """
+    global _tidal_country
+    if _tidal_country:
+        return _tidal_country
+    code = (os.getenv("TIDAL_COUNTRY") or "").strip().upper()
+    if not re.fullmatch(r"[A-Z]{2}", code):
+        code = ""
+        try:
+            import ctypes
+            buf = ctypes.create_unicode_buffer(16)
+            if ctypes.windll.kernel32.GetUserDefaultGeoName(buf, 16):
+                code = buf.value.strip().upper()
+        except Exception:
+            pass
+    _tidal_country = code if re.fullmatch(r"[A-Z]{2}", code) else "US"
+    return _tidal_country
+
+
+def tidal_token():
+    """A client-credentials token, kept until a minute before it expires."""
+    ident = (TIDAL_CLIENT_ID, TIDAL_CLIENT_SECRET)
+    with _tidal_lock:
+        t = _tidal_token
+        if t["value"] and t["ident"] == ident and time.time() < t["expires"] - 60:
+            return t["value"]
+        r = requests.post(TIDAL_TOKEN_URL, data={"grant_type": "client_credentials"}, auth=ident,
+                          timeout=TIDAL_TIMEOUT)
+        if r.status_code != 200:
+            raise RuntimeError(f"Tidal refused the Client ID and Secret ({r.status_code}), "
+                               f"check them under {KEY_HELP_LINE}")
+        data = r.json()
+        t.update(value=data.get("access_token"), ident=ident,
+                 expires=time.time() + float(data.get("expires_in") or 3600))
+        if not t["value"]:
+            raise RuntimeError("Tidal's login gave no token")
+        return t["value"]
+
+
+def tidal_get(path, params=None):
+    """One Tidal API call, as JSON. Waits briefly if Tidal asks it to slow down."""
+    url = path if path.startswith("http") else TIDAL_API + (path[3:] if path.startswith("/v2/") else path)
+    params = dict(params or {})
+    if "countryCode=" not in url:
+        params.setdefault("countryCode", tidal_country())
+    r = None
+    for attempt in range(3):
+        headers = {"Authorization": f"Bearer {tidal_token()}", "Accept": "application/vnd.api+json"}
+        r = requests.get(url, params=params, headers=headers, timeout=TIDAL_TIMEOUT)
+        if r.status_code == 401 and attempt == 0:
+            _tidal_token["value"] = None   # expired early: log in again once
+            continue
+        if r.status_code == 429 and attempt < 2:
+            try:
+                wait = float(r.headers.get("Retry-After") or 1)
+            except (TypeError, ValueError):
+                wait = 1
+            time.sleep(min(max(wait, 0.5), 5))
+            continue
+        break
+    if r.status_code != 200:
+        raise RuntimeError(f"Tidal answered {r.status_code}")
+    return r.json()
+
+
+def _tidal_items(data):
+    items = data.get("data") or []
+    return [items] if isinstance(items, dict) else items
+
+
+def tidal_ids(path, want, kind=None, params=None):
+    """Follows a relationship's pages and returns up to `want` resource ids, in order."""
+    out, url, params, pages = [], path, dict(params or {}), 0
+    while url and len(out) < want and pages < TIDAL_PAGE_LIMIT:
+        data = tidal_get(url, params)
+        out += [i["id"] for i in _tidal_items(data)
+                if i.get("id") and (kind is None or i.get("type") == kind)]
+        url, params, pages = (data.get("links") or {}).get("next"), {}, pages + 1
+    return out[:want]
+
+
+def tidal_search_ids(query, kind):
+    """Search result ids of one kind (tracks or artists), best first."""
+    data = tidal_get("/searchResults", {"filter[query]": query, "include": kind})
+    items = _tidal_items(data)
+    if not items:
+        return []
+    rel = (items[0].get("relationships") or {}).get(kind) or {}
+    ids = [x["id"] for x in rel.get("data") or [] if x.get("id")]
+    if not ids:   # given only as a link: follow it
+        links = rel.get("links") or {}
+        link = links.get("related") or links.get("self")
+        if link:
+            ids = tidal_ids(link, 10, kind=kind)
+    return ids[:10]
+
+
+def tidal_track_details(ids):
+    """Track ids -> [(id, [artist names], title, version)], in the order given."""
+    found = {}
+    for i in range(0, len(ids), 20):
+        chunk = ids[i:i + 20]
+        data = tidal_get("/tracks", {"filter[id]": ",".join(chunk), "include": "artists"})
+        names = {a["id"]: (a.get("attributes") or {}).get("name", "")
+                 for a in data.get("included") or [] if a.get("type") == "artists"}
+        for t in _tidal_items(data):
+            at = t.get("attributes") or {}
+            artist_ids = [a["id"] for a in ((t.get("relationships") or {}).get("artists") or {}).get("data") or []]
+            found[t["id"]] = (t["id"], [names[a] for a in artist_ids if names.get(a)],
+                              at.get("title") or "", (at.get("version") or "").strip())
+    return [found[i] for i in ids if i in found and found[i][1] and found[i][2]]
+
+
+def tidal_artist_names(ids):
+    """Artist ids -> names, in the order given."""
+    names = {}
+    for i in range(0, len(ids), 20):
+        data = tidal_get("/artists", {"filter[id]": ",".join(ids[i:i + 20])})
+        for a in _tidal_items(data):
+            names[a["id"]] = (a.get("attributes") or {}).get("name", "")
+    return [names[i] for i in ids if names.get(i)]
+
+
+def tidal_track_id(artist, track):
+    """
+    Tidal's id for the seed track: artist and title must match; the studio version
+    (no version note, such as Live or Acoustic) wins over the others.
+    """
+    want_a, want_t = artist_key(artist), clean_name(track)
+    details = tidal_track_details(tidal_search_ids(f"{artist} {track}", "tracks"))
+    for loose in (False, True):   # exact artist first, then the artist inside a longer credit
+        best = None
+        for tid, names, title, version in details:
+            if clean_name(title) != want_t:
+                continue
+            keys = [artist_key(n) for n in names]
+            if not (want_a in keys if not loose else any(want_a in k or k in want_a for k in keys)):
+                continue
+            if not version:
+                return tid
+            best = best or tid
+        if best:
+            return best
+    return None
+
+
+def tidal_artist_id(name):
+    """Tidal's id for an artist whose name matches; the best-known first."""
+    ids = tidal_search_ids(name, "artists")
+    want = artist_key(name)
+    for aid, found in zip(ids, tidal_artist_names(ids)):
+        if artist_key(found) == want:
+            return aid
+    return None
+
+
+def tidal_similar_tracks(artist, track, limit=None):
+    """Tidal similar tracks: [[artist, title], ...], most similar first. Lead artist only."""
+    limit = limit or SIMILAR_TRACK_FETCH
+    try:
+        tid = tidal_track_id(artist, track)
+        if not tid:
+            debug(f"Tidal: no track match for {artist} - {track}")
+            return []
+        ids = tidal_ids(f"/tracks/{tid}/relationships/similarTracks", limit, kind="tracks")
+        out = []
+        for _, names, title, version in tidal_track_details(ids):
+            out.append([names[0], f"{title} ({version})" if version else title])
+        return out[:limit]
+    except Exception as e:
+        print(f"  Problem: Tidal didn't answer for similar tracks ({e}).")
+        return []
+
+
+def tidal_similar(artist_name, limit=20):
+    """Tidal similar artists, most similar first. Broader than its similar tracks (see the !! in Settings)."""
+    try:
+        aid = tidal_artist_id(artist_name)
+        if not aid:
+            debug(f"Tidal: no artist match for {artist_name}")
+            return []
+        ids = tidal_ids(f"/artists/{aid}/relationships/similarArtists", limit)
+        return [canonicalise_conjunction(n) for n in tidal_artist_names(ids)]
+    except Exception as e:
+        print(f"  Problem: Tidal didn't answer for similar artists ({e}).")
+        return []
+
+
 # --- Registry and chooser --------------------------------------------------
 
 PROVIDERS = {
@@ -2468,6 +2678,7 @@ PROVIDERS = {
     "listenbrainz": ("ListenBrainz", listenbrainz_similar, listenbrainz_top_tracks),
     "deezer":       ("Deezer",       deezer_similar,       deezer_top_tracks),
     "ai":           ("AI",           ai_similar,           ai_top_tracks),
+    "tidal":        ("Tidal",        tidal_similar,        None),
     "youtube":      ("YouTube",      youtube_similar,      None),
 }
 
@@ -2487,6 +2698,8 @@ def source_has_key(code, purpose="similar"):
     """
     if code == "lastfm":
         return bool(LASTFM_KEY)
+    if code == "tidal":
+        return bool(TIDAL_CLIENT_ID and TIDAL_CLIENT_SECRET)
     if code == "ai":
         return ai_enabled()
     if code == "listenbrainz" and purpose == "top":
@@ -2506,6 +2719,8 @@ def missing_key_notes(similar=False, top_tracks=False):
                      + KEY_HELP_LINE)
     elif "ai" in (ticked_similar | ticked_top) and not USE_AI:
         notes.append("AI is ticked but Use AI is Off (Settings > Keys), so it was skipped.")
+    if "tidal" in ticked_similar and not (TIDAL_CLIENT_ID and TIDAL_CLIENT_SECRET):
+        notes.append("Tidal is ticked but has no Client ID and Secret, so it was skipped. " + KEY_HELP_LINE)
     if "listenbrainz" in ticked_top and not LISTENBRAINZ_TOKEN:
         notes.append("ListenBrainz is ticked for top tracks but has no user token, "
                      "so it was skipped there. " + KEY_HELP_LINE)
@@ -5085,6 +5300,7 @@ TRACK_PROVIDERS = {
     "ai":           ("AI",           ai_similar_tracks),
     "lastfm":       ("Last.fm",      lastfm_similar_tracks),
     "listenbrainz": ("ListenBrainz", listenbrainz_similar_tracks),
+    "tidal":        ("Tidal",        tidal_similar_tracks),
     "youtube":      ("YouTube",      youtube_similar_tracks),
 }
 
