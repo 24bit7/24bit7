@@ -1758,7 +1758,7 @@ class SettingsTab(tk.Frame):
 
     def _score_header(self, p, frame, section, row):
         """
-        The notice and a header row (Source, Performance, Best At, Worst At, with a rule under it)
+        The notice and a header row (Source, Score, Best At, Worst At, with a rule under it)
         above a section's scored sources, from row. Returns the row the first source goes on.
         """
         import source_test
@@ -1766,10 +1766,10 @@ class SettingsTab(tk.Frame):
         ui["notice"] = tk.Label(frame, text="", font=HELP_FONT, wraplength=620, justify="left", anchor="w",
                                 padx=8, pady=4)
         ui["notice"].grid(row=row, column=0, columnspan=4, sticky="ew", pady=(8, 6))
-        for c, title in enumerate(("Source", "Performance", "Best At", "Worst At")):
+        for c, title in enumerate(("Source", "Score", "Best At", "Worst At")):
             lab = tk.Label(frame, text=title, font=LABEL_FONT, fg=PALETTE["text_secondary"], anchor="w")
             lab.grid(row=row + 1, column=c, sticky="w", padx=(0 if c == 0 else 18, 0))
-            if title == "Performance":
+            if title == "Score":
                 Tooltip(lab, source_test.PERFORMANCE_HELP, click=False)
                 lab.config(cursor="question_arrow")
         tk.Frame(frame, bg=PALETTE["line"], height=1).grid(row=row + 2, column=0, columnspan=4, sticky="ew",
@@ -1911,7 +1911,7 @@ class SettingsTab(tk.Frame):
         else:
             tk.Label(top, text=f"Your results, tested {result['finished']} ({result['mode'].title()}, "
                                f"{len(result['seeds'])} seeds).", fg=PALETTE["help_fg"], anchor="w").pack(fill="x")
-        tk.Label(top, text="Performance against the best source in each genre; the best in each row is shaded. "
+        tk.Label(top, text="Score against the best source in each genre; the best in each row is shaded. "
                            "Hover a cell for its detail.", font=HELP_FONT, fg=PALETTE["help_fg"],
                  anchor="w").pack(fill="x", pady=(4, 0))
         nb = TabbedPane(win, font=("Segoe UI", 10, "bold"), pad=(16, 6))
@@ -1948,8 +1948,10 @@ class SettingsTab(tk.Frame):
             foot = len(result["genres"]) + 1
             tk.Frame(page, bg=PALETTE["line"], height=1).grid(row=foot, column=0, columnspan=len(codes) + 1,
                                                               sticky="ew", pady=(2, 0))
-            tk.Label(page, text="Performance", font=LABEL_FONT, anchor="w", padx=8,
-                     pady=4).grid(row=foot + 1, column=0, sticky="ew")
+            score = tk.Label(page, text="Score", font=LABEL_FONT, anchor="w", padx=8, pady=4,
+                             cursor="question_arrow")
+            score.grid(row=foot + 1, column=0, sticky="ew")
+            Tooltip(score, source_test.PERFORMANCE_HELP, click=False)
             for c, code in enumerate(codes, start=1):
                 s = sc["sources"].get(code)
                 tk.Label(page, text=f"{s['performance']}%" if s else "-", font=LABEL_FONT,

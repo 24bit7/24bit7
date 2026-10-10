@@ -11,7 +11,7 @@ results returned, in your library (the seed itself never counts), found by no ot
 and time taken. Scored per section:
 
   per genre    a source's useful matches (in your library) against the best source for that genre
-  Performance  the average of those across genres, as a percentage
+  Score        the average of those across genres, as a percentage
   Best At      the three genres where it does best against the others; Worst At, the three worst
   thin genres  where even the best source found fewer than THIN useful matches: flagged, and left
                out of Best At and Worst At (they say more about the library than the source)
@@ -67,9 +67,12 @@ progress_state = {"n": 0, "of": 0}       # for the screens: which seed a running
 
 SAMPLE_NOTICE = ("Sample results from a {tracks:,}-track library. Source performance varies between "
                  "libraries, so run the test on yours for figures that fit your collection.")
-PERFORMANCE_HELP = ("How much of your library a source reaches from the test's seeds, against the best "
-                    "source for each genre: 100% means it matched the best in every genre. Sources that "
-                    "favour well-known artists reach more of a large library.")
+PERFORMANCE_HELP = ("Score: how many of this source's suggestions are in your library, compared with "
+                    "the best source in each genre, averaged across all 17 genres. 100% means it found "
+                    "as much as the best source in every genre. It measures reach, not taste: a source "
+                    "that suggests well-known artists can score well on a big library even when its "
+                    "picks are safe. Best At and Worst At are this source's strongest and weakest "
+                    "genres, so even a high scorer has a Worst At.")
 
 
 def sample_notice(result):
@@ -430,7 +433,7 @@ def export_csv(result, path):
     names = {c: n for sec in SECTIONS for c, n in result["sources"][sec]}
     with open(path, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["Section", "Genre", "Source", "Performance %", "In your library", "Results used",
+        w.writerow(["Section", "Genre", "Source", "Score %", "In your library", "Results used",
                     "Results returned", "Seeds answered", "Seeds asked", "Found by no other source", "Seconds",
                     "You own little here"])
         for section in SECTIONS:
@@ -474,7 +477,7 @@ def report_lines(result, is_sample=False):
     for section in SECTIONS:
         sc = result["scores"][section]
         lines += ["", "Similar Artists" if section == "artists" else "Similar Tracks"]
-        lines.append(f"  {'Source':<14}{'Performance':<13}{'Best At':<34}Worst At")
+        lines.append(f"  {'Source':<14}{'Score':<13}{'Best At':<34}Worst At")
         for c, s in sorted(sc["sources"].items(), key=lambda cs: -cs[1]["performance"]):
             lines.append(f"  {names.get(c, c):<14}{str(s['performance']) + '%':<13}"
                          f"{', '.join(s['best_at']):<34}{', '.join(s['worst_at'])}")
