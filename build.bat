@@ -28,7 +28,7 @@ echo Backed up settings and history to %BK%
 
 rem --- 2. Build ---
 python -m pip install --upgrade pyinstaller
-python -m PyInstaller --noconfirm --clean --windowed --name 24bit7 --icon 24bit7.ico --collect-data ytmusicapi --add-data "24bit7.ico;." --hidden-import pystray._win32 gui.pyw
+python -m PyInstaller --noconfirm --clean --windowed --name 24bit7 --icon 24bit7.ico --collect-data ytmusicapi --add-data "24bit7.ico;." --add-data "source_test_*.json;." --hidden-import pystray._win32 gui.pyw
 if errorlevel 1 (
     echo.
     echo Build FAILED. Your settings and history are safe in %BK%

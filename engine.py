@@ -983,6 +983,11 @@ def session_start(mode, seed_info, sources=""):
          seed_info.get("Artist"), seed_info.get("Name"), seed_info.get("Album"), sources))
     db().commit()
     _SESSION_STARTED[cur.lastrowid] = time.time()
+    try:   # a finished source test the user hasn't opened yet: say so again
+        import source_test
+        source_test.remind_if_ready()
+    except Exception:
+        pass
     return cur.lastrowid
 
 

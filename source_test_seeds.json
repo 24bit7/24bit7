@@ -1,0 +1,569 @@
+{
+ "version": 2,
+ "created": "2026-10-10",
+ "genres": [
+  "Rock",
+  "Indie",
+  "Pop",
+  "Hip-Hop",
+  "Soul",
+  "House",
+  "Techno",
+  "Ambient",
+  "Trip-Hop",
+  "Jazz",
+  "Folk",
+  "Country",
+  "Metal",
+  "Reggae",
+  "Latin",
+  "African",
+  "Classical"
+ ],
+ "seeds": [
+  {
+   "genre": "Rock",
+   "tier": "famous",
+   "artist": "Led Zeppelin",
+   "track": "Whole Lotta Love",
+   "year": 1969,
+   "note": "Hard rock touchstone"
+  },
+  {
+   "genre": "Rock",
+   "tier": "famous",
+   "artist": "Foo Fighters",
+   "track": "Everlong",
+   "year": 1997,
+   "note": "Ties back to the first Tidal probe"
+  },
+  {
+   "genre": "Rock",
+   "tier": "hidden",
+   "artist": "Big Star",
+   "track": "September Gurls",
+   "year": 1974,
+   "note": "Critics' cult band that never sold"
+  },
+  {
+   "genre": "Rock",
+   "tier": "hidden",
+   "artist": "The Hold Steady",
+   "track": "Stuck Between Stations",
+   "year": 2006,
+   "note": "Loved by critics, modest sales"
+  },
+  {
+   "genre": "Indie",
+   "tier": "famous",
+   "artist": "Pixies",
+   "track": "Where Is My Mind?",
+   "year": 1988,
+   "note": "Alternative cornerstone"
+  },
+  {
+   "genre": "Indie",
+   "tier": "famous",
+   "artist": "The Strokes",
+   "track": "Last Nite",
+   "year": 2001,
+   "note": "2000s indie revival"
+  },
+  {
+   "genre": "Indie",
+   "tier": "hidden",
+   "artist": "The Go-Betweens",
+   "track": "Cattle and Cane",
+   "year": 1983,
+   "note": "Revered, rarely charted"
+  },
+  {
+   "genre": "Indie",
+   "tier": "hidden",
+   "artist": "Life Without Buildings",
+   "track": "The Leanover",
+   "year": 2001,
+   "note": "One album, later cult status"
+  },
+  {
+   "genre": "Pop",
+   "tier": "famous",
+   "artist": "Michael Jackson",
+   "track": "Billie Jean",
+   "year": 1982,
+   "note": "Pop's centre of gravity"
+  },
+  {
+   "genre": "Pop",
+   "tier": "famous",
+   "artist": "Robyn",
+   "track": "Dancing On My Own",
+   "year": 2010,
+   "note": "Modern pop critics' favourite"
+  },
+  {
+   "genre": "Pop",
+   "tier": "hidden",
+   "artist": "Prefab Sprout",
+   "track": "When Love Breaks Down",
+   "year": 1985,
+   "note": "Sophisti-pop, underrated"
+  },
+  {
+   "genre": "Pop",
+   "tier": "hidden",
+   "artist": "Carly Rae Jepsen",
+   "track": "Run Away With Me",
+   "year": 2015,
+   "note": "Critical cult hit, modest sales"
+  },
+  {
+   "genre": "Hip-Hop",
+   "tier": "famous",
+   "artist": "Grandmaster Flash and the Furious Five",
+   "track": "The Message",
+   "year": 1982,
+   "note": "Early hip-hop landmark"
+  },
+  {
+   "genre": "Hip-Hop",
+   "tier": "famous",
+   "artist": "Kendrick Lamar",
+   "track": "Alright",
+   "year": 2015,
+   "note": "Modern landmark"
+  },
+  {
+   "genre": "Hip-Hop",
+   "tier": "hidden",
+   "artist": "Madvillain",
+   "track": "Accordion",
+   "year": 2004,
+   "note": "Underground classic"
+  },
+  {
+   "genre": "Hip-Hop",
+   "tier": "hidden",
+   "artist": "Souls of Mischief",
+   "track": "93 'til Infinity",
+   "year": 1993,
+   "note": "West Coast alternative"
+  },
+  {
+   "genre": "Soul",
+   "tier": "famous",
+   "artist": "Marvin Gaye",
+   "track": "What's Going On",
+   "year": 1971,
+   "note": "Soul's high point"
+  },
+  {
+   "genre": "Soul",
+   "tier": "famous",
+   "artist": "D'Angelo",
+   "track": "Untitled (How Does It Feel)",
+   "year": 2000,
+   "note": "Neo-soul"
+  },
+  {
+   "genre": "Soul",
+   "tier": "hidden",
+   "artist": "Darondo",
+   "track": "Didn't I",
+   "year": 1973,
+   "note": "Rediscovered through a 2000s reissue"
+  },
+  {
+   "genre": "Soul",
+   "tier": "hidden",
+   "artist": "Sault",
+   "track": "Wildfires",
+   "year": 2020,
+   "note": "Anonymous collective, critics' favourite"
+  },
+  {
+   "genre": "House",
+   "tier": "famous",
+   "artist": "Donna Summer",
+   "track": "I Feel Love",
+   "year": 1977,
+   "note": "Disco into electronic"
+  },
+  {
+   "genre": "House",
+   "tier": "famous",
+   "artist": "Daft Punk",
+   "track": "One More Time",
+   "year": 2000,
+   "note": "French house"
+  },
+  {
+   "genre": "House",
+   "tier": "hidden",
+   "artist": "Mr. Fingers",
+   "track": "Can You Feel It",
+   "year": 1986,
+   "note": "Deep house origin"
+  },
+  {
+   "genre": "House",
+   "tier": "hidden",
+   "artist": "Dinosaur L",
+   "track": "Go Bang!",
+   "year": 1982,
+   "note": "Arthur Russell's leftfield disco"
+  },
+  {
+   "genre": "Techno",
+   "tier": "famous",
+   "artist": "Afrika Bambaataa & the Soulsonic Force",
+   "track": "Planet Rock",
+   "year": 1982,
+   "note": "Electro landmark"
+  },
+  {
+   "genre": "Techno",
+   "tier": "famous",
+   "artist": "Rhythim Is Rhythim",
+   "track": "Strings of Life",
+   "year": 1987,
+   "note": "Detroit techno anthem"
+  },
+  {
+   "genre": "Techno",
+   "tier": "hidden",
+   "artist": "Drexciya",
+   "track": "Andreaen Sand Dunes",
+   "year": 1992,
+   "note": "Faceless Detroit electro"
+  },
+  {
+   "genre": "Techno",
+   "tier": "hidden",
+   "artist": "Basic Channel",
+   "track": "Phylyps Trak",
+   "year": 1993,
+   "note": "Berlin dub techno"
+  },
+  {
+   "genre": "Ambient",
+   "tier": "famous",
+   "artist": "Brian Eno",
+   "track": "1/1",
+   "year": 1978,
+   "note": "The genre's starting point"
+  },
+  {
+   "genre": "Ambient",
+   "tier": "famous",
+   "artist": "Boards of Canada",
+   "track": "Roygbiv",
+   "year": 1998,
+   "note": "Electronic listening classic"
+  },
+  {
+   "genre": "Ambient",
+   "tier": "hidden",
+   "artist": "Harold Budd & Brian Eno",
+   "track": "First Light",
+   "year": 1980,
+   "note": "Quiet companion piece"
+  },
+  {
+   "genre": "Ambient",
+   "tier": "hidden",
+   "artist": "Gigi Masin",
+   "track": "Clouds",
+   "year": 1986,
+   "note": "Italian ambient, rediscovered decades later"
+  },
+  {
+   "genre": "Trip-Hop",
+   "tier": "famous",
+   "artist": "Massive Attack",
+   "track": "Teardrop",
+   "year": 1998,
+   "note": "Bristol sound at its peak"
+  },
+  {
+   "genre": "Trip-Hop",
+   "tier": "famous",
+   "artist": "Portishead",
+   "track": "Glory Box",
+   "year": 1994,
+   "note": "The other Bristol pillar"
+  },
+  {
+   "genre": "Trip-Hop",
+   "tier": "hidden",
+   "artist": "Lamb",
+   "track": "Gorecki",
+   "year": 1996,
+   "note": "Manchester's answer to Bristol, built on Górecki"
+  },
+  {
+   "genre": "Trip-Hop",
+   "tier": "hidden",
+   "artist": "DJ Krush",
+   "track": "Kemuri",
+   "year": 1995,
+   "note": "Japanese abstract beats on Mo' Wax"
+  },
+  {
+   "genre": "Jazz",
+   "tier": "famous",
+   "artist": "Miles Davis",
+   "track": "So What",
+   "year": 1959,
+   "note": "Kind of Blue"
+  },
+  {
+   "genre": "Jazz",
+   "tier": "famous",
+   "artist": "Kamasi Washington",
+   "track": "Truth",
+   "year": 2017,
+   "note": "Modern spiritual jazz"
+  },
+  {
+   "genre": "Jazz",
+   "tier": "hidden",
+   "artist": "Doug Carn",
+   "track": "Infant Eyes",
+   "year": 1971,
+   "note": "Black Jazz Records cult"
+  },
+  {
+   "genre": "Jazz",
+   "tier": "hidden",
+   "artist": "Yussef Kamaal",
+   "track": "Strings of Light",
+   "year": 2016,
+   "note": "London scene, one album"
+  },
+  {
+   "genre": "Folk",
+   "tier": "famous",
+   "artist": "Joni Mitchell",
+   "track": "A Case of You",
+   "year": 1971,
+   "note": "Singer-songwriter peak"
+  },
+  {
+   "genre": "Folk",
+   "tier": "famous",
+   "artist": "Bon Iver",
+   "track": "Skinny Love",
+   "year": 2007,
+   "note": "Modern folk standard"
+  },
+  {
+   "genre": "Folk",
+   "tier": "hidden",
+   "artist": "Vashti Bunyan",
+   "track": "Diamond Day",
+   "year": 1970,
+   "note": "Lost record, rediscovered decades later"
+  },
+  {
+   "genre": "Folk",
+   "tier": "hidden",
+   "artist": "Bill Callahan",
+   "track": "Jim Cain",
+   "year": 2009,
+   "note": "Critics' favourite, low profile"
+  },
+  {
+   "genre": "Country",
+   "tier": "famous",
+   "artist": "Johnny Cash",
+   "track": "Folsom Prison Blues",
+   "year": 1955,
+   "note": "Country canon"
+  },
+  {
+   "genre": "Country",
+   "tier": "famous",
+   "artist": "Kacey Musgraves",
+   "track": "Slow Burn",
+   "year": 2018,
+   "note": "Modern crossover"
+  },
+  {
+   "genre": "Country",
+   "tier": "hidden",
+   "artist": "Blaze Foley",
+   "track": "Clay Pigeons",
+   "year": 1984,
+   "note": "Outlaw cult songwriter"
+  },
+  {
+   "genre": "Country",
+   "tier": "hidden",
+   "artist": "Gillian Welch",
+   "track": "Revelator",
+   "year": 2001,
+   "note": "Americana favourite"
+  },
+  {
+   "genre": "Metal",
+   "tier": "famous",
+   "artist": "Black Sabbath",
+   "track": "Paranoid",
+   "year": 1970,
+   "note": "Where metal starts"
+  },
+  {
+   "genre": "Metal",
+   "tier": "famous",
+   "artist": "Metallica",
+   "track": "Master of Puppets",
+   "year": 1986,
+   "note": "Thrash landmark"
+  },
+  {
+   "genre": "Metal",
+   "tier": "hidden",
+   "artist": "Candlemass",
+   "track": "Solitude",
+   "year": 1986,
+   "note": "Doom metal cornerstone"
+  },
+  {
+   "genre": "Metal",
+   "tier": "hidden",
+   "artist": "Sleep",
+   "track": "Dragonaut",
+   "year": 1992,
+   "note": "Stoner doom cult"
+  },
+  {
+   "genre": "Reggae",
+   "tier": "famous",
+   "artist": "Bob Marley & The Wailers",
+   "track": "Redemption Song",
+   "year": 1980,
+   "note": "Reggae's best known"
+  },
+  {
+   "genre": "Reggae",
+   "tier": "famous",
+   "artist": "Toots & the Maytals",
+   "track": "Pressure Drop",
+   "year": 1969,
+   "note": "Early reggae"
+  },
+  {
+   "genre": "Reggae",
+   "tier": "hidden",
+   "artist": "Augustus Pablo",
+   "track": "King Tubby Meets Rockers Uptown",
+   "year": 1976,
+   "note": "Dub classic"
+  },
+  {
+   "genre": "Reggae",
+   "tier": "hidden",
+   "artist": "The Congos",
+   "track": "Fisherman",
+   "year": 1977,
+   "note": "Lee Perry's Black Ark"
+  },
+  {
+   "genre": "Latin",
+   "tier": "famous",
+   "artist": "Stan Getz & João Gilberto",
+   "track": "The Girl from Ipanema",
+   "year": 1964,
+   "note": "Bossa nova standard"
+  },
+  {
+   "genre": "Latin",
+   "tier": "famous",
+   "artist": "Bad Bunny",
+   "track": "Tití Me Preguntó",
+   "year": 2022,
+   "note": "Modern reggaeton"
+  },
+  {
+   "genre": "Latin",
+   "tier": "hidden",
+   "artist": "Os Mutantes",
+   "track": "A Minha Menina",
+   "year": 1968,
+   "note": "Tropicália cult"
+  },
+  {
+   "genre": "Latin",
+   "tier": "hidden",
+   "artist": "Ana Tijoux",
+   "track": "1977",
+   "year": 2010,
+   "note": "Chilean hip-hop, crosses genres"
+  },
+  {
+   "genre": "African",
+   "tier": "famous",
+   "artist": "Fela Kuti",
+   "track": "Water No Get Enemy",
+   "year": 1975,
+   "note": "Afrobeat"
+  },
+  {
+   "genre": "African",
+   "tier": "famous",
+   "artist": "Burna Boy",
+   "track": "Last Last",
+   "year": 2022,
+   "note": "Modern Afrobeats"
+  },
+  {
+   "genre": "African",
+   "tier": "hidden",
+   "artist": "William Onyeabor",
+   "track": "Fantastic Man",
+   "year": 1978,
+   "note": "Nigerian synth-funk, rediscovered"
+  },
+  {
+   "genre": "African",
+   "tier": "hidden",
+   "artist": "Mdou Moctar",
+   "track": "Afrique Victime",
+   "year": 2021,
+   "note": "Tuareg guitar"
+  },
+  {
+   "genre": "Classical",
+   "tier": "famous",
+   "artist": "Samuel Barber",
+   "track": "Adagio for Strings",
+   "year": 1936,
+   "note": "Widely known"
+  },
+  {
+   "genre": "Classical",
+   "tier": "famous",
+   "artist": "Erik Satie",
+   "track": "Gymnopédie No. 1",
+   "year": 1888,
+   "note": "Widely known"
+  },
+  {
+   "genre": "Classical",
+   "tier": "hidden",
+   "artist": "Arvo Pärt",
+   "track": "Spiegel im Spiegel",
+   "year": 1978,
+   "note": "Minimalist favourite"
+  },
+  {
+   "genre": "Classical",
+   "tier": "hidden",
+   "artist": "Julius Eastman",
+   "track": "Femenine",
+   "year": 1974,
+   "note": "Minimalist, rediscovered"
+  }
+ ]
+}
