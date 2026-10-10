@@ -2947,6 +2947,8 @@ def blended_similar_artists(seed_artist, limit=20, seed_track=None, report=None)
                 results.append((service_name, names))
                 if label not in labels:
                     labels.append(label)
+            elif similar_fn is youtube_similar and not seed_track:
+                pass   # YouTube has already said it needs a track: one line, not two
             else:
                 why = f" ({AI_LAST_ERROR})" if service_name == "AI" and AI_LAST_ERROR else ""
                 print(f"  Note: {service_name} returned no similar artists for {seed}{why}.")
@@ -4553,10 +4555,10 @@ class Drift:
         return True
 
     def _round_artists(self, seeds, keys):
-        for seed, _, seed_key in seeds:
+        for seed, seed_title, seed_key in seeds:
             if len(keys) >= self.target:
                 return
-            similar, _ = blended_similar_artists(seed, limit=SIMILAR_ARTIST_LIMIT)
+            similar, _ = blended_similar_artists(seed, limit=SIMILAR_ARTIST_LIMIT, seed_track=seed_title)
             fresh = [(a, s) for a, s in similar if artist_key(a) not in self.seen_artists]
             prefetch_top_tracks([a for a, _ in fresh], TRACKS_PER_ARTIST_POOL, report=self.report)
             for artist, suggested_by in fresh:
@@ -5122,10 +5124,12 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
         session_seed = dict(seed_info, Artist=PLAYING_NOW_SESSION, Name="", Album="")
     pn_keys = {str(r.get("Key")) for r in pn_rows if r.get("Key")}
     seed_tracks = {}   # sampled artist -> its track in Playing Now, as Discover's Seed for what it brought
+    seed_titles = {}   # sampled artist -> that track's title, for YouTube, which seeds from a track
     for r in pn_rows:
         a = deinvert_the((r.get("Artist") or "").split(";")[0].strip())
         if a and r.get("Name"):
             seed_tracks.setdefault(artist_key(a), f"{a} - {r['Name']}")
+            seed_titles.setdefault(artist_key(a), r["Name"])
 
     report_missing_keys(report, similar=True, top_tracks=True)
     target = count if limited else 0   # 0: no limit, and nothing for Drift to fill
@@ -5227,7 +5231,8 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
         for seed in seeds:
             need += per   # this artist's share, plus any shortfall passed on
             fetch = min(50, len(used) + need * (1 if deferred is not None else DELIVER_DEPTH))
-            similar, source_label = blended_similar_artists(seed, limit=fetch, report=report)
+            similar, source_label = blended_similar_artists(seed, limit=fetch, report=report,
+                                                            seed_track=seed_titles.get(artist_key(seed)))
             if source_label not in labels and source_label != "none":
                 labels.append(source_label)
             report(f"  Similar to {seed}, taking {need}:")

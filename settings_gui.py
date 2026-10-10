@@ -592,8 +592,9 @@ DRIFT_ARTIST_SOURCE_NAMES = [s for s in SOURCE_NAMES if s[0] != "ai"]   # Drift 
 DRIFT_SOURCES_HELP = ("Same as Settings > Sources uses the sources you picked for this Play option. Custom "
                       "Sources lets the top-up rounds use different ones, for example steadier sources first "
                       "and more adventurous ones to fill the gaps.")
-DRIFT_SAME_WARNING = ("Drift is using the same sources as the playlist, so if they find nothing, Drift "
-                      "won't either. Choose Custom Sources to give Drift a different route.")
+DRIFT_SAME_WARNING = ("Same sources keep Drift's picks closest to the seed. Custom Sources give Drift a "
+                      "different route if the playlist finds nothing and provide a back-up route to build "
+                      "out the playlist.")
 
 
 def drift_using_options(group):
@@ -2221,11 +2222,7 @@ class SettingsTab(tk.Frame):
                 for code, label in names:
                     var = tk.BooleanVar(value=code in chosen)
                     p.vars[f"{name}_{kind}_SOURCES"][code] = var
-                    tick = ttk.Checkbutton(ticks, text=label, variable=var, command=p.save)
-                    tick.pack(side="left", padx=(0, 12))
-                    if kind == "ARTIST" and code in WEAK_ARTIST_SOURCES:
-                        tick.pack_configure(padx=(0, 2))
-                        weak_mark(ticks, WEAK_ARTIST_SOURCES[code]).pack(side="left", padx=(0, 12))
+                    ttk.Checkbutton(ticks, text=label, variable=var, command=p.save).pack(side="left", padx=(0, 12))
                 agree_row = tk.Frame(frame)
                 agree_row.pack(anchor="w", pady=(2, 0))
                 tk.Label(agree_row, text="Sources that must agree").pack(side="left")

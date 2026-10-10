@@ -99,6 +99,7 @@ def test_settings_lists(app):
 @pytest.mark.skipif(not os.environ.get("DISPLAY") and os.name != "nt", reason="needs a display")
 def test_weak_mark_beside_tidal(app, ui):
     import tkinter as tk
+    from tkinter import ttk
     from test_gui import visit_every_page
     pane = next(c for c in ui.settings.winfo_children() if hasattr(c, "select"))
     ui.nb.select(ui.settings)
@@ -112,6 +113,7 @@ def test_weak_mark_beside_tidal(app, ui):
                 marks.append(c)
             walk(c)
     walk(ui.settings)
-    # Similar Artists' Tidal, plus Drift's Custom Sources similar-artist ticks
-    assert len(marks) >= 2
+    # Similar Artists' Tidal only: each !! sits on its own source line, never in Drift's row of ticks
+    assert marks
+    assert all(sum(isinstance(c, ttk.Checkbutton) for c in m.master.winfo_children()) == 1 for m in marks)
     assert all(getattr(m, "_tooltip", None) and "Tidal" in m._tooltip.text for m in marks)
