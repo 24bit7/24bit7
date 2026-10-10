@@ -2767,6 +2767,35 @@ def tidal_similar(artist_name, limit=20):
         return []
 
 
+def tidal_top_tracks(artist_name, limit=10):
+    """
+    Tidal's top tracks for an artist: titles, most popular first. Tidal lists an artist's tracks
+    in popularity order (collapseBy=FINGERPRINT is required, and the endpoint takes no sort).
+    Where a title comes back again as another version ('Everlong', then 'Everlong (Acoustic
+    Version)'), only the first is kept, so it doesn't take two of the places.
+    """
+    try:
+        aid = tidal_artist_id(artist_name)
+        lead = primary_artist(artist_name)
+        if not aid and lead:   # a joint credit Tidal doesn't know: its lead artist
+            aid = tidal_artist_id(lead)
+        if not aid:
+            debug(f"Tidal: no artist match for {artist_name}")
+            return []
+        ids = tidal_ids(f"/artists/{aid}/relationships/tracks", limit * 2, kind="tracks",
+                        params={"collapseBy": "FINGERPRINT"})
+        titles, seen = [], set()
+        for _, _, title, _ in tidal_track_details(ids):
+            k = clean_name(title)
+            if k and k not in seen:
+                seen.add(k)
+                titles.append(title)
+        return titles[:limit]
+    except Exception as e:
+        print(f"  Problem: Tidal didn't answer for {artist_name}'s top tracks ({e}).")
+        return []
+
+
 # --- Registry and chooser --------------------------------------------------
 
 PROVIDERS = {
@@ -2774,7 +2803,7 @@ PROVIDERS = {
     "listenbrainz": ("ListenBrainz", listenbrainz_similar, listenbrainz_top_tracks),
     "deezer":       ("Deezer",       deezer_similar,       deezer_top_tracks),
     "ai":           ("AI",           ai_similar,           ai_top_tracks),
-    "tidal":        ("Tidal",        tidal_similar,        None),
+    "tidal":        ("Tidal",        tidal_similar,        tidal_top_tracks),
     "youtube":      ("YouTube",      youtube_similar,      None),
 }
 
@@ -2815,7 +2844,7 @@ def missing_key_notes(similar=False, top_tracks=False):
                      + KEY_HELP_LINE)
     elif "ai" in (ticked_similar | ticked_top) and not USE_AI:
         notes.append("AI is ticked but Use AI is Off (Settings > Keys), so it was skipped.")
-    if "tidal" in ticked_similar and not (TIDAL_CLIENT_ID and TIDAL_CLIENT_SECRET):
+    if "tidal" in (ticked_similar | ticked_top) and not (TIDAL_CLIENT_ID and TIDAL_CLIENT_SECRET):
         notes.append("Tidal is ticked but has no Client ID and Secret, so it was skipped. " + KEY_HELP_LINE)
     if "listenbrainz" in ticked_top and not LISTENBRAINZ_TOKEN:
         notes.append("ListenBrainz is ticked for top tracks but has no user token, "
@@ -3012,7 +3041,7 @@ def blended_similar_artists(seed_artist, limit=20, seed_track=None, report=None)
     return blended[:limit], " + ".join(labels) if labels else "none"
 
 
-TOP_TRACK_WORKERS = {"Deezer": 2}   # artists fetched at once, per source (Deezer allows 50 requests per 5 s)
+TOP_TRACK_WORKERS = {"Deezer": 2, "Tidal": 2}   # artists fetched at once, per source (Deezer allows 50 requests per 5 s)
 TOP_TRACK_WORKERS_DEFAULT = 4
 
 

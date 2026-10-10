@@ -516,6 +516,18 @@ class FakeWeb:
             a, t, _ = self._tidal_get("tracks", m.group(1))
             pairs = [] if empty else self.similar_tracks(a, t)
             return self._tidal_page("tracks", [self._tidal_id("tracks", (x, y, "")) for x, y in pairs], path, params)
+        m = re.match(r"/v2/artists/(\d+)/relationships/tracks", path)
+        if m:   # an artist's tracks, most popular first; refused without collapseBy, as the real one is
+            if not params.get("collapseBy") and "collapseBy=" not in path:
+                return Resp(400, data={"errors": [{"code": "MISSING_REQUIRED_PARAMETER"}]})
+            a = self._tidal_get("artists", m.group(1))
+            titles = [] if empty else self.top_tracks(a)
+            ids = []
+            for i, t in enumerate(titles):
+                ids.append(self._tidal_id("tracks", (a, t, "")))
+                if i == 0:   # the top track again, as another version
+                    ids.append(self._tidal_id("tracks", (a, t, "Acoustic Version")))
+            return self._tidal_page("tracks", ids, path, params)
         m = re.match(r"/v2/artists/(\d+)/relationships/similarArtists", path)
         if m:
             names = [] if empty else self.similar_artists(self._tidal_get("artists", m.group(1)))

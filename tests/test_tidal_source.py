@@ -74,8 +74,8 @@ def test_tidal_down_fails_soft(app):
     assert answered == ["Last.fm"]
 
 
-def test_tidal_not_a_top_track_source(app):
-    assert app.engine.PROVIDERS["tidal"][2] is None
+def test_tidal_is_a_top_track_source(app):
+    assert app.engine.PROVIDERS["tidal"][2] is app.engine.tidal_top_tracks
 
 
 def test_token_reused(app):
@@ -90,7 +90,7 @@ def test_token_reused(app):
 def test_settings_lists(app):
     import settings_gui as s
     assert ("tidal", "Tidal") in s.SOURCE_NAMES and ("tidal", "Tidal") in s.TRACK_SOURCE_NAMES
-    assert "tidal" not in [c for c, _ in s.TOP_SOURCE_NAMES]
+    assert "tidal" in [c for c, _ in s.TOP_SOURCE_NAMES]
     assert "tidal" in s.WEAK_ARTIST_SOURCES
     assert "TIDAL_CLIENT_ID" in s.KEY_FIELDS and "TIDAL_CLIENT_SECRET" in s.KEY_FIELDS
     assert "TIDAL_CLIENT_ID" in s.KEY_HELP

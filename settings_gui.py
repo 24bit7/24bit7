@@ -84,8 +84,8 @@ THANKS = [   # Settings > About > Thanks, and the README's Thanks section
 SOURCE_NAMES = [("ai", "AI"), ("deezer", "Deezer"),
                 ("lastfm", "Last.fm"), ("listenbrainz", "ListenBrainz"),
                 ("tidal", "Tidal"), ("youtube", "YouTube")]
-# YouTube and Tidal suggest artists and tracks only, so neither is offered as a top-track source
-TOP_SOURCE_NAMES = [s for s in SOURCE_NAMES if s[0] not in ("youtube", "tidal")]
+# YouTube suggests artists only, so it isn't offered as a top-track source
+TOP_SOURCE_NAMES = [s for s in SOURCE_NAMES if s[0] != "youtube"]
 # Sources that can suggest tracks like a track
 TRACK_SOURCE_NAMES = [("ai", "AI"), ("lastfm", "Last.fm"), ("listenbrainz", "ListenBrainz"), ("tidal", "Tidal"),
                       ("youtube", "YouTube")]
