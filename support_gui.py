@@ -2,7 +2,8 @@
 24bit7 - Support.
 
 The "Support" link at the top right of the main window opens this: a few words about
-the project, and buttons for donating, the JRiver forum thread and GitHub issues.
+the project, and buttons for PayPal (AI credits), Ko-fi (the speaker fund), the JRiver forum
+thread and GitHub issues.
 """
 
 import tkinter as tk
@@ -12,16 +13,17 @@ from tabs import PALETTE, FlatButton
 from settings_gui import FORUM_URL, REPO_URL
 
 DONATE_URL = "https://paypal.me/24bit7"
+KOFI_URL = "https://ko-fi.com/24bit7"
 ISSUES_URL = REPO_URL + "/issues"
 
 TITLE = "Support 24bit7"
 PARAGRAPHS = (
     "24bit7 is a passion project, built for myself and people like me: JRiver users with large music "
     "collections who want to get the most out of their music, and a steady supply of new music to discover.",
-    "24bit7 is free, and it always will be. If you'd like to support the project, you can buy me a coffee, "
-    "a beer, or a pair of PMC Prodigy speakers.",
-    "Donations go towards the Anthropic credits I use building and testing the AI features. Unless anyone "
-    "takes the PMC Prodigy speakers seriously ;-)",
+    "24bit7 is free, and it always will be. If you'd like to support it, there are two ways.",
+    "Donations through PayPal go towards the AI credits I use building and testing 24bit7's AI features.",
+    "Ko-fi is for something more fun. As a music and hi-fi aficionado, I'm saving towards a shiny new pair "
+    "of PMC Prodigy speakers, and every donation there goes into that fund.",
     "Got a suggestion, a request or a bug? Post in the 24bit7 thread on the JRiver forum, or open an issue "
     "on GitHub. I'd love to hear from you.",
 )
@@ -56,7 +58,7 @@ def show(root):
         paragraphs.append(label)
     buttons = tk.Frame(body, bg=body.cget("bg"))
     buttons.pack(anchor="w", pady=(10, 0))
-    links = [("Donate with PayPal", DONATE_URL, False)]
+    links = [("PayPal: AI Credits", DONATE_URL, False), ("Ko-fi: Speakers", KOFI_URL, False)]
     if FORUM_URL:
         links.append(("JRiver Forum", FORUM_URL, True))
     links.append(("GitHub Issues", ISSUES_URL, True))

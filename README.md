@@ -520,4 +520,4 @@ Released under the MIT Licence. See LICENSE. Provided as is, without warranty of
 
 ## Support the project
 
-24bit7 is free and always will be. If it has found you music you'd have missed, you can buy me a coffee, a beer, or a pair of PMC Prodigy speakers: https://paypal.me/24bit7. The **Support** link at the top right of 24bit7 says more.
+24bit7 is free and always will be. If you'd like to support it, there are two ways. Donations through PayPal (https://paypal.me/24bit7) go towards the AI credits I use building and testing 24bit7's AI features. Ko-fi (https://ko-fi.com/24bit7) is for something more fun: a fund towards a pair of PMC Prodigy speakers. The **Support** link at the top right of 24bit7 says more.

@@ -566,7 +566,8 @@ def test_support_window(app, ui):
     walk(win)
     joined = " ".join(texts)
     assert "Support 24bit7" in joined and "free, and it always will be" in joined
-    assert "Donate with PayPal" in joined and "GitHub Issues" in joined
+    assert "PayPal: AI Credits" in joined and "Ko-fi: Speakers" in joined
+    assert "GitHub Issues" in joined and "Anthropic credits" not in joined
     assert support_gui.show(ui.root) is win, "a second click brings the same window forward"
     win.destroy()
 
