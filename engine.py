@@ -2188,8 +2188,23 @@ def _ai_request(prompt, max_tokens, feature="AI", tier="main", system=None, anno
         debug(f"AI ({ai_provider_name()}, {model}) replied in {time.time() - started:.1f} s")
 
 
+def _list_from(data):
+    """A list of names from a parsed reply: a bare list, or the one list inside an object
+    ({"artists": [...]}, as small models often send). None if there isn't one."""
+    if isinstance(data, dict):
+        lists = [v for v in data.values() if isinstance(v, list)]
+        data = lists[0] if len(lists) == 1 else None
+    if isinstance(data, list):
+        return [str(x).strip() for x in data if not isinstance(x, (dict, list)) and str(x).strip()]
+    return None
+
+
 def ai_ask_list(prompt, feature="AI"):
-    """Sends a prompt expecting a JSON array of strings; returns the list or []."""
+    """
+    Sends a prompt expecting a JSON array of strings; returns the list or [].
+    Words around the list are ignored, a list wrapped in an object is accepted, and a
+    reply that can't be read (or a request that fails) is asked once more.
+    """
     global AI_LAST_ERROR
     AI_LAST_ERROR = "no AI set up" if AI_PROVIDER == "ollama" else "no API key"
     if not ai_configured():
@@ -2198,27 +2213,38 @@ def ai_ask_list(prompt, feature="AI"):
     if not USE_AI:
         AI_LAST_ERROR = "Use AI is Off"
         return []
-    try:
-        text = ai_request(prompt, 1500, feature).text
-        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
+    for attempt in (1, 2):
+        text, stop = "", ""
         try:
-            data = json.loads(text)
-        except json.JSONDecodeError:
-            data = _salvage_json_array(text)
-            if data:
-                print(f"  Note: the AI's reply was cut short; {len(data)} names were recovered.")
-        if isinstance(data, list):
-            AI_LAST_ERROR = ""
-            return [str(x).strip() for x in data if str(x).strip()]
-        AI_LAST_ERROR = "reply couldn't be read"
-        print("  Problem: the AI's reply couldn't be read.")
-        debug(f"AI reply: {text[:200]}")
-    except ImportError:
-        AI_LAST_ERROR = "anthropic package not installed"
-        print("  Problem: the AI can't run because the anthropic package isn't installed (pip install anthropic).")
-    except Exception as e:
-        AI_LAST_ERROR = f"request failed: {e.__class__.__name__}"
-        print(f"  Problem: the AI request failed ({e}).")
+            reply = ai_request(prompt, 1500, feature)
+            text, stop = reply.text, reply.stop_reason
+            body = _json_body(text)
+            try:
+                names = _list_from(json.loads(body))
+            except json.JSONDecodeError:
+                names = None
+                found = _salvage_json_array(body[body.find("["):] if "[" in body else "")
+                if found:
+                    why = "cut short" if stop == "max_tokens" else "partly unreadable"
+                    AI_LAST_ERROR = f"reply {why}, {len(found)} recovered"
+                    print(f"  Note: the AI's reply was {why}; {len(found)} names were recovered.")
+                    return [x.strip() for x in found if x.strip()]
+            if names is not None:
+                AI_LAST_ERROR = ""
+                return names
+            AI_LAST_ERROR = "reply couldn't be read"
+            debug(f"AI reply couldn't be read (stop_reason {stop}): {text[:200]!r}")
+        except ImportError:
+            AI_LAST_ERROR = "anthropic package not installed"
+            print("  Problem: the AI can't run because the anthropic package isn't installed (pip install anthropic).")
+            return []
+        except Exception as e:
+            AI_LAST_ERROR = f"request failed: {e.__class__.__name__}"
+            debug(f"AI request failed: {e}")
+        if attempt == 1:
+            print("  Note: the AI request didn't work, so trying once more...")
+        else:
+            print(f"  Problem: the AI request didn't work ({AI_LAST_ERROR}).")
     return []
 
 
