@@ -52,6 +52,9 @@ SEEDS_NAME, SAMPLE_NAME = "source_test_seeds.json", "source_test_sample.json"
 THIN = 3                    # a genre where the best source finds fewer useful matches than this is thin
 ARTIST_FETCH = 30           # similar artists asked of each source per seed
 TRACK_FETCH = 50            # similar tracks asked of each source per seed
+ARTIST_DEPTH = 20           # every source is scored on the same depth: its top 20 artists per seed
+TRACK_DEPTH = 30            # ... and its top 30 tracks, about what a build reads
+SECONDS_PER_SEED = 20       # measured on the first real run (10 Oct 2026), for the time estimate
 BUSY_WINDOW = 15 * 60       # a build counts as running for at most this long (a cancelled one can't hold it)
 SECTIONS = ("artists", "tracks")
 READY_LINE = ("Source test ready: open Full Results under Settings > Sources to see how each source "
@@ -146,6 +149,24 @@ def ask(section, code, artist, track):
 
 # --- what's in the library -----------------------------------------------------------------
 
+def owned_artist(name):
+    """
+    The test's strict check: the library has this artist under the same name, or under the
+    credit's lead artist. Stricter than the builds' check, which also accepts band credits, so
+    a short library name can't make a long list of famous names look owned.
+    """
+    import library
+    library.ensure_loaded()
+    known = library._artists
+    lead = engine.primary_artist(name)
+    return library.norm(name) in known or bool(lead and library.norm(lead) in known)
+
+
+def minutes_for(n):
+    """The time estimate for n seeds, in whole minutes."""
+    return max(1, round(n * SECONDS_PER_SEED / 60))
+
+
 def library_hits(section, answer, seed):
     """The answer's items that are in the library, as comparable keys. The seed never counts."""
     import library   # here rather than at the top: library imports engine
@@ -157,7 +178,7 @@ def library_hits(section, answer, seed):
     if section == "artists":
         for name in answer:
             k = engine.artist_key(name)
-            if k not in seed_artists and k not in hits and engine.library_has_artist(name):
+            if k not in seed_artists and k not in hits and owned_artist(name):
                 hits.append(k)
         return hits
     seed_key = library.find_track_key(seed["artist"], seed["track"])
@@ -186,12 +207,14 @@ def run(quick=False, include_ai=False, progress=None, wait_for_builds=True, stop
     seeds = load_seeds(quick)
     testing = sources_to_test(include_ai)
     started = time.time()
+    timing = {"asking": 0.0, "matching": 0.0, "waiting": 0.0}
     rows = []   # one per seed, section and source: counts only, no names
     for n, seed in enumerate(seeds, 1):
         while wait_for_builds and build_running():
             if stop and stop():
                 return None
             time.sleep(2)
+            timing["waiting"] += 2
         if stop and stop():
             return None
         if progress:
@@ -200,11 +223,16 @@ def run(quick=False, include_ai=False, progress=None, wait_for_builds=True, stop
             found = {}
             for code, name in testing[section]:
                 answer, secs = ask(section, code, seed["artist"], seed["track"])
+                full = len(answer)
+                answer = answer[:ARTIST_DEPTH if section == "artists" else TRACK_DEPTH]   # the same depth for all
+                matched = time.time()
                 hits = library_hits(section, answer, seed)
+                timing["asking"] += secs
+                timing["matching"] += time.time() - matched
                 found[code] = set(hits)
                 rows.append({"seed": n - 1, "genre": seed["genre"], "section": section, "source": code,
                              "name": name, "answered": bool(answer), "returned": len(answer),
-                             "hits": len(hits), "seconds": round(secs, 2)})
+                             "returned_all": full, "hits": len(hits), "seconds": round(secs, 2)})
             for row in rows[len(rows) - len(testing[section]):]:
                 others = set().union(*[v for c, v in found.items() if c != row["source"]])
                 row["unique"] = len(found[row["source"]] - others)
@@ -214,7 +242,8 @@ def run(quick=False, include_ai=False, progress=None, wait_for_builds=True, stop
                                                              "track": s["track"], "tier": s["tier"]} for s in seeds],
         "genres": genres(seeds), "library_tracks": len(getattr(library, "_tracks", []) or []),
         "sources": {sec: [[c, nm] for c, nm in testing[sec]] for sec in SECTIONS},
-        "rows": rows,
+        "rows": rows, "depth": {"artists": ARTIST_DEPTH, "tracks": TRACK_DEPTH},
+        "timing": {k: round(v) for k, v in timing.items()},
     }
     result["scores"] = score(result)
     save(result)
@@ -228,7 +257,7 @@ def start_background(quick=False, include_ai=False):
         if _thread is not None and _thread.is_alive():
             return False
         n = len(load_seeds(quick))
-        engine.print(f"Source test started in the background ({n} seeds, about {max(1, n // 12)} minutes). "
+        engine.print(f"Source test started in the background ({n} seeds, about {minutes_for(n)} minutes). "
                      f"You can keep using 24bit7.")
 
         def work():
@@ -366,6 +395,11 @@ def report_lines(result, is_sample=False):
     else:
         lines.append(f"Your results, tested {result['finished']} ({result['mode']}, {len(result['seeds'])} seeds, "
                      f"{result['seconds'] // 60} min {result['seconds'] % 60} s).")
+        t = result.get("timing")
+        if t:
+            lines.append(f"Time: asking the sources {t['asking'] // 60} min {t['asking'] % 60} s, matching your "
+                         f"library {t['matching'] // 60} min {t['matching'] % 60} s"
+                         + (f", waiting for builds {t['waiting'] // 60} min" if t.get("waiting") else "") + ".")
     for section in SECTIONS:
         sc = result["scores"][section]
         lines += ["", "Similar Artists" if section == "artists" else "Similar Tracks"]
@@ -393,7 +427,7 @@ def main(argv):
     if "--show" not in argv:
         quick, ai = "--quick" in argv, "--ai" in argv
         n = len(load_seeds(quick))
-        print(f"Source test: {n} seeds{', with the AI' if ai else ''}. This takes a few minutes.")
+        print(f"Source test: {n} seeds{', with the AI' if ai else ''}. This takes about {minutes_for(n)} minutes.")
         engine.OUTPUT_HOOK = None
         if run(quick=quick, include_ai=ai, progress=print, wait_for_builds=False) is None:
             return

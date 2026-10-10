@@ -55,6 +55,29 @@ def test_the_seed_never_counts(app):
     assert s.library_hits("artists", ["Queen", "The Hollies"], seed) == [app.engine.artist_key("The Hollies")]
 
 
+def test_artist_check_is_strict(app):
+    s = st(app)
+    assert s.owned_artist("Queen") and s.owned_artist("Queen & David Bowie")   # the lead artist counts
+    assert not s.owned_artist("Queen Latifah")                                # a longer name doesn't
+
+
+def test_every_source_is_scored_at_the_same_depth(app, monkeypatch):
+    s = st(app)
+    monkeypatch.setattr(s, "load_seeds", lambda quick=False: SEEDS[:1])
+    monkeypatch.setattr(s, "sources_to_test", lambda include_ai=False: {
+        "artists": [("lastfm", "Last.fm")], "tracks": [("lastfm", "Last.fm")]})
+    long_tracks = [("Nobody", f"Song {i}") for i in range(45)]
+    long_artists = [f"Nobody {i}" for i in range(35)]
+    monkeypatch.setattr(s, "ask", lambda section, code, a, t:
+                        ((long_artists if section == "artists" else long_tracks), 0.1))
+    result = s.run(wait_for_builds=False)
+    rows = {r["section"]: r for r in result["rows"]}
+    assert rows["artists"]["returned"] == s.ARTIST_DEPTH and rows["artists"]["returned_all"] == 35
+    assert rows["tracks"]["returned"] == s.TRACK_DEPTH and rows["tracks"]["returned_all"] == 45
+    assert set(result["timing"]) == {"asking", "matching", "waiting"}
+    assert any(line.startswith("Time: asking the sources") for line in s.report_lines(result))
+
+
 def test_unique_counts_what_no_other_source_found(app, monkeypatch):
     s = st(app)
     monkeypatch.setattr(s, "load_seeds", lambda quick=False: SEEDS[:1])
