@@ -41,7 +41,7 @@ def test_sample_then_own_results(app, ui):
     assert sc["tracks"]["notice"].cget("text").startswith("Sample results from a")
     perf, best, worst = sc["tracks"]["cells"]["lastfm"]
     assert perf.cget("text").endswith("%") and best.cget("text")
-    assert sc["artists"]["cells"]["ai"][0].cget("text") == "-"   # not tested
+    assert "ai" not in sc["artists"]["cells"]   # the AI sits above the scores, unscored
     s.run(quick=True, wait_for_builds=False)
     ui.settings._refresh_scores()
     assert sc["tracks"]["notice"].cget("text").startswith("Your results, tested")

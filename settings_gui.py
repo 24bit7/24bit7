@@ -90,11 +90,6 @@ TOP_SOURCE_NAMES = [s for s in SOURCE_NAMES if s[0] != "youtube"]
 # Sources that can suggest tracks like a track
 TRACK_SOURCE_NAMES = [("ai", "AI"), ("lastfm", "Last.fm"), ("listenbrainz", "ListenBrainz"), ("tidal", "Tidal"),
                       ("youtube", "YouTube")]
-# Similar-artist sources that are weaker than the rest: shown with a !! carrying this note
-WEAK_ARTIST_SOURCES = {
-    "tidal": "Tidal's similar artists are broader than its similar tracks and can wander off the seed. "
-             "Best used alongside Last.fm rather than on its own.",
-}
 
 
 KEY_HELP = {
@@ -340,14 +335,6 @@ def _place_note(anchor):
                     bg=PALETTE["help_mark_bg"], width=2, cursor="question_arrow")
     mark.pack()
     _note_on(anchor, mark)
-
-
-def weak_mark(parent, text):
-    """A bold orange !! beside a source that's weaker than the rest; its note shows on hover or click."""
-    mark = tk.Label(parent, text="!!", font=("Segoe UI", 9, "bold"), fg=PALETTE["brand_orange"],
-                    cursor="question_arrow")
-    Tooltip(mark, text)
-    return mark
 
 
 def section(parent, title, help_text=None, row=None, title_fg=None):
@@ -1728,12 +1715,18 @@ class SettingsTab(tk.Frame):
         frame.grid(row=r, column=0, columnspan=6, sticky="w", pady=(2, 4))
         chosen = [x.strip().lower() for x in p.env.get(group, default).split(",") if x.strip()]
         p.vars[group] = {}
-        first = self._score_header(p, frame, scores) if scores else 0
+        # with scores: the AI on its own line at the top (it's only tested on request), then the notice,
+        # the header row, and the other sources with their scores beside them
+        has_ai = bool(scores) and any(c == "ai" for c, _ in names)
+        next_row = self._score_header(p, frame, scores, 1 if has_ai else 0) if scores else 0
         for n, (code, label) in enumerate(names):
             line = tk.Frame(frame)
-            if scores:
-                line.grid(row=first + n, column=0, sticky="w", pady=1)
-                self._score_cells(p, frame, scores, code, first + n)
+            if scores and code == "ai":
+                line.grid(row=0, column=0, columnspan=4, sticky="w", pady=1)
+            elif scores:
+                line.grid(row=next_row, column=0, sticky="w", pady=1)
+                self._score_cells(p, frame, scores, code, next_row)
+                next_row += 1
             else:
                 line.pack(anchor="w", pady=1)
             v = tk.BooleanVar(value=code in chosen)
@@ -1748,8 +1741,6 @@ class SettingsTab(tk.Frame):
                 ttk.Style(line).configure("AI.Big.TCheckbutton", font=("Segoe UI", 11),
                                           foreground=PALETTE["ai_purple"])
             tick.pack(side="left")
-            if group == "SIMILAR_SOURCES" and code in WEAK_ARTIST_SOURCES:
-                weak_mark(line, WEAK_ARTIST_SOURCES[code]).pack(side="left", padx=(4, 0))
             self._source_boxes.append((tick, code, label, purpose))
             if help_text and n == 0:
                 help_mark(line, help_text).pack(side="left", padx=(10, 0))
@@ -1765,24 +1756,27 @@ class SettingsTab(tk.Frame):
 
     # --- Test My Sources: scores beside the sources, the start window and Full Results ---------------
 
-    def _score_header(self, p, frame, section):
-        """The notice and the column titles above a section's sources. Returns the first row for sources."""
+    def _score_header(self, p, frame, section, row):
+        """
+        The notice and a header row (Source, Performance, Best At, Worst At, with a rule under it)
+        above a section's scored sources, from row. Returns the row the first source goes on.
+        """
         import source_test
         ui = p.__dict__.setdefault("score_ui", {}).setdefault(section, {"cells": {}})
         ui["notice"] = tk.Label(frame, text="", font=HELP_FONT, wraplength=620, justify="left", anchor="w",
                                 padx=8, pady=4)
-        ui["notice"].grid(row=0, column=0, columnspan=4, sticky="ew", pady=(0, 6))
-        for c, title in enumerate(("", "Performance", "Best At", "Worst At")):
-            if not title:
-                continue
-            lab = tk.Label(frame, text=title, font=LABEL_FONT, fg=PALETTE["help_fg"], anchor="w")
-            lab.grid(row=1, column=c, sticky="w", padx=(18, 0))
+        ui["notice"].grid(row=row, column=0, columnspan=4, sticky="ew", pady=(8, 6))
+        for c, title in enumerate(("Source", "Performance", "Best At", "Worst At")):
+            lab = tk.Label(frame, text=title, font=LABEL_FONT, fg=PALETTE["text_secondary"], anchor="w")
+            lab.grid(row=row + 1, column=c, sticky="w", padx=(0 if c == 0 else 18, 0))
             if title == "Performance":
                 Tooltip(lab, source_test.PERFORMANCE_HELP, click=False)
                 lab.config(cursor="question_arrow")
+        tk.Frame(frame, bg=PALETTE["line"], height=1).grid(row=row + 2, column=0, columnspan=4, sticky="ew",
+                                                           pady=(2, 4))
         if p not in self.__dict__.setdefault("_score_pages", []):
             self._score_pages.append(p)
-        return 2
+        return row + 3
 
     def _score_cells(self, p, frame, section, code, row):
         cells = tuple(tk.Label(frame, text="", anchor="w") for _ in range(3))
