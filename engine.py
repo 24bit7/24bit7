@@ -1760,6 +1760,44 @@ def _musicbrainz_query(name):
     return None
 
 
+def title_folded(title):
+    """
+    A title with possessives, plurals and 'the' folded away, for a second-chance match:
+    'King Tubbys Meets Rockers Uptown' and 'King Tubby Meets Rockers Uptown' fold alike.
+    Only ever used after the plain title has missed.
+    """
+    words = [w for w in clean_name(title).split() if w != "the"]
+    return " ".join(re.sub(r"(?<=\w)s$", "", w) for w in words)
+
+
+def musicbrainz_recording_id(artist, track):
+    """
+    A recording's MusicBrainz ID from MusicBrainz's own search: the fallback when
+    ListenBrainz's lookup finds nothing. Tries the full credit, then the lead artist.
+    The title must match (folded variants allowed) and the credit must hold the artist.
+    """
+    want = clean_name(track)
+    names = [artist] + [p for p in [primary_artist(artist)] if p]
+    for who in names:
+        _musicbrainz_wait_turn()   # MusicBrainz allows one request a second
+        query = f'recording:"{track.replace(chr(34), "")}" AND artist:"{who.replace(chr(34), "")}"'
+        try:
+            r = requests.get("https://musicbrainz.org/ws/2/recording", timeout=20,
+                             headers={"User-Agent": USER_AGENT},
+                             params={"query": query, "fmt": "json", "limit": 5})
+            recordings = (r.json().get("recordings") or []) if r.status_code == 200 else []
+        except Exception as e:
+            debug(f"MusicBrainz recording search failed for {who} - {track} ({e})")
+            return None
+        for rec in recordings:
+            credit = "".join(c.get("name", "") + c.get("joinphrase", "") for c in rec.get("artist-credit") or [])
+            title = rec.get("title") or ""
+            title_ok = clean_name(title) == want or title_folded(title) == title_folded(track)
+            if title_ok and credit and artist_key(who) in artist_key(credit) and rec.get("id"):
+                return rec["id"]
+    return None
+
+
 def musicbrainz_artist_id(artist_name):
     """
     Resolves an artist name to a MusicBrainz ID. Tries the name as given, then
@@ -2616,7 +2654,7 @@ def tidal_track_id(artist, track):
     for loose in (False, True):   # exact artist first, then the artist inside a longer credit
         best = None
         for tid, names, title, version in details:
-            if clean_name(title) != want_t:
+            if clean_name(title) != want_t and title_folded(title) != title_folded(track):
                 continue
             keys = [artist_key(n) for n in names]
             if not (want_a in keys if not loose else any(want_a in k or k in want_a for k in keys)):
@@ -2870,6 +2908,14 @@ def blended_similar_artists(seed_artist, limit=20, seed_track=None, report=None)
             else:
                 names = cached_call(label, "similar", f"{artist_key(seed)}|{fetch}",
                                     lambda: similar_fn(seed, limit=fetch, **kwargs))
+                lead = primary_artist(seed)
+                if not names and lead and similar_fn is not ai_similar and artist_key(lead) not in seed_keys:
+                    # a joint credit nobody knows ('Harold Budd & Brian Eno'): ask about the lead artist
+                    names = cached_call(label, "similar", f"{artist_key(lead)}|{fetch}",
+                                        lambda: similar_fn(lead, limit=fetch, **kwargs))
+                    seed_keys.add(artist_key(lead))   # never offered back as a similar artist
+                    if names:
+                        debug(f"{service_name}: similar artists found under the lead artist {lead} for {seed}")
             debug(f"{service_name} similar artists for {seed}: {names}")
             if names:
                 results.append((service_name, names))
@@ -5247,6 +5293,10 @@ def listenbrainz_similar_tracks(artist, track, limit=SIMILAR_TRACK_FETCH):
         rows = _labs_rows(r.json()) if r.status_code == 200 else []
         mbid = next((row["recording_mbid"] for row in rows if row.get("recording_mbid")), None)
         if not mbid:
+            mbid = musicbrainz_recording_id(artist, track)
+            if mbid:
+                debug(f"ListenBrainz: found {artist} - {track} through MusicBrainz's recording search")
+        if not mbid:
             debug(f"ListenBrainz: no MusicBrainz match for {artist} - {track}")
             return []
         r = requests.post(f"{LABS}/similar-recordings/json", headers=headers, timeout=30,
@@ -5318,7 +5368,13 @@ def similar_track_candidates(seeds, track, report=print):
             report(f"  Note: {name} is ticked but has no key, so it was skipped. {KEY_HELP_LINE}")
             continue
         pairs, from_cache = [], False
-        for seed in seeds:   # a multi-value artist: the first name a source knows the track under
+        tries = list(seeds)
+        if code not in ("ai", "youtube"):   # the AI reads joint credits itself; YouTube searches
+            for s in seeds:   # a joint credit nobody knows: its lead artist as a last try
+                lead = primary_artist(s)
+                if lead and lead not in tries:
+                    tries.append(lead)
+        for seed in tries:   # a multi-value artist: the first name a source knows the track under
             if code == "youtube":
                 pairs = youtube_similar_tracks(seed, track)
             else:
@@ -5327,6 +5383,8 @@ def similar_track_candidates(seeds, track, report=print):
                 from_cache = cache_get(label, "similar_tracks", cache_key) is not None
                 pairs = cached_call(label, "similar_tracks", cache_key, lambda: fetch(seed, track))
             if pairs:
+                if seed not in seeds:
+                    debug(f"{name}: similar tracks found under the lead artist {seed} for {seeds[0]} - {track}")
                 break
         pairs = [(canonicalise_conjunction(p[0]), normalise_punctuation(p[1])) for p in pairs or []
                  if isinstance(p, (list, tuple)) and len(p) == 2 and p[0] and p[1]

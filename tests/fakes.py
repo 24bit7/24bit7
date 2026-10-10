@@ -355,6 +355,8 @@ class FakeWeb:
         self.calls = []                 # (service, detail)
         self.down = set()               # services answering with an error
         self.empty = set()              # services answering with nothing
+        self.unknown = set()            # artist names every service treats as unknown (joint credits)
+        self.acr_miss = set()           # (artist, title) ListenBrainz's own lookup can't find
         lib_artists = []
         for r in jriver.tracks:
             a = r["Album Artist (auto)"]
@@ -399,6 +401,7 @@ class FakeWeb:
         empty = service in self.empty
         if service == "lastfm":
             m, artist = params.get("method"), params.get("artist", "")
+            empty = empty or artist in self.unknown
             if m == "artist.getsimilar":
                 names = [] if empty else self.similar_artists(artist)[:int(params.get("limit", 20))]
                 return Resp(data={"similarartists": {"artist": [{"name": n} for n in names]}})
@@ -428,6 +431,14 @@ class FakeWeb:
                 return Resp(data={"models": [] if empty else [{"name": "gemma3:4b"}]})
             return Resp(status=404, data={"error": "not faked"})
         if service == "musicbrainz":
+            if path.startswith("/ws/2/recording"):   # the recording search behind ListenBrainz
+                m = re.match(r'recording:"(.*)" AND artist:"(.*)"$', params.get("query", ""))
+                t, a = m.groups() if m else ("", "")
+                known = not empty and a not in self.unknown and any(
+                    a.lower() == x.lower() for x in self.artists + self.lib_artists)
+                return Resp(data={"recordings": [{"id": f"rec:{a}|{t}", "title": t,
+                                                  "artist-credit": [{"name": a, "joinphrase": ""}]}]
+                                  if known else []})
             if path.startswith("/ws/2/artist"):
                 name = re.sub(r'^artist:"|"$', "", params.get("query", ""))
                 known = any(name.lower() == a.lower() for a in self.artists) or name in self.lib_artists
@@ -443,7 +454,8 @@ class FakeWeb:
                 return Resp(data=[] if empty else [{"recording_name": t} for t in self.top_tracks(name)])
             if path == "/acr-lookup/json":
                 a, t = params.get("artist_credit_name", ""), params.get("recording_name", "")
-                return Resp(data=[] if empty else [{"recording_mbid": f"rec:{a}|{t}"}])
+                miss = empty or (a, t) in self.acr_miss or a in self.unknown
+                return Resp(data=[] if miss else [{"recording_mbid": f"rec:{a}|{t}"}])
             if path == "/similar-recordings/json":
                 a, t = body[0]["recording_mbids"][0][4:].split("|", 1)
                 pairs = [] if empty else self.similar_tracks(a, t)[::-1]
