@@ -305,7 +305,7 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 - **A second try from the AI**: when none of its suggestions are in your library, the AI is asked once more for different ones (Similar Artists, Similar Tracks and Drift's AI rounds).
 - **Better seed matching** for joint credits, ListenBrainz (through MusicBrainz) and Tidal title variants, and a clearer note on Drift's sources.
 - **Support**: a Ko-fi fund towards a pair of PMC Prodigy speakers, alongside PayPal for AI credits.
-- **Fixes**: AI list replies with extra words around them are read properly instead of being reported as "cut short"; YouTube gets a seed track in Playing Now and Drift.
+- **Fixes**: AI list replies with extra words around them are read properly instead of being reported as "cut short"; YouTube gets a seed track in Playing Now and Drift; a new install's first Test My Sources run can no longer lose a source's answer to a database error.
 
 ### Earlier: 1.17.0
 

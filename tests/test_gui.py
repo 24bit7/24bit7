@@ -747,8 +747,10 @@ def _review_with_zone(app, ui, playing=None, pos=1):
 
 def _act(ui, how, ticks):
     panel = ui.play.review_panel
+    ui.pump(until=lambda: not panel.busy)   # a slower PC can still be busy here, and Review ignores ticks then
     for k in ticks:
         panel.toggle(k)
+    assert panel._can_act(), "Review wasn't ready to act"
     panel._act(how)
     ui.pump(until=lambda: not panel.busy)
     ui.pump(0.2)

@@ -791,27 +791,34 @@ def seed_artists(seed_info):
 # ---------------------------------------------------------------------------
 
 _db = None
+import threading as _db_threading
+_db_open_lock = _db_threading.RLock()   # sources asked at once mustn't see the connection before its tables
 
 
 def db():
-    """Opens the database on first use and creates tables if needed."""
+    """Opens the database on first use and creates tables if needed. Opening is locked, and the
+    connection is only handed out once its tables exist, so threads starting together can't
+    meet "no such table"."""
     global _db
     if _db is None:
-        _db = sqlite3.connect(DB_FILE, check_same_thread=False)
-        _db.execute("""CREATE TABLE IF NOT EXISTS cache (
-            source TEXT, kind TEXT, key TEXT, payload TEXT, fetched_at REAL,
-            PRIMARY KEY (source, kind, key))""")
-        _db.execute("""CREATE TABLE IF NOT EXISTS sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, started_at TEXT, mode TEXT,
-            seed_artist TEXT, seed_track TEXT, seed_album TEXT, sources TEXT, queued INTEGER)""")
-        _db.execute("""CREATE TABLE IF NOT EXISTS discoveries (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER,
-            artist TEXT, track TEXT, sources TEXT, found INTEGER)""")
-        _db.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
-        if "seed" not in [c[1] for c in _db.execute("PRAGMA table_info(discoveries)")]:
-            _db.execute("ALTER TABLE discoveries ADD COLUMN seed TEXT")   # 1.17.0: the sample a row came from
-        _db.commit()
-        import_legacy_csv()
+        with _db_open_lock:
+            if _db is None:
+                con = sqlite3.connect(DB_FILE, check_same_thread=False)
+                con.execute("""CREATE TABLE IF NOT EXISTS cache (
+                    source TEXT, kind TEXT, key TEXT, payload TEXT, fetched_at REAL,
+                    PRIMARY KEY (source, kind, key))""")
+                con.execute("""CREATE TABLE IF NOT EXISTS sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, started_at TEXT, mode TEXT,
+                    seed_artist TEXT, seed_track TEXT, seed_album TEXT, sources TEXT, queued INTEGER)""")
+                con.execute("""CREATE TABLE IF NOT EXISTS discoveries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER,
+                    artist TEXT, track TEXT, sources TEXT, found INTEGER)""")
+                con.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
+                if "seed" not in [c[1] for c in con.execute("PRAGMA table_info(discoveries)")]:
+                    con.execute("ALTER TABLE discoveries ADD COLUMN seed TEXT")   # 1.17.0: the sample a row came from
+                con.commit()
+                _db = con
+                import_legacy_csv()
     return _db
 
 
