@@ -1,0 +1,5976 @@
+{
+ "version": 1,
+ "finished": "2026-10-10 12:36",
+ "mode": "quick",
+ "seconds": 558,
+ "seeds": [
+  {
+   "genre": "Rock",
+   "artist": "Led Zeppelin",
+   "track": "Whole Lotta Love",
+   "tier": "famous"
+  },
+  {
+   "genre": "Rock",
+   "artist": "Big Star",
+   "track": "September Gurls",
+   "tier": "hidden"
+  },
+  {
+   "genre": "Indie",
+   "artist": "Pixies",
+   "track": "Where Is My Mind?",
+   "tier": "famous"
+  },
+  {
+   "genre": "Indie",
+   "artist": "The Go-Betweens",
+   "track": "Cattle and Cane",
+   "tier": "hidden"
+  },
+  {
+   "genre": "Pop",
+   "artist": "Michael Jackson",
+   "track": "Billie Jean",
+   "tier": "famous"
+  },
+  {
+   "genre": "Pop",
+   "artist": "Prefab Sprout",
+   "track": "When Love Breaks Down",
+   "tier": "hidden"
+  },
+  {
+   "genre": "Hip-Hop",
+   "artist": "Grandmaster Flash and the Furious Five",
+   "track": "The Message",
+   "tier": "famous"
+  },
+  {
+   "genre": "Hip-Hop",
+   "artist": "Madvillain",
+   "track": "Accordion",
+   "tier": "hidden"
+  },
+  {
+   "genre": "Soul",
+   "artist": "Marvin Gaye",
+   "track": "What's Going On",
+   "tier": "famous"
+  },
+  {
+   "genre": "Soul",
+   "artist": "Darondo",
+   "track": "Didn't I",
+   "tier": "hidden"
+  },
+  {
+   "genre": "House",
+   "artist": "Donna Summer",
+   "track": "I Feel Love",
+   "tier": "famous"
+  },
+  {
+   "genre": "House",
+   "artist": "Mr. Fingers",
+   "track": "Can You Feel It",
+   "tier": "hidden"
+  },
+  {
+   "genre": "Techno",
+   "artist": "Afrika Bambaataa & the Soulsonic Force",
+   "track": "Planet Rock",
+   "tier": "famous"
+  },
+  {
+   "genre": "Techno",
+   "artist": "Drexciya",
+   "track": "Andreaen Sand Dunes",
+   "tier": "hidden"
+  },
+  {
+   "genre": "Ambient",
+   "artist": "Brian Eno",
+   "track": "1/1",
+   "tier": "famous"
+  },
+  {
+   "genre": "Ambient",
+   "artist": "Harold Budd & Brian Eno",
+   "track": "First Light",
+   "tier": "hidden"
+  },
+  {
+   "genre": "Trip-Hop",
+   "artist": "Massive Attack",
+   "track": "Teardrop",
+   "tier": "famous"
+  },
+  {
+   "genre": "Trip-Hop",
+   "artist": "Lamb",
+   "track": "Gorecki",
+   "tier": "hidden"
+  },
+  {
+   "genre": "Jazz",
+   "artist": "Miles Davis",
+   "track": "So What",
+   "tier": "famous"
+  },
+  {
+   "genre": "Jazz",
+   "artist": "Doug Carn",
+   "track": "Infant Eyes",
+   "tier": "hidden"
+  },
+  {
+   "genre": "Folk",
+   "artist": "Joni Mitchell",
+   "track": "A Case of You",
+   "tier": "famous"
+  },
+  {
+   "genre": "Folk",
+   "artist": "Vashti Bunyan",
+   "track": "Diamond Day",
+   "tier": "hidden"
+  },
+  {
+   "genre": "Country",
+   "artist": "Johnny Cash",
+   "track": "Folsom Prison Blues",
+   "tier": "famous"
+  },
+  {
+   "genre": "Country",
+   "artist": "Blaze Foley",
+   "track": "Clay Pigeons",
+   "tier": "hidden"
+  },
+  {
+   "genre": "Metal",
+   "artist": "Black Sabbath",
+   "track": "Paranoid",
+   "tier": "famous"
+  },
+  {
+   "genre": "Metal",
+   "artist": "Candlemass",
+   "track": "Solitude",
+   "tier": "hidden"
+  },
+  {
+   "genre": "Reggae",
+   "artist": "Bob Marley & The Wailers",
+   "track": "Redemption Song",
+   "tier": "famous"
+  },
+  {
+   "genre": "Reggae",
+   "artist": "Augustus Pablo",
+   "track": "King Tubby Meets Rockers Uptown",
+   "tier": "hidden"
+  },
+  {
+   "genre": "Latin",
+   "artist": "Stan Getz & João Gilberto",
+   "track": "The Girl from Ipanema",
+   "tier": "famous"
+  },
+  {
+   "genre": "Latin",
+   "artist": "Os Mutantes",
+   "track": "A Minha Menina",
+   "tier": "hidden"
+  },
+  {
+   "genre": "African",
+   "artist": "Fela Kuti",
+   "track": "Water No Get Enemy",
+   "tier": "famous"
+  },
+  {
+   "genre": "African",
+   "artist": "William Onyeabor",
+   "track": "Fantastic Man",
+   "tier": "hidden"
+  },
+  {
+   "genre": "Classical",
+   "artist": "Samuel Barber",
+   "track": "Adagio for Strings",
+   "tier": "famous"
+  },
+  {
+   "genre": "Classical",
+   "artist": "Arvo Pärt",
+   "track": "Spiegel im Spiegel",
+   "tier": "hidden"
+  }
+ ],
+ "genres": [
+  "Rock",
+  "Indie",
+  "Pop",
+  "Hip-Hop",
+  "Soul",
+  "House",
+  "Techno",
+  "Ambient",
+  "Trip-Hop",
+  "Jazz",
+  "Folk",
+  "Country",
+  "Metal",
+  "Reggae",
+  "Latin",
+  "African",
+  "Classical"
+ ],
+ "library_tracks": 140683,
+ "sources": {
+  "artists": [
+   [
+    "lastfm",
+    "Last.fm"
+   ],
+   [
+    "listenbrainz",
+    "ListenBrainz"
+   ],
+   [
+    "deezer",
+    "Deezer"
+   ],
+   [
+    "tidal",
+    "Tidal"
+   ],
+   [
+    "youtube",
+    "YouTube"
+   ]
+  ],
+  "tracks": [
+   [
+    "lastfm",
+    "Last.fm"
+   ],
+   [
+    "listenbrainz",
+    "ListenBrainz"
+   ],
+   [
+    "tidal",
+    "Tidal"
+   ],
+   [
+    "youtube",
+    "YouTube"
+   ]
+  ]
+ },
+ "rows": [
+  {
+   "seed": 0,
+   "genre": "Rock",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 16,
+   "seconds": 0.23,
+   "unique": 2
+  },
+  {
+   "seed": 0,
+   "genre": "Rock",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 20,
+   "seconds": 1.8,
+   "unique": 7
+  },
+  {
+   "seed": 0,
+   "genre": "Rock",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 18,
+   "seconds": 1.0,
+   "unique": 5
+  },
+  {
+   "seed": 0,
+   "genre": "Rock",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 18,
+   "seconds": 3.34,
+   "unique": 6
+  },
+  {
+   "seed": 0,
+   "genre": "Rock",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 18,
+   "seconds": 0.0,
+   "unique": 5
+  },
+  {
+   "seed": 0,
+   "genre": "Rock",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 29,
+   "seconds": 0.69,
+   "unique": 13
+  },
+  {
+   "seed": 0,
+   "genre": "Rock",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 30,
+   "seconds": 1.02,
+   "unique": 11
+  },
+  {
+   "seed": 0,
+   "genre": "Rock",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 28,
+   "seconds": 3.89,
+   "unique": 7
+  },
+  {
+   "seed": 0,
+   "genre": "Rock",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 30,
+   "seconds": 0.0,
+   "unique": 16
+  },
+  {
+   "seed": 1,
+   "genre": "Rock",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 16,
+   "seconds": 0.25,
+   "unique": 11
+  },
+  {
+   "seed": 1,
+   "genre": "Rock",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 20,
+   "seconds": 1.52,
+   "unique": 6
+  },
+  {
+   "seed": 1,
+   "genre": "Rock",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 20,
+   "seconds": 0.84,
+   "unique": 15
+  },
+  {
+   "seed": 1,
+   "genre": "Rock",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 9,
+   "seconds": 2.88,
+   "unique": 4
+  },
+  {
+   "seed": 1,
+   "genre": "Rock",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 19,
+   "seconds": 0.0,
+   "unique": 10
+  },
+  {
+   "seed": 1,
+   "genre": "Rock",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 20,
+   "seconds": 0.27,
+   "unique": 17
+  },
+  {
+   "seed": 1,
+   "genre": "Rock",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 21,
+   "seconds": 0.91,
+   "unique": 18
+  },
+  {
+   "seed": 1,
+   "genre": "Rock",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 10,
+   "seconds": 3.92,
+   "unique": 8
+  },
+  {
+   "seed": 1,
+   "genre": "Rock",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 29,
+   "seconds": 0.0,
+   "unique": 26
+  },
+  {
+   "seed": 2,
+   "genre": "Indie",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 18,
+   "seconds": 0.25,
+   "unique": 6
+  },
+  {
+   "seed": 2,
+   "genre": "Indie",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 20,
+   "seconds": 1.31,
+   "unique": 8
+  },
+  {
+   "seed": 2,
+   "genre": "Indie",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 19,
+   "seconds": 1.0,
+   "unique": 9
+  },
+  {
+   "seed": 2,
+   "genre": "Indie",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 17,
+   "seconds": 2.76,
+   "unique": 6
+  },
+  {
+   "seed": 2,
+   "genre": "Indie",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 17,
+   "seconds": 0.0,
+   "unique": 6
+  },
+  {
+   "seed": 2,
+   "genre": "Indie",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 28,
+   "seconds": 0.4,
+   "unique": 14
+  },
+  {
+   "seed": 2,
+   "genre": "Indie",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 30,
+   "seconds": 1.17,
+   "unique": 7
+  },
+  {
+   "seed": 2,
+   "genre": "Indie",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 29,
+   "seconds": 4.0,
+   "unique": 16
+  },
+  {
+   "seed": 2,
+   "genre": "Indie",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 26,
+   "seconds": 0.0,
+   "unique": 14
+  },
+  {
+   "seed": 3,
+   "genre": "Indie",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 7,
+   "seconds": 0.28,
+   "unique": 1
+  },
+  {
+   "seed": 3,
+   "genre": "Indie",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 20,
+   "seconds": 3.17,
+   "unique": 9
+  },
+  {
+   "seed": 3,
+   "genre": "Indie",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 11,
+   "seconds": 1.33,
+   "unique": 3
+  },
+  {
+   "seed": 3,
+   "genre": "Indie",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 4,
+   "seconds": 2.8,
+   "unique": 0
+  },
+  {
+   "seed": 3,
+   "genre": "Indie",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 17,
+   "seconds": 0.01,
+   "unique": 9
+  },
+  {
+   "seed": 3,
+   "genre": "Indie",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 8,
+   "seconds": 0.64,
+   "unique": 7
+  },
+  {
+   "seed": 3,
+   "genre": "Indie",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 30,
+   "hits": 21,
+   "seconds": 0.82,
+   "unique": 20
+  },
+  {
+   "seed": 3,
+   "genre": "Indie",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 4,
+   "seconds": 4.11,
+   "unique": 3
+  },
+  {
+   "seed": 3,
+   "genre": "Indie",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 13,
+   "seconds": 0.0,
+   "unique": 10
+  },
+  {
+   "seed": 4,
+   "genre": "Pop",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 14,
+   "seconds": 0.24,
+   "unique": 7
+  },
+  {
+   "seed": 4,
+   "genre": "Pop",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 20,
+   "seconds": 1.95,
+   "unique": 14
+  },
+  {
+   "seed": 4,
+   "genre": "Pop",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 18,
+   "seconds": 1.01,
+   "unique": 7
+  },
+  {
+   "seed": 4,
+   "genre": "Pop",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 14,
+   "seconds": 2.8,
+   "unique": 5
+  },
+  {
+   "seed": 4,
+   "genre": "Pop",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 17,
+   "seconds": 0.0,
+   "unique": 6
+  },
+  {
+   "seed": 4,
+   "genre": "Pop",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 21,
+   "seconds": 0.74,
+   "unique": 8
+  },
+  {
+   "seed": 4,
+   "genre": "Pop",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 26,
+   "seconds": 0.98,
+   "unique": 13
+  },
+  {
+   "seed": 4,
+   "genre": "Pop",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 28,
+   "seconds": 4.01,
+   "unique": 10
+  },
+  {
+   "seed": 4,
+   "genre": "Pop",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 28,
+   "seconds": 0.0,
+   "unique": 15
+  },
+  {
+   "seed": 5,
+   "genre": "Pop",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 13,
+   "seconds": 0.23,
+   "unique": 5
+  },
+  {
+   "seed": 5,
+   "genre": "Pop",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 20,
+   "seconds": 0.82,
+   "unique": 11
+  },
+  {
+   "seed": 5,
+   "genre": "Pop",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 12,
+   "seconds": 0.92,
+   "unique": 3
+  },
+  {
+   "seed": 5,
+   "genre": "Pop",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 7,
+   "seconds": 2.81,
+   "unique": 2
+  },
+  {
+   "seed": 5,
+   "genre": "Pop",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 16,
+   "seconds": 0.0,
+   "unique": 10
+  },
+  {
+   "seed": 5,
+   "genre": "Pop",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 17,
+   "seconds": 0.52,
+   "unique": 10
+  },
+  {
+   "seed": 5,
+   "genre": "Pop",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 17,
+   "seconds": 0.89,
+   "unique": 13
+  },
+  {
+   "seed": 5,
+   "genre": "Pop",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 9,
+   "seconds": 4.12,
+   "unique": 9
+  },
+  {
+   "seed": 5,
+   "genre": "Pop",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 19,
+   "seconds": 0.0,
+   "unique": 16
+  },
+  {
+   "seed": 6,
+   "genre": "Hip-Hop",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 6,
+   "seconds": 0.22,
+   "unique": 1
+  },
+  {
+   "seed": 6,
+   "genre": "Hip-Hop",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 17,
+   "seconds": 1.08,
+   "unique": 10
+  },
+  {
+   "seed": 6,
+   "genre": "Hip-Hop",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 5,
+   "seconds": 1.83,
+   "unique": 1
+  },
+  {
+   "seed": 6,
+   "genre": "Hip-Hop",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 3,
+   "seconds": 3.83,
+   "unique": 1
+  },
+  {
+   "seed": 6,
+   "genre": "Hip-Hop",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 11,
+   "seconds": 0.0,
+   "unique": 8
+  },
+  {
+   "seed": 6,
+   "genre": "Hip-Hop",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 13,
+   "seconds": 0.42,
+   "unique": 10
+  },
+  {
+   "seed": 6,
+   "genre": "Hip-Hop",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": false,
+   "returned": 0,
+   "returned_all": 0,
+   "hits": 0,
+   "seconds": 1.99,
+   "unique": 0
+  },
+  {
+   "seed": 6,
+   "genre": "Hip-Hop",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 13,
+   "seconds": 3.98,
+   "unique": 9
+  },
+  {
+   "seed": 6,
+   "genre": "Hip-Hop",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 17,
+   "seconds": 0.0,
+   "unique": 14
+  },
+  {
+   "seed": 7,
+   "genre": "Hip-Hop",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 5,
+   "seconds": 0.39,
+   "unique": 2
+  },
+  {
+   "seed": 7,
+   "genre": "Hip-Hop",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 8,
+   "seconds": 0.83,
+   "unique": 4
+  },
+  {
+   "seed": 7,
+   "genre": "Hip-Hop",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 1,
+   "seconds": 0.94,
+   "unique": 0
+  },
+  {
+   "seed": 7,
+   "genre": "Hip-Hop",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 1,
+   "seconds": 2.82,
+   "unique": 0
+  },
+  {
+   "seed": 7,
+   "genre": "Hip-Hop",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 22,
+   "hits": 10,
+   "seconds": 0.0,
+   "unique": 7
+  },
+  {
+   "seed": 7,
+   "genre": "Hip-Hop",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 15,
+   "seconds": 0.31,
+   "unique": 10
+  },
+  {
+   "seed": 7,
+   "genre": "Hip-Hop",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 2,
+   "seconds": 1.43,
+   "unique": 0
+  },
+  {
+   "seed": 7,
+   "genre": "Hip-Hop",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 5,
+   "seconds": 3.97,
+   "unique": 4
+  },
+  {
+   "seed": 7,
+   "genre": "Hip-Hop",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 15,
+   "seconds": 0.0,
+   "unique": 8
+  },
+  {
+   "seed": 8,
+   "genre": "Soul",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 16,
+   "seconds": 0.23,
+   "unique": 4
+  },
+  {
+   "seed": 8,
+   "genre": "Soul",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 20,
+   "seconds": 3.86,
+   "unique": 9
+  },
+  {
+   "seed": 8,
+   "genre": "Soul",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 16,
+   "seconds": 0.88,
+   "unique": 0
+  },
+  {
+   "seed": 8,
+   "genre": "Soul",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 14,
+   "seconds": 2.81,
+   "unique": 2
+  },
+  {
+   "seed": 8,
+   "genre": "Soul",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 18,
+   "seconds": 0.0,
+   "unique": 9
+  },
+  {
+   "seed": 8,
+   "genre": "Soul",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 23,
+   "seconds": 0.78,
+   "unique": 7
+  },
+  {
+   "seed": 8,
+   "genre": "Soul",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 27,
+   "seconds": 1.03,
+   "unique": 14
+  },
+  {
+   "seed": 8,
+   "genre": "Soul",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 21,
+   "seconds": 3.98,
+   "unique": 10
+  },
+  {
+   "seed": 8,
+   "genre": "Soul",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 20,
+   "seconds": 0.0,
+   "unique": 13
+  },
+  {
+   "seed": 9,
+   "genre": "Soul",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 4,
+   "seconds": 0.28,
+   "unique": 0
+  },
+  {
+   "seed": 9,
+   "genre": "Soul",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 10,
+   "seconds": 0.91,
+   "unique": 2
+  },
+  {
+   "seed": 9,
+   "genre": "Soul",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 9,
+   "seconds": 1.03,
+   "unique": 2
+  },
+  {
+   "seed": 9,
+   "genre": "Soul",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 4,
+   "seconds": 3.16,
+   "unique": 0
+  },
+  {
+   "seed": 9,
+   "genre": "Soul",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 4,
+   "seconds": 0.0,
+   "unique": 2
+  },
+  {
+   "seed": 9,
+   "genre": "Soul",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 21,
+   "seconds": 0.3,
+   "unique": 19
+  },
+  {
+   "seed": 9,
+   "genre": "Soul",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": false,
+   "returned": 0,
+   "returned_all": 0,
+   "hits": 0,
+   "seconds": 0.76,
+   "unique": 0
+  },
+  {
+   "seed": 9,
+   "genre": "Soul",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 4,
+   "seconds": 3.98,
+   "unique": 4
+  },
+  {
+   "seed": 9,
+   "genre": "Soul",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 3,
+   "seconds": 0.0,
+   "unique": 1
+  },
+  {
+   "seed": 10,
+   "genre": "House",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 15,
+   "seconds": 0.35,
+   "unique": 7
+  },
+  {
+   "seed": 10,
+   "genre": "House",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 20,
+   "seconds": 0.83,
+   "unique": 10
+  },
+  {
+   "seed": 10,
+   "genre": "House",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 15,
+   "seconds": 0.87,
+   "unique": 4
+  },
+  {
+   "seed": 10,
+   "genre": "House",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 7,
+   "seconds": 2.73,
+   "unique": 1
+  },
+  {
+   "seed": 10,
+   "genre": "House",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 11,
+   "seconds": 0.0,
+   "unique": 9
+  },
+  {
+   "seed": 10,
+   "genre": "House",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 18,
+   "seconds": 0.26,
+   "unique": 8
+  },
+  {
+   "seed": 10,
+   "genre": "House",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 26,
+   "seconds": 0.88,
+   "unique": 20
+  },
+  {
+   "seed": 10,
+   "genre": "House",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 15,
+   "seconds": 3.91,
+   "unique": 7
+  },
+  {
+   "seed": 10,
+   "genre": "House",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 21,
+   "seconds": 0.0,
+   "unique": 15
+  },
+  {
+   "seed": 11,
+   "genre": "House",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 4,
+   "seconds": 0.26,
+   "unique": 1
+  },
+  {
+   "seed": 11,
+   "genre": "House",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 10,
+   "seconds": 0.81,
+   "unique": 8
+  },
+  {
+   "seed": 11,
+   "genre": "House",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 2,
+   "seconds": 0.9,
+   "unique": 1
+  },
+  {
+   "seed": 11,
+   "genre": "House",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 1,
+   "seconds": 2.86,
+   "unique": 0
+  },
+  {
+   "seed": 11,
+   "genre": "House",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 1,
+   "seconds": 0.0,
+   "unique": 1
+  },
+  {
+   "seed": 11,
+   "genre": "House",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 13,
+   "seconds": 0.59,
+   "unique": 4
+  },
+  {
+   "seed": 11,
+   "genre": "House",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 26,
+   "returned_all": 26,
+   "hits": 12,
+   "seconds": 0.83,
+   "unique": 4
+  },
+  {
+   "seed": 11,
+   "genre": "House",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 13,
+   "seconds": 4.01,
+   "unique": 4
+  },
+  {
+   "seed": 11,
+   "genre": "House",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 5,
+   "seconds": 0.0,
+   "unique": 3
+  },
+  {
+   "seed": 12,
+   "genre": "Techno",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 7,
+   "seconds": 0.52,
+   "unique": 5
+  },
+  {
+   "seed": 12,
+   "genre": "Techno",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 10,
+   "seconds": 2.59,
+   "unique": 8
+  },
+  {
+   "seed": 12,
+   "genre": "Techno",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 1,
+   "seconds": 1.77,
+   "unique": 0
+  },
+  {
+   "seed": 12,
+   "genre": "Techno",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 0,
+   "seconds": 3.88,
+   "unique": 0
+  },
+  {
+   "seed": 12,
+   "genre": "Techno",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 3,
+   "seconds": 0.0,
+   "unique": 3
+  },
+  {
+   "seed": 12,
+   "genre": "Techno",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 12,
+   "seconds": 0.43,
+   "unique": 7
+  },
+  {
+   "seed": 12,
+   "genre": "Techno",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": false,
+   "returned": 0,
+   "returned_all": 0,
+   "hits": 0,
+   "seconds": 1.54,
+   "unique": 0
+  },
+  {
+   "seed": 12,
+   "genre": "Techno",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 11,
+   "seconds": 3.92,
+   "unique": 6
+  },
+  {
+   "seed": 12,
+   "genre": "Techno",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 13,
+   "seconds": 0.0,
+   "unique": 10
+  },
+  {
+   "seed": 13,
+   "genre": "Techno",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 1,
+   "seconds": 0.27,
+   "unique": 0
+  },
+  {
+   "seed": 13,
+   "genre": "Techno",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 3,
+   "seconds": 3.19,
+   "unique": 2
+  },
+  {
+   "seed": 13,
+   "genre": "Techno",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 2,
+   "seconds": 1.18,
+   "unique": 1
+  },
+  {
+   "seed": 13,
+   "genre": "Techno",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 0,
+   "seconds": 2.82,
+   "unique": 0
+  },
+  {
+   "seed": 13,
+   "genre": "Techno",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 2,
+   "seconds": 0.0,
+   "unique": 1
+  },
+  {
+   "seed": 13,
+   "genre": "Techno",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 6,
+   "seconds": 0.4,
+   "unique": 5
+  },
+  {
+   "seed": 13,
+   "genre": "Techno",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 1,
+   "returned_all": 1,
+   "hits": 1,
+   "seconds": 0.79,
+   "unique": 0
+  },
+  {
+   "seed": 13,
+   "genre": "Techno",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 5,
+   "seconds": 3.96,
+   "unique": 3
+  },
+  {
+   "seed": 13,
+   "genre": "Techno",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 4,
+   "seconds": 0.0,
+   "unique": 2
+  },
+  {
+   "seed": 14,
+   "genre": "Ambient",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 7,
+   "seconds": 0.26,
+   "unique": 6
+  },
+  {
+   "seed": 14,
+   "genre": "Ambient",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 17,
+   "seconds": 2.26,
+   "unique": 15
+  },
+  {
+   "seed": 14,
+   "genre": "Ambient",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 15,
+   "seconds": 0.89,
+   "unique": 13
+  },
+  {
+   "seed": 14,
+   "genre": "Ambient",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 2,
+   "seconds": 2.9,
+   "unique": 1
+  },
+  {
+   "seed": 14,
+   "genre": "Ambient",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 2,
+   "seconds": 0.0,
+   "unique": 2
+  },
+  {
+   "seed": 14,
+   "genre": "Ambient",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 8,
+   "seconds": 0.26,
+   "unique": 7
+  },
+  {
+   "seed": 14,
+   "genre": "Ambient",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 8,
+   "seconds": 0.89,
+   "unique": 7
+  },
+  {
+   "seed": 14,
+   "genre": "Ambient",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 5,
+   "seconds": 3.99,
+   "unique": 5
+  },
+  {
+   "seed": 14,
+   "genre": "Ambient",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 2,
+   "seconds": 0.0,
+   "unique": 2
+  },
+  {
+   "seed": 15,
+   "genre": "Ambient",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 7,
+   "seconds": 0.4,
+   "unique": 2
+  },
+  {
+   "seed": 15,
+   "genre": "Ambient",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 13,
+   "seconds": 1.96,
+   "unique": 7
+  },
+  {
+   "seed": 15,
+   "genre": "Ambient",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 6,
+   "seconds": 1.23,
+   "unique": 2
+  },
+  {
+   "seed": 15,
+   "genre": "Ambient",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 3,
+   "seconds": 3.81,
+   "unique": 1
+  },
+  {
+   "seed": 15,
+   "genre": "Ambient",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 26,
+   "hits": 3,
+   "seconds": 0.01,
+   "unique": 2
+  },
+  {
+   "seed": 15,
+   "genre": "Ambient",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 9,
+   "seconds": 0.35,
+   "unique": 9
+  },
+  {
+   "seed": 15,
+   "genre": "Ambient",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 7,
+   "returned_all": 7,
+   "hits": 1,
+   "seconds": 0.81,
+   "unique": 1
+  },
+  {
+   "seed": 15,
+   "genre": "Ambient",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 7,
+   "seconds": 3.92,
+   "unique": 6
+  },
+  {
+   "seed": 15,
+   "genre": "Ambient",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 3,
+   "seconds": 0.0,
+   "unique": 2
+  },
+  {
+   "seed": 16,
+   "genre": "Trip-Hop",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 20,
+   "seconds": 0.26,
+   "unique": 18
+  },
+  {
+   "seed": 16,
+   "genre": "Trip-Hop",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 20,
+   "seconds": 0.43,
+   "unique": 9
+  },
+  {
+   "seed": 16,
+   "genre": "Trip-Hop",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 18,
+   "seconds": 0.93,
+   "unique": 4
+  },
+  {
+   "seed": 16,
+   "genre": "Trip-Hop",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 18,
+   "seconds": 2.88,
+   "unique": 8
+  },
+  {
+   "seed": 16,
+   "genre": "Trip-Hop",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 18,
+   "seconds": 0.01,
+   "unique": 9
+  },
+  {
+   "seed": 16,
+   "genre": "Trip-Hop",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 28,
+   "seconds": 0.34,
+   "unique": 17
+  },
+  {
+   "seed": 16,
+   "genre": "Trip-Hop",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 30,
+   "seconds": 1.23,
+   "unique": 14
+  },
+  {
+   "seed": 16,
+   "genre": "Trip-Hop",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 29,
+   "seconds": 3.91,
+   "unique": 13
+  },
+  {
+   "seed": 16,
+   "genre": "Trip-Hop",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 25,
+   "seconds": 0.0,
+   "unique": 13
+  },
+  {
+   "seed": 17,
+   "genre": "Trip-Hop",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 19,
+   "seconds": 0.33,
+   "unique": 6
+  },
+  {
+   "seed": 17,
+   "genre": "Trip-Hop",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 19,
+   "seconds": 0.4,
+   "unique": 3
+  },
+  {
+   "seed": 17,
+   "genre": "Trip-Hop",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 17,
+   "seconds": 0.93,
+   "unique": 6
+  },
+  {
+   "seed": 17,
+   "genre": "Trip-Hop",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 15,
+   "seconds": 2.75,
+   "unique": 5
+  },
+  {
+   "seed": 17,
+   "genre": "Trip-Hop",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 18,
+   "seconds": 0.0,
+   "unique": 6
+  },
+  {
+   "seed": 17,
+   "genre": "Trip-Hop",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 29,
+   "seconds": 0.39,
+   "unique": 12
+  },
+  {
+   "seed": 17,
+   "genre": "Trip-Hop",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 28,
+   "seconds": 0.87,
+   "unique": 15
+  },
+  {
+   "seed": 17,
+   "genre": "Trip-Hop",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 26,
+   "seconds": 4.06,
+   "unique": 9
+  },
+  {
+   "seed": 17,
+   "genre": "Trip-Hop",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 27,
+   "seconds": 0.0,
+   "unique": 15
+  },
+  {
+   "seed": 18,
+   "genre": "Jazz",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 17,
+   "seconds": 0.25,
+   "unique": 6
+  },
+  {
+   "seed": 18,
+   "genre": "Jazz",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 18,
+   "seconds": 1.45,
+   "unique": 7
+  },
+  {
+   "seed": 18,
+   "genre": "Jazz",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 16,
+   "seconds": 0.84,
+   "unique": 6
+  },
+  {
+   "seed": 18,
+   "genre": "Jazz",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 11,
+   "seconds": 2.79,
+   "unique": 2
+  },
+  {
+   "seed": 18,
+   "genre": "Jazz",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 26,
+   "hits": 7,
+   "seconds": 0.01,
+   "unique": 0
+  },
+  {
+   "seed": 18,
+   "genre": "Jazz",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 21,
+   "seconds": 0.29,
+   "unique": 12
+  },
+  {
+   "seed": 18,
+   "genre": "Jazz",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 17,
+   "seconds": 0.96,
+   "unique": 8
+  },
+  {
+   "seed": 18,
+   "genre": "Jazz",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 14,
+   "seconds": 4.13,
+   "unique": 8
+  },
+  {
+   "seed": 18,
+   "genre": "Jazz",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 11,
+   "seconds": 0.0,
+   "unique": 6
+  },
+  {
+   "seed": 19,
+   "genre": "Jazz",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 8,
+   "seconds": 0.38,
+   "unique": 7
+  },
+  {
+   "seed": 19,
+   "genre": "Jazz",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 16,
+   "returned_all": 16,
+   "hits": 7,
+   "seconds": 1.26,
+   "unique": 7
+  },
+  {
+   "seed": 19,
+   "genre": "Jazz",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 4,
+   "seconds": 1.05,
+   "unique": 3
+  },
+  {
+   "seed": 19,
+   "genre": "Jazz",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 0,
+   "seconds": 2.81,
+   "unique": 0
+  },
+  {
+   "seed": 19,
+   "genre": "Jazz",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 13,
+   "seconds": 0.0,
+   "unique": 13
+  },
+  {
+   "seed": 19,
+   "genre": "Jazz",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 3,
+   "seconds": 0.45,
+   "unique": 3
+  },
+  {
+   "seed": 19,
+   "genre": "Jazz",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": false,
+   "returned": 0,
+   "returned_all": 0,
+   "hits": 0,
+   "seconds": 0.82,
+   "unique": 0
+  },
+  {
+   "seed": 19,
+   "genre": "Jazz",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 3,
+   "seconds": 3.94,
+   "unique": 3
+  },
+  {
+   "seed": 19,
+   "genre": "Jazz",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 7,
+   "seconds": 0.0,
+   "unique": 7
+  },
+  {
+   "seed": 20,
+   "genre": "Folk",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 18,
+   "seconds": 0.26,
+   "unique": 10
+  },
+  {
+   "seed": 20,
+   "genre": "Folk",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 20,
+   "seconds": 1.63,
+   "unique": 7
+  },
+  {
+   "seed": 20,
+   "genre": "Folk",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 18,
+   "seconds": 0.96,
+   "unique": 7
+  },
+  {
+   "seed": 20,
+   "genre": "Folk",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 10,
+   "seconds": 2.88,
+   "unique": 2
+  },
+  {
+   "seed": 20,
+   "genre": "Folk",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 20,
+   "seconds": 0.0,
+   "unique": 16
+  },
+  {
+   "seed": 20,
+   "genre": "Folk",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 23,
+   "seconds": 0.65,
+   "unique": 14
+  },
+  {
+   "seed": 20,
+   "genre": "Folk",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 27,
+   "seconds": 0.95,
+   "unique": 13
+  },
+  {
+   "seed": 20,
+   "genre": "Folk",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 29,
+   "seconds": 4.03,
+   "unique": 16
+  },
+  {
+   "seed": 20,
+   "genre": "Folk",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 24,
+   "seconds": 0.0,
+   "unique": 18
+  },
+  {
+   "seed": 21,
+   "genre": "Folk",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 9,
+   "seconds": 0.46,
+   "unique": 3
+  },
+  {
+   "seed": 21,
+   "genre": "Folk",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 17,
+   "seconds": 0.81,
+   "unique": 11
+  },
+  {
+   "seed": 21,
+   "genre": "Folk",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 7,
+   "seconds": 0.89,
+   "unique": 5
+  },
+  {
+   "seed": 21,
+   "genre": "Folk",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 2,
+   "seconds": 2.8,
+   "unique": 0
+  },
+  {
+   "seed": 21,
+   "genre": "Folk",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 9,
+   "seconds": 0.0,
+   "unique": 4
+  },
+  {
+   "seed": 21,
+   "genre": "Folk",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 18,
+   "seconds": 0.27,
+   "unique": 13
+  },
+  {
+   "seed": 21,
+   "genre": "Folk",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 39,
+   "hits": 11,
+   "seconds": 0.84,
+   "unique": 8
+  },
+  {
+   "seed": 21,
+   "genre": "Folk",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 8,
+   "seconds": 3.96,
+   "unique": 6
+  },
+  {
+   "seed": 21,
+   "genre": "Folk",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 11,
+   "seconds": 0.0,
+   "unique": 7
+  },
+  {
+   "seed": 22,
+   "genre": "Country",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 11,
+   "seconds": 0.26,
+   "unique": 3
+  },
+  {
+   "seed": 22,
+   "genre": "Country",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 20,
+   "seconds": 1.92,
+   "unique": 17
+  },
+  {
+   "seed": 22,
+   "genre": "Country",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 13,
+   "seconds": 1.15,
+   "unique": 6
+  },
+  {
+   "seed": 22,
+   "genre": "Country",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 8,
+   "seconds": 2.78,
+   "unique": 1
+  },
+  {
+   "seed": 22,
+   "genre": "Country",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 11,
+   "seconds": 0.01,
+   "unique": 5
+  },
+  {
+   "seed": 22,
+   "genre": "Country",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 14,
+   "seconds": 0.56,
+   "unique": 7
+  },
+  {
+   "seed": 22,
+   "genre": "Country",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 23,
+   "seconds": 1.04,
+   "unique": 21
+  },
+  {
+   "seed": 22,
+   "genre": "Country",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 9,
+   "seconds": 4.06,
+   "unique": 6
+  },
+  {
+   "seed": 22,
+   "genre": "Country",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 16,
+   "seconds": 0.0,
+   "unique": 8
+  },
+  {
+   "seed": 23,
+   "genre": "Country",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 6,
+   "seconds": 0.25,
+   "unique": 2
+  },
+  {
+   "seed": 23,
+   "genre": "Country",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 12,
+   "seconds": 0.81,
+   "unique": 6
+  },
+  {
+   "seed": 23,
+   "genre": "Country",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 7,
+   "seconds": 0.87,
+   "unique": 3
+  },
+  {
+   "seed": 23,
+   "genre": "Country",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 4,
+   "seconds": 2.79,
+   "unique": 0
+  },
+  {
+   "seed": 23,
+   "genre": "Country",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 10,
+   "seconds": 0.0,
+   "unique": 7
+  },
+  {
+   "seed": 23,
+   "genre": "Country",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 12,
+   "seconds": 0.47,
+   "unique": 12
+  },
+  {
+   "seed": 23,
+   "genre": "Country",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": false,
+   "returned": 0,
+   "returned_all": 0,
+   "hits": 0,
+   "seconds": 0.79,
+   "unique": 0
+  },
+  {
+   "seed": 23,
+   "genre": "Country",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 4,
+   "seconds": 3.9,
+   "unique": 4
+  },
+  {
+   "seed": 23,
+   "genre": "Country",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 10,
+   "seconds": 0.0,
+   "unique": 10
+  },
+  {
+   "seed": 24,
+   "genre": "Metal",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 13,
+   "seconds": 0.21,
+   "unique": 3
+  },
+  {
+   "seed": 24,
+   "genre": "Metal",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 20,
+   "seconds": 1.25,
+   "unique": 6
+  },
+  {
+   "seed": 24,
+   "genre": "Metal",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 15,
+   "seconds": 0.93,
+   "unique": 4
+  },
+  {
+   "seed": 24,
+   "genre": "Metal",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 10,
+   "seconds": 2.75,
+   "unique": 4
+  },
+  {
+   "seed": 24,
+   "genre": "Metal",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 20,
+   "seconds": 0.0,
+   "unique": 7
+  },
+  {
+   "seed": 24,
+   "genre": "Metal",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 30,
+   "seconds": 0.53,
+   "unique": 9
+  },
+  {
+   "seed": 24,
+   "genre": "Metal",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 30,
+   "seconds": 1.44,
+   "unique": 11
+  },
+  {
+   "seed": 24,
+   "genre": "Metal",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 19,
+   "seconds": 4.01,
+   "unique": 17
+  },
+  {
+   "seed": 24,
+   "genre": "Metal",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 27,
+   "seconds": 0.0,
+   "unique": 12
+  },
+  {
+   "seed": 25,
+   "genre": "Metal",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 0,
+   "seconds": 0.26,
+   "unique": 0
+  },
+  {
+   "seed": 25,
+   "genre": "Metal",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 9,
+   "seconds": 0.81,
+   "unique": 3
+  },
+  {
+   "seed": 25,
+   "genre": "Metal",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 5,
+   "seconds": 0.92,
+   "unique": 1
+  },
+  {
+   "seed": 25,
+   "genre": "Metal",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 1,
+   "seconds": 2.78,
+   "unique": 1
+  },
+  {
+   "seed": 25,
+   "genre": "Metal",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 16,
+   "seconds": 0.0,
+   "unique": 10
+  },
+  {
+   "seed": 25,
+   "genre": "Metal",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 4,
+   "seconds": 0.51,
+   "unique": 2
+  },
+  {
+   "seed": 25,
+   "genre": "Metal",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 10,
+   "seconds": 1.06,
+   "unique": 9
+  },
+  {
+   "seed": 25,
+   "genre": "Metal",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 1,
+   "seconds": 3.98,
+   "unique": 0
+  },
+  {
+   "seed": 25,
+   "genre": "Metal",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 16,
+   "seconds": 0.0,
+   "unique": 13
+  },
+  {
+   "seed": 26,
+   "genre": "Reggae",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 5,
+   "seconds": 0.34,
+   "unique": 0
+  },
+  {
+   "seed": 26,
+   "genre": "Reggae",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 18,
+   "seconds": 1.42,
+   "unique": 12
+  },
+  {
+   "seed": 26,
+   "genre": "Reggae",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 8,
+   "seconds": 0.91,
+   "unique": 2
+  },
+  {
+   "seed": 26,
+   "genre": "Reggae",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 6,
+   "seconds": 2.81,
+   "unique": 1
+  },
+  {
+   "seed": 26,
+   "genre": "Reggae",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 17,
+   "seconds": 0.0,
+   "unique": 12
+  },
+  {
+   "seed": 26,
+   "genre": "Reggae",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 10,
+   "seconds": 0.3,
+   "unique": 7
+  },
+  {
+   "seed": 26,
+   "genre": "Reggae",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 24,
+   "seconds": 0.94,
+   "unique": 23
+  },
+  {
+   "seed": 26,
+   "genre": "Reggae",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 8,
+   "seconds": 4.0,
+   "unique": 4
+  },
+  {
+   "seed": 26,
+   "genre": "Reggae",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 18,
+   "seconds": 0.0,
+   "unique": 16
+  },
+  {
+   "seed": 27,
+   "genre": "Reggae",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 5,
+   "seconds": 0.23,
+   "unique": 1
+  },
+  {
+   "seed": 27,
+   "genre": "Reggae",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 8,
+   "seconds": 0.85,
+   "unique": 1
+  },
+  {
+   "seed": 27,
+   "genre": "Reggae",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 2,
+   "seconds": 0.88,
+   "unique": 0
+  },
+  {
+   "seed": 27,
+   "genre": "Reggae",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 3,
+   "seconds": 2.83,
+   "unique": 0
+  },
+  {
+   "seed": 27,
+   "genre": "Reggae",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 3,
+   "seconds": 0.0,
+   "unique": 0
+  },
+  {
+   "seed": 27,
+   "genre": "Reggae",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 6,
+   "seconds": 0.45,
+   "unique": 4
+  },
+  {
+   "seed": 27,
+   "genre": "Reggae",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 45,
+   "hits": 19,
+   "seconds": 0.83,
+   "unique": 17
+  },
+  {
+   "seed": 27,
+   "genre": "Reggae",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 8,
+   "seconds": 3.91,
+   "unique": 7
+  },
+  {
+   "seed": 27,
+   "genre": "Reggae",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 2,
+   "seconds": 0.0,
+   "unique": 1
+  },
+  {
+   "seed": 28,
+   "genre": "Latin",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 11,
+   "seconds": 0.26,
+   "unique": 7
+  },
+  {
+   "seed": 28,
+   "genre": "Latin",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 18,
+   "seconds": 4.41,
+   "unique": 8
+  },
+  {
+   "seed": 28,
+   "genre": "Latin",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 15,
+   "seconds": 1.94,
+   "unique": 6
+  },
+  {
+   "seed": 28,
+   "genre": "Latin",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 7,
+   "seconds": 3.8,
+   "unique": 1
+  },
+  {
+   "seed": 28,
+   "genre": "Latin",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 4,
+   "seconds": 0.0,
+   "unique": 3
+  },
+  {
+   "seed": 28,
+   "genre": "Latin",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 13,
+   "seconds": 0.49,
+   "unique": 9
+  },
+  {
+   "seed": 28,
+   "genre": "Latin",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 16,
+   "seconds": 1.75,
+   "unique": 13
+  },
+  {
+   "seed": 28,
+   "genre": "Latin",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 13,
+   "seconds": 3.87,
+   "unique": 7
+  },
+  {
+   "seed": 28,
+   "genre": "Latin",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 6,
+   "seconds": 0.0,
+   "unique": 2
+  },
+  {
+   "seed": 29,
+   "genre": "Latin",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 29,
+   "hits": 1,
+   "seconds": 0.41,
+   "unique": 0
+  },
+  {
+   "seed": 29,
+   "genre": "Latin",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 10,
+   "seconds": 0.86,
+   "unique": 7
+  },
+  {
+   "seed": 29,
+   "genre": "Latin",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 3,
+   "seconds": 0.88,
+   "unique": 0
+  },
+  {
+   "seed": 29,
+   "genre": "Latin",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 3,
+   "seconds": 2.78,
+   "unique": 1
+  },
+  {
+   "seed": 29,
+   "genre": "Latin",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 3,
+   "seconds": 0.0,
+   "unique": 0
+  },
+  {
+   "seed": 29,
+   "genre": "Latin",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 48,
+   "hits": 6,
+   "seconds": 0.53,
+   "unique": 3
+  },
+  {
+   "seed": 29,
+   "genre": "Latin",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 4,
+   "seconds": 0.88,
+   "unique": 2
+  },
+  {
+   "seed": 29,
+   "genre": "Latin",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 5,
+   "seconds": 3.97,
+   "unique": 2
+  },
+  {
+   "seed": 29,
+   "genre": "Latin",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 4,
+   "seconds": 0.0,
+   "unique": 2
+  },
+  {
+   "seed": 30,
+   "genre": "African",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 8,
+   "seconds": 0.3,
+   "unique": 3
+  },
+  {
+   "seed": 30,
+   "genre": "African",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 16,
+   "seconds": 3.19,
+   "unique": 14
+  },
+  {
+   "seed": 30,
+   "genre": "African",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 4,
+   "seconds": 1.0,
+   "unique": 0
+  },
+  {
+   "seed": 30,
+   "genre": "African",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 5,
+   "seconds": 2.88,
+   "unique": 1
+  },
+  {
+   "seed": 30,
+   "genre": "African",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 7,
+   "seconds": 0.0,
+   "unique": 6
+  },
+  {
+   "seed": 30,
+   "genre": "African",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 6,
+   "seconds": 0.39,
+   "unique": 2
+  },
+  {
+   "seed": 30,
+   "genre": "African",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 3,
+   "returned_all": 3,
+   "hits": 0,
+   "seconds": 0.84,
+   "unique": 0
+  },
+  {
+   "seed": 30,
+   "genre": "African",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 6,
+   "seconds": 4.03,
+   "unique": 2
+  },
+  {
+   "seed": 30,
+   "genre": "African",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 7,
+   "seconds": 0.0,
+   "unique": 5
+  },
+  {
+   "seed": 31,
+   "genre": "African",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 9,
+   "seconds": 0.35,
+   "unique": 3
+  },
+  {
+   "seed": 31,
+   "genre": "African",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 15,
+   "seconds": 0.81,
+   "unique": 11
+  },
+  {
+   "seed": 31,
+   "genre": "African",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 5,
+   "seconds": 0.87,
+   "unique": 0
+  },
+  {
+   "seed": 31,
+   "genre": "African",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 5,
+   "seconds": 2.78,
+   "unique": 0
+  },
+  {
+   "seed": 31,
+   "genre": "African",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 8,
+   "seconds": 0.0,
+   "unique": 5
+  },
+  {
+   "seed": 31,
+   "genre": "African",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 9,
+   "seconds": 0.39,
+   "unique": 7
+  },
+  {
+   "seed": 31,
+   "genre": "African",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 3,
+   "returned_all": 3,
+   "hits": 1,
+   "seconds": 0.83,
+   "unique": 1
+  },
+  {
+   "seed": 31,
+   "genre": "African",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 6,
+   "seconds": 3.96,
+   "unique": 3
+  },
+  {
+   "seed": 31,
+   "genre": "African",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 12,
+   "seconds": 0.0,
+   "unique": 9
+  },
+  {
+   "seed": 32,
+   "genre": "Classical",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 0,
+   "seconds": 0.39,
+   "unique": 0
+  },
+  {
+   "seed": 32,
+   "genre": "Classical",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 9,
+   "seconds": 0.83,
+   "unique": 8
+  },
+  {
+   "seed": 32,
+   "genre": "Classical",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 0,
+   "seconds": 0.97,
+   "unique": 0
+  },
+  {
+   "seed": 32,
+   "genre": "Classical",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 2,
+   "seconds": 2.85,
+   "unique": 1
+  },
+  {
+   "seed": 32,
+   "genre": "Classical",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 2,
+   "seconds": 0.01,
+   "unique": 2
+  },
+  {
+   "seed": 32,
+   "genre": "Classical",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 1,
+   "seconds": 0.28,
+   "unique": 1
+  },
+  {
+   "seed": 32,
+   "genre": "Classical",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": false,
+   "returned": 0,
+   "returned_all": 0,
+   "hits": 0,
+   "seconds": 0.83,
+   "unique": 0
+  },
+  {
+   "seed": 32,
+   "genre": "Classical",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 1,
+   "seconds": 4.13,
+   "unique": 1
+  },
+  {
+   "seed": 32,
+   "genre": "Classical",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 3,
+   "seconds": 0.0,
+   "unique": 3
+  },
+  {
+   "seed": 33,
+   "genre": "Classical",
+   "section": "artists",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 2,
+   "seconds": 0.79,
+   "unique": 0
+  },
+  {
+   "seed": 33,
+   "genre": "Classical",
+   "section": "artists",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 9,
+   "seconds": 0.81,
+   "unique": 8
+  },
+  {
+   "seed": 33,
+   "genre": "Classical",
+   "section": "artists",
+   "source": "deezer",
+   "name": "Deezer",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 20,
+   "hits": 2,
+   "seconds": 0.92,
+   "unique": 0
+  },
+  {
+   "seed": 33,
+   "genre": "Classical",
+   "section": "artists",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 3,
+   "seconds": 2.98,
+   "unique": 1
+  },
+  {
+   "seed": 33,
+   "genre": "Classical",
+   "section": "artists",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 20,
+   "returned_all": 30,
+   "hits": 3,
+   "seconds": 0.0,
+   "unique": 2
+  },
+  {
+   "seed": 33,
+   "genre": "Classical",
+   "section": "tracks",
+   "source": "lastfm",
+   "name": "Last.fm",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 8,
+   "seconds": 0.78,
+   "unique": 8
+  },
+  {
+   "seed": 33,
+   "genre": "Classical",
+   "section": "tracks",
+   "source": "listenbrainz",
+   "name": "ListenBrainz",
+   "answered": false,
+   "returned": 0,
+   "returned_all": 0,
+   "hits": 0,
+   "seconds": 0.8,
+   "unique": 0
+  },
+  {
+   "seed": 33,
+   "genre": "Classical",
+   "section": "tracks",
+   "source": "tidal",
+   "name": "Tidal",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 50,
+   "hits": 3,
+   "seconds": 4.11,
+   "unique": 3
+  },
+  {
+   "seed": 33,
+   "genre": "Classical",
+   "section": "tracks",
+   "source": "youtube",
+   "name": "YouTube",
+   "answered": true,
+   "returned": 30,
+   "returned_all": 49,
+   "hits": 1,
+   "seconds": 0.0,
+   "unique": 1
+  }
+ ],
+ "depth": {
+  "artists": 20,
+  "tracks": 30
+ },
+ "timing": {
+  "asking": 385,
+  "matching": 173,
+  "waiting": 0
+ },
+ "scores": {
+  "artists": {
+   "genres": {
+    "Rock": {
+     "best": 40,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 32,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 13,
+       "seconds": 0.5,
+       "percent": 80
+      },
+      "listenbrainz": {
+       "useful": 40,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 13,
+       "seconds": 3.3,
+       "percent": 100
+      },
+      "deezer": {
+       "useful": 38,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 20,
+       "seconds": 1.8,
+       "percent": 95
+      },
+      "tidal": {
+       "useful": 27,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 10,
+       "seconds": 6.2,
+       "percent": 68
+      },
+      "youtube": {
+       "useful": 37,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 15,
+       "seconds": 0.0,
+       "percent": 92
+      }
+     }
+    },
+    "Indie": {
+     "best": 40,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 25,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 7,
+       "seconds": 0.5,
+       "percent": 62
+      },
+      "listenbrainz": {
+       "useful": 40,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 17,
+       "seconds": 4.5,
+       "percent": 100
+      },
+      "deezer": {
+       "useful": 30,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 12,
+       "seconds": 2.3,
+       "percent": 75
+      },
+      "tidal": {
+       "useful": 21,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 6,
+       "seconds": 5.6,
+       "percent": 52
+      },
+      "youtube": {
+       "useful": 34,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 15,
+       "seconds": 0.0,
+       "percent": 85
+      }
+     }
+    },
+    "Pop": {
+     "best": 40,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 27,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 12,
+       "seconds": 0.5,
+       "percent": 68
+      },
+      "listenbrainz": {
+       "useful": 40,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 25,
+       "seconds": 2.8,
+       "percent": 100
+      },
+      "deezer": {
+       "useful": 30,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 10,
+       "seconds": 1.9,
+       "percent": 75
+      },
+      "tidal": {
+       "useful": 21,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 7,
+       "seconds": 5.6,
+       "percent": 52
+      },
+      "youtube": {
+       "useful": 33,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 16,
+       "seconds": 0.0,
+       "percent": 82
+      }
+     }
+    },
+    "Hip-Hop": {
+     "best": 25,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 11,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 3,
+       "seconds": 0.6,
+       "percent": 44
+      },
+      "listenbrainz": {
+       "useful": 25,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 14,
+       "seconds": 1.9,
+       "percent": 100
+      },
+      "deezer": {
+       "useful": 6,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 1,
+       "seconds": 2.8,
+       "percent": 24
+      },
+      "tidal": {
+       "useful": 4,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 1,
+       "seconds": 6.7,
+       "percent": 16
+      },
+      "youtube": {
+       "useful": 21,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 15,
+       "seconds": 0.0,
+       "percent": 84
+      }
+     }
+    },
+    "Soul": {
+     "best": 30,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 20,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 4,
+       "seconds": 0.5,
+       "percent": 67
+      },
+      "listenbrainz": {
+       "useful": 30,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 11,
+       "seconds": 4.8,
+       "percent": 100
+      },
+      "deezer": {
+       "useful": 25,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 2,
+       "seconds": 1.9,
+       "percent": 83
+      },
+      "tidal": {
+       "useful": 18,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 2,
+       "seconds": 6.0,
+       "percent": 60
+      },
+      "youtube": {
+       "useful": 22,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 11,
+       "seconds": 0.0,
+       "percent": 73
+      }
+     }
+    },
+    "House": {
+     "best": 30,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 19,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 8,
+       "seconds": 0.6,
+       "percent": 63
+      },
+      "listenbrainz": {
+       "useful": 30,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 18,
+       "seconds": 1.6,
+       "percent": 100
+      },
+      "deezer": {
+       "useful": 17,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 5,
+       "seconds": 1.8,
+       "percent": 57
+      },
+      "tidal": {
+       "useful": 8,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 1,
+       "seconds": 5.6,
+       "percent": 27
+      },
+      "youtube": {
+       "useful": 12,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 10,
+       "seconds": 0.0,
+       "percent": 40
+      }
+     }
+    },
+    "Techno": {
+     "best": 13,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 8,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 5,
+       "seconds": 0.8,
+       "percent": 62
+      },
+      "listenbrainz": {
+       "useful": 13,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 10,
+       "seconds": 5.8,
+       "percent": 100
+      },
+      "deezer": {
+       "useful": 3,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 1,
+       "seconds": 3.0,
+       "percent": 23
+      },
+      "tidal": {
+       "useful": 0,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 0,
+       "seconds": 6.7,
+       "percent": 0
+      },
+      "youtube": {
+       "useful": 5,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 4,
+       "seconds": 0.0,
+       "percent": 38
+      }
+     }
+    },
+    "Ambient": {
+     "best": 30,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 14,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 8,
+       "seconds": 0.7,
+       "percent": 47
+      },
+      "listenbrainz": {
+       "useful": 30,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 22,
+       "seconds": 4.2,
+       "percent": 100
+      },
+      "deezer": {
+       "useful": 21,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 15,
+       "seconds": 2.1,
+       "percent": 70
+      },
+      "tidal": {
+       "useful": 5,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 2,
+       "seconds": 6.7,
+       "percent": 17
+      },
+      "youtube": {
+       "useful": 5,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 4,
+       "seconds": 0.0,
+       "percent": 17
+      }
+     }
+    },
+    "Trip-Hop": {
+     "best": 39,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 39,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 24,
+       "seconds": 0.6,
+       "percent": 100
+      },
+      "listenbrainz": {
+       "useful": 39,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 12,
+       "seconds": 0.8,
+       "percent": 100
+      },
+      "deezer": {
+       "useful": 35,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 10,
+       "seconds": 1.9,
+       "percent": 90
+      },
+      "tidal": {
+       "useful": 33,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 13,
+       "seconds": 5.6,
+       "percent": 85
+      },
+      "youtube": {
+       "useful": 36,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 15,
+       "seconds": 0.0,
+       "percent": 92
+      }
+     }
+    },
+    "Jazz": {
+     "best": 25,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 25,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 13,
+       "seconds": 0.6,
+       "percent": 100
+      },
+      "listenbrainz": {
+       "useful": 25,
+       "returned": 36,
+       "answered": 2,
+       "asked": 2,
+       "unique": 14,
+       "seconds": 2.7,
+       "percent": 100
+      },
+      "deezer": {
+       "useful": 20,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 9,
+       "seconds": 1.9,
+       "percent": 80
+      },
+      "tidal": {
+       "useful": 11,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 2,
+       "seconds": 5.6,
+       "percent": 44
+      },
+      "youtube": {
+       "useful": 20,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 13,
+       "seconds": 0.0,
+       "percent": 80
+      }
+     }
+    },
+    "Folk": {
+     "best": 37,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 27,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 13,
+       "seconds": 0.7,
+       "percent": 73
+      },
+      "listenbrainz": {
+       "useful": 37,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 18,
+       "seconds": 2.4,
+       "percent": 100
+      },
+      "deezer": {
+       "useful": 25,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 12,
+       "seconds": 1.9,
+       "percent": 68
+      },
+      "tidal": {
+       "useful": 12,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 2,
+       "seconds": 5.7,
+       "percent": 32
+      },
+      "youtube": {
+       "useful": 29,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 20,
+       "seconds": 0.0,
+       "percent": 78
+      }
+     }
+    },
+    "Country": {
+     "best": 32,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 17,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 5,
+       "seconds": 0.5,
+       "percent": 53
+      },
+      "listenbrainz": {
+       "useful": 32,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 23,
+       "seconds": 2.7,
+       "percent": 100
+      },
+      "deezer": {
+       "useful": 20,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 9,
+       "seconds": 2.0,
+       "percent": 62
+      },
+      "tidal": {
+       "useful": 12,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 1,
+       "seconds": 5.6,
+       "percent": 38
+      },
+      "youtube": {
+       "useful": 21,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 12,
+       "seconds": 0.0,
+       "percent": 66
+      }
+     }
+    },
+    "Metal": {
+     "best": 36,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 13,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 3,
+       "seconds": 0.5,
+       "percent": 36
+      },
+      "listenbrainz": {
+       "useful": 29,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 9,
+       "seconds": 2.1,
+       "percent": 81
+      },
+      "deezer": {
+       "useful": 20,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 5,
+       "seconds": 1.9,
+       "percent": 56
+      },
+      "tidal": {
+       "useful": 11,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 5,
+       "seconds": 5.5,
+       "percent": 31
+      },
+      "youtube": {
+       "useful": 36,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 17,
+       "seconds": 0.0,
+       "percent": 100
+      }
+     }
+    },
+    "Reggae": {
+     "best": 26,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 10,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 1,
+       "seconds": 0.6,
+       "percent": 38
+      },
+      "listenbrainz": {
+       "useful": 26,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 13,
+       "seconds": 2.3,
+       "percent": 100
+      },
+      "deezer": {
+       "useful": 10,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 2,
+       "seconds": 1.8,
+       "percent": 38
+      },
+      "tidal": {
+       "useful": 9,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 1,
+       "seconds": 5.6,
+       "percent": 35
+      },
+      "youtube": {
+       "useful": 20,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 12,
+       "seconds": 0.0,
+       "percent": 77
+      }
+     }
+    },
+    "Latin": {
+     "best": 28,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 12,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 7,
+       "seconds": 0.7,
+       "percent": 43
+      },
+      "listenbrainz": {
+       "useful": 28,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 15,
+       "seconds": 5.3,
+       "percent": 100
+      },
+      "deezer": {
+       "useful": 18,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 6,
+       "seconds": 2.8,
+       "percent": 64
+      },
+      "tidal": {
+       "useful": 10,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 2,
+       "seconds": 6.6,
+       "percent": 36
+      },
+      "youtube": {
+       "useful": 7,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 3,
+       "seconds": 0.0,
+       "percent": 25
+      }
+     }
+    },
+    "African": {
+     "best": 31,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 17,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 6,
+       "seconds": 0.6,
+       "percent": 55
+      },
+      "listenbrainz": {
+       "useful": 31,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 25,
+       "seconds": 4.0,
+       "percent": 100
+      },
+      "deezer": {
+       "useful": 9,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 0,
+       "seconds": 1.9,
+       "percent": 29
+      },
+      "tidal": {
+       "useful": 10,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 1,
+       "seconds": 5.7,
+       "percent": 32
+      },
+      "youtube": {
+       "useful": 15,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 11,
+       "seconds": 0.0,
+       "percent": 48
+      }
+     }
+    },
+    "Classical": {
+     "best": 18,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 2,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 0,
+       "seconds": 1.2,
+       "percent": 11
+      },
+      "listenbrainz": {
+       "useful": 18,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 16,
+       "seconds": 1.6,
+       "percent": 100
+      },
+      "deezer": {
+       "useful": 2,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 0,
+       "seconds": 1.9,
+       "percent": 11
+      },
+      "tidal": {
+       "useful": 5,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 2,
+       "seconds": 5.8,
+       "percent": 28
+      },
+      "youtube": {
+       "useful": 5,
+       "returned": 40,
+       "answered": 2,
+       "asked": 2,
+       "unique": 4,
+       "seconds": 0.0,
+       "percent": 28
+      }
+     }
+    }
+   },
+   "sources": {
+    "lastfm": {
+     "performance": 59,
+     "best_at": [
+      "Trip-Hop",
+      "Jazz",
+      "Rock"
+     ],
+     "worst_at": [
+      "Classical",
+      "Metal",
+      "Reggae"
+     ]
+    },
+    "listenbrainz": {
+     "performance": 99,
+     "best_at": [
+      "Rock",
+      "Indie",
+      "Pop"
+     ],
+     "worst_at": [
+      "Metal",
+      "Techno",
+      "Classical"
+     ]
+    },
+    "deezer": {
+     "performance": 59,
+     "best_at": [
+      "Rock",
+      "Trip-Hop",
+      "Soul"
+     ],
+     "worst_at": [
+      "Classical",
+      "Techno",
+      "Hip-Hop"
+     ]
+    },
+    "tidal": {
+     "performance": 38,
+     "best_at": [
+      "Trip-Hop",
+      "Rock",
+      "Soul"
+     ],
+     "worst_at": [
+      "Techno",
+      "Hip-Hop",
+      "Ambient"
+     ]
+    },
+    "youtube": {
+     "performance": 65,
+     "best_at": [
+      "Metal",
+      "Rock",
+      "Trip-Hop"
+     ],
+     "worst_at": [
+      "Ambient",
+      "Latin",
+      "Classical"
+     ]
+    }
+   }
+  },
+  "tracks": {
+   "genres": {
+    "Rock": {
+     "best": 59,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 49,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 30,
+       "seconds": 1.0,
+       "percent": 83
+      },
+      "listenbrainz": {
+       "useful": 51,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 29,
+       "seconds": 1.9,
+       "percent": 86
+      },
+      "tidal": {
+       "useful": 38,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 15,
+       "seconds": 7.8,
+       "percent": 64
+      },
+      "youtube": {
+       "useful": 59,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 42,
+       "seconds": 0.0,
+       "percent": 100
+      }
+     }
+    },
+    "Indie": {
+     "best": 51,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 36,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 21,
+       "seconds": 1.0,
+       "percent": 71
+      },
+      "listenbrainz": {
+       "useful": 51,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 27,
+       "seconds": 2.0,
+       "percent": 100
+      },
+      "tidal": {
+       "useful": 33,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 19,
+       "seconds": 8.1,
+       "percent": 65
+      },
+      "youtube": {
+       "useful": 39,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 24,
+       "seconds": 0.0,
+       "percent": 76
+      }
+     }
+    },
+    "Pop": {
+     "best": 47,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 38,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 18,
+       "seconds": 1.3,
+       "percent": 81
+      },
+      "listenbrainz": {
+       "useful": 43,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 26,
+       "seconds": 1.9,
+       "percent": 91
+      },
+      "tidal": {
+       "useful": 37,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 19,
+       "seconds": 8.1,
+       "percent": 79
+      },
+      "youtube": {
+       "useful": 47,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 31,
+       "seconds": 0.0,
+       "percent": 100
+      }
+     }
+    },
+    "Hip-Hop": {
+     "best": 32,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 28,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 20,
+       "seconds": 0.7,
+       "percent": 88
+      },
+      "listenbrainz": {
+       "useful": 2,
+       "returned": 30,
+       "answered": 1,
+       "asked": 2,
+       "unique": 0,
+       "seconds": 3.4,
+       "percent": 6
+      },
+      "tidal": {
+       "useful": 18,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 13,
+       "seconds": 8.0,
+       "percent": 56
+      },
+      "youtube": {
+       "useful": 32,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 22,
+       "seconds": 0.0,
+       "percent": 100
+      }
+     }
+    },
+    "Soul": {
+     "best": 44,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 44,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 26,
+       "seconds": 1.1,
+       "percent": 100
+      },
+      "listenbrainz": {
+       "useful": 27,
+       "returned": 30,
+       "answered": 1,
+       "asked": 2,
+       "unique": 14,
+       "seconds": 1.8,
+       "percent": 61
+      },
+      "tidal": {
+       "useful": 25,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 14,
+       "seconds": 8.0,
+       "percent": 57
+      },
+      "youtube": {
+       "useful": 23,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 14,
+       "seconds": 0.0,
+       "percent": 52
+      }
+     }
+    },
+    "House": {
+     "best": 38,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 31,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 12,
+       "seconds": 0.8,
+       "percent": 82
+      },
+      "listenbrainz": {
+       "useful": 38,
+       "returned": 56,
+       "answered": 2,
+       "asked": 2,
+       "unique": 24,
+       "seconds": 1.7,
+       "percent": 100
+      },
+      "tidal": {
+       "useful": 28,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 11,
+       "seconds": 7.9,
+       "percent": 74
+      },
+      "youtube": {
+       "useful": 26,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 18,
+       "seconds": 0.0,
+       "percent": 68
+      }
+     }
+    },
+    "Techno": {
+     "best": 18,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 18,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 12,
+       "seconds": 0.8,
+       "percent": 100
+      },
+      "listenbrainz": {
+       "useful": 1,
+       "returned": 1,
+       "answered": 1,
+       "asked": 2,
+       "unique": 0,
+       "seconds": 2.3,
+       "percent": 6
+      },
+      "tidal": {
+       "useful": 16,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 9,
+       "seconds": 7.9,
+       "percent": 89
+      },
+      "youtube": {
+       "useful": 17,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 12,
+       "seconds": 0.0,
+       "percent": 94
+      }
+     }
+    },
+    "Ambient": {
+     "best": 17,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 17,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 16,
+       "seconds": 0.6,
+       "percent": 100
+      },
+      "listenbrainz": {
+       "useful": 9,
+       "returned": 37,
+       "answered": 2,
+       "asked": 2,
+       "unique": 8,
+       "seconds": 1.7,
+       "percent": 53
+      },
+      "tidal": {
+       "useful": 12,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 11,
+       "seconds": 7.9,
+       "percent": 71
+      },
+      "youtube": {
+       "useful": 5,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 4,
+       "seconds": 0.0,
+       "percent": 29
+      }
+     }
+    },
+    "Trip-Hop": {
+     "best": 58,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 57,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 29,
+       "seconds": 0.7,
+       "percent": 98
+      },
+      "listenbrainz": {
+       "useful": 58,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 29,
+       "seconds": 2.1,
+       "percent": 100
+      },
+      "tidal": {
+       "useful": 55,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 22,
+       "seconds": 8.0,
+       "percent": 95
+      },
+      "youtube": {
+       "useful": 52,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 28,
+       "seconds": 0.0,
+       "percent": 90
+      }
+     }
+    },
+    "Jazz": {
+     "best": 24,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 24,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 15,
+       "seconds": 0.7,
+       "percent": 100
+      },
+      "listenbrainz": {
+       "useful": 17,
+       "returned": 30,
+       "answered": 1,
+       "asked": 2,
+       "unique": 8,
+       "seconds": 1.8,
+       "percent": 71
+      },
+      "tidal": {
+       "useful": 17,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 11,
+       "seconds": 8.1,
+       "percent": 71
+      },
+      "youtube": {
+       "useful": 18,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 13,
+       "seconds": 0.0,
+       "percent": 75
+      }
+     }
+    },
+    "Folk": {
+     "best": 41,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 41,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 27,
+       "seconds": 0.9,
+       "percent": 100
+      },
+      "listenbrainz": {
+       "useful": 38,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 21,
+       "seconds": 1.8,
+       "percent": 93
+      },
+      "tidal": {
+       "useful": 37,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 22,
+       "seconds": 8.0,
+       "percent": 90
+      },
+      "youtube": {
+       "useful": 35,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 25,
+       "seconds": 0.0,
+       "percent": 85
+      }
+     }
+    },
+    "Country": {
+     "best": 26,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 26,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 19,
+       "seconds": 1.0,
+       "percent": 100
+      },
+      "listenbrainz": {
+       "useful": 23,
+       "returned": 30,
+       "answered": 1,
+       "asked": 2,
+       "unique": 21,
+       "seconds": 1.8,
+       "percent": 88
+      },
+      "tidal": {
+       "useful": 13,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 10,
+       "seconds": 8.0,
+       "percent": 50
+      },
+      "youtube": {
+       "useful": 26,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 18,
+       "seconds": 0.0,
+       "percent": 100
+      }
+     }
+    },
+    "Metal": {
+     "best": 43,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 34,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 11,
+       "seconds": 1.0,
+       "percent": 79
+      },
+      "listenbrainz": {
+       "useful": 40,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 20,
+       "seconds": 2.5,
+       "percent": 93
+      },
+      "tidal": {
+       "useful": 20,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 17,
+       "seconds": 8.0,
+       "percent": 47
+      },
+      "youtube": {
+       "useful": 43,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 25,
+       "seconds": 0.0,
+       "percent": 100
+      }
+     }
+    },
+    "Reggae": {
+     "best": 43,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 16,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 11,
+       "seconds": 0.8,
+       "percent": 37
+      },
+      "listenbrainz": {
+       "useful": 43,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 40,
+       "seconds": 1.8,
+       "percent": 100
+      },
+      "tidal": {
+       "useful": 16,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 11,
+       "seconds": 7.9,
+       "percent": 37
+      },
+      "youtube": {
+       "useful": 20,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 17,
+       "seconds": 0.0,
+       "percent": 47
+      }
+     }
+    },
+    "Latin": {
+     "best": 20,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 19,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 12,
+       "seconds": 1.0,
+       "percent": 95
+      },
+      "listenbrainz": {
+       "useful": 20,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 15,
+       "seconds": 2.6,
+       "percent": 100
+      },
+      "tidal": {
+       "useful": 18,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 9,
+       "seconds": 7.8,
+       "percent": 90
+      },
+      "youtube": {
+       "useful": 10,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 4,
+       "seconds": 0.0,
+       "percent": 50
+      }
+     }
+    },
+    "African": {
+     "best": 19,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 15,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 9,
+       "seconds": 0.8,
+       "percent": 79
+      },
+      "listenbrainz": {
+       "useful": 1,
+       "returned": 6,
+       "answered": 2,
+       "asked": 2,
+       "unique": 1,
+       "seconds": 1.7,
+       "percent": 5
+      },
+      "tidal": {
+       "useful": 12,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 5,
+       "seconds": 8.0,
+       "percent": 63
+      },
+      "youtube": {
+       "useful": 19,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 14,
+       "seconds": 0.0,
+       "percent": 100
+      }
+     }
+    },
+    "Classical": {
+     "best": 9,
+     "thin": false,
+     "by": {
+      "lastfm": {
+       "useful": 9,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 9,
+       "seconds": 1.1,
+       "percent": 100
+      },
+      "listenbrainz": {
+       "useful": 0,
+       "returned": 0,
+       "answered": 0,
+       "asked": 2,
+       "unique": 0,
+       "seconds": 1.6,
+       "percent": 0
+      },
+      "tidal": {
+       "useful": 4,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 4,
+       "seconds": 8.2,
+       "percent": 44
+      },
+      "youtube": {
+       "useful": 4,
+       "returned": 60,
+       "answered": 2,
+       "asked": 2,
+       "unique": 4,
+       "seconds": 0.0,
+       "percent": 44
+      }
+     }
+    }
+   },
+   "sources": {
+    "lastfm": {
+     "performance": 88,
+     "best_at": [
+      "Soul",
+      "Folk",
+      "Country"
+     ],
+     "worst_at": [
+      "Reggae",
+      "Indie",
+      "African"
+     ]
+    },
+    "listenbrainz": {
+     "performance": 68,
+     "best_at": [
+      "Trip-Hop",
+      "Indie",
+      "Reggae"
+     ],
+     "worst_at": [
+      "Classical",
+      "African",
+      "Techno"
+     ]
+    },
+    "tidal": {
+     "performance": 67,
+     "best_at": [
+      "Trip-Hop",
+      "Folk",
+      "Latin"
+     ],
+     "worst_at": [
+      "Reggae",
+      "Classical",
+      "Metal"
+     ]
+    },
+    "youtube": {
+     "performance": 77,
+     "best_at": [
+      "Rock",
+      "Pop",
+      "Metal"
+     ],
+     "worst_at": [
+      "Ambient",
+      "Classical",
+      "Reggae"
+     ]
+    }
+   }
+  }
+ },
+ "sample": true
+}
