@@ -22,3 +22,4 @@ profiles/
 *_log.txt
 singles_undo.json
 tidal_test.py
+seed_check.py
