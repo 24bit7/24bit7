@@ -77,7 +77,7 @@ CREDITS = [
 THANKS = [   # Settings > About > Thanks, and the README's Thanks section
     ("datdude", "Early testing and ideas, including Switch Profiles."),
     ("Helmut", "Shaping Review."),
-    ("Denis", "The local AI work, and testing 24bit7 against a 187,000-track library."),
+    ("Denis", "The local AI work, testing it with Ollama and Gemma 3 4B, and testing 24bit7 against a 187,000-track library."),
 ]
 
 

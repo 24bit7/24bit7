@@ -115,9 +115,9 @@ Each Play option's tab under Settings > Playlist can leave out anything JRiver h
 
 ### Non-stop
 
-A playlist used to end. With **Non-stop** switched on for a Play option under Settings > Playlist, 24bit7 watches the zone, and when the last track of a playlist it built starts playing, it adds more to the end. **Keep It Tight** reseeds each top-up from a track of the original playlist, a different one each time, so the evening stays close to where it started; once every track has been used it carries on as **Let's See Where This Goes**, which follows the music wherever it leads. Each Play option sets how it carries on:
+A playlist used to end. With **Non-stop** switched on for a Play option under Settings > Playlist, 24bit7 watches the zone, and when the last track of a playlist it built starts playing, it adds more to the end. **Keep It Tight** reseeds each top-up from a track of the original playlist, a different one each time, so the evening stays close to where it started; once every track has been used it carries on as **Wander**, which follows the music wherever it leads. Each Play option sets how it carries on:
 
-- **Similar Artists and Similar Tracks** top up using similar artists or similar tracks (**Play using**). Let's See Where This Goes seeds from the **last track**, so the music wanders as the evening goes on, or the **2nd track**, the first pick after the original seed, so it stays closer to how it started.
+- **Similar Artists and Similar Tracks** top up using similar artists or similar tracks (**Play using**). Wander seeds from the **last track**, so the music wanders as the evening goes on, or the **2nd track**, the first pick after the original seed, so it stays closer to how it started.
 - **Artist's Top Tracks** can first play the rest of the artist's songs in your library, shuffled (up to 20 by default, or unlimited), then carries on from their most popular track.
 - **AI Playlist** can ask the AI for more (More from the AI), or carry on with similar artists or similar tracks, which use no credit.
 
@@ -256,12 +256,15 @@ Every response from every source is cached in a local SQLite database with a con
 | Last.fm | Similar artists, similar tracks, top tracks, play counts | Yes (free) | Classic listener-based similarity. |
 | ListenBrainz / MusicBrainz | Similar artists, similar tracks, top recordings, record labels | Only for top recordings (free) | Open data. Choice of algorithm for artists (all-time or recent 75-day) and for tracks (all-time or roughly six months). The slowest artist source on a first run. |
 | Deezer | Similar artists, top tracks, name verification | No | Also used to verify AI-suggested artists exist. |
+| Tidal | Similar artists, similar tracks, top tracks | Yes (free developer app) | Marked **!!** in Similar Artists: its artist suggestions are weaker than its track suggestions. |
 | YouTube Music | Similar artists and similar tracks from the up next queue, playlist output, Discover playlists | No | No sign-in. Uses the unofficial ytmusicapi library, so it may break now and then. |
 | Discogs | Album credits, record labels | Yes (free) | Credits, and a second source for the Label button. |
 | Anthropic (Claude) | AI-suggested similar artists and tracks, AI Playlist, AI Moderator, Console Query | Yes (paid, pennies per run) | Every suggestion is verified against Deezer before it is trusted. The moderator uses Claude Haiku, a fraction of a penny per playlist. |
 | OpenAI, Google Gemini or Ollama | The same, in place of Anthropic (Settings > Keys > AI) | OpenAI and Gemini: yes (paid). Ollama: none, it runs on your PC | Untested so far; reports welcome. Console Query isn't available with Ollama. |
 
 Enable any combination of similar-artist sources in Settings. One is enough; several are better. Deezer and YouTube Music need no keys, so 24bit7 works out of the box.
+
+Not sure which to tick? **Test My Sources**, on the right of each Sources section in Settings, tests every source against your own library and shows how each one does, overall and genre by genre.
 
 ---
 
@@ -293,7 +296,18 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.17.0
+## What's new in 1.18.0
+
+- **Tidal** is a source for Similar Tracks, Similar Artists and Artist's Top Tracks. It needs a free Client ID and Client Secret from developer.tidal.com (Settings > Keys). In Similar Artists it's marked **!!**, as its artist suggestions are weaker than its tracks.
+- **Test My Sources**: a button on each Sources section tests every source against your own library, using seed tracks across 17 genres, and shows each source's **Performance**, **Best At** and **Worst At** beside it, with **Full Results** for every genre. It runs in the background. Until you run it, the figures come from the developer's library.
+- **Drift rescue**: with Drift on Custom Sources, a first round that finds nothing no longer stops Drift; it starts again from the seed with Drift's own sources.
+- **If All Else Fails** now offers **Shuffle Genre**, **Run File** or **Play Playlist**, and is off by default.
+- **A second try from the AI**: when none of its suggestions are in your library, the AI is asked once more for different ones (Similar Artists, Similar Tracks and Drift's AI rounds).
+- **Better seed matching** for joint credits, ListenBrainz (through MusicBrainz) and Tidal title variants, and a clearer note on Drift's sources.
+- **Support**: a Ko-fi fund towards a pair of PMC Prodigy speakers, alongside PayPal for AI credits.
+- **Fixes**: AI list replies with extra words around them are read properly instead of being reported as "cut short"; YouTube gets a seed track in Playing Now and Drift.
+
+### Earlier: 1.17.0
 
 - **Seed: Playing Now**: under **More Options**, **Seed** switches Similar Artists and Similar Tracks between the track that's playing and your whole Playing Now list. A few artists or tracks are sampled at random and each brings its own share of similar ones, so nothing repeats; tracks already in Playing Now are left out. Settings > Playlist has **Playing Now** columns for the figures, and Review Mode its own pair. While it's on, the two buttons' bars turn teal.
 - **If All Else Fails**: a build that finds nothing (or only the seed) shuffles songs in the seed's genre, at a similar tempo where BPM tags allow, instead of stopping. A voice command hears why in the room first. On by default, per playlist type, in Settings > Playlist.
@@ -510,7 +524,7 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 - **datdude**, for early testing and ideas, including Switch Profiles.
 - **Helmut**, for shaping Review.
-- **Denis**, for the local AI work and for testing 24bit7 against a 187,000-track library.
+- **Denis**, for the local AI work, testing it with Ollama and Gemma 3 4B, and testing 24bit7 against a 187,000-track library.
 
 ---
 
