@@ -2370,9 +2370,36 @@ def ai_vibe_tracks(vibe, count, avoid=(), prompt=None):
     return pairs
 
 
-def ai_similar(artist_name, limit=20):
-    names = ai_ask_list(AI_SIMILAR_PROMPT.format(artist=artist_name, limit=limit),
-                        feature="Similar Artists (AI source)")
+AI_ASK_AGAIN = ("\n\nNone of these are in the listener's library, so suggest different ones and don't "
+                "repeat any of them:\n{missed}")
+
+
+def library_has_artist(name):
+    """
+    True when the library holds this artist, as tagged or inside a band credit ('Bob Marley'
+    and 'Bob Marley & The Wailers'). Used to decide whether the AI's suggestions missed the
+    library entirely. If the library can't be read, it answers True, so nothing is asked again.
+    """
+    try:
+        import library   # here rather than at the top: library imports engine
+        library.ensure_loaded()
+        known = library._artists
+    except Exception:
+        return True
+    for form in [name] + [p for p in [primary_artist(name)] if p]:
+        n = library.norm(form)
+        if n and (n in known or any(k.startswith(n + " ") or n.startswith(k + " ") for k in known if k)):
+            return True
+    return False
+
+
+def ai_similar(artist_name, limit=20, missed=None):
+    """The AI's similar artists. missed: its earlier suggestions, none of them in the library,
+    to be left out of a second request."""
+    prompt = AI_SIMILAR_PROMPT.format(artist=artist_name, limit=limit)
+    if missed:
+        prompt += AI_ASK_AGAIN.format(missed="\n".join(missed))
+    names = ai_ask_list(prompt, feature="Similar Artists (AI source)")
     names = [canonicalise_conjunction(n) for n in names
              if strip_accents(n).lower() != strip_accents(artist_name).lower()]
     return names[:limit]
@@ -2934,6 +2961,15 @@ def blended_similar_artists(seed_artist, limit=20, seed_track=None, report=None)
             else:
                 names = cached_call(label, "similar", f"{artist_key(seed)}|{fetch}",
                                     lambda: similar_fn(seed, limit=fetch, **kwargs))
+                if (similar_fn is ai_similar and names and not output_is_youtube()
+                        and not any(library_has_artist(n) for n in names)):
+                    # none of the AI's artists are in the library: ask it once more, for different ones
+                    (report or print)(f"  None of the AI's suggestions for {seed} are in your library, "
+                                      f"so asking once more.")
+                    again = ai_similar(seed, limit=fetch, missed=names)
+                    if again:
+                        names = again
+                        cache_put(label, "similar", f"{artist_key(seed)}|{fetch}", again)
                 lead = primary_artist(seed)
                 if not names and lead and similar_fn is not ai_similar and artist_key(lead) not in seed_keys:
                     # a joint credit nobody knows ('Harold Budd & Brian Eno'): ask about the lead artist
@@ -5365,11 +5401,14 @@ AI_SIMILAR_TRACKS_PROMPT = (
 )
 
 
-def ai_similar_tracks(artist, track, limit=SIMILAR_TRACK_FETCH):
+def ai_similar_tracks(artist, track, limit=SIMILAR_TRACK_FETCH, missed=None):
     """Claude's songs like the seed track: [[artist, title], ...], most similar first. A made-up
-    song simply isn't found in the library, so no separate check is needed."""
-    data = ai_ask_json(AI_SIMILAR_TRACKS_PROMPT.format(artist=artist, track=track, limit=min(limit, 40)),
-                       feature="Similar Tracks (AI source)")
+    song simply isn't found in the library, so no separate check is needed. missed: earlier
+    suggestions, none of them in the library, to be left out of a second request."""
+    prompt = AI_SIMILAR_TRACKS_PROMPT.format(artist=artist, track=track, limit=min(limit, 40))
+    if missed:
+        prompt += AI_ASK_AGAIN.format(missed="\n".join(f"{a} - {t}" for a, t in missed))
+    data = ai_ask_json(prompt, feature="Similar Tracks (AI source)")
     out = []
     for item in data if isinstance(data, list) else []:
         if isinstance(item, dict) and item.get("artist") and item.get("track"):
@@ -5384,6 +5423,15 @@ TRACK_PROVIDERS = {
     "tidal":        ("Tidal",        tidal_similar_tracks),
     "youtube":      ("YouTube",      youtube_similar_tracks),
 }
+
+
+def _any_in_library(pairs):
+    """True when at least one (artist, title) is in the library. True too if it can't be checked."""
+    try:
+        import library   # here rather than at the top: library imports engine
+        return any(library.find_track_key(p[0], p[1]) for p in pairs if len(p) == 2)
+    except Exception:
+        return True
 
 
 def similar_track_candidates(seeds, track, report=print):
@@ -5417,6 +5465,13 @@ def similar_track_candidates(seeds, track, report=print):
                 if seed not in seeds:
                     debug(f"{name}: similar tracks found under the lead artist {seed} for {seeds[0]} - {track}")
                 break
+        if code == "ai" and pairs and not output_is_youtube() and not _any_in_library(pairs):
+            # none of the AI's tracks are in the library: ask it once more, for different ones
+            report(f"  None of the AI's suggestions for {seed} - {track} are in your library, so asking once more.")
+            again = ai_similar_tracks(seed, track, missed=[tuple(p) for p in pairs if len(p) == 2])
+            if again:
+                pairs = again
+                cache_put(name, "similar_tracks", f"{artist_key(seed)}|{clean_name(track)}", again)
         pairs = [(canonicalise_conjunction(p[0]), normalise_punctuation(p[1])) for p in pairs or []
                  if isinstance(p, (list, tuple)) and len(p) == 2 and p[0] and p[1]
                  and p[0].strip().lower() not in YOUTUBE_SKIP_ARTISTS]
