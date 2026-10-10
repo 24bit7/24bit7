@@ -26,7 +26,8 @@ import hotkeys
 import saved_playlists
 import filters
 import ai_usage
-from tabs import TabbedPane, PALETTE
+from tabs import TabbedPane, PALETTE, FlatButton
+from datetime import datetime
 
 ENV_FILE = engine.ENV_FILE   # single source of truth for where .env lives
 
@@ -1717,18 +1718,24 @@ class SettingsTab(tk.Frame):
         return pages
 
     def _source_ticks(self, p, box, r, group, names, default, command, purpose, help_text=None,
-                      lb_key=None, lb_notes=None):
+                      lb_key=None, lb_notes=None, scores=None):
         """
         The sources for one Play option, one per line, with an optional ? beside
         the first. lb_key: the ListenBrainz algorithm dropdown, on its line.
+        scores: "artists" or "tracks", for Test My Sources' columns beside each source.
         """
         frame = tk.Frame(box)
         frame.grid(row=r, column=0, columnspan=6, sticky="w", pady=(2, 4))
         chosen = [x.strip().lower() for x in p.env.get(group, default).split(",") if x.strip()]
         p.vars[group] = {}
+        first = self._score_header(p, frame, scores) if scores else 0
         for n, (code, label) in enumerate(names):
             line = tk.Frame(frame)
-            line.pack(anchor="w", pady=1)
+            if scores:
+                line.grid(row=first + n, column=0, sticky="w", pady=1)
+                self._score_cells(p, frame, scores, code, first + n)
+            else:
+                line.pack(anchor="w", pady=1)
             v = tk.BooleanVar(value=code in chosen)
             p.vars[group][code] = v
 
@@ -1755,6 +1762,223 @@ class SettingsTab(tk.Frame):
                 help_mark(line, lb_notes).pack(side="left", padx=(8, 0))
                 p.lb_cbs.append((v, cb))
         return r + 1
+
+    # --- Test My Sources: scores beside the sources, the start window and Full Results ---------------
+
+    def _score_header(self, p, frame, section):
+        """The notice and the column titles above a section's sources. Returns the first row for sources."""
+        import source_test
+        ui = p.__dict__.setdefault("score_ui", {}).setdefault(section, {"cells": {}})
+        ui["notice"] = tk.Label(frame, text="", font=HELP_FONT, wraplength=620, justify="left", anchor="w",
+                                padx=8, pady=4)
+        ui["notice"].grid(row=0, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+        for c, title in enumerate(("", "Performance", "Best At", "Worst At")):
+            if not title:
+                continue
+            lab = tk.Label(frame, text=title, font=LABEL_FONT, fg=PALETTE["help_fg"], anchor="w")
+            lab.grid(row=1, column=c, sticky="w", padx=(18, 0))
+            if title == "Performance":
+                Tooltip(lab, source_test.PERFORMANCE_HELP, click=False)
+                lab.config(cursor="question_arrow")
+        if p not in self.__dict__.setdefault("_score_pages", []):
+            self._score_pages.append(p)
+        return 2
+
+    def _score_cells(self, p, frame, section, code, row):
+        cells = tuple(tk.Label(frame, text="", anchor="w") for _ in range(3))
+        for c, lab in enumerate(cells, start=1):
+            lab.grid(row=row, column=c, sticky="w", padx=(18, 0))
+        p.score_ui[section]["cells"][code] = cells
+
+    def _score_buttons(self, p, box, section):
+        """Test My Sources (Re-run Test, Cancel Test) and Full Results, on the right of the Sources bar."""
+        head = box.master.winfo_children()[0]
+        ui = p.__dict__.setdefault("score_ui", {}).setdefault(section, {"cells": {}})
+        ui["results"] = FlatButton(head, text="Full Results", command=self._open_test_results, quiet=True)
+        ui["results"].pack(side="right", padx=(6, 8), pady=3)
+        ui["test"] = FlatButton(head, text="Test My Sources", command=self._test_button)
+        ui["test"].pack(side="right", pady=3)
+        ui["progress"] = tk.Label(head, text="", font=HELP_FONT, bg=head.cget("bg"),
+                                  fg=PALETTE.get("head_fg") or PALETTE["section_fg"])
+        ui["progress"].pack(side="right", padx=(0, 8))
+
+    def _refresh_scores(self):
+        """Fills every Sources page's scores, notice and buttons from the latest results."""
+        import source_test
+        result, is_sample = source_test.load_results()
+        running = source_test.is_running()
+        state = source_test.progress_state
+        names_ok = {}
+        for p in [p for p in self.__dict__.get("_score_pages", []) if p.__dict__.get("score_ui")]:
+            for section, ui in p.score_ui.items():
+                notice = ui.get("notice")
+                try:
+                    if notice is None or not notice.winfo_exists():
+                        continue
+                except tk.TclError:
+                    continue
+                if result and is_sample:
+                    notice.config(text=source_test.sample_notice(result), bg=PALETTE["button_hover"],
+                                  fg=PALETTE["button_fg"])
+                elif result:
+                    when = datetime.strptime(result["finished"], "%Y-%m-%d %H:%M").strftime("%d %b %Y")
+                    notice.config(text=f"Your results, tested {when.lstrip('0')} ({result['mode'].title()}).",
+                                  bg=notice.master.cget("bg"), fg=PALETTE["help_fg"])
+                else:
+                    notice.config(text="No results yet. Test My Sources shows how each source does with your "
+                                       "library.", bg=notice.master.cget("bg"), fg=PALETTE["help_fg"])
+                scores = (result or {}).get("scores", {}).get(section, {}).get("sources", {})
+                for code, cells in ui["cells"].items():
+                    s = scores.get(code)
+                    if code not in names_ok:
+                        names_ok[code] = engine.source_has_key(code) if code != "ai" else engine.ai_enabled()
+                    fg = PALETTE["help_fg"] if not names_ok[code] else PALETTE["text_secondary"]
+                    texts = ((f"{s['performance']}%", ", ".join(s["best_at"]), ", ".join(s["worst_at"]))
+                             if s else ("-", "", ""))
+                    for lab, text in zip(cells, texts):
+                        lab.config(text=text, fg=fg)
+                if ui.get("test"):
+                    ui["test"].config(text="Cancel Test" if running else
+                                      ("Re-run Test" if result and not is_sample else "Test My Sources"))
+                    ui["results"].config(state="normal" if result else "disabled")
+                    ui["progress"].config(text=f"Testing {state['n']} of {state['of']}" if running else "")
+        return result, is_sample
+
+    def _watch_source_test(self):
+        """While a test runs, the progress and buttons follow it; when it ends, the scores refresh."""
+        import source_test
+        self._refresh_scores()
+        if source_test.is_running():
+            self.after(2000, self._watch_source_test)
+
+    def _test_button(self):
+        import source_test
+        if source_test.is_running():
+            source_test.cancel()
+            self.after(300, self._watch_source_test)
+        else:
+            self._open_test_window()
+
+    def _open_test_window(self):
+        """The start window: Full or Quick, Include AI, Start."""
+        import source_test
+        win = tk.Toplevel(self)
+        win.title("Test My Sources")
+        win.transient(self.winfo_toplevel())
+        win.resizable(False, False)
+        self.test_window = win
+        body = tk.Frame(win, padx=16, pady=12)
+        body.pack(fill="both", expand=True)
+        tk.Label(body, text="Asks every source what's similar to a fixed set of seed tracks across 17 genres, "
+                            "and counts how many answers are in your library. It runs in the background, so "
+                            "you can keep using 24bit7.", wraplength=420, justify="left").pack(anchor="w")
+        mode = tk.StringVar(value="full")
+        full, quick = len(source_test.load_seeds()), len(source_test.load_seeds(quick=True))
+        for value, text in (("full", f"Full: {full} seeds, about {source_test.minutes_for(full)} minutes"),
+                            ("quick", f"Quick: {quick} seeds, about {source_test.minutes_for(quick)} minutes")):
+            ttk.Radiobutton(body, text=text, variable=mode, value=value).pack(anchor="w", pady=(8 if value == "full" else 2, 0))
+        ai = tk.BooleanVar(value=False)
+        tick = ttk.Checkbutton(body, text="Include AI (costs a few pence)", variable=ai)
+        tick.pack(anchor="w", pady=(10, 0))
+        if not engine.ai_enabled():
+            tick.state(["disabled"])
+            Tooltip(tick, NO_KEY_TEXT)
+        buttons = tk.Frame(body)
+        buttons.pack(fill="x", pady=(14, 0))
+
+        def start():
+            source_test.start_background(quick=mode.get() == "quick", include_ai=ai.get())
+            win.destroy()
+            self._watch_source_test()
+        ttk.Button(buttons, text="Cancel", command=win.destroy).pack(side="right")
+        ttk.Button(buttons, text="Start", command=start).pack(side="right", padx=(0, 6))
+        win.start = start   # for the tests
+        win.mode, win.ai = mode, ai
+        return win
+
+    def _open_test_results(self):
+        """Full Results: every genre against every source, for Similar Artists and Similar Tracks."""
+        import source_test
+        result, is_sample = source_test.load_results()
+        if not result:
+            return None
+        if not is_sample:
+            source_test.mark_seen()   # the console stops repeating "ready"
+        win = tk.Toplevel(self)
+        win.title("Source Test Results")
+        win.transient(self.winfo_toplevel())
+        self.results_window = win
+        top = tk.Frame(win, padx=14, pady=10)
+        top.pack(fill="x")
+        if is_sample:
+            tk.Label(top, text=source_test.sample_notice(result), bg=PALETTE["button_hover"], fg=PALETTE["button_fg"],
+                     wraplength=760,
+                     justify="left", anchor="w", padx=8, pady=4).pack(fill="x")
+        else:
+            tk.Label(top, text=f"Your results, tested {result['finished']} ({result['mode'].title()}, "
+                               f"{len(result['seeds'])} seeds).", fg=PALETTE["help_fg"], anchor="w").pack(fill="x")
+        tk.Label(top, text="Performance against the best source in each genre; the best in each row is shaded. "
+                           "Hover a cell for its detail.", font=HELP_FONT, fg=PALETTE["help_fg"],
+                 anchor="w").pack(fill="x", pady=(4, 0))
+        nb = TabbedPane(win, font=("Segoe UI", 10, "bold"), pad=(16, 6))
+        nb.pack(fill="both", expand=True, padx=14)
+        names = {c: n for sec in source_test.SECTIONS for c, n in result["sources"][sec]}
+        win.grids = {}
+        for section, title in (("artists", "Similar Artists"), ("tracks", "Similar Tracks")):
+            page = tk.Frame(nb, padx=4, pady=8)
+            nb.add(page, text=title)
+            codes = [c for c, _ in result["sources"][section]]
+            sc = result["scores"][section]
+            stripe = PALETTE.get("field_bg") or PALETTE.get("window_bg")
+            tk.Label(page, text="Genre", font=LABEL_FONT, fg=PALETTE["help_fg"], anchor="w",
+                     padx=8, pady=4).grid(row=0, column=0, sticky="ew")
+            for c, code in enumerate(codes, start=1):
+                tk.Label(page, text=names.get(code, code), font=LABEL_FONT, fg=PALETTE["help_fg"],
+                         padx=8, pady=4).grid(row=0, column=c, sticky="ew")
+            cells = {}
+            for r, genre in enumerate(result["genres"], start=1):
+                gs = sc["genres"][genre]
+                bg = stripe if r % 2 else page.cget("bg")
+                tk.Label(page, text=genre + ("  (you own little here)" if gs["thin"] else ""), anchor="w",
+                         fg=PALETTE["help_fg"] if gs["thin"] else PALETTE["text_secondary"], bg=bg,
+                         padx=8, pady=3).grid(row=r, column=0, sticky="nsew")
+                for c, code in enumerate(codes, start=1):
+                    v = gs["by"].get(code)
+                    best = bool(v) and gs["best"] > 0 and v["useful"] == gs["best"]
+                    lab = tk.Label(page, text=f"{v['percent']}%" if v else "-", bg=PALETTE["button_hover"] if best
+                                   else bg, fg=PALETTE["button_fg"] if best else PALETTE["text_secondary"], font=("Segoe UI", 9, "bold") if best else ("Segoe UI", 9),
+                                   padx=8, pady=3)
+                    lab.grid(row=r, column=c, sticky="nsew")
+                    Tooltip(lab, source_test.cell_detail(result, section, genre, code), click=False)
+                    cells[(genre, code)] = lab
+            foot = len(result["genres"]) + 1
+            tk.Frame(page, bg=PALETTE["line"], height=1).grid(row=foot, column=0, columnspan=len(codes) + 1,
+                                                              sticky="ew", pady=(2, 0))
+            tk.Label(page, text="Performance", font=LABEL_FONT, anchor="w", padx=8,
+                     pady=4).grid(row=foot + 1, column=0, sticky="ew")
+            for c, code in enumerate(codes, start=1):
+                s = sc["sources"].get(code)
+                tk.Label(page, text=f"{s['performance']}%" if s else "-", font=LABEL_FONT,
+                         padx=8, pady=4).grid(row=foot + 1, column=c, sticky="ew")
+            win.grids[section] = cells
+        buttons = tk.Frame(win, padx=14, pady=10)
+        buttons.pack(fill="x")
+
+        def export():
+            path = filedialog.asksaveasfilename(parent=win, defaultextension=".csv", initialfile="24bit7 source test.csv",
+                                                filetypes=[("CSV", "*.csv")])
+            if path:
+                source_test.export_csv(result, path)
+
+        def rerun():
+            win.destroy()
+            self._open_test_window()
+        ttk.Button(buttons, text="Close", command=win.destroy).pack(side="right")
+        ttk.Button(buttons, text="Export CSV", command=export).pack(side="right", padx=(0, 6))
+        ttk.Button(buttons, text="Re-run Test", command=rerun).pack(side="right", padx=(0, 6))
+        win.export = export   # for the tests
+        self.after(10, self._refresh_scores)
+        return win
 
     def _sync_listenbrainz(self, p):
         """Each ListenBrainz algorithm dropdown greys out while ListenBrainz is unticked."""
@@ -1805,8 +2029,9 @@ class SettingsTab(tk.Frame):
                                "No key needed. Ticked on its own, it plays YouTube's queue as is, matched against "
                                "your library. Ticked with other sources, its artists join the blend. It's an "
                                "unofficial route, so it may break now and then.")
+        self._score_buttons(p, box, "artists")
         r = self._source_ticks(p, box, 0, "SIMILAR_SOURCES", SOURCE_NAMES, "lastfm", similar_changed, "similar",
-                               lb_key="LISTENBRAINZ_ALGORITHM",
+                               scores="artists", lb_key="LISTENBRAINZ_ALGORITHM",
                                lb_notes="alltime: from all listening history; leans toward well-known artists.\n"
                                         "recent: what people are playing alongside this artist right now.")
         # How many sources must agree. Replaced the old on/off tick box; an old
@@ -1828,8 +2053,9 @@ class SettingsTab(tk.Frame):
         box = section(pages["tracks"], "Sources",
                       "Tracks like the seed track, for the Similar Tracks button. No key needed for "
                       "ListenBrainz or YouTube.")
+        self._score_buttons(p, box, "tracks")
         r = self._source_ticks(p, box, 0, "SIMILAR_TRACK_SOURCES", TRACK_SOURCE_NAMES, "lastfm,listenbrainz,youtube",
-                               tracks_changed, "similar", lb_key="LISTENBRAINZ_TRACK_ALGORITHM",
+                               tracks_changed, "similar", scores="tracks", lb_key="LISTENBRAINZ_TRACK_ALGORITHM",
                                lb_notes="alltime: from all listening history.\n"
                                         "recent: roughly the last six months; older songs may find fewer matches.")
         start = p.env.get("SIMILAR_TRACK_MIN_AGREEMENT", "2").strip() or "2"
@@ -1858,6 +2084,7 @@ class SettingsTab(tk.Frame):
                             self._sync_moderator_box(p), self._sync_listenbrainz(p))
         p.resync()
         p.loading = False
+        self._watch_source_test()   # the scores, the notice and the buttons, and a running test followed
 
     def _on_console_query_toggled(self):
         """Ticking Console Query asks first; with no AI set up, or on Ollama, it explains and stays off."""

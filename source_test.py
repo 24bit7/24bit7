@@ -54,7 +54,7 @@ ARTIST_FETCH = 30           # similar artists asked of each source per seed
 TRACK_FETCH = 50            # similar tracks asked of each source per seed
 ARTIST_DEPTH = 20           # every source is scored on the same depth: its top 20 artists per seed
 TRACK_DEPTH = 30            # ... and its top 30 tracks, about what a build reads
-SECONDS_PER_SEED = 20       # measured on the first real run (10 Oct 2026), for the time estimate
+SECONDS_PER_SEED = 10       # with the sources asked at once (the first real runs took about 16 a seed in turn)
 BUSY_WINDOW = 15 * 60       # a build counts as running for at most this long (a cancelled one can't hold it)
 SECTIONS = ("artists", "tracks")
 READY_LINE = ("Source test ready: open Full Results under Settings > Sources to see how each source "
@@ -62,6 +62,18 @@ READY_LINE = ("Source test ready: open Full Results under Settings > Sources to 
 
 _thread = None
 _lock = threading.Lock()
+_stop = threading.Event()                  # set by cancel(): the running test stops before the next seed
+progress_state = {"n": 0, "of": 0}       # for the screens: which seed a running test is on
+
+SAMPLE_NOTICE = ("Sample results from a {tracks:,}-track library. Source performance varies between "
+                 "libraries, so run the test on yours for figures that fit your collection.")
+PERFORMANCE_HELP = ("How much of your library a source reaches from the test's seeds, against the best "
+                    "source for each genre: 100% means it matched the best in every genre. Sources that "
+                    "favour well-known artists reach more of a large library.")
+
+
+def sample_notice(result):
+    return SAMPLE_NOTICE.format(tracks=int((result or {}).get("library_tracks") or 0))
 
 
 # --- seeds ----------------------------------------------------------------------------
@@ -140,8 +152,8 @@ def ask(section, code, artist, track):
             try:
                 engine.cache_put(label, "similar_tracks", f"{engine.artist_key(artist)}|{engine.clean_name(track)}",
                                  [list(p) for p in answer])
-            except Exception:
-                pass
+            except Exception as e:
+                engine.debug(f"Source test: couldn't cache {code}'s answer ({e})")
     else:
         answer = [a for a in answer if isinstance(a, str) and a.strip()]
     return answer, time.time() - started
@@ -197,10 +209,22 @@ def build_running():
     return any(now - started < BUSY_WINDOW for started in list(engine._SESSION_STARTED.values()))
 
 
-def run(quick=False, include_ai=False, progress=None, wait_for_builds=True, stop=None):
+def _ask_all(section, testing, seed, parallel):
+    """Every source's answer for one seed, asked at once (or in turn): {code: (answer, seconds)}."""
+    codes = [c for c, _ in testing[section]]
+    if not parallel or len(codes) < 2:
+        return {c: ask(section, c, seed["artist"], seed["track"]) for c in codes}
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=len(codes)) as pool:
+        futures = {c: pool.submit(ask, section, c, seed["artist"], seed["track"]) for c in codes}
+        return {c: f.result() for c, f in futures.items()}
+
+
+def run(quick=False, include_ai=False, progress=None, wait_for_builds=True, stop=None, parallel=True):
     """
     The whole test. progress(line) gets one line per seed (None: quiet). Returns the result dict,
     already saved. stop(): a callable that, when True, ends the run early (nothing is saved).
+    parallel: each seed's sources are asked at once (each service keeps to its own limits).
     """
     import library
     library.ensure_loaded()
@@ -209,6 +233,7 @@ def run(quick=False, include_ai=False, progress=None, wait_for_builds=True, stop
     started = time.time()
     timing = {"asking": 0.0, "matching": 0.0, "waiting": 0.0}
     rows = []   # one per seed, section and source: counts only, no names
+    progress_state.update(n=0, of=len(seeds))
     for n, seed in enumerate(seeds, 1):
         while wait_for_builds and build_running():
             if stop and stop():
@@ -217,17 +242,20 @@ def run(quick=False, include_ai=False, progress=None, wait_for_builds=True, stop
             timing["waiting"] += 2
         if stop and stop():
             return None
+        progress_state["n"] = n
         if progress:
             progress(f"  Testing {seed['genre']}: {seed['artist']} - {seed['track']} ({n} of {len(seeds)})")
         for section in SECTIONS:
             found = {}
+            asked_at = time.time()
+            answers = _ask_all(section, testing, seed, parallel)
+            timing["asking"] += time.time() - asked_at
             for code, name in testing[section]:
-                answer, secs = ask(section, code, seed["artist"], seed["track"])
+                answer, secs = answers[code]
                 full = len(answer)
                 answer = answer[:ARTIST_DEPTH if section == "artists" else TRACK_DEPTH]   # the same depth for all
                 matched = time.time()
                 hits = library_hits(section, answer, seed)
-                timing["asking"] += secs
                 timing["matching"] += time.time() - matched
                 found[code] = set(hits)
                 rows.append({"seed": n - 1, "genre": seed["genre"], "section": section, "source": code,
@@ -256,14 +284,17 @@ def start_background(quick=False, include_ai=False):
     with _lock:
         if _thread is not None and _thread.is_alive():
             return False
+        _stop.clear()
         n = len(load_seeds(quick))
         engine.print(f"Source test started in the background ({n} seeds, about {minutes_for(n)} minutes). "
                      f"You can keep using 24bit7.")
 
         def work():
             try:
-                if run(quick=quick, include_ai=include_ai) is not None:
+                if run(quick=quick, include_ai=include_ai, stop=_stop.is_set) is not None:
                     engine.print(READY_LINE)
+                else:
+                    engine.print("Source test cancelled. Nothing was saved, so the last results still show.")
             except Exception as e:
                 engine.print(f"Problem: the source test stopped ({e}).")
         _thread = threading.Thread(target=work, daemon=True, name="source-test")
@@ -273,6 +304,11 @@ def start_background(quick=False, include_ai=False):
 
 def is_running():
     return _thread is not None and _thread.is_alive()
+
+
+def cancel():
+    """Stops a running test before its next seed. Nothing half-finished is saved."""
+    _stop.set()
 
 
 # --- scoring --------------------------------------------------------------------------------
@@ -290,6 +326,7 @@ def score(result):
                 if not rows:
                     continue
                 by[c] = {"useful": sum(r["hits"] for r in rows), "returned": sum(r["returned"] for r in rows),
+                         "returned_all": sum(r.get("returned_all", r["returned"]) for r in rows),
                          "answered": sum(r["answered"] for r in rows), "asked": len(rows),
                          "unique": sum(r.get("unique", 0) for r in rows),
                          "seconds": round(sum(r["seconds"] for r in rows), 1)}
@@ -372,6 +409,41 @@ def remind_if_ready():
         pass
 
 
+def cell_detail(result, section, genre, code):
+    """The hover text for one cell of Full Results."""
+    v = result["scores"][section]["genres"][genre]["by"].get(code)
+    if not v:
+        return "Not tested."
+    depth = (result.get("depth") or {}).get(section)
+    returned = f"{v['returned']}" + (f" (top {depth} of {v['returned_all']} each seed)"
+                                       if depth and v.get("returned_all", 0) > v["returned"] else "")
+    return (f"Seeds answered: {v['answered']} of {v['asked']}\n"
+            f"Results used: {returned}\n"
+            f"In your library: {v['useful']}\n"
+            f"Found by no other source: {v['unique']}\n"
+            f"Time: {v['seconds']} s")
+
+
+def export_csv(result, path):
+    """Every genre and source, for both sections, as a CSV file."""
+    import csv
+    names = {c: n for sec in SECTIONS for c, n in result["sources"][sec]}
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["Section", "Genre", "Source", "Performance %", "In your library", "Results used",
+                    "Results returned", "Seeds answered", "Seeds asked", "Found by no other source", "Seconds",
+                    "You own little here"])
+        for section in SECTIONS:
+            title = "Similar Artists" if section == "artists" else "Similar Tracks"
+            for g in result["genres"]:
+                gs = result["scores"][section]["genres"][g]
+                for c, v in gs["by"].items():
+                    w.writerow([title, g, names.get(c, c), v["percent"], v["useful"], v["returned"],
+                                v.get("returned_all", v["returned"]), v["answered"], v["asked"], v["unique"],
+                                v["seconds"], "yes" if gs["thin"] else ""])
+    return path
+
+
 def make_sample():
     """Writes the latest run as the shipped sample: scores and counts only. Returns the path."""
     own = latest_own()
@@ -390,8 +462,7 @@ def report_lines(result, is_sample=False):
     names = {c: n for sec in SECTIONS for c, n in result["sources"][sec]}
     lines = []
     if is_sample:
-        lines.append(f"Sample results from a {result.get('library_tracks', 0):,}-track library. Results differ "
-                     f"between libraries: run the test on yours for more accurate figures.")
+        lines.append(sample_notice(result))
     else:
         lines.append(f"Your results, tested {result['finished']} ({result['mode']}, {len(result['seeds'])} seeds, "
                      f"{result['seconds'] // 60} min {result['seconds'] % 60} s).")

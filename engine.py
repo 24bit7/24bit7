@@ -844,10 +844,15 @@ def cache_clear(which):
     return cur.rowcount if cur.rowcount is not None and cur.rowcount >= 0 else 0
 
 
+import threading as _cache_threading
+_cache_lock = _cache_threading.RLock()   # sources asked at once (source test, top-track prefetch) share one database
+
+
 def cache_get(source, kind, key):
     """Returns the cached list for (source, kind, key) if younger than CACHE_DAYS (always, on Permanent), else None."""
-    row = db().execute("SELECT payload, fetched_at FROM cache WHERE source=? AND kind=? AND key=?",
-                       (source, kind, key)).fetchone()
+    with _cache_lock:
+        row = db().execute("SELECT payload, fetched_at FROM cache WHERE source=? AND kind=? AND key=?",
+                           (source, kind, key)).fetchone()
     if not row:
         return None
     if CACHE_DAYS is not None and time.time() - row[1] > CACHE_DAYS * 86400:
@@ -856,9 +861,10 @@ def cache_get(source, kind, key):
 
 
 def cache_put(source, kind, key, items):
-    db().execute("INSERT OR REPLACE INTO cache (source, kind, key, payload, fetched_at) VALUES (?,?,?,?,?)",
-                 (source, kind, key, json.dumps(items), time.time()))
-    db().commit()
+    with _cache_lock:
+        db().execute("INSERT OR REPLACE INTO cache (source, kind, key, payload, fetched_at) VALUES (?,?,?,?,?)",
+                     (source, kind, key, json.dumps(items), time.time()))
+        db().commit()
 
 
 def cached_call(source, kind, key, fetch_fn):

@@ -155,3 +155,37 @@ def test_background_run_says_started_and_ready(app):
     assert app.printed.has("Source test started in the background")
     s._thread.join(timeout=60)
     assert app.printed.has("Source test ready")
+
+
+def test_asking_at_once_gives_the_same_results(app):
+    s = st(app)
+    together = s.run(quick=True, wait_for_builds=False, parallel=True)
+    in_turn = s.run(quick=True, wait_for_builds=False, parallel=False)
+    strip = lambda rows: [{k: v for k, v in r.items() if k != "seconds"} for r in rows]
+    assert strip(together["rows"]) == strip(in_turn["rows"])
+
+
+def test_cancel_stops_before_the_next_seed(app, monkeypatch):
+    s = st(app)
+    real = s.ask
+
+    def slow(*a):
+        s.cancel()   # cancelled while the first seed is being asked
+        return real(*a)
+    monkeypatch.setattr(s, "ask", slow)
+    assert s.start_background(quick=True)
+    s._thread.join(timeout=60)
+    assert s.latest_own() is None
+    assert app.printed.has("Source test cancelled")
+    assert s.progress_state["n"] == 1
+
+
+def test_sample_wording_and_export(app, tmp_path):
+    s = st(app)
+    result = s.run(quick=True, wait_for_builds=False)
+    assert s.sample_notice({"library_tracks": 140683}).startswith(
+        "Sample results from a 140,683-track library. Source performance varies between libraries")
+    path = s.export_csv(result, str(tmp_path / "out.csv"))
+    text = open(path, encoding="utf-8").read()
+    assert text.startswith("Section,Genre,Source,Performance %") and "Similar Tracks,Rock,Last.fm" in text
+    assert "Seeds answered" in s.cell_detail(result, "tracks", "Rock", "lastfm")
