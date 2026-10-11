@@ -110,7 +110,25 @@ def norm(text):
     words = ["okay" if w == "ok" else w for w in text.split() if w != "and"]
     if words and words[0] == "the":
         words = words[1:]
-    return " ".join(words)
+    return " ".join(_join_initials(words))
+
+
+def _join_initials(words):
+    """
+    Joins a run of two or more single letters into one word, so 'U.N.K.L.E.'
+    ('u n k l e' once the dots go) and a source's 'UNKLE' compare the same.
+    Applied to both sides of every comparison, so it never favours either.
+    """
+    out, run = [], []
+    for w in words + [""]:
+        if len(w) == 1 and w.isalpha():
+            run.append(w)
+            continue
+        out.extend(["".join(run)] if len(run) > 1 else run)
+        run = []
+        if w:
+            out.append(w)
+    return out
 
 
 _BRACKET_DROP_START = re.compile(r"\s*(feat\.?|featuring|ft\.?|with|from)\b", re.I)
