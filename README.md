@@ -314,7 +314,7 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 ### Earlier: 1.17.0
 
 - **Seed: Playing Now**: under **More Options**, **Seed** switches Similar Artists and Similar Tracks between the track that's playing and your whole Playing Now list. A few artists or tracks are sampled at random and each brings its own share of similar ones, so nothing repeats; tracks already in Playing Now are left out. Settings > Playlist has **Playing Now** columns for the figures, and Review Mode its own pair. While it's on, the two buttons' bars turn teal.
-- **If All Else Fails**: a build that finds nothing (or only the seed) shuffles songs in the seed's genre, at a similar tempo where BPM tags allow, instead of stopping. A voice command hears why in the room first. On by default, per playlist type, in Settings > Playlist.
+- **If All Else Fails**: when a build finds nothing (or only the seed), it can shuffle songs in the seed's genre at a similar tempo where BPM tags allow, run a file of your own, or play one of your JRiver playlists, instead of stopping. Off by default, per playlist type, in Settings > Playlist. Tick **Say why in the room first** and a voice command or shortcut hears why before the music.
 - **Only library artists count**: a similar artist only counts towards Number of artists once it gives a track from your library; the next one down is read instead.
 - **Cancel**: while a build runs, the console's strip shows **Cancel**, which stops it at its next step and says what had already gone out.
 - **More Options as buttons**: Seed, Play Mode / Review Mode, AI Moderator, Drift and Non-stop step through their choices with a click (right-click steps back).

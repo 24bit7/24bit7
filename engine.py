@@ -28,7 +28,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.18.1"
+VERSION = "1.18.2"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
@@ -47,7 +47,7 @@ PROFILE_KEYS = {
                  "SIMILAR_TRACK_VARIETY",
                  "TOP_TRACKS_COUNT", "TOP_TRACKS_ORDER", "VIBE_TRACK_COUNT",
                  "IF_ALL_ELSE_FAILS_ARTISTS", "IF_ALL_ELSE_FAILS_TRACKS", "IF_ALL_ELSE_FAILS_TOP",
-                 "IF_ALL_ELSE_FAILS_VIBE",
+                 "IF_ALL_ELSE_FAILS_VIBE", "FALLBACK_SPOKEN",
                  *[f"IF_ALL_ELSE_FAILS_{g}_{part}" for g in ("ARTISTS", "TRACKS", "TOP", "VIBE")
                    for part in ("MODE", "PATH", "PLAYLIST", "PLAYLIST_NAME")],
                  "DRIFT_ARTISTS", "DRIFT_ARTISTS_USING", "DRIFT_ARTISTS_ROUNDS",
@@ -4856,6 +4856,15 @@ def fallback_on(kind):
     return os.getenv(FALLBACK_SETTINGS.get(kind, ""), "0").strip().lower() in ("1", "true", "yes")
 
 
+def fallback_spoken():
+    """
+    Say why in the room first: If All Else Fails' message spoken in the zone before the music, on voice
+    and shortcut builds. One setting for every playlist type. Off to start, as the message is a WAV
+    played in JRiver, so it shows up in Playing Now.
+    """
+    return os.getenv("FALLBACK_SPOKEN", "0").strip().lower() in ("1", "true", "yes")
+
+
 FALLBACK_MODES = ("shuffle", "file", "playlist")   # Shuffle Genre, Run File, Play Playlist
 FALLBACK_RAN_FILE = False    # If All Else Fails ran its file this build, so Run After Building doesn't run it too
 FALLBACK_HANDLED = False     # If All Else Fails did something this build (tracks sent, or a file run)
@@ -4975,7 +4984,7 @@ def speak_in_zone(text, zone, report=print):
 
 def _say_first(spoken, seed_info, report):
     """A voice command: say why in the room first, then carry on once the message has played."""
-    if not OUTPUT_OVERRIDE or (REVIEW_MODE and not VOICE_TAKEOVER):
+    if not OUTPUT_OVERRIDE or (REVIEW_MODE and not VOICE_TAKEOVER) or not fallback_spoken():
         return
     seconds = speak_in_zone(spoken, output_zone(seed_info, None, report), report)
     for _ in range(int(min(seconds + 0.5, 12) * 10) if seconds else 0):

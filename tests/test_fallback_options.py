@@ -75,7 +75,7 @@ def test_voice_hears_the_playlist_name(app, nothing_found, monkeypatch):
     said = []
     monkeypatch.setattr(nothing_found, "speak_in_zone", lambda text, zone, report=print: said.append(text) or 0.1)
     app.set_env(IF_ALL_ELSE_FAILS_TRACKS_MODE="playlist", IF_ALL_ELSE_FAILS_TRACKS_PLAYLIST="203",
-                IF_ALL_ELSE_FAILS_TRACKS_PLAYLIST_NAME="60s Smartlist")
+                IF_ALL_ELSE_FAILS_TRACKS_PLAYLIST_NAME="60s Smartlist", FALLBACK_SPOKEN="1")
     nothing_found.OUTPUT_OVERRIDE = "Speakers"
     try:
         build(app, nothing_found)

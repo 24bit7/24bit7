@@ -479,6 +479,8 @@ class ProfilePage:
                 out[f"{name}_MODERATOR"] = option_code(DRIFT_MODERATOR_OPTIONS, v[f"{name}_MODERATOR"].get())
         if "AI_MODERATOR_VIBE" in v:
             out["AI_MODERATOR_VIBE"] = v["AI_MODERATOR_VIBE"].get().lower()
+        if "FALLBACK_SPOKEN" in v:
+            out["FALLBACK_SPOKEN"] = "1" if v["FALLBACK_SPOKEN"].get() else "0"
         for group in engine.PLAYED_GROUPS:
             g = group.upper()
             out[f"SKIP_PLAYED_{g}"] = "1" if v[f"SKIP_PLAYED_{g}"].get() else "0"
@@ -524,8 +526,11 @@ FALLBACK_HELP = ("When a build finds nothing at all. Shuffle Genre plays songs f
                  "track's genre (or the artist's most common genre), at a similar tempo when the seed has a BPM "
                  "tag, leaving out the seed artist and anything played recently. Run File starts a file of your "
                  "own, such as a .bat, and Run After Building is skipped for that build. Play Playlist plays one "
-                 "of your JRiver playlists or smartlists, as JRiver gives it. A voice command hears why first, "
-                 "in the room. Unticked, the build ends with a message.")
+                 "of your JRiver playlists or smartlists, as JRiver gives it. Unticked, the build ends with a "
+                 "message.")
+SPOKEN_HELP = ("For voice commands and keyboard shortcuts that play in a zone: before the music starts, "
+               "Windows' own voice says why in that zone. The message is a short WAV file played in JRiver, so "
+               "it shows in Playing Now. One setting for every playlist type. Off to start.")
 NO_PLAYLIST = "No playlist chosen"
 
 
@@ -2698,10 +2703,21 @@ class SettingsTab(tk.Frame):
             ttk.Button(list_row, text="Choose...", command=lambda: choose_playlist(self, picked)).pack(side="left")
             place(list_row, pady=(0, 4))
             list_row.grid_configure(padx=(16, 0))
+            if "FALLBACK_SPOKEN" not in p.vars:   # one setting, shown in each playlist type's section
+                p.vars["FALLBACK_SPOKEN"] = tk.BooleanVar(
+                    value=str(p.env.get("FALLBACK_SPOKEN", "0")).strip().lower() in ("1", "true", "yes"))
+            spoken_row = tk.Frame(where["box"])
+            spoken_tick = ttk.Checkbutton(spoken_row, text="Say why in the room first",
+                                          variable=p.vars["FALLBACK_SPOKEN"], command=lambda: p.save())
+            spoken_tick.pack(side="left")
+            help_mark(spoken_row, SPOKEN_HELP).pack(side="left", padx=(8, 0))
+            place(spoken_row, pady=(0, 4))
+            spoken_row.grid_configure(padx=(16, 0))
 
             def sync():
                 on, code = p.vars[key].get(), option_code(FALLBACK_MODE_OPTIONS, mode.get())
                 mode_cb.config(state="readonly" if on else "disabled")
+                spoken_tick.config(state="normal" if on else "disabled")
                 file_row.grid() if on and code == "file" else file_row.grid_remove()
                 list_row.grid() if on and code == "playlist" else list_row.grid_remove()
 

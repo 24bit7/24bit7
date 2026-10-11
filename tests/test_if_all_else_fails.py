@@ -106,6 +106,7 @@ def test_review_mode_fills_the_review_list(app, nothing_found):
 def test_voice_build_speaks_first(app, nothing_found, monkeypatch):
     said = []
     monkeypatch.setattr(nothing_found, "speak_in_zone", lambda text, zone, report=print: said.append(text) or 0.1)
+    app.set_env(FALLBACK_SPOKEN="1")
     nothing_found.OUTPUT_OVERRIDE = "Speakers"
     try:
         r = app.Lines()

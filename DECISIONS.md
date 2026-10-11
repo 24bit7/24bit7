@@ -209,6 +209,9 @@ A Playing Now seed was parked on 8 Oct because it needed new settings, and the r
 **9 Oct 2026: A similar artist only counts once it gives a library track.**
 Number of artists used to count every artist the sources suggested, whether you owned any of them or not, so the same setting gave very different playlists from library to library. Now an artist counts once one of its picks is in your library, and the next one down is read when it isn't (up to three times the number wanted). That's needed for Playing Now's per-sample shares to mean anything, and it applies to Current Track as well so the two columns mean the same thing. Playlists come out fuller; Limit total tracks still caps them.
 
+**11 Oct 2026: If All Else Fails' spoken message is an option, off by default.**
+The message is a WAV file played in JRiver, so it lands in Playing Now, and at Windows' 22 kHz it can trip a DSP setup that expects otherwise (mandrews79, GitHub issue #7). It also plays on keyboard shortcut builds, not only voice. So it's now "Say why in the room first" under If All Else Fails, one setting for every playlist type rather than one per type, in line with keeping settings few. Off means a voice command that finds nothing goes straight to the fallback with no explanation in the room; the console still says why.
+
 **9 Oct 2026: If All Else Fails, and how a voice command hears it.**
 A build that finds nothing used to end quietly, which on a voice command means silence in the room. Now it shuffles the seed's genre (at a similar tempo where tags allow). Alexa has to answer within eight seconds, long before a build knows it's empty, so the explanation is spoken through the zone with Windows' own text-to-speech rather than by Alexa, and the music waits for it to finish.
 
