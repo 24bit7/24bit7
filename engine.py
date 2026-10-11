@@ -28,7 +28,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.18.2"
+VERSION = "1.18.3"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
@@ -2113,11 +2113,13 @@ def _chat_messages(prompt, system):
     return ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": prompt}]
 
 
-def _openai_style_request(model, prompt, system, max_tokens, tier):
+def _openai_style_request(model, prompt, system, max_tokens, tier, temperature=None):
     """OpenAI, and Gemini through its OpenAI-compatible address: the same request and reply."""
     provider = AI_PROVIDER
     url, key = (OPENAI_CHAT_URL, OPENAI_API_KEY) if provider == "openai" else (GEMINI_CHAT_URL, GEMINI_API_KEY)
     body = {"model": model, "messages": _chat_messages(prompt, system)}
+    if temperature is not None:
+        body["temperature"] = temperature
     body["max_completion_tokens" if provider == "openai" else "max_tokens"] = max_tokens + AI_REASONING_ROOM
     effort = AI_REASONING.get((provider, tier))
     if effort:
@@ -2136,13 +2138,15 @@ def _openai_style_request(model, prompt, system, max_tokens, tier):
                    int(usage.get("completion_tokens") or 0), cached)
 
 
-def _ollama_request(model, prompt, system, max_tokens):
+def _ollama_request(model, prompt, system, max_tokens, temperature=None):
     """Ollama's own chat interface, so the working memory can be set (its default is small)."""
     problem = ollama_check()
     if problem:
         raise AIError(problem)
     body = {"model": model, "messages": _chat_messages(prompt, system), "stream": False,
             "options": {"num_ctx": OLLAMA_CONTEXT, "num_predict": max_tokens + 2048}}
+    if temperature is not None:
+        body["options"]["temperature"] = temperature
     r = requests.post(f"{OLLAMA_URL}/api/chat", json=body, timeout=AI_TIMEOUT)
     if r.status_code != 200:
         _OLLAMA_CHECKED.discard((OLLAMA_URL, OLLAMA_MODEL))
@@ -2157,19 +2161,50 @@ AI_BUSY = 0                # AI requests in flight, so Cancel can say it waits f
 _ai_busy_lock = threading.Lock()
 
 
-def ai_request(prompt, max_tokens, feature="AI", tier="main", system=None, announce=True):
+def ai_request(prompt, max_tokens, feature="AI", tier="main", system=None, announce=True, temperature=None):
     """One request to the chosen provider (see _ai_request), counted in AI_BUSY while it's out."""
     global AI_BUSY
     with _ai_busy_lock:
         AI_BUSY += 1
     try:
-        return _ai_request(prompt, max_tokens, feature=feature, tier=tier, system=system, announce=announce)
+        return _ai_request(prompt, max_tokens, feature=feature, tier=tier, system=system, announce=announce,
+                           temperature=temperature)
     finally:
         with _ai_busy_lock:
             AI_BUSY -= 1
 
 
-def _ai_request(prompt, max_tokens, feature="AI", tier="main", system=None, announce=True):
+_TEMPERATURE_REFUSED = set()   # (provider, model) that refused a fixed temperature this session
+TEMPERATURE_NOTES = []         # what to say about a refusal, for the feature that asked (the AI Moderator)
+
+
+def _refuses_temperature(e):
+    """A provider turning down the temperature setting itself (a 400 that names it)."""
+    text = str(e).lower()
+    return "temperature" in text and (getattr(e, "status_code", None) == 400 or "400" in text)
+
+
+def _ai_request(prompt, max_tokens, feature="AI", tier="main", system=None, announce=True, temperature=None):
+    """
+    One request, with a fixed temperature when asked for (the AI Moderator asks for 0, so the
+    same tracks get the same answer as far as the provider allows). A model that refuses the
+    setting gets the request again without it, once, and isn't sent it again this session.
+    """
+    model = ai_model(tier)
+    use = temperature is not None and (AI_PROVIDER, model) not in _TEMPERATURE_REFUSED
+    try:
+        return _ai_request_once(prompt, max_tokens, feature, tier, system, announce, temperature if use else None)
+    except Exception as e:
+        if not (use and _refuses_temperature(e)):
+            raise
+        _TEMPERATURE_REFUSED.add((AI_PROVIDER, model))
+        TEMPERATURE_NOTES.append(f"{model} won't take a fixed temperature, so its answers can vary between "
+                                 f"runs on the same tracks")
+        debug(f"{model} refused temperature {temperature} ({str(e)[:120]}), asking again without it")
+        return _ai_request_once(prompt, max_tokens, feature, tier, system, announce, None)
+
+
+def _ai_request_once(prompt, max_tokens, feature="AI", tier="main", system=None, announce=True, temperature=None):
     """
     One request to the chosen provider, its tokens recorded for AI Usage. Returns an
     AIReply (text, stop_reason, usage). Raises ImportError when the anthropic package
@@ -2182,6 +2217,8 @@ def _ai_request(prompt, max_tokens, feature="AI", tier="main", system=None, anno
         kwargs = {"model": model, "max_tokens": max_tokens, "messages": [{"role": "user", "content": prompt}]}
         if system:
             kwargs["system"] = system
+        if temperature is not None:
+            kwargs["temperature"] = temperature
         message = _ai_create(client, feature, announce=announce, **kwargs)
         text = "".join(b.text for b in message.content if getattr(b, "type", "") == "text")
         reply = AIReply(text, getattr(message, "stop_reason", ""))
@@ -2192,9 +2229,9 @@ def _ai_request(prompt, max_tokens, feature="AI", tier="main", system=None, anno
     started = time.time()
     try:
         if AI_PROVIDER == "ollama":
-            reply = _ollama_request(model, prompt, system, max_tokens)
+            reply = _ollama_request(model, prompt, system, max_tokens, temperature)
         else:
-            reply = _openai_style_request(model, prompt, system, max_tokens, tier)
+            reply = _openai_style_request(model, prompt, system, max_tokens, tier, temperature)
         record_ai(feature, model, reply)
         return reply
     except requests.Timeout:
@@ -3975,7 +4012,8 @@ MODERATOR_RULES = {
                  "upbeat seed, should go. If unsure, keep it."),
     "strict": ("Keep only tracks that sit close to the seed in tone, energy and mood. Flag any\n"
                "track that differs noticeably on any one of the three, however good it is. A\n"
-               "shorter playlist that holds together is better than a longer one that wanders."),
+               "shorter playlist that holds together is better than a longer one that wanders.\n"
+               "If a track is borderline on all three, keep it."),
 }
 
 MODERATOR_PROMPT = """You are a playlist moderator for a personal music library. You will be given
@@ -4137,7 +4175,9 @@ def moderate(tracks, seed, report=print, level=None, reference=None):
     try:
         reply = ai_request(f"{seed_line}{ref_text}\n\nCandidates:\n{listing}", 2000, "AI Moderator", tier="quick",
                            system=MODERATOR_PROMPT.format(level_rules=MODERATOR_RULES[level], limit_rule=limit_rule),
-                           announce=False)
+                           announce=False, temperature=0)
+        while TEMPERATURE_NOTES:
+            report(f"  Note: AI Moderator: {TEMPERATURE_NOTES.pop(0)}.")
         flagged = moderator_reply(reply.text)
     except ImportError:
         report("  Problem: AI Moderator didn't run, as the anthropic package (needed for Anthropic) isn't "
@@ -4339,6 +4379,12 @@ def drift_sources(cfg, using):
         SIMILAR_SOURCES, SIMILAR_MIN_AGREEMENT, SIMILAR_TRACK_SOURCES = saved
 
 
+def and_list(items):
+    """'A', 'A and B', 'A, B and C'."""
+    items = [str(i) for i in items]
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1] if items else ""
+
+
 class Drift:
     """
     Drift (Settings > Playlist): when a playlist comes up short of its target,
@@ -4500,8 +4546,10 @@ class Drift:
     def _drop_chains(self, candidates, removed, level):
         """
         After a Drift round's check: where the moderator flagged at least half of what one
-        seed brought in, the rest of that batch goes too (within the level's cap), and Drift
-        never seeds from that chain again. Returns the extra keys to remove.
+        seed brought in, the rest of that batch goes too (within the level's cap), each
+        named, and Drift never seeds from that chain again. Not when that would leave the
+        round with nothing: then the moderator's own removals stand and the rest stays.
+        Returns the extra keys to remove.
         """
         level = level or moderator_level()
         removed = {str(k) for k in removed}
@@ -4513,7 +4561,12 @@ class Drift:
         room = None if level == "strict" else max(
             0, int(len(candidates) * MODERATOR_CAP.get(level, 0)) - len(removed))
         info = {f[2]: (f[0], f[1]) for f in self.finds}
-        extra = set()
+
+        def name(key, fallback="a track"):
+            artist, title = info.get(str(key), (fallback, ""))
+            return f"{artist} - {title}" if title else artist
+
+        drops = []   # (parent, the rest of its batch)
         for parent, batch in groups.items():
             flagged = [k for k in batch if k in removed]
             if len(batch) < 2 or len(flagged) * 2 < len(batch):
@@ -4521,12 +4574,21 @@ class Drift:
             rest = [k for k in batch if k not in removed]
             if room is not None:
                 rest, room = rest[:room], room - len(rest[:room])
-            extra |= set(rest)
+            drops.append((parent, rest))
+        extra = {k for _, rest in drops for k in rest}
+        survivors = {str(k) for k in candidates} - removed
+        if extra and survivors <= extra:   # dropping them would leave this round with nothing
+            for parent, rest in drops:
+                if rest:
+                    self.report(f"  AI Moderator: half or more of what came from {name(parent, 'a Drift seed')} "
+                                f"went off course, but dropping the rest would leave this round with nothing, "
+                                f"so {and_list([name(k) for k in rest])} "
+                                + ("stays." if len(rest) == 1 else "stay."))
+            return set()
+        for parent, rest in drops:
             self.blocked |= self._chain(parent)
-            artist, title = info.get(parent, ("a Drift seed", ""))
-            source = f"{artist} - {title}" if title else artist
-            self.report(f"  AI Moderator: most of what came from {source} went off course"
-                        + (f", so the other {len(rest)} went too" if rest else "")
+            self.report(f"  AI Moderator: half or more of what came from {name(parent, 'a Drift seed')} went off course"
+                        + (f", so {and_list([name(k) for k in rest])} went too" if rest else "")
                         + ". Drift won't seed from that chain again.")
         return extra
 

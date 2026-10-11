@@ -348,7 +348,7 @@ Most playlists are right apart from one track: the stadium anthem in the middle 
 
 A few extra tracks are found up front so removals are replaced. It costs a fraction of a penny per playlist (nothing with Ollama). If the check fails, the playlist builds as normal and the console says why. A single track is checked too on Balanced and Strict; Relaxed skips it and says so, as at most a fifth of one track is none of it. Whenever the Moderator is set but can't run (no AI set up, or Use AI Off), the console says why once per build.
 
-Drift rounds are checked against the playlist so far as well as the seed, which makes an odd one out much easier to spot. **AI Moderator on Drift tracks** (Similar Artists and Similar Tracks) can check Drift harder than the first round, or not at all; Same as build follows the build's own level. When most of what one seed brought in is off course, the rest of it goes too and Drift doesn't seed from that chain again, within the level's limit.
+Drift rounds are checked against the playlist so far as well as the seed, which makes an odd one out much easier to spot. **AI Moderator on Drift tracks** (Similar Artists and Similar Tracks) can check Drift harder than the first round, or not at all; Same as build follows the build's own level. When half or more of what one seed brought in is off course, the rest of it goes too (the console names each track) and Drift doesn't seed from that chain again, within the level's limit. It never does this when it would leave the round with nothing: then only the flagged tracks go. The Moderator asks the AI for its most consistent answer, so the same tracks get the same verdict as far as each provider allows, and Strict keeps a track that's only borderline.
 
 ### Non-stop
 

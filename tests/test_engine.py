@@ -513,7 +513,8 @@ def test_chain_dropped_when_mostly_off_course(app, monkeypatch):
     assert removed == {"r0", "r1", "r2"}, "two of k0's three flagged, so the third goes too"
     assert "s0" in keys and "s1" in keys
     assert "k0" in d.blocked and "k0" not in [k for _, _, k in d._seeds()]
-    assert d.report.has("off course")
+    assert d.report.has("half or more of what came from Artist 0 - Song 0 went off course, "
+                        "so Rock 2 - Loud 2 went too."), d.report.text()
 
 
 def test_chain_drop_respects_the_cap(app, monkeypatch):
