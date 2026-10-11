@@ -184,7 +184,7 @@ def test_sample_wording_and_export(app, tmp_path):
     s = st(app)
     result = s.run(quick=True, wait_for_builds=False)
     assert s.sample_notice({"library_tracks": 140683}).startswith(
-        "Sample results from a 140,683-track library. Source performance varies between libraries")
+        "Sample results from a 140,683-track library. Scores vary between libraries")
     path = s.export_csv(result, str(tmp_path / "out.csv"))
     text = open(path, encoding="utf-8").read()
     assert text.startswith("Section,Genre,Source,Score %") and "Similar Tracks,Rock,Last.fm" in text

@@ -296,7 +296,11 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.18.0
+## What's new in 1.18.1
+
+- **Settings on high-resolution screens**: notes that wrapped into narrow columns on a display scaled above 100% (Drift's sources note, the Test My Sources notice, hover notes and a few small windows) now fit the window.
+
+### Earlier: 1.18.0
 
 - **Tidal** is a source for Similar Tracks, Similar Artists and Artist's Top Tracks. It needs a free Client ID and Client Secret from developer.tidal.com (Settings > Keys). In Similar Artists it's marked **!!**, as its artist suggestions are weaker than its tracks.
 - **Test My Sources**: a button on each Sources section tests every source against your own library, using seed tracks across 17 genres, and shows each source's **Score**, **Best At** and **Worst At** beside it, with **Full Results** for every genre. It runs in the background. Until you run it, the figures come from the developer's library.

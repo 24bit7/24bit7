@@ -161,6 +161,28 @@ NOTE_DELAY_MS = 500   # a note waits this long, so passing the pointer over a ti
 NOTE_WRAP = 720       # wide and short rather than narrow and tall
 
 
+def scaled(widget, pixels):
+    """A width designed at 100% display scaling, at this display's scaling."""
+    try:
+        return int(pixels * max(1.0, widget.winfo_fpixels("1i") / 96.0))
+    except tk.TclError:
+        return pixels
+
+
+def follow_width(label, container, margin=24, minimum=300):
+    """Wrapped text follows its container's width rather than a fixed number of pixels."""
+    def fit(_event=None):
+        try:
+            right = container.winfo_rootx() + container.winfo_width()
+            width = max(scaled(label, minimum), right - label.winfo_rootx() - margin)
+        except tk.TclError:
+            return
+        if int(float(str(label.cget("wraplength")) or 0)) != width:
+            label.config(wraplength=width)
+    container.bind("<Configure>", fit, add="+")
+    label.bind("<Map>", fit, add="+")
+
+
 class Tooltip:
     """
     A small note shown while the pointer rests on a widget, after a short delay, or on a
@@ -205,7 +227,7 @@ class Tooltip:
         self.tip = tk.Toplevel(self.widget)
         self.tip.wm_overrideredirect(True)
         tk.Label(self.tip, text=self.text, bg=PALETTE["tooltip_bg"], fg=PALETTE["tooltip_fg"], relief="solid",
-                 borderwidth=1, justify="left", wraplength=NOTE_WRAP, font=("Segoe UI", 9),
+                 borderwidth=1, justify="left", wraplength=scaled(self.widget, NOTE_WRAP), font=("Segoe UI", 9),
                  padx=10, pady=6).pack()
         self.tip.update_idletasks()   # its size, so it can be kept on screen
         w, h = self.tip.winfo_reqwidth(), self.tip.winfo_reqheight()
@@ -1145,7 +1167,7 @@ class SettingsTab(tk.Frame):
             tk.Label(frame, text=label, font=LABEL_FONT, anchor="w").grid(row=r, column=0, sticky="w",
                                                                            pady=(4 if r else 0, 0))
             tk.Label(frame, text=", ".join(names) or "No filters", anchor="w", fg=PALETTE["help_fg"],
-                     font=HELP_FONT, wraplength=230, justify="left").grid(row=r + 1, column=0, sticky="w")
+                     font=HELP_FONT, wraplength=scaled(frame, 230), justify="left").grid(row=r + 1, column=0, sticky="w")
             r += 2
 
     def _filter_picked(self, _e=None):
@@ -1763,9 +1785,21 @@ class SettingsTab(tk.Frame):
         """
         import source_test
         ui = p.__dict__.setdefault("score_ui", {}).setdefault(section, {"cells": {}})
-        ui["notice"] = tk.Label(frame, text="", font=HELP_FONT, wraplength=620, justify="left", anchor="w",
-                                padx=8, pady=4)
+        ui["notice"] = tk.Label(frame, text="", font=HELP_FONT, wraplength=scaled(frame, 300), justify="left",
+                                anchor="w", padx=8, pady=4)
         ui["notice"].grid(row=row, column=0, columnspan=4, sticky="ew", pady=(8, 6))
+        notice, head_row = ui["notice"], row + 1
+
+        def fit_notice(_event=None):
+            """The notice spans the table, Source to Worst At, at any display scaling."""
+            try:
+                width = frame.grid_bbox(0, head_row, 3, head_row)[2] - 16
+            except tk.TclError:
+                return
+            width = max(scaled(frame, 300), width)
+            if int(float(str(notice.cget("wraplength")) or 0)) != width:
+                notice.config(wraplength=width)
+        frame.bind("<Configure>", fit_notice, add="+")
         for c, title in enumerate(("Source", "Score", "Best At", "Worst At")):
             lab = tk.Label(frame, text=title, font=LABEL_FONT, fg=PALETTE["text_secondary"], anchor="w")
             lab.grid(row=row + 1, column=c, sticky="w", padx=(0 if c == 0 else 18, 0))
@@ -1865,7 +1899,7 @@ class SettingsTab(tk.Frame):
         body.pack(fill="both", expand=True)
         tk.Label(body, text="Asks every source what's similar to a fixed set of seed tracks across 17 genres, "
                             "and counts how many answers are in your library. It runs in the background, so "
-                            "you can keep using 24bit7.", wraplength=420, justify="left").pack(anchor="w")
+                            "you can keep using 24bit7.", wraplength=scaled(body, 420), justify="left").pack(anchor="w")
         mode = tk.StringVar(value="full")
         full, quick = len(source_test.load_seeds()), len(source_test.load_seeds(quick=True))
         for value, text in (("full", f"Full: {full} seeds, about {source_test.minutes_for(full)} minutes"),
@@ -1906,7 +1940,7 @@ class SettingsTab(tk.Frame):
         top.pack(fill="x")
         if is_sample:
             tk.Label(top, text=source_test.sample_notice(result), bg=PALETTE["button_hover"], fg=PALETTE["button_fg"],
-                     wraplength=760,
+                     wraplength=scaled(top, 760),
                      justify="left", anchor="w", padx=8, pady=4).pack(fill="x")
         else:
             tk.Label(top, text=f"Your results, tested {result['finished']} ({result['mode'].title()}, "
@@ -2422,9 +2456,10 @@ class SettingsTab(tk.Frame):
             place(mode_row, pady=(0, 4))
             if group in ("artists", "tracks"):   # an empty build is only picked up with Custom Sources
                 warn = tk.Label(box, text=DRIFT_SAME_WARNING, fg=PALETTE["text_secondary"], font=HELP_FONT,
-                                wraplength=440, justify="left")
+                                wraplength=scaled(box, 440), justify="left")
                 place(warn, pady=(0, 4))
                 warn.grid_configure(padx=(16, 0))
+                follow_width(warn, box, minimum=440)
                 p.drift_warn[group] = warn
             panel = tk.Frame(box)
             frames = {}
@@ -3207,7 +3242,7 @@ class SettingsTab(tk.Frame):
                 anchor="w", pady=2)
         tk.Label(body, text="Anything cleared is fetched again next time it's needed, and AI answers use "
                             "credits again.", fg=PALETTE["help_fg"], font=HELP_FONT, justify="left",
-                 wraplength=380).pack(anchor="w", pady=(10, 12))
+                 wraplength=scaled(body, 380)).pack(anchor="w", pady=(10, 12))
         buttons = tk.Frame(body)
         buttons.pack(anchor="e")
 

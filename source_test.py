@@ -65,8 +65,8 @@ _lock = threading.Lock()
 _stop = threading.Event()                  # set by cancel(): the running test stops before the next seed
 progress_state = {"n": 0, "of": 0}       # for the screens: which seed a running test is on
 
-SAMPLE_NOTICE = ("Sample results from a {tracks:,}-track library. Source performance varies between "
-                 "libraries, so run the test on yours for figures that fit your collection.")
+SAMPLE_NOTICE = ("Sample results from a {tracks:,}-track library. Scores vary between libraries, "
+                 "so run the test on yours for figures that fit your collection.")
 PERFORMANCE_HELP = ("Score: how many of this source's suggestions are in your library, compared with "
                     "the best source in each genre, averaged across all 17 genres. 100% means it found "
                     "as much as the best source in every genre. It measures reach, not taste: a source "

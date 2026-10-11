@@ -960,7 +960,7 @@ def test_note_waits_before_showing(app, ui):
     assert note.tip is None, "not straight away"
     ui.pump(settings_gui.NOTE_DELAY_MS / 1000 + 0.3)
     assert note.tip is not None, "shown after the delay"
-    assert int(note.tip.winfo_children()[0].cget("wraplength")) == settings_gui.NOTE_WRAP
+    assert int(note.tip.winfo_children()[0].cget("wraplength")) == settings_gui.scaled(note.widget, settings_gui.NOTE_WRAP)
     note.hide()   # as the pointer leaves
     assert note.tip is None
     note._wait()
