@@ -245,7 +245,7 @@ def load_settings():
     so both the GUI and the CLI pick up changes without a restart.
     """
     global AUTH, JRIVER_HOST, JRIVER_BASE, LASTFM_KEY, LISTENBRAINZ_TOKEN
-    global TIDAL_CLIENT_ID, TIDAL_CLIENT_SECRET
+    global TIDAL_CLIENT_ID, TIDAL_CLIENT_SECRET, TIDAL_REFRESH_TOKEN, TIDAL_USER_ID
     global DISCOGS_TOKEN, ANTHROPIC_API_KEY, AI_PROVIDER, OPENAI_API_KEY, GEMINI_API_KEY, OLLAMA_URL, OLLAMA_MODEL
     global SIMILAR_SOURCES, TOP_TRACK_SOURCES, LISTENBRAINZ_ALGORITHM_SETTING
     global DIGITAL_STORES, REFERENCE_SITES, DEBUG, SIMILAR_ARTIST_LIMIT, TRACKS_PER_ARTIST_POOL
@@ -278,6 +278,9 @@ def load_settings():
     DISCOGS_TOKEN = os.getenv("DISCOGS_TOKEN")
     TIDAL_CLIENT_ID = (os.getenv("TIDAL_CLIENT_ID") or "").strip()
     TIDAL_CLIENT_SECRET = (os.getenv("TIDAL_CLIENT_SECRET") or "").strip()
+    # Signed in to a Tidal account (Settings > Keys > Sign In to Tidal), for Output to Tidal
+    TIDAL_REFRESH_TOKEN = (os.getenv("TIDAL_REFRESH_TOKEN") or "").strip()
+    TIDAL_USER_ID = (os.getenv("TIDAL_USER_ID") or "").strip()
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
     # Settings > Keys > AI: which provider the AI features use, and what each one needs
     AI_PROVIDER = os.getenv("AI_PROVIDER", "anthropic").strip().lower()
@@ -1406,7 +1409,7 @@ def clean_name(s):
     s = re.sub(r'\s+-\s+from\s.*$', '', s)                        # " - From 'Casino Royale' Soundtrack"
     s = re.sub(rf'\s+-\s+[^-]*\b{VERSION_WORDS}\b[^-]*$', '', s)  # " - 2012 Mix/Master", " - Live at..."
     s = re.sub(r'\s*(feat\.|featuring|ft\.)\s.*', '', s)         # feat. credits
-    s = s.replace('&', ' and ')                                  # "Girls & Boys" = "Girls And Boys"
+    s = fold_name_chars(s)                                       # accents, Travi$, "Girls & Boys" = "Girls And Boys"
     s = re.sub(r'[^\w\s]', '', s)                                # punctuation
     return re.sub(r'\s+', ' ', s).strip()
 
@@ -1455,6 +1458,23 @@ def strip_accents(s):
     return ''.join(c for c in decomposed if not unicodedata.combining(c))
 
 
+_DOLLAR_S = re.compile(r"(?<=[A-Za-z])\$|\$(?=[A-Za-z])")   # a $ touching a letter, not $5
+_JOINER = re.compile(r"\s*[&+]\s*")
+
+
+def fold_name_chars(s, joiner=" and "):
+    """
+    The character rules every name comparison in 24bit7 shares (library matching
+    through library.norm, source against source, and Tidal and YouTube lookups),
+    so two spellings of one name compare the same: accents fold away
+    ('JAŸ-Z' = 'JAY-Z'), a '$' touching a letter is an 's' ('Travi$ Scott',
+    'Ke$ha', 'A$AP'), and '&' and '+' are one joiner ('Halcyon + On + On' =
+    'Halcyon And On And On'). Artist names keep '&' as their joiner (joiner=' & ').
+    """
+    s = _DOLLAR_S.sub("s", strip_accents(s or ""))
+    return _JOINER.sub(joiner, s)
+
+
 def strip_initial_dots(s):
     """
     Collapses dotted initials: 'U.N.K.L.E.' -> 'UNKLE', 'M.I.A.' -> 'MIA',
@@ -1472,7 +1492,7 @@ def strip_initial_dots(s):
 
 def norm_artist_text(s):
     """Accent-free, dot-collapsed, ASCII-punctuation form used wherever two artist names are compared."""
-    return strip_accents(strip_initial_dots(normalise_punctuation(s)))
+    return fold_name_chars(strip_initial_dots(normalise_punctuation(s)), joiner=" & ")
 
 
 def deinvert_the(name):
@@ -2694,6 +2714,152 @@ def tidal_get(path, params=None):
     return r.json()
 
 
+
+# --- Tidal sign-in (a user login, for Output to Tidal) ---------------------------
+# The client ID and secret above only read Tidal's catalogue. Writing a playlist
+# needs the user's own login: Tidal's sign-in page in the browser, which hands a
+# code back to a small listener on this PC (the redirect address set in the user's
+# Tidal app), swapped for a refresh token that's kept in .env. Tidal doesn't send a
+# new refresh token on renewal, so .env is only ever written at sign-in.
+
+TIDAL_LOGIN_URL = "https://login.tidal.com/authorize"
+TIDAL_REDIRECT_PORT = 47807
+TIDAL_REDIRECT_URI = f"http://localhost:{TIDAL_REDIRECT_PORT}/tidal"
+TIDAL_USER_SCOPES = "playlists.read playlists.write"
+TIDAL_SIGN_IN_WAIT = 300     # seconds the sign-in page is given
+_tidal_user = {"value": None, "expires": 0.0, "refresh": None}
+
+
+class TidalSignInError(RuntimeError):
+    """A sign-in that didn't finish, or a saved one Tidal no longer accepts. The text is for the user."""
+
+
+def tidal_signed_in():
+    return bool(TIDAL_REFRESH_TOKEN)
+
+
+def _tidal_user_token_request(data):
+    """One call to Tidal's token address for the user's login. The reply as a dict, or None if refused."""
+    data = dict(data, client_id=TIDAL_CLIENT_ID, scope=TIDAL_USER_SCOPES)
+    if TIDAL_CLIENT_SECRET:
+        data["client_secret"] = TIDAL_CLIENT_SECRET
+    r = requests.post(TIDAL_TOKEN_URL, data=data, timeout=TIDAL_TIMEOUT)
+    if r.status_code != 200:
+        debug(f"Tidal token reply {r.status_code}: {r.text[:300]}")
+        return None
+    return r.json()
+
+
+def tidal_sign_in(open_page=None, wait=TIDAL_SIGN_IN_WAIT, cancelled=None):
+    """
+    Signs in to Tidal: opens Tidal's sign-in page and waits for the code to come back
+    to this PC. Returns {"refresh_token", "user_id"} for the caller to save to .env.
+    Raises TidalSignInError with a plain message if it doesn't finish.
+    cancelled: an optional threading.Event that stops the wait.
+    """
+    import base64
+    import hashlib
+    import secrets
+    import webbrowser
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from urllib.parse import parse_qs, urlencode, urlparse
+
+    if not (TIDAL_CLIENT_ID and TIDAL_CLIENT_SECRET):
+        raise TidalSignInError(f"Fill in the Tidal Client ID and Client Secret under {KEY_HELP_LINE} first.")
+    verifier = secrets.token_urlsafe(64)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+    state = secrets.token_urlsafe(16)
+    reply = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            u = urlparse(self.path)
+            q = {k: v[0] for k, v in parse_qs(u.query).items()}
+            if u.path != "/tidal" or q.get("state") != state:
+                self.send_response(404)
+                self.end_headers()
+                return
+            reply.update(q)
+            text = ("Signed in to Tidal. You can close this tab and go back to 24bit7." if q.get("code") else
+                    "Tidal didn't sign you in. Go back to 24bit7 for details.")
+            body = ("<html><head><meta charset='utf-8'><title>24bit7</title></head>"
+                    f"<body style='font-family:Segoe UI,sans-serif;margin:3em'><p>{text}</p></body></html>")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(body.encode("utf-8"))
+
+        def log_message(self, *args):
+            pass
+
+    try:
+        server = HTTPServer(("127.0.0.1", TIDAL_REDIRECT_PORT), Handler)
+    except OSError:
+        raise TidalSignInError(f"Couldn't listen for Tidal's reply: port {TIDAL_REDIRECT_PORT} is in use "
+                               "by another program. Close it and try again.")
+    try:
+        server.timeout = 0.5
+        url = TIDAL_LOGIN_URL + "?" + urlencode({
+            "response_type": "code", "client_id": TIDAL_CLIENT_ID, "redirect_uri": TIDAL_REDIRECT_URI,
+            "scope": TIDAL_USER_SCOPES, "code_challenge_method": "S256", "code_challenge": challenge,
+            "state": state})
+        (open_page or webbrowser.open)(url)
+        deadline = time.time() + wait
+        while not reply and time.time() < deadline and not (cancelled and cancelled.is_set()):
+            server.handle_request()
+    finally:
+        server.server_close()
+
+    if cancelled and cancelled.is_set():
+        raise TidalSignInError("Sign-in cancelled.")
+    if not reply:
+        raise TidalSignInError("Nothing came back from Tidal. Check that your Tidal app at developer.tidal.com "
+                               f"has the redirect address {TIDAL_REDIRECT_URI} (the ? beside Sign In to "
+                               "Tidal has the steps), then try again.")
+    if not reply.get("code"):
+        why = reply.get("error_description") or reply.get("error") or "no reason given"
+        raise TidalSignInError(f"Tidal didn't sign you in ({why}).")
+    try:
+        data = _tidal_user_token_request({"grant_type": "authorization_code", "code": reply["code"],
+                                          "code_verifier": verifier, "redirect_uri": TIDAL_REDIRECT_URI})
+    except requests.RequestException as e:
+        raise TidalSignInError(f"Tidal couldn't be reached ({e}). Try again.")
+    if not data or not data.get("refresh_token"):
+        raise TidalSignInError("Tidal accepted the sign-in but didn't hand over a login. Check that your Tidal "
+                               "app at developer.tidal.com allows playlists, then try again.")
+    with _tidal_lock:
+        _tidal_user.update(value=data.get("access_token"), refresh=data["refresh_token"],
+                           expires=time.time() + float(data.get("expires_in") or 3600))
+    return {"refresh_token": data["refresh_token"], "user_id": str(data.get("user_id") or "")}
+
+
+def tidal_sign_out():
+    """Forgets the signed-in login in memory. The caller removes it from .env."""
+    with _tidal_lock:
+        _tidal_user.update(value=None, expires=0.0, refresh=None)
+
+
+def tidal_user_token():
+    """
+    An access token for the signed-in user, renewed from the saved refresh token a
+    minute before it runs out. Raises TidalSignInError if not signed in, or if Tidal
+    no longer accepts the saved sign-in.
+    """
+    if not TIDAL_REFRESH_TOKEN:
+        raise TidalSignInError(f"Not signed in to Tidal. Sign in under {KEY_HELP_LINE}.")
+    with _tidal_lock:
+        t = _tidal_user
+        if t["value"] and t["refresh"] == TIDAL_REFRESH_TOKEN and time.time() < t["expires"] - 60:
+            return t["value"]
+        data = _tidal_user_token_request({"grant_type": "refresh_token", "refresh_token": TIDAL_REFRESH_TOKEN})
+        if not data or not data.get("access_token"):
+            t.update(value=None, expires=0.0)
+            raise TidalSignInError(f"Tidal sign-in has run out. Sign in to Tidal again under {KEY_HELP_LINE}.")
+        t.update(value=data["access_token"], refresh=TIDAL_REFRESH_TOKEN,
+                 expires=time.time() + float(data.get("expires_in") or 3600))
+        return t["value"]
+
+
 def _tidal_items(data):
     items = data.get("data") or []
     return [items] if isinstance(items, dict) else items
@@ -2758,21 +2924,50 @@ def tidal_track_id(artist, track):
     (no version note, such as Live or Acoustic) wins over the others.
     """
     want_a, want_t = artist_key(artist), clean_name(track)
-    details = tidal_track_details(tidal_search_ids(f"{artist} {track}", "tracks"))
-    for loose in (False, True):   # exact artist first, then the artist inside a longer credit
-        best = None
-        for tid, names, title, version in details:
-            if clean_name(title) != want_t and title_folded(title) != title_folded(track):
-                continue
-            keys = [artist_key(n) for n in names]
-            if not (want_a in keys if not loose else any(want_a in k or k in want_a for k in keys)):
-                continue
-            if not version:
-                return tid
-            best = best or tid
-        if best:
-            return best
-    return None
+
+    def pick(details):
+        # exact artist first, then the artist inside a longer credit; then, the artist
+        # matching exactly, a title one letter or so out ('Al of me' for 'All of Me')
+        for loose, near in ((False, False), (True, False), (False, True)):
+            best = None
+            for tid, names, title, version in details:
+                if near:
+                    if not near_title(title, track):
+                        continue
+                elif clean_name(title) != want_t and title_folded(title) != title_folded(track):
+                    continue
+                keys = [artist_key(n) for n in names]
+                if not (want_a in keys if not loose else any(want_a in k or k in want_a for k in keys)):
+                    continue
+                if not version:
+                    return tid
+                best = best or tid
+            if best:
+                return best
+        return None
+
+    found = pick(tidal_track_details(tidal_search_ids(f"{artist} {track}", "tracks")))
+    folded = fold_name_chars(artist)
+    if not found and folded != artist:   # Tidal's search doesn't know 'Travi$ Scott' is 'Travis Scott'
+        found = pick(tidal_track_details(tidal_search_ids(f"{folded} {track}", "tracks")))
+    return found
+
+
+NEAR_TITLE = 0.9   # how alike two titles must be for a near miss, by the same artist only
+
+
+def near_title(a, b):
+    """
+    Two titles one letter or so apart ('Al of me', 'All of Me'). Only for looking a
+    track up by an artist that has already matched: never between sources, where
+    'Song 2' and 'Song 3' must stay apart. Numbers always have to agree, so
+    'Symphony No. 5' is never a near miss for 'Symphony No. 6'.
+    """
+    import difflib
+    x, y = clean_name(a), clean_name(b)
+    if not (x and y) or re.findall(r"\d+", x) != re.findall(r"\d+", y):
+        return False
+    return difflib.SequenceMatcher(None, x, y).ratio() >= NEAR_TITLE
 
 
 def tidal_artist_id(name):

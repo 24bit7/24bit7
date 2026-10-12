@@ -217,3 +217,13 @@ A build that finds nothing used to end quietly, which on a voice command means s
 
 **9 Oct 2026: The AI Moderator never skips silently.**
 A Drift round that found one track skipped the check with no log line, and on Spread that one track went on to seed a later round (datdude's report). Balanced and Strict check single tracks; Relaxed, whose cap is a fifth, skips them and says so; set but unable to run says why once a build.
+
+**12 Oct 2026: Tidal is an Output, not a Now Playing source.**
+Windows can see what Tidal plays in Chrome, so Tidal could have joined Now Playing as a source, with a Chrome extension to start playlists at the right moment. Decided against it for now: 24bit7 is built for the JRiver listener, and driving Tidal's web player would break whenever Tidal changes it. Output to Tidal works like Output to YouTube, and a track heard on Tidal can still be typed into the Search tab. `media_probe.py` (not in git) is kept in case this is revisited.
+
+**12 Oct 2026: Output to Tidal signs in once and fills one playlist called 24bit7.**
+Writing a playlist needs the user's own Tidal login, which 24bit7 can't borrow from the browser or app, so Settings > Keys has Sign In to Tidal: Tidal's page in the browser, a code back to `localhost:47807`, and a refresh token kept in .env. Each build replaces the tracks of the playlist named exactly 24bit7, found by name rather than a saved ID, so renaming it in Tidal keeps it and the next build makes a fresh one. The console offers Open in Tidal app (a `tidal://` link, which goes straight to the playlist) and Open in Tidal web; nothing opens on its own. Tracks are found by name; a test on five real builds found 96%, so ISRCs aren't needed.
+
+**12 Oct 2026: One set of character rules for every name comparison.**
+The Tidal test showed the library matcher and the source and lookup rules had drifted apart: the library already folded accents and read '+' as 'and', the rest didn't. `fold_name_chars()` now holds the character rules (accents, '$' next to a letter as 's', '&' and '+' as one joiner) and every comparison uses it, so every mode gets each new rule. Near-miss titles (one letter or so out) stay limited to looking a track up by an artist that has already matched, the library and Tidal: between sources, 'Song 2' and 'Song 3' must stay apart, and numbers must always agree.
+

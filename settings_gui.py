@@ -113,6 +113,11 @@ KEY_HELP = {
         "At developer.tidal.com, sign in with a TIDAL account, open Dashboard\n"
         "and choose Create App. Copy the Client ID and Client Secret from the\n"
         "app's overview page into the two Tidal fields. It's free."),
+    "TIDAL_ACCOUNT": ("Sign In to Tidal",
+        "Only needed for Output to Tidal. At developer.tidal.com, open Dashboard\n"
+        "and the app you made for the Client ID. Under Redirect URIs add\n"
+        "http://localhost:47807/tidal and under Scopes tick playlists.read\n"
+        "and playlists.write. Save, then press Sign In to Tidal here."),
     "DISCOGS_TOKEN": ("Discogs token",
         "Go to discogs.com/settings/developers and click\n"
         "'Generate new token' under Personal access token."),
@@ -2899,8 +2904,13 @@ class SettingsTab(tk.Frame):
     def _build_keys(self, nb):
         tab = self._scroll_tab(nb, "Keys")
         box = section(tab, "Keys and passwords")
-        for r, key in enumerate(k for k in KEY_FIELDS if k not in AI_KEY_FIELDS):
+        r = 0
+        for key in (k for k in KEY_FIELDS if k not in AI_KEY_FIELDS):
             self._key_row(box, r, key)
+            r += 1
+            if key == "TIDAL_CLIENT_SECRET":   # the Tidal account sits under its two keys
+                self._tidal_account_row(box, r)
+                r += 1
 
         # --- AI: the provider and what it needs, in its own box, with what the AI has used under it ---
         box = section(tab, "AI",
@@ -3124,6 +3134,75 @@ class SettingsTab(tk.Frame):
             button = tk.Button(box, text="?", width=2, command=lambda k=key: self._show_help(k))
             button.grid(row=r, column=3, padx=(4, 0))
             Tooltip(button, KEY_HELP[key][1].replace("\n", " ") + "\nClick for these steps in a window.")
+
+    def _tidal_account_row(self, box, r):
+        """Tidal account: signed in or not, and Sign In to Tidal / Sign Out (for Output to Tidal)."""
+        tk.Label(box, text="Tidal account", anchor="w").grid(row=r, column=0, sticky="w", pady=4)
+        cell = tk.Frame(box)
+        cell.grid(row=r, column=1, columnspan=2, sticky="w", padx=(8, 4))
+        self._tidal_button = FlatButton(cell, text="Sign In to Tidal", command=self._tidal_account_pressed, quiet=True)
+        self._tidal_button.pack(side="left")
+        self._tidal_status = tk.Label(cell, fg=PALETTE["help_fg"], font=HELP_FONT)
+        self._tidal_status.pack(side="left", padx=(8, 0))
+        button = tk.Button(box, text="?", width=2, command=lambda: self._show_help("TIDAL_ACCOUNT"))
+        button.grid(row=r, column=3, padx=(4, 0))
+        Tooltip(button, KEY_HELP["TIDAL_ACCOUNT"][1].replace("\n", " ") + "\nClick for these steps in a window.")
+        self._tidal_waiting = None   # a threading.Event while a sign-in is waiting on the browser
+        self._show_tidal_account()
+
+    def _show_tidal_account(self):
+        if self._tidal_waiting is not None:
+            self._tidal_button.config(text="Cancel")
+            self._tidal_status.config(text="Waiting for Tidal in your browser...")
+        elif engine.tidal_signed_in():
+            self._tidal_button.config(text="Sign Out")
+            self._tidal_status.config(text="Signed in")
+        else:
+            self._tidal_button.config(text="Sign In to Tidal")
+            self._tidal_status.config(text="Not signed in. Only needed for Output to Tidal.")
+
+    def _tidal_account_pressed(self):
+        if self._tidal_waiting is not None:   # Cancel
+            self._tidal_waiting.set()
+            return
+        if engine.tidal_signed_in():
+            if messagebox.askyesno("Tidal", "Sign out of Tidal? Output to Tidal won't work until you sign in "
+                                            "again.", parent=self):
+                write_env({"TIDAL_REFRESH_TOKEN": None, "TIDAL_USER_ID": None})
+                engine.tidal_sign_out()
+                engine.refresh_settings_if_changed()
+                self._show_tidal_account()
+            return
+        self._save()   # Client ID and Secret just typed, without leaving the field
+        engine.refresh_settings_if_changed()
+        cancelled = threading.Event()
+        self._tidal_waiting = cancelled
+        outcome = {}
+
+        def run():
+            try:
+                outcome["login"] = engine.tidal_sign_in(cancelled=cancelled)
+            except Exception as e:   # TidalSignInError carries a message for the user
+                outcome["error"] = str(e)
+
+        def finish():
+            if not self.winfo_exists():
+                return
+            if not outcome:
+                self.after(300, finish)
+                return
+            self._tidal_waiting = None
+            login = outcome.get("login")
+            if login:
+                write_env({"TIDAL_REFRESH_TOKEN": login["refresh_token"], "TIDAL_USER_ID": login["user_id"] or None})
+                engine.refresh_settings_if_changed()
+            elif not cancelled.is_set():
+                messagebox.showwarning("Tidal", outcome.get("error") or "Tidal didn't sign you in.", parent=self)
+            self._show_tidal_account()
+
+        threading.Thread(target=run, daemon=True).start()
+        self._show_tidal_account()
+        self.after(300, finish)
 
     def _wrap_to_width(self, frame, labels):
         """

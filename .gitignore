@@ -22,5 +22,7 @@ profiles/
 *_log.txt
 singles_undo.json
 tidal_test.py
+tidal_match_test.py
+media_probe.py
 seed_check.py
 pack_for_laptop.py

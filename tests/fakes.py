@@ -357,6 +357,8 @@ class FakeWeb:
         self.empty = set()              # services answering with nothing
         self.unknown = set()            # artist names every service treats as unknown (joint credits)
         self.acr_miss = set()           # (artist, title) ListenBrainz's own lookup can't find
+        self.tidal_login = {"challenge": None, "code": "good-code", "refresh": "fake-refresh",
+                            "refresh_ok": True}   # the fake Tidal account sign-in
         lib_artists = []
         for r in jriver.tracks:
             a = r["Album Artist (auto)"]
@@ -425,7 +427,7 @@ class FakeWeb:
                 titles = [] if empty else self.top_tracks(name)
                 return Resp(data={"data": [{"title": t} for t in titles]})
         if service == "tidal":
-            return self._tidal(method, path, params, empty)
+            return self._tidal(method, path, params, empty, body)
         if service == "ollama":   # a local Ollama with one model, for Settings > Keys > AI's Refresh
             if path == "/api/tags":
                 return Resp(data={"models": [] if empty else [{"name": "gemma3:4b"}]})
@@ -475,6 +477,25 @@ class FakeWeb:
         return self.__dict__.setdefault("_tidal_reg", {"tracks": [], "artists": []})[kind][
             int(ident) - (1000 if kind == "tracks" else 1)]
 
+    def _tidal_token(self, form):
+        """The token address: the catalogue login, a sign-in code swapped, or a renewal."""
+        login, grant = self.tidal_login, form.get("grant_type")
+        if grant == "authorization_code":
+            import base64
+            import hashlib
+            sent = base64.urlsafe_b64encode(hashlib.sha256(form.get("code_verifier", "").encode()).digest())
+            if (form.get("code") != login["code"] or sent.decode().rstrip("=") != login["challenge"]
+                    or form.get("redirect_uri") != login.get("redirect_uri")
+                    or "playlists.write" not in form.get("scope", "")):
+                return Resp(status=400, data={"error": "invalid_grant"})
+            return Resp(data={"access_token": "fake-user-token", "refresh_token": login["refresh"],
+                              "expires_in": 86400, "user_id": 12345, "token_type": "Bearer"})
+        if grant == "refresh_token":
+            if not login["refresh_ok"] or form.get("refresh_token") != login["refresh"]:
+                return Resp(status=400, data={"error": "invalid_grant"})
+            return Resp(data={"access_token": "fake-user-token-renewed", "expires_in": 86400})
+        return Resp(data={"access_token": "fake-tidal-token", "expires_in": 86400})
+
     def _tidal_page(self, kind, ids, path, params):
         start = int(params.get("page[cursor]", 0) or 0)
         page = ids[start:start + 20]
@@ -483,9 +504,9 @@ class FakeWeb:
             links["next"] = f"{path[3:]}?countryCode=GB&page[cursor]={start + 20}"
         return Resp(data={"data": [{"id": i, "type": kind} for i in page], "links": links})
 
-    def _tidal(self, method, path, params, empty):
+    def _tidal(self, method, path, params, empty, body=None):
         if path == "/v1/oauth2/token":
-            return Resp(data={"access_token": "fake-tidal-token", "expires_in": 86400})
+            return self._tidal_token(body or {})
         if path == "/v2/searchResults":
             q, kind = params.get("filter[query]", ""), params.get("include", "tracks")
             ids = []
@@ -641,5 +662,6 @@ def install(monkeypatch, jriver, web):
             p = dict(urllib.parse.parse_qsl(u.query))
             p.update(params or {})
             return jriver.handle(method, path, p)
-        return web.handle(method, url, params or dict(urllib.parse.parse_qsl(u.query)), json)
+        return web.handle(method, url, params or dict(urllib.parse.parse_qsl(u.query)),
+                          json if json is not None else data)
     monkeypatch.setattr(requests.Session, "request", request)

@@ -100,7 +100,8 @@ def _spell_numbers(text):
 
 def norm(text):
     """Both sides of a comparison go through this: what Alexa hears and what the tags say."""
-    text = unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode().lower()
+    text = engine.fold_name_chars(text)                          # the character rules every comparison shares
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
     text = re.sub(r",\s*the\s*$", "", text.strip())            # Kooks, The
     text = text.replace("&", " and ").replace("+", " and ")
     text = re.sub(r"\(.*?\)|\[.*?\]", " ", text)               # (Remastered), [Deluxe Edition]
@@ -476,7 +477,7 @@ def find_track_key(artist, title):
             add(_songs.get(w, []))
         if not entries:
             for w in wants:
-                for t in difflib.get_close_matches(w, _song_titles, n=3, cutoff=0.9):
+                for t in difflib.get_close_matches(w, _song_titles, n=3, cutoff=engine.NEAR_TITLE):
                     add(_songs[t])
     matches = [e for e in entries if _artist_score(artist, e[1]) >= GOOD]
     if not matches:
