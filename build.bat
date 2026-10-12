@@ -2,8 +2,6 @@
 setlocal
 cd /d "%~dp0"
 
-rem Close the packaged 24bit7 before building, or its files can't be replaced.
-
 rem --- 0. Full test suite: a failure stops the release before anything else happens ---
 echo Running the tests (a few minutes)...
 python -m pytest -q
@@ -14,6 +12,9 @@ if errorlevel 1 (
     exit /b 1
 )
 echo.
+
+rem --- 0a. Close the packaged 24bit7, or its files can't be replaced (a copy run from gui.pyw is left alone) ---
+powershell -NoProfile -Command "$exe = (Resolve-Path 'dist\24bit7\24bit7.exe' -ErrorAction SilentlyContinue).Path; if ($exe) { Get-Process 24bit7 -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe } | ForEach-Object { Write-Host 'Closing 24bit7 so it can be rebuilt.'; Stop-Process -Id $_.Id -Force; $_.WaitForExit(10000) | Out-Null } }; exit 0"
 
 rem --- 1. Back up settings and history (a rebuild deletes dist\24bit7) ---
 for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd_HHmm"') do set STAMP=%%i
@@ -79,6 +80,9 @@ powershell -NoProfile -Command "Get-ChildItem backups -Directory | Sort-Object N
 
 rem --- 6. Publish to GitHub (release.ps1), only reached once tests, build and zip have all worked ---
 if exist "%ZIP%" powershell -NoProfile -ExecutionPolicy Bypass -File release.ps1 -Version %VER% -Zip "%ZIP%"
+
+rem --- 7. Open the new 24bit7, published or not, so it isn't left closed ---
+if exist "dist\24bit7\24bit7.exe" start "" /d "%~dp0dist\24bit7" "%~dp0dist\24bit7\24bit7.exe"
 
 echo.
 echo Build complete.
