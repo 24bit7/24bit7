@@ -1585,6 +1585,29 @@ def _forget_pid():
         pass
 
 
+# --- tray: a maximised window comes back maximised ---
+# Tk's deiconify shows a window at its normal size on Windows, so going to the tray
+# and back lost the maximised state. The state is noted on the way out and put back.
+
+def hide_to_tray(root, memo):
+    state = root.state()
+    if state != "iconic":   # minimised to the taskbar: keep what was noted before
+        memo["zoomed"] = state == "zoomed"
+    root.withdraw()
+
+
+def show_from_tray(root, memo):
+    if memo.get("zoomed"):
+        root.state("zoomed")
+        if root.state() != "zoomed":   # not shown by that: show it, then maximise
+            root.deiconify()
+            root.state("zoomed")
+    else:
+        root.deiconify()
+    root.lift()
+    root.focus_force()
+
+
 def main():
     _enable_dpi_awareness()
     _set_app_id()
@@ -1682,10 +1705,10 @@ def main():
         root.after(13000, lambda: play.report("Closed the copy of 24bit7 that was already running."))
 
     # --- tray: Start in the tray (when Windows launches it) and Close to tray ---
+    tray_memo = {}   # whether the window was maximised when it went to the tray
+
     def show_window():
-        root.deiconify()
-        root.lift()
-        root.focus_force()
+        show_from_tray(root, tray_memo)
 
     def quit_app():
         tray.stop()
@@ -1707,7 +1730,7 @@ def main():
     def on_close():
         engine.refresh_settings_if_changed()
         if engine.CLOSE_TO_TRAY and tray.start(root, show_window, quit_app):
-            root.withdraw()   # still running: voice keeps listening
+            hide_to_tray(root, tray_memo)   # still running: voice keeps listening
         else:
             quit_app()
 
