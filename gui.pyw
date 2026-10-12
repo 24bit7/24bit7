@@ -282,7 +282,7 @@ class PlayTab(tk.Frame):
         tk.Label(frame, text="Output", font=("Segoe UI", 9, "bold"), fg=PALETTE["text_secondary"]).pack(side="left", padx=(8, 6))
         self.output_var = tk.StringVar(value=self._output_label(engine.OUTPUT_TARGET))
         self.output_cb = ttk.Combobox(frame, textvariable=self.output_var,
-                                      values=[SAME_ZONE_LABEL, "YouTube", "Tidal"], state="readonly", width=24,
+                                      values=[SAME_ZONE_LABEL] + self._extra_outputs(), state="readonly", width=24,
                                       postcommand=self._fill_output_list)
         self.output_cb.pack(side="left")
         self.output_cb.bind("<<ComboboxSelected>>", self._on_output_changed)
@@ -378,7 +378,23 @@ class PlayTab(tk.Frame):
         return SAME_ZONE_LABEL
 
     def _fill_output_list(self):
-        self.output_cb.config(values=[SAME_ZONE_LABEL] + engine.zone_names() + ["YouTube", "Tidal"])
+        self.output_cb.config(values=[SAME_ZONE_LABEL] + engine.zone_names() + self._extra_outputs())
+
+    @staticmethod
+    def _extra_outputs():
+        """The services ticked under Settings > Other > Additional Outputs, as Output offers them."""
+        engine.refresh_settings_if_changed()
+        return [label for code, label in sorted(engine.OUTPUT_OPTIONS, key=lambda o: o[1])
+                if code in engine.EXTRA_OUTPUTS]
+
+    def outputs_changed(self):
+        """Additional Outputs changed: an Output that's been unticked goes back to Same zone, and says so."""
+        was = self.output_var.get()
+        if was in dict(engine.OUTPUT_OPTIONS).values() and was not in self._extra_outputs():
+            self.output_var.set(SAME_ZONE_LABEL)
+            self._on_output_changed()
+            messagebox.showinfo("Output", f"{was} is no longer ticked under Additional Outputs, so Output is "
+                                          f"back to {SAME_ZONE_LABEL}.", parent=self)
 
     def _on_output_changed(self, *_):
         choice = self.output_var.get()

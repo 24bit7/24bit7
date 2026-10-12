@@ -114,7 +114,7 @@ KEY_HELP = {
         "and choose Create App. Copy the Client ID and Client Secret from the\n"
         "app's overview page into the two Tidal fields. It's free."),
     "TIDAL_ACCOUNT": ("Sign In to Tidal",
-        "Only needed for Output to Tidal. At developer.tidal.com, open Dashboard\n"
+        "Only needed to send playlists to Tidal. At developer.tidal.com, open Dashboard\n"
         "and the app you made for the Client ID. Under Redirect URIs add\n"
         "http://localhost:47807/tidal and under Scopes tick playlists.read\n"
         "and playlists.write. Save, then press Sign In to Tidal here."),
@@ -848,6 +848,9 @@ class SettingsTab(tk.Frame):
         if "DISCOVER_LABEL" in self.vars:
             updates["DISCOVER_LABEL"] = "1" if self.vars["DISCOVER_LABEL"].get() else "0"
         updates["LISTEN_SITES"] = ",".join(code for code, v in self.vars["LISTEN_SITES"].items() if v.get())
+        for group in ("PLAYLIST_SITES", "EXTRA_OUTPUTS"):
+            if group in self.vars:
+                updates[group] = ",".join(code for code, v in self.vars[group].items() if v.get())
         for n in range(1, engine.CUSTOM_SITE_SLOTS + 1):
             name = self.vars[f"CUSTOM_SITE_{n}_NAME"].get().strip()
             url = self.vars[f"CUSTOM_SITE_{n}_URL"].get().strip()
@@ -3159,7 +3162,8 @@ class SettingsTab(tk.Frame):
             self._tidal_status.config(text="Signed in")
         else:
             self._tidal_button.config(text="Sign In to Tidal")
-            self._tidal_status.config(text="Not signed in. Only needed for Output to Tidal.")
+            self._tidal_status.config(text="Not signed in. Only needed to send playlists to Tidal.")
+        self._sync_output_parts()   # Settings > Other > Additional Outputs says it too
 
     def _tidal_account_pressed(self):
         if self._tidal_waiting is not None:   # Cancel
@@ -3522,24 +3526,6 @@ class SettingsTab(tk.Frame):
         e.grid(row=1, column=1, sticky="w", padx=(12, 0))
         e.bind("<FocusOut>", self._save)
 
-        tk.Label(box, text="YouTube playlist length", anchor="w").grid(row=2, column=0, sticky="w", pady=4)
-        self.vars["YOUTUBE_PLAYLIST_LENGTH"] = tk.StringVar(value=self.env.get("YOUTUBE_PLAYLIST_LENGTH", "50"))
-        cell = tk.Frame(box)
-        cell.grid(row=2, column=1, sticky="w", padx=(12, 0))
-        tk.Spinbox(cell, from_=5, to=50, textvariable=self.vars["YOUTUBE_PLAYLIST_LENGTH"], width=6,
-                   command=self._save).pack(side="left")
-        help_mark(cell, "How many videos a playlist holds when Output is set to YouTube (5 to 50). "
-                        "50 is the most YouTube allows in one playlist link.").pack(side="left", padx=(8, 0))
-        self.vars["YOUTUBE_PLAYLIST_LENGTH"].trace_add("write", self._save)
-
-        self.vars["PREFER_OFFICIAL_VIDEOS"] = tk.BooleanVar(
-            value=self.env.get("PREFER_OFFICIAL_VIDEOS", "0") in ("1", "true", "yes"))
-        cell = tk.Frame(box)
-        cell.grid(row=3, column=0, columnspan=3, sticky="w", pady=4)
-        ttk.Checkbutton(cell, text="Prefer official music videos",
-                       variable=self.vars["PREFER_OFFICIAL_VIDEOS"], command=self._save).pack(side="left")
-        help_mark(cell, "YouTube Music usually plays the audio-only version of a song, shown with the album cover. Tick this to play the artist's official music video instead, where one exists. Videos can run longer than the song because of intros and outros, and a few may not play in your region. Songs without an official video still play as audio.").pack(side="left", padx=(8, 0))
-
         tk.Label(box, text="Theme", anchor="w").grid(row=4, column=0, sticky="w", pady=4)
         self.vars["THEME"] = tk.StringVar(
             value="Dark" if self.env.get("THEME", "light").strip().lower() == "dark" else "Light")
@@ -3599,6 +3585,8 @@ class SettingsTab(tk.Frame):
                         "credits of its own, under its number and title, then the album's. Track credits "
                         "include album credits marked for that track, such as a drummer on tracks 2 to 4. "
                         "Show First picks which list comes first.").pack(side="left", padx=(8, 0))
+
+        self._build_additional_outputs(tab)
 
         # --- Zones: which JRiver zones appear in the Play tab's Zone and Output lists ---
         # Filled when the tab is first shown, so a slow JRiver never delays startup.
@@ -4180,7 +4168,7 @@ class SettingsTab(tk.Frame):
 
     def _build_search_sites(self, nb):
         """Discover search sites: which stores and reference sites to open per row."""
-        tab = self._scroll_tab(nb, "Search")
+        tab = self._scroll_tab(nb, "Discover")
         ttk.Style(self).configure("Big.TCheckbutton", font=("Segoe UI", 11))
         cols = 4
 
@@ -4195,14 +4183,6 @@ class SettingsTab(tk.Frame):
                                 style="Big.TCheckbutton").grid(
                     row=i // cols, column=i % cols, sticky="w", padx=(0, 16), pady=2)
 
-        box = section(tab, "Record Label",
-                      "Adds a Label button to the Discover tab. It finds who released the selected track and "
-                      "opens the label on Bandcamp, so buying it supports the artist through their label.")
-        self.vars["DISCOVER_LABEL"] = tk.BooleanVar(
-            value=self.env.get("DISCOVER_LABEL", "1").strip().lower() in ("1", "true", "yes"))
-        ttk.Checkbutton(box, text="Label", variable=self.vars["DISCOVER_LABEL"], command=self._save,
-                        style="Big.TCheckbutton").grid(row=0, column=0, sticky="w", pady=2)
-
         # Carry over a pre-1.1.0 single DIGITAL_STORE if the new key isn't there yet.
         stores_raw = self.env.get("DIGITAL_STORES", self.env.get("DIGITAL_STORE", "bandcamp"))
         box = section(tab, "Stores",
@@ -4213,9 +4193,25 @@ class SettingsTab(tk.Frame):
         box = section(tab, "Reference", "Search the artist, for a discography. Each ticked site gets its own "
                                         "button on the Discover tab.")
         ticks(box, "REFERENCE_SITES", engine.REFERENCE_OPTIONS, self._csv_list("REFERENCE_SITES", ""))
+        # Record Label sits with the reference sites, but keeps its own setting (DISCOVER_LABEL), on unless unticked
+        self.vars["DISCOVER_LABEL"] = tk.BooleanVar(
+            value=self.env.get("DISCOVER_LABEL", "1").strip().lower() in ("1", "true", "yes"))
+        n = len(engine.REFERENCE_OPTIONS)
+        label_tick = ttk.Checkbutton(box, text="Record Label", variable=self.vars["DISCOVER_LABEL"],
+                                     command=self._save, style="Big.TCheckbutton")
+        label_tick.grid(row=n // cols, column=n % cols, sticky="w", padx=(0, 16), pady=2)
+        Tooltip(label_tick, "Adds a Label button to the Discover tab. It finds who released the selected track "
+                            "and opens the label on Bandcamp, so buying it supports the artist through their label.")
         box = section(tab, "Listen", "Search by artist and track. Each ticked site gets its own button on the "
                                      "Discover tab.")
         ticks(box, "LISTEN_SITES", engine.LISTEN_OPTIONS, self._csv_list("LISTEN_SITES", "youtube"))
+        box = section(tab, "Create Playlist",
+                      "Tick rows on the Discover tab, then make them into one playlist to listen through. Each "
+                      "ticked service gets its own button there. YouTube opens them in your browser; Tidal puts "
+                      "them in your playlist called 24bit7, in place of what was there (sign in under Settings > "
+                      "Keys). This is for the Discover tab only: the Play tab's Output list is set under "
+                      "Settings > Other > Additional Outputs.")
+        ticks(box, "PLAYLIST_SITES", engine.PLAYLIST_OPTIONS, self._csv_list("PLAYLIST_SITES", "youtube"))
 
         box = section(tab, "Custom sites",
                       "To add a site: search for anything on it, copy the address from your browser, then replace "
@@ -4246,6 +4242,79 @@ class SettingsTab(tk.Frame):
             mode_cb.bind("<<ComboboxSelected>>", self._save)
 
     # --- helpers -----------------------------------------------------------
+
+    def _build_additional_outputs(self, tab):
+        """
+        Additional Outputs: the streaming services the Play tab's Output list offers besides
+        JRiver's zones, each with its own settings under it, greyed out while it's unticked.
+        """
+        box = section(tab, "Additional Outputs",
+                      "Besides your JRiver zones, the Play tab's Output list can send a playlist to these. "
+                      "Untick one to take it out of the list. Discover's Create Playlist buttons are set "
+                      "separately, under Settings > Discover.")
+        chosen = self._csv_list("EXTRA_OUTPUTS", "youtube")
+        self.vars["EXTRA_OUTPUTS"] = {code: tk.BooleanVar(value=code in chosen) for code, _ in engine.OUTPUT_OPTIONS}
+        self._output_parts = {}   # code -> the widgets greyed out while it's unticked
+
+        # YouTube, with the two settings it had under General before
+        tick = ttk.Checkbutton(box, text="YouTube", variable=self.vars["EXTRA_OUTPUTS"]["youtube"],
+                               command=self._extra_outputs_changed, style="Big.TCheckbutton")
+        tick.grid(row=0, column=0, columnspan=3, sticky="w", pady=(2, 0))
+        Tooltip(tick, "Output on YouTube opens the playlist in your browser, as one YouTube playlist.")
+        tk.Label(box, text="YouTube playlist length", anchor="w").grid(row=1, column=0, sticky="w",
+                                                                         padx=(24, 0), pady=4)
+        self.vars["YOUTUBE_PLAYLIST_LENGTH"] = tk.StringVar(value=self.env.get("YOUTUBE_PLAYLIST_LENGTH", "50"))
+        cell = tk.Frame(box)
+        cell.grid(row=1, column=1, sticky="w", padx=(12, 0))
+        spin = tk.Spinbox(cell, from_=5, to=50, textvariable=self.vars["YOUTUBE_PLAYLIST_LENGTH"], width=6,
+                          command=self._save)
+        spin.pack(side="left")
+        help_mark(cell, "How many videos a playlist holds when Output is set to YouTube (5 to 50). "
+                        "50 is the most YouTube allows in one playlist link.").pack(side="left", padx=(8, 0))
+        self.vars["YOUTUBE_PLAYLIST_LENGTH"].trace_add("write", self._save)
+        self.vars["PREFER_OFFICIAL_VIDEOS"] = tk.BooleanVar(
+            value=self.env.get("PREFER_OFFICIAL_VIDEOS", "0") in ("1", "true", "yes"))
+        cell = tk.Frame(box)
+        cell.grid(row=2, column=0, columnspan=3, sticky="w", padx=(24, 0), pady=4)
+        official = ttk.Checkbutton(cell, text="Prefer official music videos",
+                                   variable=self.vars["PREFER_OFFICIAL_VIDEOS"], command=self._save)
+        official.pack(side="left")
+        help_mark(cell, "YouTube Music usually plays the audio-only version of a song, shown with the album cover. Tick this to play the artist's official music video instead, where one exists. Videos can run longer than the song because of intros and outros, and a few may not play in your region. Songs without an official video still play as audio.").pack(side="left", padx=(8, 0))
+        self._output_parts["youtube"] = [spin, official]
+
+        # Tidal, with whether you're signed in
+        tick = ttk.Checkbutton(box, text="Tidal", variable=self.vars["EXTRA_OUTPUTS"]["tidal"],
+                               command=self._extra_outputs_changed, style="Big.TCheckbutton")
+        tick.grid(row=3, column=0, columnspan=3, sticky="w", pady=(10, 0))
+        Tooltip(tick, "Output on Tidal puts the playlist in your Tidal playlist called 24bit7, in place of "
+                      "what was there. Rename it in Tidal to keep it.")
+        self._tidal_output_note = tk.Label(box, text="", fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w")
+        self._tidal_output_note.grid(row=4, column=0, columnspan=3, sticky="w", padx=(24, 0), pady=4)
+        self._output_parts["tidal"] = [self._tidal_output_note]
+        self._sync_output_parts()
+
+    def _sync_output_parts(self):
+        """Greys out an unticked service's own settings, and says whether you're signed in to Tidal."""
+        if not hasattr(self, "_output_parts"):
+            return
+        self._tidal_output_note.config(
+            text="Signed in to Tidal." if engine.tidal_signed_in()
+            else "Not signed in yet: Settings > Keys, Sign In to Tidal.")
+        for code, parts in self._output_parts.items():
+            on = self.vars["EXTRA_OUTPUTS"][code].get()
+            for w in parts:
+                try:
+                    w.config(state="normal" if on else "disabled")
+                except tk.TclError:
+                    pass
+
+    def _extra_outputs_changed(self):
+        self._save()
+        engine.refresh_settings_if_changed()
+        self._sync_output_parts()
+        play = getattr(self, "play", None)
+        if play is not None:
+            play.outputs_changed()   # an Output that's been unticked goes back to Same zone
 
     def _csv_list(self, key, default):
         return [x.strip().lower() for x in self.env.get(key, default).split(",") if x.strip()]

@@ -11,7 +11,8 @@ def seed(app, artist="The Beatles", title="Here Comes The Sun"):
 
 def tidal_out(app, **extra):
     app.set_env(**dict(dict(TIDAL_CLIENT_ID="test-id", TIDAL_CLIENT_SECRET="test-secret",
-                            TIDAL_REFRESH_TOKEN="fake-refresh", TIDAL_USER_ID="12345", OUTPUT_TARGET="tidal"), **extra))
+                            TIDAL_REFRESH_TOKEN="fake-refresh", TIDAL_USER_ID="12345", OUTPUT_TARGET="tidal",
+                            EXTRA_OUTPUTS="youtube,tidal"), **extra))
 
 
 def playlists(app):
@@ -199,8 +200,10 @@ def test_open_links(app):
 def test_unknown_output_falls_back_to_jriver(app):
     app.set_env(OUTPUT_TARGET="spotify")
     assert app.engine.OUTPUT_TARGET == "jriver"
-    app.set_env(OUTPUT_TARGET="tidal")
+    app.set_env(OUTPUT_TARGET="tidal", EXTRA_OUTPUTS="youtube,tidal")
     assert app.engine.OUTPUT_TARGET == "tidal"
+    app.set_env(EXTRA_OUTPUTS="youtube")   # Tidal unticked under Additional Outputs
+    assert app.engine.OUTPUT_TARGET == "jriver"
 
 
 def test_a_track_tidal_lacks_is_a_miss(app):

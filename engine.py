@@ -99,10 +99,21 @@ STORE_CODES = [c for c, _ in STORE_OPTIONS]
 REFERENCE_CODES = [c for c, _ in REFERENCE_OPTIONS]
 # "Listen" sites are searched by artist + track, like the stores, but aren't shops.
 LISTEN_OPTIONS = [
+    ("tidal", "Tidal"),
     ("youtube", "YouTube"),
 ]
 LISTEN_CODES = [c for c, _ in LISTEN_OPTIONS]
-CUSTOM_SITE_SLOTS = 3   # rows offered under Settings > Search > Custom sites
+# Create Playlist: the services Discover's ticked rows can be made into one playlist on
+PLAYLIST_OPTIONS = [
+    ("tidal", "Tidal"),
+    ("youtube", "YouTube"),
+]
+# Additional Outputs (Settings > Other): the services offered in the Play tab's Output list
+OUTPUT_OPTIONS = [
+    ("tidal", "Tidal"),
+    ("youtube", "YouTube"),
+]
+CUSTOM_SITE_SLOTS = 3   # rows offered under Settings > Discover > Custom sites
 
 
 def _int_setting(name, default, lo, hi):
@@ -259,7 +270,7 @@ def load_settings():
     global PREFER_OFFICIAL_VIDEOS, THEME
     global VOICE_ENABLED, VOICE_KEY, VOICE_PORT
     global START_IN_TRAY, CLOSE_TO_TRAY
-    global LISTEN_SITES, CUSTOM_SITES
+    global LISTEN_SITES, CUSTOM_SITES, PLAYLIST_SITES, EXTRA_OUTPUTS
     global SKIP_LONG_CLOSERS, LONG_CLOSER_MINUTES
     global SIMILAR_ARTIST_TRACK_COUNT, SIMILAR_ARTIST_TRACK_LIMIT, DRIFT
     global AI_MODERATOR, MODERATOR_WARNED, SKIP_PLAYED
@@ -308,6 +319,11 @@ def load_settings():
     if listen_raw is None:
         listen_raw = "youtube"
     LISTEN_SITES = [x.strip().lower() for x in listen_raw.split(",") if x.strip().lower() in LISTEN_CODES]
+    # Create Playlist and Additional Outputs: YouTube is on unless unticked, as it was before either existed
+    PLAYLIST_SITES = [x.strip().lower() for x in os.getenv("PLAYLIST_SITES", "youtube").split(",")
+                      if x.strip().lower() in dict(PLAYLIST_OPTIONS)]
+    EXTRA_OUTPUTS = [x.strip().lower() for x in os.getenv("EXTRA_OUTPUTS", "youtube").split(",")
+                     if x.strip().lower() in dict(OUTPUT_OPTIONS)]
     CUSTOM_SITES = read_custom_sites()
     DEBUG = True   # always recorded since 1.11.0: the console's Simple/Advanced switch shows or hides them
     CONSOLE_QUERY = os.getenv("CONSOLE_QUERY", "0").strip().lower() in ("1", "true", "yes")   # off by default
@@ -428,7 +444,8 @@ def load_settings():
         OUTPUT_TARGET = "zone:" + raw_output[5:].strip()
     else:
         OUTPUT_TARGET = raw_output.lower()
-        if OUTPUT_TARGET not in ("jriver", "youtube", "tidal"):
+        if OUTPUT_TARGET not in ("jriver", "youtube", "tidal") or (
+                OUTPUT_TARGET in ("youtube", "tidal") and OUTPUT_TARGET not in EXTRA_OUTPUTS):   # unticked
             OUTPUT_TARGET = "jriver"
     # Zones hidden from the Play tab's Zone and Output lists (names separated by |)
     HIDDEN_ZONES = {x.strip() for x in os.getenv("HIDDEN_ZONES", "").split("|") if x.strip()}
@@ -602,12 +619,16 @@ SIMILAR_TRACK_VARIETY=no
 # Reference: wikipedia, discogs_ref, allmusic, musicbrainz
 DIGITAL_STORES=bandcamp
 REFERENCE_SITES=
-# Listen: youtube (searches artist + track). Custom sites are added in Settings > Search.
+# Listen: youtube, tidal (search artist + track). Custom sites are added in Settings > Discover.
 LISTEN_SITES=youtube
+# Create Playlist: youtube, tidal (Discover's ticked rows as one playlist)
+PLAYLIST_SITES=youtube
 
-# Output: jriver (Same zone, the default), zone:<JRiver zone name>, or youtube
-# (opens an instant playlist in the browser, 5-50 videos). Set from the Play tab.
+# Output: jriver (Same zone, the default), zone:<JRiver zone name>, youtube (opens an
+# instant playlist in the browser, 5-50 videos) or tidal (fills your playlist called
+# 24bit7). Set from the Play tab. Additional Outputs: the services the Play tab offers.
 OUTPUT_TARGET=jriver
+EXTRA_OUTPUTS=youtube
 YOUTUBE_PLAYLIST_LENGTH=50
 # Use official music videos on YouTube where they exist, instead of audio with a cover image (1 or 0)
 PREFER_OFFICIAL_VIDEOS=0

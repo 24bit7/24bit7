@@ -53,7 +53,7 @@ SHOTS = [
     ("settings_playlist_top_tracks", ["Settings", "Playlist", "Artist's Top Tracks"], ["settings_gui.py"], None),
     ("settings_playlist_ai_playlist", ["Settings", "Playlist", "AI Playlist"], ["settings_gui.py"], None),
     ("settings_filters", ["Settings", "Filters"], ["settings_gui.py", "filters.py"], None),
-    ("settings_search_sites", ["Settings", "Search"], ["settings_gui.py"], None),
+    ("settings_discover_sites", ["Settings", "Discover"], ["settings_gui.py"], None),
     ("settings_keys", ["Settings", "Keys"], ["settings_gui.py"], None),
     ("settings_voice_commands", ["Settings", "Voice Commands"], ["settings_gui.py", "voice.py"], None),
     ("settings_jriver_playlists", ["Settings", "JRiver Playlists"], ["settings_gui.py", "saved_playlists.py"], None),

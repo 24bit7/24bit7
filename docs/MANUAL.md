@@ -186,8 +186,8 @@ Discover lists every track a build looked for and whether you own it.
 
 - **Show** picks Misses (tracks you don't own), Hits, or All.
 - **Session** narrows it to one build. It opens on the latest build until you pick one yourself, with **All sessions** first in the list and the rest newest first. **Search** looks across every column. A build seeded from Playing Now reads **Playing Now (Multiple Tracks)**, and each of its rows shows the Playing Now track it came from as its Seed.
-- Select a row and each site you've ticked under Settings > Search has a button along the bottom. Stores and YouTube search for the artist and track; reference sites such as Wikipedia and Discogs search for the artist, for the discography.
-- **Label** finds who released the selected track and opens the label on Bandcamp, so you can buy from the people who put the record out. It asks MusicBrainz first, then Discogs if you have a token. A self-released track opens the artist on Bandcamp. Each answer is remembered, so a second click is instant. Untick it under Settings > Search > Record Label if you don't want it.
+- Select a row and each site you've ticked under Settings > Discover has a button along the bottom. Stores and YouTube search for the artist and track; reference sites such as Wikipedia and Discogs search for the artist, for the discography.
+- **Label** finds who released the selected track and opens the label on Bandcamp, so you can buy from the people who put the record out. It asks MusicBrainz first, then Discogs if you have a token. A self-released track opens the artist on Bandcamp. Each answer is remembered, so a second click is instant. Untick Record Label under Settings > Discover > Reference if you don't want it.
 - Tick rows, or **Select All**, and **Create YouTube Playlist** opens them in your browser as one playlist, so you can hear the misses before you buy.
 - **Clear All** empties the history and **Clear Selected** removes just the ticked rows. Both ask first.
 - **CSV** saves the list as a spreadsheet file. **A-** and **A+**, at the top right, set the size of the table text.
@@ -244,11 +244,11 @@ A library of named filters that narrow what 24bit7 picks, including Drift rounds
 
 A track with no value for a field passes that rule. The seed track is never filtered out. Each build's console says which filters applied and how many tracks they left out. Albums, songs, shuffles and JRiver playlists asked for by voice play as asked.
 
-### Search
+### Discover
 
-![Settings, Search](images/settings_search_sites.png)
+![Settings, Discover](images/settings_discover_sites.png)
 
-The sites that get a button on the Discover tab: **Record Label** (the Label button, ticked by default), **Stores** (at least one stays ticked), **Reference** sites for discographies, and **Listen** sites. **Custom sites** adds up to three of your own: search for anything on the site, copy the address from your browser, and replace your search words with `{query}`.
+The sites that get a button on the Discover tab: **Stores** (at least one stays ticked), **Reference** sites for discographies, with **Record Label** among them (the Label button, ticked by default), and **Listen** sites (YouTube and Tidal). **Create Playlist** picks which buttons appear when you tick rows: YouTube opens them as one playlist in your browser, and Tidal puts them in your Tidal playlist called 24bit7 (sign in under Keys first). **Custom sites** adds up to three of your own: search for anything on the site, copy the address from your browser, and replace your search words with `{query}`.
 
 ### Keys
 

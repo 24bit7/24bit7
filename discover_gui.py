@@ -49,6 +49,7 @@ REFERENCE_SEARCH = {
 # "Listen" sites take an "artist track" query, like the stores.
 LISTEN_SEARCH = {
     "youtube": lambda q: f"https://www.youtube.com/results?search_query={q}",
+    "tidal":   lambda q: f"https://tidal.com/search?q={q}",
 }
 
 
@@ -266,6 +267,11 @@ class DiscoverTab(tk.Frame):
         # Appears once a row is ticked; the status line beside it says how the last playlist went
         self._yt_button = FlatButton(self._bar_right, text="Create YouTube Playlist", quiet=True, height=1,
                                      command=self.create_youtube_playlist)
+        self._tidal_button = FlatButton(self._bar_right, text="Create Tidal Playlist", quiet=True, height=1,
+                                        command=self.create_tidal_playlist)
+        # After a Tidal playlist is filled: links to open it, until the next thing the status line says
+        self._tidal_open = tk.Frame(self._bar_right)
+        self._tidal_open_pid = None
         # Clear all always shows, at the far left of the group; Clear selected appears with the ticks
         FlatButton(self._bar_right, text="Clear All", quiet=True, height=1,
                    command=self.clear_all).pack(side="right", padx=(0, 16))
@@ -439,20 +445,95 @@ class DiscoverTab(tk.Frame):
         self._sync_ticks()
 
     def _sync_ticks(self):
-        """Shows "Create YouTube playlist (n)" while any row is ticked."""
+        """
+        While any row is ticked: a Create Playlist button for each service ticked under
+        Settings > Discover > Create Playlist, then Clear Selected.
+        """
         count = sum(1 for r in getattr(self, "_rows", []) if r.get("_ticked"))
-        if count and not self._yt_button.winfo_ismapped():
-            self._yt_button.pack(side="right", padx=(0, 8), after=self._select_all_button)
-        elif not count:
-            self._yt_button.pack_forget()
-        if count and not self._clear_sel_button.winfo_manager():
-            self._clear_sel_button.pack(side="right", padx=(0, 8), after=self._yt_button)
-        elif not count:
-            self._clear_sel_button.pack_forget()
+        sites = getattr(engine, "PLAYLIST_SITES", ["youtube"])
+        wanted = ([b for code, b in (("youtube", self._yt_button), ("tidal", self._tidal_button)) if code in sites]
+                  + [self._clear_sel_button]) if count else []
+        shown = [b for b in (self._yt_button, self._tidal_button, self._clear_sel_button) if b.winfo_manager()]
+        if shown != wanted:   # repacked only when the set changes, so ticking rows doesn't flicker
+            for b in shown:
+                b.pack_forget()
+            after = self._select_all_button
+            for b in wanted:
+                b.pack(side="right", padx=(0, 8), after=after)
+                after = b
         self._clear_sel_button.config(text=f"Clear Selected ({count})")
         if str(self._yt_button.cget("state")) != "disabled":
             self._yt_button.config(text=f"Create YouTube Playlist ({count})")
+        if str(self._tidal_button.cget("state")) != "disabled":
+            self._tidal_button.config(text=f"Create Tidal Playlist ({count})")
         self._place_site_buttons()
+
+    def create_tidal_playlist(self):
+        """Puts the ticked tracks (in table order) into the Tidal playlist called 24bit7, in place of what was there."""
+        ticked = [r for r in self._rows if r.get("_ticked")]
+        pairs = [(r["artist"], r["track"]) for r in ticked if r.get("artist") and r.get("track")]
+        if not pairs:
+            self._set_yt_status("None of the ticked rows has a track to look up.")
+            return
+        if not engine.tidal_signed_in():
+            self._set_yt_status("Sign in to Tidal first: Settings > Keys, Sign In to Tidal.")
+            return
+        self._tidal_button.config(state="disabled", text="Looking up on Tidal...")
+        self._set_yt_status("")
+
+        def work():
+            said = []
+            try:
+                ids = engine.tidal_ids_for_pairs(pairs)
+                sent = engine.send_to_tidal([i for i in ids if i], report=said.append) if any(ids) else 0
+            except Exception as e:
+                ids, sent, said = [], 0, [f"Problem: Tidal lookup failed ({e})."]
+            self.after(0, lambda: self._tidal_done(pairs, ids, sent, said))
+        threading.Thread(target=work, daemon=True).start()
+
+    def _tidal_done(self, pairs, ids, sent, said):
+        self._tidal_button.config(state="normal")
+        self._sync_ticks()
+        if not sent:
+            problem = next((line for line in said if line.startswith("Problem:")), "")
+            self._set_yt_status(problem.replace("Problem: ", "", 1) if problem
+                                else "None of the ticked tracks were found on Tidal.")
+            return
+        missing = len(pairs) - len([i for i in ids if i])
+        text = f'{sent} of {len(pairs)} in your Tidal playlist "{engine.TIDAL_PLAYLIST_NAME}"'
+        if missing:
+            text += f", {missing} not found on Tidal"
+        self._set_yt_status(text + ".")
+        self._show_tidal_open(engine.TIDAL_PLAYLIST_ID)
+
+    def _show_tidal_open(self, pid):
+        """Open in Tidal app (when it's installed) and Open in Tidal web, beside the status line."""
+        for w in self._tidal_open.winfo_children():
+            w.destroy()
+        self._tidal_open_pid = pid
+        if not pid:
+            self._tidal_open.pack_forget()
+            return
+        app_url, web_url = engine.tidal_open_links(pid)
+        links = ([("Open in Tidal app", app_url)] if engine.tidal_app_installed() else []) + [
+            ("Open in Tidal web", web_url)]
+        for n, (text, url) in enumerate(links):
+            if n:
+                tk.Label(self._tidal_open, text="·").pack(side="left", padx=4)
+            link = tk.Label(self._tidal_open, text=text, fg=PALETTE["link"], cursor="hand2",
+                            font=("Segoe UI", 9, "underline"))
+            link.pack(side="left")
+            link.bind("<Button-1>", lambda e, u=url: self._open_tidal(u))
+        self._tidal_open.pack(side="left", padx=(0, 12), before=self._bar_right.winfo_children()[0])
+
+    def _open_tidal(self, url):
+        try:
+            if url.startswith("tidal:"):
+                os.startfile(url)   # the Tidal app, straight to the playlist
+            else:
+                webbrowser.open(url)
+        except OSError as e:
+            messagebox.showerror("Tidal", f"Couldn't open Tidal ({e}).", parent=self)
 
     def create_youtube_playlist(self):
         """Looks the ticked tracks up on YouTube (in table order) and opens them as an instant playlist."""
@@ -527,6 +608,8 @@ class DiscoverTab(tk.Frame):
 
     def _set_yt_status(self, text):
         self._yt_note = text
+        if getattr(self, "_tidal_open_pid", None):   # the Open in Tidal links belong to the last message only
+            self._show_tidal_open(None)
         self._show_count()
 
     def _show_count(self):
@@ -562,7 +645,7 @@ class DiscoverTab(tk.Frame):
         parent = self._sites_inline if self._site_mode == "inline" else self._sites_below
         self._site_buttons = []
         self._label_button = None
-        if show_label:   # Settings > Search Sites > Record Label
+        if show_label:   # Settings > Discover > Reference > Record Label
             self._label_button = FlatButton(parent, text="Finding label..." if self._label_busy else "Label",
                                             quiet=True, height=1,
                                            command=self.find_label)

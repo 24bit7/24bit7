@@ -1143,7 +1143,8 @@ def test_review_play_on_youtube(app, ui, monkeypatch):
 
 
 def test_review_send_to_tidal(app, ui, monkeypatch):
-    app.set_env(TIDAL_CLIENT_ID="test-id", TIDAL_CLIENT_SECRET="test-secret", TIDAL_REFRESH_TOKEN="fake-refresh")
+    app.set_env(TIDAL_CLIENT_ID="test-id", TIDAL_CLIENT_SECRET="test-secret", TIDAL_REFRESH_TOKEN="fake-refresh",
+                EXTRA_OUTPUTS="youtube,tidal")
     keys = _review_with_zone(app, ui, _album(app))
     play, panel = ui.play, ui.play.review_panel
     seen = {}
@@ -1200,6 +1201,10 @@ def test_output_offers_tidal_and_asks_to_sign_in(app, ui, monkeypatch):
     told = []
     monkeypatch.setattr(gui_module.messagebox, "showinfo", lambda *a, **k: told.append(a))
     play = ui.play
+    app.set_env(EXTRA_OUTPUTS="youtube")
+    play._fill_output_list()
+    assert "Tidal" not in play.output_cb.cget("values"), "unticked under Additional Outputs"
+    app.set_env(EXTRA_OUTPUTS="youtube,tidal")
     play._fill_output_list()
     assert "Tidal" in play.output_cb.cget("values")
     app.set_env(TIDAL_REFRESH_TOKEN="")
@@ -1407,3 +1412,124 @@ def test_about_thanks_everyone_in_the_readme(app):
     thanks = readme.split("## Thanks", 1)[1].split("\n## ", 1)[0]
     for name, _ in gui_settings.THANKS:
         assert f"**{name}**" in thanks
+
+
+# --- Settings > Discover and Additional Outputs (Tidal) ---------------------------------------------
+
+def _everything(widget):
+    out = [widget]
+    for child in widget.winfo_children():
+        out += _everything(child)
+    return out
+
+
+def _tick(ui, text):
+    """The tick with this text in Settings (pages built first)."""
+    visit_every_page(ui, next(c for c in ui.settings.winfo_children() if hasattr(c, "select")))
+    found = [w for w in _everything(ui.settings) if isinstance(w, ttk.Checkbutton) and w.cget("text") == text]
+    assert found, text
+    return found
+
+
+def _page_titles(ui):
+    pane = next(c for c in ui.settings.winfo_children() if hasattr(c, "select"))
+    return [t.cget("text") for t in pane._tabs]
+
+
+def test_settings_discover_page_and_record_label(app, ui):
+    titles = _page_titles(ui)
+    assert "Discover" in titles and "Search" not in titles
+    s = ui.settings
+    label = _tick(ui, "Record Label")[0]
+    assert label.master is next(w.master for w in _everything(s)
+                                if isinstance(w, ttk.Checkbutton) and w.cget("text") == "Wikipedia"), \
+        "Record Label sits with the reference sites"
+    assert not [w for w in _everything(s) if isinstance(w, tk.Label) and w.cget("text") == "Record Label"], \
+        "no section of its own"
+    s.vars["DISCOVER_LABEL"].set(False)
+    s._save()
+    assert "DISCOVER_LABEL=0" in (app.folder / ".env").read_text()
+
+
+def test_settings_create_playlist_and_listen_on_tidal(app, ui):
+    s = ui.settings
+    assert len(_tick(ui, "Tidal")) >= 3, "Listen, Create Playlist and Additional Outputs each have one"
+    s.vars["PLAYLIST_SITES"]["tidal"].set(True)
+    s.vars["LISTEN_SITES"]["tidal"].set(True)
+    s._save()
+    env = (app.folder / ".env").read_text()
+    assert "PLAYLIST_SITES=tidal,youtube" in env and "LISTEN_SITES=tidal,youtube" in env
+
+
+def test_additional_outputs_untick_falls_back_to_same_zone(app, ui):
+    s, play = ui.settings, ui.play
+    _tick(ui, "YouTube")
+    s.vars["EXTRA_OUTPUTS"]["tidal"].set(True)
+    s._extra_outputs_changed()
+    play._fill_output_list()
+    assert "Tidal" in play.output_cb.cget("values")
+    play.output_var.set("Tidal")
+    play._on_output_changed()
+    s.vars["EXTRA_OUTPUTS"]["tidal"].set(False)
+    s._extra_outputs_changed()
+    assert play.output_var.get() == "Same zone"
+    assert "OUTPUT_TARGET=jriver" in (app.folder / ".env").read_text()
+    play._fill_output_list()
+    assert "Tidal" not in play.output_cb.cget("values")
+    s.vars["EXTRA_OUTPUTS"]["youtube"].set(False)
+    s._extra_outputs_changed()
+    assert all(str(w.cget("state")) == "disabled" for w in s._output_parts["youtube"]), "greyed while unticked"
+    assert "Not signed in" in s._tidal_output_note.cget("text")
+    assert not ui.errors, ui.errors
+
+
+def test_discover_create_tidal_playlist(app, ui, monkeypatch):
+    app.set_env(PLAYLIST_SITES="youtube,tidal", TIDAL_CLIENT_ID="test-id", TIDAL_CLIENT_SECRET="test-secret",
+                TIDAL_REFRESH_TOKEN="fake-refresh")
+    e = app.engine
+    e.session_start("similar_tracks", {"Artist": "The Beatles", "Name": "Something", "Album": ""})
+    sid = e.db().execute("SELECT MAX(id) FROM sessions").fetchone()[0]
+    for a, t in (("The Kinks", "Waterloo Sunset"), ("Nobody", "Nothing At All")):
+        e.session_log(sid, a, t, ["Last.fm"], found=False)
+    e.db().commit()
+    seen = {}
+    monkeypatch.setattr(e, "tidal_ids_for_pairs", lambda pairs: seen.setdefault("pairs", pairs) and
+                        [("t1" if p[0] == "The Kinks" else None) for p in pairs])
+
+    def send(ids, seed_info=None, report=print):
+        seen["ids"] = ids
+        e.TIDAL_PLAYLIST_ID = "pl-1"
+        return len(ids)
+    monkeypatch.setattr(e, "send_to_tidal", send)
+    monkeypatch.setattr(e, "tidal_app_installed", lambda: True)
+    d = ui.discover
+    d.refresh()
+    ui.pump(0.3)
+    d.select_all()
+    ui.pump(0.2)
+    assert d._yt_button.winfo_manager() and d._tidal_button.winfo_manager()
+    d.create_tidal_playlist()
+    ui.pump(until=lambda: str(d._tidal_button.cget("state")) == "normal", timeout=10)
+    ui.pump(0.2)
+    assert seen["ids"] == ["t1"]
+    assert '1 of 2 in your Tidal playlist "24bit7", 1 not found on Tidal.' in d.count_label.cget("text")
+    links = [w.cget("text") for w in _everything(d._tidal_open) if isinstance(w, tk.Label)]
+    assert "Open in Tidal app" in links and "Open in Tidal web" in links
+    d._set_yt_status("Something else")
+    assert not d._tidal_open.winfo_manager(), "the links go with the next message"
+    app.set_env(PLAYLIST_SITES="youtube")
+    d._sync_ticks()
+    assert d._yt_button.winfo_manager() and not d._tidal_button.winfo_manager()
+    app.set_env(PLAYLIST_SITES="youtube,tidal", TIDAL_REFRESH_TOKEN="")
+    d._sync_ticks()
+    d.create_tidal_playlist()
+    assert "Sign in to Tidal first" in d.count_label.cget("text")
+    assert not ui.errors, ui.errors
+
+
+def test_discover_listen_on_tidal_button(app, ui):
+    app.set_env(LISTEN_SITES="youtube,tidal")
+    d = ui.discover
+    d.refresh()
+    ui.pump(0.3)
+    assert "Tidal" in [b.cget("text") for b in d._site_buttons]
