@@ -36,7 +36,7 @@ Four playlist buttons on the **Play** tab, plus **More Options**. The seed is wh
 
 Two supporting tabs:
 
-- **Discover** lists every track a run looked for, whether it was found (hit) or not (miss), filterable by session and searchable across all fields. Select a row and every site you have ticked has its own button along the bottom: one click, one browser tab. Stores (Bandcamp, Qobuz, Bleep, Beatport and more) and YouTube search for the artist and track; reference sites (Wikipedia, Discogs, AllMusic, MusicBrainz) search for the artist, so you can browse the discography. If your favourite site is missing, add up to three of your own under Settings > Discover. Misses are one click from purchase. **Label** finds who released the selected track and opens the label on Bandcamp (see below). Tick any rows (or Select all) and **Create YouTube playlist** opens them in your browser as one playlist, so you can hear the misses before you buy. **Clear all** empties the history, and **Clear selected** removes just the ticked rows; both ask first.
+- **Discover** lists every track a run looked for, whether it was found (hit) or not (miss), filterable by session and searchable across all fields. Select a row and every site you have ticked has its own button along the bottom: one click, one browser tab. Stores (Bandcamp, Qobuz, Bleep, Beatport and more) and YouTube search for the artist and track; reference sites (Wikipedia, Discogs, AllMusic, MusicBrainz) search for the artist, so you can browse the discography. If your favourite site is missing, add up to three of your own under Settings > Discover. Misses are one click from purchase. **Label** finds who released the selected track and opens the label on Bandcamp (see below). Tick any rows (or Select all) and **Create YouTube playlist** opens them in your browser as one playlist, so you can hear the misses before you buy; **Create Tidal Playlist** puts them in your Tidal playlist called 24bit7 instead. **Clear all** empties the history, and **Clear selected** removes just the ticked rows; both ask first.
 - **Settings** holds all keys and preferences, in boxed sections, with each setting's explanation behind a small **?** beside it. Sources and Playlist have a tab for each Play option (Similar Artists, Similar Tracks, Artist's Top Tracks, AI Playlist), so each can be set up its own way. Changes save immediately and the running app picks them up without a restart.
 
 ---
@@ -152,11 +152,13 @@ The other sources answer "who is similar to this artist?". YouTube Music has no 
 
 It needs no key and no sign-in. It does rely on an unofficial library, ytmusicapi, which imitates the YouTube Music website. When YouTube changes something it can break until that library catches up.
 
-### Output: a JRiver zone or YouTube
+### Output: a JRiver zone, YouTube or Tidal
 
-With Output set to YouTube the playlist is built exactly as before. Then each track's video is looked up and the whole list opens in your browser as an instant playlist: no sign-in, nothing saved to an account, and up to 50 videos, which is the most YouTube allows in one playlist link (**YouTube playlist length** in Settings > Other sets the number). Tick **Prefer official music videos** under Settings > Other to play the artist's own video where YouTube has one; videos can run longer than the song, and a few may not play in every country. JRiver isn't touched. There is no library check, so nothing is a miss: every track found is logged to Discover as a hit. A video is only accepted if the artist matches, because a cover is worse than a gap.
+With Output set to YouTube the playlist is built exactly as before. Then each track's video is looked up and the whole list opens in your browser as an instant playlist: no sign-in, nothing saved to an account, and up to 50 videos, which is the most YouTube allows in one playlist link (**YouTube playlist length** in Settings > Other > Additional Outputs sets the number). Tick **Prefer official music videos** there to play the artist's own video where YouTube has one; videos can run longer than the song, and a few may not play in every country. JRiver isn't touched. There is no library check, so nothing is a miss: every track found is logged to Discover as a hit. A video is only accepted if the artist matches, because a cover is worse than a gap.
 
 Be clear about what this is for. YouTube audio is lossy, and 24bit7 exists because of a library of music worth owning. YouTube output is the way to hear something before you buy it, or to build a playlist for someone who doesn't own any of it.
+
+Tidal works the same way, but into a real playlist in your Tidal account: each build replaces the tracks of your playlist called **24bit7** (made the first time), so it's there in the Tidal app, on the web and on your phone. Tracks are found on Tidal by artist and title with the same rules as everywhere else, the studio version first; a test on real builds found about 96 in 100. Tidal answers about two requests a second, so a first build of 30 new tracks takes around half a minute, and repeats are quick from the cache. Rename the playlist in Tidal to keep it: 24bit7 only ever fills the one called exactly 24bit7. Setting up takes a one-off **Sign In to Tidal** under Settings > Keys (its **?** has the steps for your developer.tidal.com app), then tick Tidal under Settings > Other > Additional Outputs.
 
 ### Library matching
 
@@ -296,7 +298,18 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.18.1
+## What's new in 1.19.0
+
+- **Output to Tidal**: pick Tidal under Output and a build fills your Tidal playlist called **24bit7**, in place of what was there, ready in the Tidal app, on the web or on your phone. The console then offers **Open in Tidal app** and **Open in Tidal web**. Tracks are found on Tidal by name, as with YouTube, so it's for listening beyond your library. Rename the playlist in Tidal to keep it; the next build makes a fresh one. It needs a one-off **Sign In to Tidal** under Settings > Keys, and Tidal ticked under Settings > Other > Additional Outputs.
+- **Tidal on Discover**: **Create Tidal Playlist** puts the ticked rows in the same 24bit7 playlist, and a **Tidal** button searches the selected track there. Both are ticked under Settings > Discover.
+- **Settings > Discover** replaces Settings > Search. **Record Label** moves in with the reference sites, and **Create Playlist** picks which playlist buttons Discover shows.
+- **Additional Outputs** (Settings > Other) picks the services in the Output list. YouTube's settings live there now, and YouTube stays ticked.
+- **Review**: **Send to Tidal** when Output is Tidal.
+- **Name matching**: every mode treats accents, "$" and "+" alike (JAŸ-Z and JAY-Z, Travi$ Scott and Travis Scott, Halcyon + On + On and Halcyon And On And On), and Tidal lookups forgive a title one letter out by the same artist.
+- **Console**: with YouTube or Tidal output, lines say "On Tidal" and "Not on Tidal" rather than "In library".
+- **Settings > About** names Tidal among the sources and in the credits.
+
+### Earlier: 1.18.1
 
 - **Settings on high-resolution screens**: notes that wrapped into narrow columns on a display scaled above 100% (Drift's sources note, the Test My Sources notice, hover notes and a few small windows) now fit the window.
 

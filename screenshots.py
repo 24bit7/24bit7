@@ -32,7 +32,8 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(HERE, "docs", "images")
-COMMON = ["tabs.py"]   # every shot changes when the tab and button drawing changes
+COMMON = ["tabs.py"]
+SCALE = 1.0   # Windows' display scaling while the shots are taken (set by build_window)   # every shot changes when the tab and button drawing changes
 
 # name, path of tab names to click through, files it depends on, optional before-shot action
 SHOTS = [
@@ -67,11 +68,13 @@ DEMO_ZONES = [("10001", "Speakers"), ("10002", "Kitchen")]
 DEMO_PLAYING = {"Artist": "The Beatles", "Album": "Abbey Road", "Name": "Here Comes The Sun",
                 "PlayingNowPosition": "4", "PlayingNowTracks": "17", "FileKey": "1001", "ZoneID": "10001"}
 DEMO_KEYS = {"LASTFM_API_KEY": "demo" * 8, "LISTENBRAINZ_TOKEN": "demo" * 9, "DISCOGS_TOKEN": "demo" * 10,
-             "TIDAL_CLIENT_ID": "demo" * 4, "TIDAL_CLIENT_SECRET": "demo" * 11,
+             "TIDAL_CLIENT_ID": "demo" * 4, "TIDAL_CLIENT_SECRET": "demo" * 11, "TIDAL_REFRESH_TOKEN": "demo" * 6,
              "ANTHROPIC_API_KEY": "demo" * 12, "JRIVER_USER": "demo", "JRIVER_PASS": "demo" * 3,
              "VOICE_KEY": "demo" * 8}
 DEMO_ENV = {"HIDDEN_ZONES": "", "DEFAULT_ZONE": "Speakers", "FOLLOW_ACTIVE_ZONE": "0", "VOICE_ENABLED": "1",
-            "CONSOLE_MODE": "simple", "CONSOLE_TABS": "0", "HOTKEY_SWITCH_ZONES": "Ctrl+Alt+5"}
+            "CONSOLE_MODE": "simple", "CONSOLE_TABS": "0", "HOTKEY_SWITCH_ZONES": "Ctrl+Alt+5",
+            # Tidal ticked everywhere, signed in (a dummy login), so the shots show it
+            "EXTRA_OUTPUTS": "youtube,tidal", "PLAYLIST_SITES": "youtube,tidal", "LISTEN_SITES": "youtube,tidal"}
 # JRiver Playlists: one playlist blended and one with Non-stop, so the shot shows both
 DEMO_SAVED_ROWS = {"201": {"blend": "tracks"}, "202": {"nonstop": "artists"}}
 DEMO_DEVICES = [("demo-kitchen", "Kitchen Echo", "Kitchen", 0, "2026-10-04 10:41"),
@@ -315,6 +318,8 @@ def build_window(gui):
     gui.apply_theme(root, engine.THEME)
     root.title(f"24bit7  v{engine.VERSION}")
     scale = root.winfo_fpixels("1i") / 96.0
+    global SCALE
+    SCALE = scale   # the shots are brought back to their 100% size, whatever Windows' display scaling
     w = min(int(1180 * scale), root.winfo_screenwidth() - 80)
     h = min(int(820 * scale), root.winfo_screenheight() - 120)
     root.geometry(f"{w}x{h}+40+40")
@@ -326,6 +331,10 @@ def build_window(gui):
     discover = gui.DiscoverTab(nb)
     settings = gui.SettingsTab(nb)
     play.settings = settings
+    # "Windows starts a different copy of 24bit7" is about this PC (the demo runs from the source
+    # folder), not something a reader of the manual should see
+    settings._show_startup_note = lambda: getattr(settings, "startup_note", None) and settings.startup_note.grid_remove()
+    settings._show_startup_note()
     nb.add(play, text="Play")
     nb.add(discover, text="Discover")
     nb.add(settings, text="Settings")
@@ -495,6 +504,8 @@ def save_if_changed(image, name):
     from PIL import Image, ImageChops
     path = os.path.join(OUT_DIR, name + ".png")
     image = image.convert("RGB")
+    if SCALE > 1.01:   # taken at, say, 300% scaling: shrunk to the 100% size, so every shot matches
+        image = image.resize((round(image.width / SCALE), round(image.height / SCALE)), Image.LANCZOS)
     if os.path.exists(path):
         with Image.open(path) as old:
             old = old.convert("RGB")
