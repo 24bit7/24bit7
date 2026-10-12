@@ -42,6 +42,11 @@ VOICE_DOCS = [("How Voice Commands work", DOCS_URL + "MANUAL.md#voice-commands",
 REPO_URL = "https://github.com/24bit7/24bit7"
 FORUM_URL = "https://yabb.jriver.com/interact/index.php/topic,144381.0.html"   # the JRiver forum thread; empty hides the link
 MANUAL_PDF = "24bit7_Manual.pdf"   # shipped next to 24bit7.exe in the release zip
+# The About tab's opening lines: they name every music source and every AI provider
+ABOUT_INTRO = ("Builds playlists from your own JRiver library around whatever is playing, using "
+               "Last.fm, ListenBrainz, Deezer, Tidal and YouTube Music. It runs without AI; the AI "
+               "features are optional and need your own key for Anthropic, OpenAI or Google Gemini, "
+               "or a local model through Ollama.")
 # The voice commands, as in the manual's Voice Commands chapter
 VOICE_COMMAND_LIST = [
     ("songs by <artist>", "Artist's Top Tracks"),
@@ -65,6 +70,7 @@ CREDITS = [
     ("ListenBrainz", "https://listenbrainz.org"),
     ("MusicBrainz", "https://musicbrainz.org"),
     ("Deezer", "https://www.deezer.com"),
+    ("Tidal", "https://tidal.com"),
     ("YouTube Music (via ytmusicapi)", "https://github.com/sigma67/ytmusicapi"),
     ("Discogs", "https://www.discogs.com"),
     ("Anthropic (Claude)", "https://www.anthropic.com"),
@@ -3615,10 +3621,7 @@ class SettingsTab(tk.Frame):
                  fg=PALETTE["text_muted"]).pack(side="left", anchor="s", pady=(0, 5))
         tk.Label(tab, text=f"Version {version}", font=LABEL_FONT).grid(row=1, column=0, sticky="w")
         tk.Label(tab, justify="left", wraplength=640, anchor="w",
-                 text=("Builds playlists from your own JRiver library around whatever is playing, using "
-                       "Last.fm, ListenBrainz, Deezer and YouTube Music. It runs without AI; the AI "
-                       "features are optional and need your own key for Anthropic, OpenAI or Google Gemini, "
-                       "or a local model through Ollama.")).grid(
+                 text=ABOUT_INTRO).grid(
             row=2, column=0, sticky="w", pady=(6, 14))
 
         # --- Links ---
