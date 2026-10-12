@@ -282,7 +282,7 @@ class PlayTab(tk.Frame):
         tk.Label(frame, text="Output", font=("Segoe UI", 9, "bold"), fg=PALETTE["text_secondary"]).pack(side="left", padx=(8, 6))
         self.output_var = tk.StringVar(value=self._output_label(engine.OUTPUT_TARGET))
         self.output_cb = ttk.Combobox(frame, textvariable=self.output_var,
-                                      values=[SAME_ZONE_LABEL, "YouTube"], state="readonly", width=24,
+                                      values=[SAME_ZONE_LABEL, "YouTube", "Tidal"], state="readonly", width=24,
                                       postcommand=self._fill_output_list)
         self.output_cb.pack(side="left")
         self.output_cb.bind("<<ComboboxSelected>>", self._on_output_changed)
@@ -371,22 +371,27 @@ class PlayTab(tk.Frame):
     def _output_label(target):
         if target == "youtube":
             return "YouTube"
+        if target == "tidal":
+            return "Tidal"
         if target.startswith("zone:"):
             return target[5:]
         return SAME_ZONE_LABEL
 
     def _fill_output_list(self):
-        self.output_cb.config(values=[SAME_ZONE_LABEL] + engine.zone_names() + ["YouTube"])
+        self.output_cb.config(values=[SAME_ZONE_LABEL] + engine.zone_names() + ["YouTube", "Tidal"])
 
     def _on_output_changed(self, *_):
         choice = self.output_var.get()
-        target = ("youtube" if choice == "YouTube" else
+        target = ("youtube" if choice == "YouTube" else "tidal" if choice == "Tidal" else
                   "jriver" if choice == SAME_ZONE_LABEL else "zone:" + choice)
         try:
             write_env({"OUTPUT_TARGET": target})
         except Exception as e:
             messagebox.showerror("Save failed", str(e), parent=self)
         self.output_cb.selection_clear()
+        if target == "tidal" and not engine.tidal_signed_in():
+            messagebox.showinfo("Tidal", "To send playlists to Tidal, sign in first: Settings > Keys, "
+                                         "Sign In to Tidal.", parent=self)
         self._sync_behaviour()
         panel = getattr(self, "review_panel", None)
         if panel is not None:
@@ -803,6 +808,37 @@ class PlayTab(tk.Frame):
         if at_bottom:
             self.log.see("end")
         self.log.config(state="disabled")
+
+    def _append_tidal_links(self, pid):
+        """Open in Tidal app (when it's installed) and Open in Tidal web, as links under the build."""
+        app_url, web_url = engine.tidal_open_links(pid)
+        links = ([("Open in Tidal app", app_url, "tidal_app")] if engine.tidal_app_installed() else []) + [
+            ("Open in Tidal web", web_url, "tidal_web")]
+        self._live.append("  " + "  ·  ".join(text for text, _, _ in links))
+        if not self._live_visible():
+            return
+        self.log.config(state="normal")
+        self.log.insert("end", "  ")
+        for n, (text, url, tag) in enumerate(links):
+            if n:
+                self.log.insert("end", "  ·  ")
+            self.log.tag_configure(tag, foreground="#00ff41", underline=True)
+            self.log.tag_bind(tag, "<Button-1>", lambda e, u=url: self._open_tidal(u))
+            self.log.tag_bind(tag, "<Enter>", lambda e: self.log.config(cursor="hand2"))
+            self.log.tag_bind(tag, "<Leave>", lambda e: self.log.config(cursor=""))
+            self.log.insert("end", text, (tag,))
+        self.log.insert("end", "\n")
+        self.log.see("end")
+        self.log.config(state="disabled")
+
+    def _open_tidal(self, url):
+        try:
+            if url.startswith("tidal:"):
+                os.startfile(url)   # the Tidal app, straight to the playlist
+            else:
+                webbrowser.open(url)
+        except OSError as e:
+            messagebox.showerror("Tidal", f"Couldn't open Tidal ({e}).", parent=self)
 
     def report(self, message):
         if engine.CANCEL_REQUESTED.is_set() and threading.current_thread() is getattr(self, "_worker", None):
@@ -1409,6 +1445,9 @@ class PlayTab(tk.Frame):
                 self._append_log(self.log_queue.get_nowait())
         except queue.Empty:
             pass
+        if (engine.LAST_OUTPUT == "Tidal" and engine.TIDAL_PLAYLIST_ID and not getattr(self, "_job_cancelled", False)
+                and getattr(self, "_job_origin", None) is None):
+            self._append_tidal_links(engine.TIDAL_PLAYLIST_ID)
         try:
             buildlog.record_job(getattr(self, "_job_origin", None), self.log.get("1.0", "end-1c"))
         except Exception as e:

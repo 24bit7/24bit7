@@ -107,7 +107,7 @@ def record_job(origin, text):
            "queued": built.get("queued"), "misses": built.get("misses"),
            "moderator": _moderator(text), "problems": _count(text, "Problem:"), "notes": _count(text, "Note:"),
            "chain_id": None, "chain_pos": None, "text": text}
-    if row["zone"] == "YouTube":
+    if row["zone"] in ("YouTube", "Tidal"):
         row["misses"] = None   # nothing is checked against the library
     kind = origin.get("from")
     with _lock:

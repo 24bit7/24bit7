@@ -517,8 +517,12 @@ class FakeWeb:
                             ids = [self._tidal_id("tracks", (a, t, "Live")), self._tidal_id("tracks", (a, t, ""))]
             elif not empty and kind == "artists":
                 ids = [self._tidal_id("artists", a) for a in self.artists if a.lower() == q.lower()]
+            included = [{"id": i, "type": "tracks", "attributes": {"title": self._tidal_get("tracks", i)[1],
+                                                                   "version": self._tidal_get("tracks", i)[2] or None}}
+                        for i in ids] if kind == "tracks" else []   # titles come with the reply; artists don't
             return Resp(data={"data": [{"id": "s1", "type": "searchResults",
-                                        "relationships": {kind: {"data": [{"id": i, "type": kind} for i in ids]}}}]})
+                                        "relationships": {kind: {"data": [{"id": i, "type": kind} for i in ids]}}}],
+                              "included": included})
         if path == "/v2/tracks":
             data, included = [], []
             for i in params.get("filter[id]", "").split(","):
@@ -553,7 +557,59 @@ class FakeWeb:
         if m:
             names = [] if empty else self.similar_artists(self._tidal_get("artists", m.group(1)))
             return self._tidal_page("artists", [self._tidal_id("artists", n) for n in names], path, params)
+        if path.startswith("/v2/playlists"):
+            return self._tidal_playlists(method, path[3:], params, body or {})
         return Resp(404, "not faked")
+
+    # --- the signed-in user's own Tidal playlists ------------------------------------
+
+    def _tidal_playlist_store(self):
+        return self.__dict__.setdefault("tidal_playlists", {})   # id -> {"name", "description", "items"}
+
+    def _tidal_playlists(self, method, path, params, body):
+        store = self._tidal_playlist_store()
+        if path == "/playlists" and method == "GET":
+            assert params.get("filter[owners.id]") == "me"
+            return Resp(data={"data": [{"id": pid, "type": "playlists", "attributes": {"name": p["name"]}}
+                                       for pid, p in store.items()], "links": {}})
+        if path == "/playlists" and method == "POST":
+            attrs = body["data"]["attributes"]
+            pid = f"pl-{len(store) + 1}"
+            store[pid] = {"name": attrs["name"], "description": attrs.get("description", ""), "items": [],
+                          "access": attrs.get("accessType")}
+            return Resp(201, data={"data": {"id": pid, "type": "playlists"}})
+        m = re.match(r"/playlists/([^/]+)(/relationships/items)?$", path)
+        if not m or m.group(1) not in store:
+            return Resp(404, data={"errors": [{"code": "NOT_FOUND"}]})
+        p = store[m.group(1)]
+        if not m.group(2):   # PATCH the playlist itself
+            assert method == "PATCH" and body["data"]["id"] == m.group(1)
+            p.update({k: v for k, v in body["data"]["attributes"].items() if k == "description"})
+            return Resp(data={})
+        if method == "GET":   # pages of twenty, each entry with its own itemId
+            start = int(params.get("page[cursor]", 0) or 0)
+            page = p["items"][start:start + 20]
+            links = {"next": f"{path}?countryCode=GB&page[cursor]={start + 20}"} if start + 20 < len(p["items"]) else {}
+            return Resp(data={"data": [{"id": t, "type": "tracks", "meta": {"itemId": i}} for i, t in page],
+                              "links": links})
+        refs = body["data"]
+        if len(refs) > 50:
+            return Resp(400, data={"errors": [{"code": "TOO_MANY_ITEMS"}]})
+        if method == "DELETE":
+            gone = {r["meta"]["itemId"] for r in refs}
+            p["items"] = [(i, t) for i, t in p["items"] if i not in gone]
+            return Resp(204, text="")
+        if method == "POST":
+            known = set(str(n + 1000) for n in range(len(self.__dict__.get("_tidal_reg", {}).get("tracks", []))))
+            skipped = []
+            for r in refs:
+                if r["id"] in known:
+                    n = self.__dict__["_tidal_item_no"] = self.__dict__.get("_tidal_item_no", 0) + 1
+                    p["items"].append((f"item-{n}", r["id"]))
+                else:
+                    skipped.append({"id": r["id"], "type": "tracks", "reason": "NOT_FOUND"})
+            return Resp(201, data={"meta": {"skipped": skipped}})
+        return Resp(405, text="")
 
     def _deezer_name(self, artist_id):
         for name in self.artists + self.lib_artists:

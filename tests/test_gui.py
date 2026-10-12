@@ -1142,6 +1142,75 @@ def test_review_play_on_youtube(app, ui, monkeypatch):
     assert panel.jriver_actions.winfo_manager() and not panel.youtube_actions.winfo_manager()
 
 
+def test_review_send_to_tidal(app, ui, monkeypatch):
+    app.set_env(TIDAL_CLIENT_ID="test-id", TIDAL_CLIENT_SECRET="test-secret", TIDAL_REFRESH_TOKEN="fake-refresh")
+    keys = _review_with_zone(app, ui, _album(app))
+    play, panel = ui.play, ui.play.review_panel
+    seen = {}
+    monkeypatch.setattr(app.engine, "tidal_ids_for_pairs",
+                        lambda pairs: seen.setdefault("pairs", pairs) and [f"t{i}" for i, _ in enumerate(pairs)])
+
+    def send(ids, seed_info=None, report=print):
+        seen["ids"] = ids
+        app.engine.TIDAL_PLAYLIST_ID = "pl-1"
+        return len(ids)
+    monkeypatch.setattr(app.engine, "send_to_tidal", send)
+    monkeypatch.setattr(app.engine, "tidal_app_installed", lambda: True)
+    play.output_var.set("Tidal")
+    play._on_output_changed()
+    ui.pump(0.1)
+    assert panel.tidal_actions.winfo_manager()
+    assert not panel.jriver_actions.winfo_manager() and not panel.youtube_actions.winfo_manager()
+    rows = {r["key"]: r for r in panel.rows}
+    for k in (keys[4], keys[1]):
+        panel.toggle(k)
+    panel._tidal()
+    ui.pump(until=lambda: not panel.busy)
+    assert seen["pairs"] == [(rows[k]["artist"], rows[k]["title"]) for k in (keys[4], keys[1])], "tick order"
+    assert seen["ids"] == ["t0", "t1"]
+    text = play.log.get("1.0", "end")
+    assert "2 tracks sent to Tidal" in text and "Open in Tidal app" in text and "Open in Tidal web" in text
+    play.output_var.set("Same zone")
+    play._on_output_changed()
+    assert panel.jriver_actions.winfo_manager() and not panel.tidal_actions.winfo_manager()
+
+
+def test_tidal_links_open_the_playlist(app, ui, monkeypatch):
+    import gui as gui_module
+    opened = []
+    monkeypatch.setattr(app.engine, "tidal_app_installed", lambda: True)
+    monkeypatch.setattr(gui_module.os, "startfile", lambda url: opened.append(url), raising=False)
+    monkeypatch.setattr(gui_module.webbrowser, "open", lambda url, *a, **k: opened.append(url))
+    play = ui.play
+    play._append_tidal_links("abc")
+    ui.pump(0.1)
+    for tag in ("tidal_app", "tidal_web"):
+        assert play.log.tag_ranges(tag), tag
+        play._open_tidal(dict(tidal_app="tidal://playlist/abc",
+                              tidal_web="https://listen.tidal.com/playlist/abc")[tag])
+    assert opened == ["tidal://playlist/abc", "https://listen.tidal.com/playlist/abc"]
+    monkeypatch.setattr(app.engine, "tidal_app_installed", lambda: False)
+    before = play.log.get("1.0", "end").count("Open in Tidal app")
+    play._append_tidal_links("abc")
+    assert play.log.get("1.0", "end").count("Open in Tidal app") == before, "no app link without the app"
+
+
+def test_output_offers_tidal_and_asks_to_sign_in(app, ui, monkeypatch):
+    import gui as gui_module
+    told = []
+    monkeypatch.setattr(gui_module.messagebox, "showinfo", lambda *a, **k: told.append(a))
+    play = ui.play
+    play._fill_output_list()
+    assert "Tidal" in play.output_cb.cget("values")
+    app.set_env(TIDAL_REFRESH_TOKEN="")
+    play.output_var.set("Tidal")
+    play._on_output_changed()
+    assert told and "Sign In to Tidal" in told[0][1]
+    assert app.engine.OUTPUT_TARGET == "tidal" or "OUTPUT_TARGET=tidal" in (app.folder / ".env").read_text()
+    play.output_var.set("Same zone")
+    play._on_output_changed()
+
+
 def test_review_has_no_status_line(app, ui):
     _review_with_zone(app, ui, _album(app))
     assert not ui.play.review_panel.status_label.winfo_manager()

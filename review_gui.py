@@ -63,6 +63,8 @@ ACTIONS = [
                                        "Playing Now holds only these."),
 ]
 YOUTUBE_TIP = "Opens the ticked tracks, in tick order, as a YouTube playlist in your browser."
+TIDAL_TIP = ("Puts the ticked tracks, in tick order, into your Tidal playlist called 24bit7, in place of "
+             "what was there. Rename it in Tidal to keep it.")
 SAME_ZONE = "Same zone"       # Output's first choice: the Now Playing zone
 BPM_TIP = ("From your files' BPM tags. JRiver can fill these in for your whole library: Library Tools > "
            "Analyze Audio, choosing only files not yet analyzed. Steer's Faster and Slower check against these "
@@ -283,6 +285,9 @@ class ReviewPanel:
         self._buttons["youtube"] = self._action_button(self.youtube_actions, "Play on YouTube", self._youtube,
                                                        YOUTUBE_TIP)
         self._buttons["youtube"].pack(side="left")
+        self.tidal_actions = tk.Frame(row, bg=p["bg"])    # Output on Tidal: just the one
+        self._buttons["tidal"] = self._action_button(self.tidal_actions, "Send to Tidal", self._tidal, TIDAL_TIP)
+        self._buttons["tidal"].pack(side="left")
         save = self._action_button(row, "Save as Playlist", self._save, SAVE_TIP, quiet=True)
         save.pack(side="right")
         self._buttons["save"] = save
@@ -313,11 +318,11 @@ class ReviewPanel:
 
     def target_zone(self, choice=None):
         """The zone Output points at: a named zone, or the Now Playing zone for Same Zone.
-        None for YouTube, or when the zone isn't in JRiver. Pass choice (read on Tk's thread)
-        when calling from a worker thread."""
+        None for YouTube or Tidal, or when the zone isn't in JRiver. Pass choice (read on Tk's
+        thread) when calling from a worker thread."""
         if choice is None:
             choice = self.output_choice()
-        if choice == "YouTube":
+        if choice in ("YouTube", "Tidal"):
             return None
         if choice and choice != SAME_ZONE:
             return engine.zone_id(choice)
@@ -325,9 +330,13 @@ class ReviewPanel:
         return engine.zone_id() if zid == engine.ACTIVE_ZONE else zid
 
     def _show_output_actions(self):
-        youtube = self.output_is_youtube()
-        (self.youtube_actions if youtube else self.jriver_actions).pack(side="left")
-        (self.jriver_actions if youtube else self.youtube_actions).pack_forget()
+        choice = self.output_choice()
+        show = {"YouTube": self.youtube_actions, "Tidal": self.tidal_actions}.get(choice, self.jriver_actions)
+        for frame in (self.jriver_actions, self.youtube_actions, self.tidal_actions):
+            if frame is show:
+                frame.pack(side="left")
+            else:
+                frame.pack_forget()
 
     def output_changed(self):
         """Output was changed on the Play tab: swap the buttons and recheck the Preview zone."""
@@ -356,6 +365,9 @@ class ReviewPanel:
     def _done(self, line):
         self.busy = False
         self.play._append_log(time.strftime("%H:%M") + "  " + line)
+        pid, self._tidal_links = getattr(self, "_tidal_links", None), None
+        if pid:
+            self.play._append_tidal_links(pid)
         self.dot = False   # our own line, not news from elsewhere
         self.status_label.config(text=line.replace("Review: ", "", 1))
         if not line.startswith("Problem:"):
@@ -391,6 +403,27 @@ class ReviewPanel:
             if not sent:
                 return "Problem: YouTube had none of those tracks, so nothing was opened."
             return f"Review: {n} opened on YouTube" + (f", {missed} not found there." if missed else ".")
+        self._run(work)
+
+    def _tidal(self):
+        """Output on Tidal: the ticked tracks, in tick order, into the 24bit7 playlist."""
+        if not self._can_act():
+            return
+        rows = {r["key"]: r for r in self.rows}
+        pairs = [(rows[k].get("artist", ""), rows[k].get("title", "")) for k in self.order if k in rows]
+        self.stop_preview(quiet=True)
+
+        def work():
+            problems = []
+            ids = engine.tidal_ids_for_pairs(pairs)
+            sent = engine.send_to_tidal([i for i in ids if i], report=problems.append)
+            if not sent:
+                said = next((p for p in problems if p.startswith("Problem:")), "")
+                return said or "Problem: Tidal had none of those tracks, so nothing was sent."
+            self._tidal_links = engine.TIDAL_PLAYLIST_ID   # Open in Tidal, under the console line
+            missed = len(pairs) - len([i for i in ids if i])
+            n = f"{sent} track{'' if sent == 1 else 's'}"
+            return f"Review: {n} sent to Tidal" + (f", {missed} not found there." if missed else ".")
         self._run(work)
 
     def _save(self):

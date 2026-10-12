@@ -56,10 +56,10 @@ def stub_tidal(app, monkeypatch, catalogue):
     rows = {r[0]: r for found in catalogue.values() for r in found}
     searched = []
 
-    def search(query, kind):
+    def search(query):
         searched.append(query)
-        return [r[0] for r in catalogue.get(query, [])]
-    monkeypatch.setattr(e, "tidal_search_ids", search)
+        return [(r[0], r[2], r[3]) for r in catalogue.get(query, [])]
+    monkeypatch.setattr(e, "tidal_search_tracks", search)
     monkeypatch.setattr(e, "tidal_track_details", lambda ids: [rows[i] for i in ids])
     return searched
 

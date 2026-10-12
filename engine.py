@@ -428,7 +428,7 @@ def load_settings():
         OUTPUT_TARGET = "zone:" + raw_output[5:].strip()
     else:
         OUTPUT_TARGET = raw_output.lower()
-        if OUTPUT_TARGET not in ("jriver", "youtube"):
+        if OUTPUT_TARGET not in ("jriver", "youtube", "tidal"):
             OUTPUT_TARGET = "jriver"
     # Zones hidden from the Play tab's Zone and Output lists (names separated by |)
     HIDDEN_ZONES = {x.strip() for x in os.getenv("HIDDEN_ZONES", "").split("|") if x.strip()}
@@ -979,7 +979,8 @@ def seed_from_row(row, zone):
 
 
 BUILD_STARTED = None   # set by the GUI as each build starts, for the Done line's time
-LAST_OUTPUT = None     # where the build's tracks went: a zone name, or "YouTube"
+LAST_OUTPUT = None     # where the build's tracks went: a zone name, "YouTube" or "Tidal"
+STREAM_MISSES = 0      # tracks the streaming service (YouTube, Tidal) didn't have, for the Done line
 LAST_OUTPUT_ID = None  # ...and that zone's JRiver ID, for Non-stop's chain in the console's Log
 LAST_BUILD = None      # the finished build's mode, sources, tracks queued and misses, for buildlog
 CLOSERS_DROPPED = 0    # tracks the hidden-track check left out when sending, so the Done line counts what went
@@ -990,8 +991,10 @@ def session_start(mode, seed_info, sources=""):
     globals()["CLOSERS_DROPPED"] = 0
     ai_off_reset()
     nonstop_begin(mode, seed_info)
-    if output_is_youtube() and not OUTPUT_OVERRIDE:
-        globals()["LAST_OUTPUT"] = "YouTube"
+    if output_streaming():
+        globals()["LAST_OUTPUT"] = output_streaming()
+    globals().update(STREAM_MISSES=0, TIDAL_SENT=None, TIDAL_PLAYLIST_ID=None)
+    TIDAL_MISSED.clear()
     cur = db().execute(
         "INSERT INTO sessions (started_at, mode, seed_artist, seed_track, seed_album, sources, queued) "
         "VALUES (?,?,?,?,?,?,0)",
@@ -1009,7 +1012,8 @@ def session_start(mode, seed_info, sources=""):
 
 def session_log(session_id, artist, track, sources, found, seed=None):
     """One track checked, hit or miss. seed: the Playing Now track it came from, shown in Discover's Seed."""
-    if output_is_youtube() and not found:
+    if output_streaming() and not found:
+        globals()["STREAM_MISSES"] = STREAM_MISSES + 1
         return   # nothing was checked against the library, so there is no miss to record
     db().execute("INSERT INTO discoveries (session_id, artist, track, sources, found, seed) VALUES (?,?,?,?,?,?)",
                  (session_id, artist, track, ", ".join(sources) if isinstance(sources, list) else sources,
@@ -1019,6 +1023,8 @@ def session_log(session_id, artist, track, sources, found, seed=None):
 def session_finish(session_id, queued, sources=None, report=print):
     save_new_mbids()   # MusicBrainz IDs learnt during this run
     queued = max(0, queued - CLOSERS_DROPPED)   # anything the final hidden-track check left out
+    if LAST_OUTPUT == "Tidal":
+        queued = TIDAL_SENT or 0   # what went into the playlist, not just what was found
     if sources is not None:
         db().execute("UPDATE sessions SET sources=? WHERE id=?", (sources, session_id))
     db().execute("UPDATE sessions SET queued=? WHERE id=?", (queued, session_id))
@@ -1039,6 +1045,11 @@ def done_line(queued, misses=0, started=None):
     tracks = f"{queued} track{'' if queued == 1 else 's'}"
     if LAST_OUTPUT == "YouTube":
         return f"Done: {tracks} sent to YouTube{took}."
+    if LAST_OUTPUT == "Tidal":
+        if TIDAL_SENT is None:
+            return f"Done: nothing sent to Tidal{took}."
+        tracks = f"{TIDAL_SENT} track{'' if TIDAL_SENT == 1 else 's'}"
+        return f"Done: {tracks} sent to Tidal, {STREAM_MISSES} not found on Tidal{took}."
     if REVIEW_MODE and not VOICE_TAKEOVER:
         return f"Done: {tracks} ready in Review, nothing played. {misses} not in library{took}."
     where = f"{tracks} queued in {LAST_OUTPUT}" if queued and LAST_OUTPUT else (
@@ -1471,8 +1482,14 @@ def fold_name_chars(s, joiner=" and "):
     'Ke$ha', 'A$AP'), and '&' and '+' are one joiner ('Halcyon + On + On' =
     'Halcyon And On And On'). Artist names keep '&' as their joiner (joiner=' & ').
     """
-    s = _DOLLAR_S.sub("s", strip_accents(s or ""))
-    return _JOINER.sub(joiner, s)
+    s = s or ""
+    if not s.isascii():   # each rule only when its character is there: the library runs every name through this
+        s = strip_accents(s)
+    if "$" in s:
+        s = _DOLLAR_S.sub("s", s)
+    if "&" in s or "+" in s:
+        s = _JOINER.sub(joiner, s)
+    return s
 
 
 def strip_initial_dots(s):
@@ -2860,6 +2877,180 @@ def tidal_user_token():
         return t["value"]
 
 
+
+# --- Output to Tidal: one playlist called 24bit7, refilled by each build ----------
+# Found by name each time rather than by a saved ID, so renaming it in Tidal keeps
+# it and the next build makes a fresh one. Its tracks are replaced, not added to.
+
+TIDAL_PLAYLIST_NAME = "24bit7"
+TIDAL_BATCH = 50            # the most tracks Tidal takes in one add or remove
+TIDAL_LOOKUP_WORKERS = 3    # searches at a time: Tidal answers about two a second, so more only means waiting
+TIDAL_PLAYLIST_ID = None    # the playlist the last build filled, for the console's Open links
+TIDAL_SENT = None           # how many tracks that build put in it (None: nothing went)
+
+
+def tidal_user_call(method, path, body=None, params=None):
+    """One call to Tidal as the signed-in user, as JSON ({} for an empty reply)."""
+    url = path if path.startswith("http") else TIDAL_API + (path[3:] if path.startswith("/v2/") else path)
+    params = dict(params or {})
+    if method == "GET" and "countryCode=" not in url:
+        params.setdefault("countryCode", tidal_country())
+    r = None
+    for attempt in range(3):
+        headers = {"Authorization": f"Bearer {tidal_user_token()}", "Accept": "application/vnd.api+json"}
+        if body is not None:
+            headers["Content-Type"] = "application/vnd.api+json"
+        r = requests.request(method, url, params=params, json=body, headers=headers, timeout=TIDAL_TIMEOUT)
+        if r.status_code == 401 and attempt == 0:
+            _tidal_user["value"] = None   # expired early: renew once
+            continue
+        if r.status_code == 429 and attempt < 2:
+            try:
+                wait = float(r.headers.get("Retry-After") or 1)
+            except (TypeError, ValueError):
+                wait = 1
+            time.sleep(min(max(wait, 0.5), 5))
+            continue
+        break
+    if r.status_code >= 300:
+        debug(f"Tidal {method} {path}: {r.status_code} {r.text[:300]}")
+        raise RuntimeError(f"Tidal answered {r.status_code}")
+    return r.json() if (r.text or "").strip() else {}
+
+
+def _tidal_user_pages(path, params=None):
+    """Every item of a paged list, following Tidal's next links."""
+    out, pages = [], 0
+    data = tidal_user_call("GET", path, params=params)
+    while True:
+        out.extend(_tidal_items(data))
+        pages += 1
+        nxt = (data.get("links") or {}).get("next")
+        if not nxt or pages >= TIDAL_PAGE_LIMIT:
+            return out
+        data = tidal_user_call("GET", nxt)
+
+
+def tidal_find_playlist():
+    """The ID of the user's own playlist named exactly 24bit7, or None."""
+    for p in _tidal_user_pages("/playlists", {"filter[owners.id]": "me"}):
+        if (p.get("attributes") or {}).get("name") == TIDAL_PLAYLIST_NAME:
+            return p.get("id")
+    return None
+
+
+def tidal_fill_playlist(track_ids, description=""):
+    """
+    Puts track_ids, in order, into the 24bit7 playlist: made if it isn't there,
+    otherwise emptied first. Returns (playlist ID, tracks Tidal turned down).
+    """
+    pid = tidal_find_playlist()
+    if pid:
+        tidal_user_call("PATCH", f"/playlists/{pid}", {"data": {
+            "id": pid, "type": "playlists", "attributes": {"description": description}}})
+        items = _tidal_user_pages(f"/playlists/{pid}/relationships/items")
+        refs = [{"id": i["id"], "type": i.get("type") or "tracks", "meta": {"itemId": (i.get("meta") or {})["itemId"]}}
+                for i in items if (i.get("meta") or {}).get("itemId")]
+        for n in range(0, len(refs), TIDAL_BATCH):
+            tidal_user_call("DELETE", f"/playlists/{pid}/relationships/items", {"data": refs[n:n + TIDAL_BATCH]})
+    else:
+        made = tidal_user_call("POST", "/playlists", {"data": {"type": "playlists", "attributes": {
+            "name": TIDAL_PLAYLIST_NAME, "description": description, "accessType": "UNLISTED"}}})
+        pid = (made.get("data") or {}).get("id")
+        if not pid:
+            raise RuntimeError("Tidal made the playlist but didn't say where")
+    refused = 0
+    for n in range(0, len(track_ids), TIDAL_BATCH):
+        reply = tidal_user_call("POST", f"/playlists/{pid}/relationships/items",
+                                {"data": [{"id": t, "type": "tracks"} for t in track_ids[n:n + TIDAL_BATCH]]})
+        refused += len((reply.get("meta") or {}).get("skipped") or [])
+    return pid, refused
+
+
+def send_to_tidal(keys, seed_info=None, report=print):
+    """
+    A finished build's Tidal track IDs into the 24bit7 playlist. Says how it went
+    in the console; a problem stops it with a plain line rather than an error.
+    """
+    global TIDAL_PLAYLIST_ID, TIDAL_SENT
+    ids = list(dict.fromkeys(str(k) for k in keys if k))
+    seed = seed_label(seed_info) if seed_info and seed_info.get("Artist") else ""
+    when = datetime.now().strftime("%d %b %Y").lstrip("0")
+    description = (f"From {seed}, {when}. " if seed else f"{when}. ") + "Made by 24bit7: rename it to keep it."
+    try:
+        pid, refused = tidal_fill_playlist(ids, description[:500])
+    except TidalSignInError as e:
+        report(f"Problem: {e}")
+        return 0
+    except (RuntimeError, requests.RequestException) as e:
+        report(f"Problem: the Tidal playlist couldn't be filled ({e}). Nothing was sent.")
+        return 0
+    TIDAL_PLAYLIST_ID, TIDAL_SENT = pid, len(ids) - refused
+    globals()["SENT_ANY"] = True
+    n = TIDAL_SENT
+    note = f" ({refused} Tidal wouldn't play here)" if refused else ""
+    report(f'  Tidal playlist "{TIDAL_PLAYLIST_NAME}" updated: {n} track{"" if n == 1 else "s"}{note}. '
+           f"Rename it in Tidal to keep it.")
+    return n
+
+
+TIDAL_MISSED = set()   # tracks Tidal hadn't got, this build only (misses aren't cached, so new rules get a go)
+
+
+def _tidal_id_key(artist, track):
+    return f"{artist_key(artist)}|{clean_name(track)}"
+
+
+def tidal_ids_for_pairs(pairs):
+    """
+    Tidal IDs for [(artist, track)], in the same order (None where Tidal has no match),
+    whatever the Output setting. Cached answers first; the rest are looked up several
+    at a time. The database is only touched from the calling thread.
+    """
+    ids, todo = {}, []
+    for pair in dict.fromkeys(pairs):
+        hit = cache_get("Tidal", "track_id", _tidal_id_key(*pair))
+        if hit:
+            ids[pair] = hit[0]
+        elif _tidal_id_key(*pair) in TIDAL_MISSED:
+            ids[pair] = None
+        else:
+            todo.append(pair)
+    found = tidal_track_ids(todo, workers=TIDAL_LOOKUP_WORKERS) if todo else []
+    for pair, tid in zip(todo, found):
+        ids[pair] = tid
+        if tid:
+            cache_put("Tidal", "track_id", _tidal_id_key(*pair), [tid])
+        else:
+            TIDAL_MISSED.add(_tidal_id_key(*pair))
+    return [ids.get(pair) for pair in pairs]
+
+
+def tidal_track_id_cached(artist, track):
+    """Tidal's ID for a track (cached when found), or None."""
+    return tidal_ids_for_pairs([(artist, track)])[0]
+
+
+def prefetch_tidal_ids(pairs):
+    """Warms the Tidal ID cache for [(artist, track)], several lookups at a time."""
+    tidal_ids_for_pairs(list(pairs))
+
+
+def tidal_open_links(pid):
+    """The app and web addresses for a playlist, for the console's Open in Tidal links."""
+    return f"tidal://playlist/{pid}", f"https://listen.tidal.com/playlist/{pid}"
+
+
+def tidal_app_installed():
+    """True when Windows has the Tidal app down for tidal:// links."""
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, r"tidal\shell\open\command"):
+            return True
+    except OSError:
+        return False
+
+
 def _tidal_items(data):
     items = data.get("data") or []
     return [items] if isinstance(items, dict) else items
@@ -2923,34 +3114,102 @@ def tidal_track_id(artist, track):
     Tidal's id for the seed track: artist and title must match; the studio version
     (no version note, such as Live or Acoustic) wins over the others.
     """
+    return tidal_track_ids([(artist, track)])[0]
+
+
+def _tidal_title_fits(title, track):
+    """A search result worth checking the artists of: the title matches, folded or one letter out."""
+    return (clean_name(title) == clean_name(track) or title_folded(title) == title_folded(track)
+            or near_title(title, track))
+
+
+def _tidal_pick(artist, track, details):
+    """
+    The best of [(id, [artist names], title, version)] for this artist and title, or None:
+    exact artist first, then the artist inside a longer credit; then, the artist matching
+    exactly, a title one letter or so out ('Al of me' for 'All of Me'). The studio version
+    (no version note, such as Live or Acoustic) wins over the others.
+    """
     want_a, want_t = artist_key(artist), clean_name(track)
-
-    def pick(details):
-        # exact artist first, then the artist inside a longer credit; then, the artist
-        # matching exactly, a title one letter or so out ('Al of me' for 'All of Me')
-        for loose, near in ((False, False), (True, False), (False, True)):
-            best = None
-            for tid, names, title, version in details:
-                if near:
-                    if not near_title(title, track):
-                        continue
-                elif clean_name(title) != want_t and title_folded(title) != title_folded(track):
+    for loose, near in ((False, False), (True, False), (False, True)):
+        best = None
+        for tid, names, title, version in details:
+            if near:
+                if not near_title(title, track):
                     continue
-                keys = [artist_key(n) for n in names]
-                if not (want_a in keys if not loose else any(want_a in k or k in want_a for k in keys)):
-                    continue
-                if not version:
-                    return tid
-                best = best or tid
-            if best:
-                return best
-        return None
+            elif clean_name(title) != want_t and title_folded(title) != title_folded(track):
+                continue
+            keys = [artist_key(n) for n in names]
+            if not (want_a in keys if not loose else any(want_a in k or k in want_a for k in keys)):
+                continue
+            if not version:
+                return tid
+            best = best or tid
+        if best:
+            return best
+    return None
 
-    found = pick(tidal_track_details(tidal_search_ids(f"{artist} {track}", "tracks")))
-    folded = fold_name_chars(artist)
-    if not found and folded != artist:   # Tidal's search doesn't know 'Travi$ Scott' is 'Travis Scott'
-        found = pick(tidal_track_details(tidal_search_ids(f"{folded} {track}", "tracks")))
-    return found
+
+def tidal_search_tracks(query):
+    """
+    Tidal's track search as [(id, title, version)], best first, the titles read from the
+    search reply itself (title None when Tidal only sent a link, to be checked in full).
+    """
+    data = tidal_get("/searchResults", {"filter[query]": query, "include": "tracks"})
+    items = _tidal_items(data)
+    if not items:
+        return []
+    rel = (items[0].get("relationships") or {}).get("tracks") or {}
+    ids = [x["id"] for x in rel.get("data") or [] if x.get("id")]
+    if not ids:   # given only as a link: follow it
+        links = rel.get("links") or {}
+        link = links.get("related") or links.get("self")
+        if link:
+            ids = tidal_ids(link, 10, kind="tracks")
+    info = {x["id"]: x.get("attributes") or {} for x in data.get("included") or [] if x.get("type") == "tracks"}
+    return [(i, info[i].get("title") if i in info else None, ((info.get(i) or {}).get("version") or "").strip())
+            for i in ids[:10]]
+
+
+def tidal_track_ids(pairs, workers=1):
+    """
+    Tidal's IDs for [(artist, track)], in the same order (None where Tidal has no match by
+    that artist). One search per track; only results whose title fits have their artists
+    checked, twenty tracks to a request across the whole list, as Tidal answers about two
+    requests a second. Tracks missed under a name the rules fold ('Travi$ Scott') are
+    searched once more as folded, since Tidal's search doesn't know they're the same.
+    """
+    results, todo = {}, list(dict.fromkeys(pairs))
+
+    def search(query):
+        try:
+            return tidal_search_tracks(query)
+        except Exception as e:
+            debug(f"Tidal search failed for {query}: {e}")
+            return []
+    for folded in (False, True):
+        if folded:
+            todo = [p for p in todo if not results.get(p) and fold_name_chars(p[0]) != p[0]]
+        if not todo:
+            break
+        queries = [f"{fold_name_chars(a) if folded else a} {t}" for a, t in todo]
+        if workers > 1 and len(queries) > 1:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                found = list(pool.map(search, queries))
+        else:
+            found = [search(q) for q in queries]
+        fits = {p: [c[0] for c in cands if c[1] is None or _tidal_title_fits(c[1], p[1])]
+                for p, cands in zip(todo, found)}
+        wanted = list(dict.fromkeys(i for ids in fits.values() for i in ids))
+        try:
+            details = {d[0]: d for d in tidal_track_details(wanted)} if wanted else {}
+        except Exception as e:
+            debug(f"Tidal track details failed: {e}")
+            details = {}
+        for p in todo:
+            results[p] = _tidal_pick(p[0], p[1], [details[i] for i in fits[p] if i in details])
+    return [results.get(p) for p in pairs]
 
 
 NEAR_TITLE = 0.9   # how alike two titles must be for a near miss, by the same artist only
@@ -3240,7 +3499,7 @@ def blended_similar_artists(seed_artist, limit=20, seed_track=None, report=None)
             else:
                 names = cached_call(label, "similar", f"{artist_key(seed)}|{fetch}",
                                     lambda: similar_fn(seed, limit=fetch, **kwargs))
-                if (similar_fn is ai_similar and names and not output_is_youtube()
+                if (similar_fn is ai_similar and names and not output_streaming()
                         and not any(library_has_artist(n) for n in names)):
                     # none of the AI's artists are in the library: ask it once more, for different ones
                     (report or print)(f"  None of the AI's suggestions for {seed} are in your library, "
@@ -3441,6 +3700,8 @@ def find_jriver_key_by_track(artist_name, track_name):
     """
     if output_is_youtube():   # no library check: the "key" is the YouTube video ID
         return youtube_video_id(artist_name, track_name)
+    if output_is_tidal():     # ...or the Tidal track ID
+        return tidal_track_id_cached(artist_name, track_name)
     clean_track = clean_name(track_name)
 
     def search(artist):
@@ -3530,12 +3791,12 @@ def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
         if key and skip_keys and str(key) in skip_keys:
             report(f"    Already in Playing Now: {track_name}")
         elif key:
-            report(f"    In library: {track_name}")
+            report(f"    {found_label(True)}: {track_name}")
             keys.append(key)
             if found is not None:
                 found.append((artist, track_name, key))
         else:
-            report(f"    Not in library: {track_name}")
+            report(f"    {found_label(False)}: {track_name}")
             misses += 1
         session_log(session_id, artist, track_name, suggested_by, found=bool(key), seed=seed)
     return keys, misses
@@ -3554,16 +3815,49 @@ def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
 YOUTUBE_LOOKUP_WORKERS = 8      # video ID lookups run this many at a time
 
 
-def output_is_youtube():
-    # A Review build matches against the library whatever Output says: YouTube is only where
-    # its ticked tracks go afterwards (Play on YouTube)
-    return OUTPUT_TARGET == "youtube" and not OUTPUT_OVERRIDE and not (REVIEW_MODE and not VOICE_TAKEOVER)
+STREAM_OUTPUTS = {"youtube": "YouTube", "tidal": "Tidal"}
 
+
+def output_streaming():
+    """
+    "YouTube" or "Tidal" while a build's tracks go to a streaming service instead of
+    JRiver, else None. A voice command's zone beats it, and a Review build matches
+    against the library whatever Output says: the service is only where its ticked
+    tracks go afterwards (Play on YouTube, Send to Tidal).
+    """
+    if OUTPUT_OVERRIDE or (REVIEW_MODE and not VOICE_TAKEOVER):
+        return None
+    return STREAM_OUTPUTS.get(OUTPUT_TARGET)
+
+
+def output_is_youtube():
+    return output_streaming() == "YouTube"
+
+
+def output_is_tidal():
+    return output_streaming() == "Tidal"
+
+
+
+def found_label(found):
+    """'In library' / 'Not in library' for a checked track, or 'On Tidal' / 'Not on Tidal' (or YouTube)."""
+    where = output_streaming()
+    if where:
+        return f"On {where}" if found else f"Not on {where}"
+    return "In library" if found else "Not in library"
+
+
+def where_found(your=False):
+    """Where a build's tracks are found: 'in library' ('in your library'), or 'on Tidal' / 'on YouTube'."""
+    where = output_streaming()
+    return f"on {where}" if where else ("in your library" if your else "in library")
 
 def sending_message(count, detail=""):
     """The log line announcing where a finished playlist is going."""
     if output_is_youtube():
         return f"  Sending {min(count, YOUTUBE_PLAYLIST_LENGTH)} tracks to YouTube{detail}..."
+    if output_is_tidal():
+        return f"  Sending {count} tracks to Tidal{detail}..."
     return f"  Sending {count} tracks{detail}..."
 
 
@@ -3647,8 +3941,11 @@ def prefetch_youtube_ids(pairs):
     """
     Warms the video ID cache for [(artist, track)] several lookups at a time, so
     the one-by-one lookups that follow are instant. Does nothing unless the
-    output is YouTube. The database is only touched from the calling thread.
+    output is YouTube (or Tidal, which warms its own). The database is only
+    touched from the calling thread.
     """
+    if output_is_tidal():
+        return prefetch_tidal_ids(pairs)
     if not output_is_youtube():
         return
     todo = [(a, t) for a, t in dict.fromkeys(pairs)
@@ -3733,11 +4030,12 @@ def typed_seed_key(seed_info, seeds, session_id, report=print):
     for seed in seeds:
         key = find_jriver_key_by_track(seed, name)
         if key:
-            report(f"  {what} found on YouTube, so it opens the playlist." if output_is_youtube()
+            report(f"  {what} found on {output_streaming()}, so it opens the playlist." if output_streaming()
                    else f"  {what} is in your library, so it opens the playlist.")
             session_log(session_id, seed, name, ["seed"], found=True)
             return key
-    report(f"  {what} wasn't found on YouTube, so the playlist starts without it." if output_is_youtube()
+    report(f"  {what} wasn't found on {output_streaming()}, so the playlist starts without it."
+           if output_streaming()
            else f"  {what} isn't in your library, so the playlist starts without it.")
     session_log(session_id, seeds[0], name, ["seed"], found=False)
     return None
@@ -4017,11 +4315,14 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
     """
     global LAST_OUTPUT
     check_cancelled()
-    if output_is_youtube() and not zone_name:   # JRiver is left completely alone
-        LAST_OUTPUT = "YouTube"
+    if output_streaming() and not zone_name:   # JRiver is left completely alone
+        LAST_OUTPUT = output_streaming()
         if keys and not append:
-            open_youtube_playlist(keys)
-            globals()["SENT_ANY"] = True
+            if LAST_OUTPUT == "Tidal":
+                send_to_tidal(keys, seed_info, report)
+            else:
+                open_youtube_playlist(keys)
+                globals()["SENT_ANY"] = True
         return
     if seed_info is not None:
         typed = bool(seed_info.get("Typed"))
@@ -4099,16 +4400,17 @@ def cap_seed_artist(keys, seed_artist_keys, first_key=None):
 
 def resolve_deferred_picks(deferred, report=print, found=None):
     """
-    YouTube output: looks up every pick collected during a Similar Artists run
+    YouTube or Tidal output: looks up every pick collected during a Similar Artists run
     in one parallel burst, then reports and logs them in the order they were
     picked. deferred is [(artist, track, suggested_by, session_id)].
-    Returns the video IDs found.
+    Returns the video or track IDs found.
     """
     prefetch_youtube_ids([(artist, track) for artist, track, _, _ in deferred])
     keys = []
     for artist, track, suggested_by, session_id in deferred:
         key = find_jriver_key_by_track(artist, track)   # a cache hit after the prefetch
-        report(f"    {'On YouTube' if key else 'Not on YouTube'}: {artist} - {track}")
+        where = output_streaming() or "YouTube"
+        report(f"    {'On ' + where if key else 'Not on ' + where}: {artist} - {track}")
         session_log(session_id, artist, track, suggested_by, found=bool(key))
         if key and key not in keys:
             keys.append(key)
@@ -4164,7 +4466,7 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
             keys.append(key)
             if any(_youtube_same_artist(raw_artist, s) for s in seeds):
                 seed_artist_keys.append(key)
-        report(f"    {'In library' if key else 'Not in library'}: {artist} - {title}")
+        report(f"    {found_label(bool(key))}: {artist} - {title}")
         session_log(session_id, artist, title, ["YouTube"], found=bool(key))
 
     keys, dropped = cap_seed_artist(keys, seed_artist_keys, first_key)
@@ -4173,7 +4475,7 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
     queued = 0
     if mix_active():
         if not keys:
-            report("Problem: nothing suggested is in your library.")
+            report(f"Problem: nothing suggested is {where_found(True)}.")
         keys = combine_with_mix(keys, report)
     mix_skipped(report)
     if keys:
@@ -4182,7 +4484,7 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
         queued = len(keys)
         debug("Queue refreshed")
     else:
-        report("Problem: nothing suggested is in your library.")
+        report(f"Problem: nothing suggested is {where_found(True)}.")
         queued = if_all_else_fails("artists", seed_info, report)
     session_finish(session_id, queued, sources="YouTube (up next queue)", report=report)
 
@@ -4490,8 +4792,8 @@ class FastStart:
 
     def __init__(self, seed_info=None, report=print, enabled=True):
         self.report, self.key, self.zone = report, None, None
-        if not enabled or REVIEW_MODE or output_is_youtube() or (seed_info and not seed_info.get("Typed")):
-            return   # YouTube output, or a now-playing seed (music is already playing)
+        if not enabled or REVIEW_MODE or output_streaming() or (seed_info and not seed_info.get("Typed")):
+            return   # YouTube or Tidal output, or a now-playing seed (music is already playing)
         zone = output_zone(seed_info, None, lambda *_: None)
         if zone is not None and zone_is_free(zone):
             self.zone = zone
@@ -4876,7 +5178,7 @@ class Drift:
             new = keys[before:]
             self.report(f"  Drift round {n}: {len(new)} added.")
             if self.using == "ai" and not new:
-                self.report("  Note: Drift stopped, as the AI found nothing new in your library.")
+                self.report(f"  Note: Drift stopped, as the AI found nothing new {where_found(True)}.")
                 break
             added += new
             if new and on_round:
@@ -4939,13 +5241,13 @@ class Drift:
                 self.ai_tried.add((artist, track))
                 continue
             if self._take(keys, artist, track, key, 1):
-                self.report(f"    In library: {artist} - {track}  (AI)")
+                self.report(f"    {found_label(True)}: {artist} - {track}  (AI)")
             else:
                 self.ai_tried.add((artist, track))
 
     def _round_tracks(self, seeds, keys):
         import library   # here rather than at the top: library imports engine
-        use_youtube = output_is_youtube()
+        use_stream = bool(output_streaming())
         for artist, title, seed_key in seeds:
             if len(keys) >= self.target:
                 return
@@ -4961,15 +5263,15 @@ class Drift:
                 if ident in self.checked or self._room(a) <= 0:
                     continue
                 self.checked.add(ident)
-                key = find_jriver_key_by_track(a, t) if use_youtube else library.find_track_key(a, t)
+                key = find_jriver_key_by_track(a, t) if use_stream else library.find_track_key(a, t)
                 session_log(self.session_id, a, t, sources, found=bool(key))
                 if self._take(keys, a, t, key, len(sources), parent=seed_key):
-                    self.report(f"    In library: {a} - {t}  ({', '.join(sources)})")
+                    self.report(f"    {found_label(True)}: {a} - {t}  ({', '.join(sources)})")
 
 
 def mix_active():
     """The Play tab handed in added playlists, and the output is JRiver."""
-    return bool(MIX_ROWS) and not output_is_youtube()
+    return bool(MIX_ROWS) and not output_streaming()
 
 
 def send_mix_only(fast, seed_info, report=print):
@@ -4988,9 +5290,9 @@ def send_mix_only(fast, seed_info, report=print):
 
 
 def mix_skipped(report=print):
-    """Added playlists only join JRiver output; says so once on YouTube."""
+    """Added playlists only join JRiver output; says so once on YouTube or Tidal."""
     global MIX_NOTED
-    if MIX_ROWS and output_is_youtube() and not MIX_NOTED:
+    if MIX_ROWS and output_streaming() and not MIX_NOTED:
         MIX_NOTED = True
         report("  Note: your added playlists were left out, as they only join playlists sent to JRiver.")
 
@@ -5081,7 +5383,7 @@ def finish_playlist(keys, drift, fast, seed_info, report, detail=""):
             send_to_jriver(rest, seed_info=seed_info, report=report, append=fast.started)
         return len(final)
     mix_skipped(report)
-    if output_is_youtube():
+    if output_streaming():
         drift.run(keys)
         if keys:
             report(sending_message(len(keys), detail))
@@ -5495,7 +5797,7 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
         drift.mark_seed(seed, "" if sample else (seed_info.get("Name") or ""))
 
     collected_keys = []   # ordered, deduped as we go
-    deferred = [] if output_is_youtube() else None   # YouTube output: picks wait here, looked up together later
+    deferred = [] if output_streaming() else None   # YouTube or Tidal output: picks wait here, looked up together later
 
     def add(found, score):
         """Adds the hits that fit; returns how many made it in."""
@@ -5595,7 +5897,7 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
 
     # --- Update JRiver queue ---
     if deferred:
-        report(f"  Looking up {len(deferred)} tracks on YouTube, several at a time...")
+        report(f"  Looking up {len(deferred)} tracks on {output_streaming()}, several at a time...")
         found = []
         resolve_deferred_picks(deferred, report, found=found)
         add(found, 1)
@@ -5621,7 +5923,7 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
         debug("Queue refreshed")
     else:
         played.done()
-        report("Problem: nothing suggested is in your library.")
+        report(f"Problem: nothing suggested is {where_found(True)}.")
         queued = send_mix_only(fast, seed_info, report)
         if not queued:   # nothing found and no added playlist: If All Else Fails
             queued = if_all_else_fails('artists', seed_info, report)
@@ -5778,7 +6080,7 @@ def similar_track_candidates(seeds, track, report=print):
                 if seed not in seeds:
                     debug(f"{name}: similar tracks found under the lead artist {seed} for {seeds[0]} - {track}")
                 break
-        if code == "ai" and pairs and not output_is_youtube() and not _any_in_library(pairs):
+        if code == "ai" and pairs and not output_streaming() and not _any_in_library(pairs):
             # none of the AI's tracks are in the library: ask it once more, for different ones
             report(f"  None of the AI's suggestions for {seed} - {track} are in your library, so asking once more.")
             again = ai_similar_tracks(seed, track, missed=[tuple(p) for p in pairs if len(p) == 2])
@@ -5896,7 +6198,7 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
                   exclude_keys=[seed_info.get("FileKey"), *pn_keys], seed=label, played=played)
     for artist, title in samples:
         drift.mark_seed(artist, title)
-    use_youtube = output_is_youtube()
+    use_stream = bool(output_streaming())
     variety = VARIETY_POOL if SIMILAR_TRACK_VARIETY else 1
     extra = moderator_extra(target)   # with the AI Moderator on, a few extra, so its removals are replaced
     extra_each = -(-extra // len(samples)) if extra else 0
@@ -5915,6 +6217,8 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
         need = max(1, min(SIMILAR_TRACK_MIN_AGREEMENT, len(responding)))
         pool, pool_keys, pool_per = [], set(), dict(per)
         pool_size = owed * variety
+        if use_stream:   # this sample's likely picks looked up together, a little over what's owed
+            prefetch_youtube_ids([p for p, s in blended if len(s) >= need][:pool_size + pool_size // 5 + 2])
         while blended:
             for (c_artist, c_title), sources in blended:
                 if len(pool) >= pool_size:
@@ -5923,7 +6227,7 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
                 if ident in checked or len(sources) < need or pool_per.get(ident[0], 0) >= per_artist * variety:
                     continue
                 checked.add(ident)
-                key = (find_jriver_key_by_track(c_artist, c_title) if use_youtube
+                key = (find_jriver_key_by_track(c_artist, c_title) if use_stream
                        else library.find_track_key(c_artist, c_title))
                 session_log(session_id, c_artist, c_title, sources, found=bool(key), seed=f"{artist} - {title}")
                 if key and str(key) in pn_keys:
@@ -5936,9 +6240,9 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
                     pool_keys.add(str(key))
                     pool_per[owner] = pool_per.get(owner, 0) + 1
                     fast.play(key)
-                    report(f"    In library: {c_artist} - {c_title}  ({', '.join(sources)})")
+                    report(f"    {found_label(True)}: {c_artist} - {c_title}  ({', '.join(sources)})")
                 elif not key:
-                    report(f"    Not in library: {c_artist} - {c_title}")
+                    report(f"    {found_label(False)}: {c_artist} - {c_title}")
             if len(pool) >= owed or need <= 1:
                 break
             report(f"    {len(pool)} tracks with {need} or more sources agreeing, so relaxed to {need - 1}.")
@@ -5956,7 +6260,7 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
         owed -= len(picks)
         if owed > 0 and i < len(samples) - 1:
             report(f"    {owed} short, passed on to the next sampled track.")
-    report(f"  Similar tracks in your library: {min(len(keys), target)} of {target}.")
+    report(f"  Similar tracks {where_found(True)}: {min(len(keys), target)} of {target}.")
     drift.checked |= checked
     drift.moderate(keys, [k for k in keys if str(k) != fast.key])
 
@@ -5981,7 +6285,7 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
         debug("Queue refreshed")
     else:
         played.done()
-        report("Problem: nothing suggested is in your library.")
+        report(f"Problem: nothing suggested is {where_found(True)}.")
         queued = send_mix_only(fast, seed_info, report)
         if not queued:   # nothing found and no added playlist: If All Else Fails
             queued = if_all_else_fails('tracks', seed_info, report)
@@ -6046,9 +6350,10 @@ def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=Fal
     blended, responding = similar_track_candidates(seeds, track, report)
     seed_keys, playing = {artist_key(s) for s in seeds}, clean_name(track)
     candidates = [(p, s) for p, s in blended if not (artist_key(p[0]) in seed_keys and clean_name(p[1]) == playing)]
-    use_youtube = output_is_youtube()
-    if use_youtube:
-        prefetch_youtube_ids([p for p, _ in candidates[:target * 2]])
+    use_stream = bool(output_streaming())
+    if use_stream:   # Tidal is slow to ask, so only a little over what's wanted; the rest one by one if needed
+        ahead = target + target // 5 + 2 if output_is_tidal() else target * 2
+        prefetch_youtube_ids([p for p, _ in candidates[:ahead]])
 
     keys, per, checked = [], {}, set()
     if first_key:
@@ -6070,7 +6375,7 @@ def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=Fal
             if ident in checked or len(sources) < need or pool_per.get(ident[0], 0) >= per_artist * variety:
                 continue
             checked.add(ident)
-            key = find_jriver_key_by_track(artist, title) if use_youtube else library.find_track_key(artist, title)
+            key = find_jriver_key_by_track(artist, title) if use_stream else library.find_track_key(artist, title)
             session_log(session_id, artist, title, sources, found=bool(key))
             owner = owner_key(artist, key) if key else ident[0]   # counted as tagged in the library
             if (key and key not in keys and str(key) not in pool_keys and played.fresh(key)
@@ -6079,9 +6384,9 @@ def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=Fal
                 pool_keys.add(str(key))
                 pool_per[owner] = pool_per.get(owner, 0) + 1
                 fast.play(key)
-                report(f"    In library: {artist} - {title}  ({', '.join(sources)})")
+                report(f"    {found_label(True)}: {artist} - {title}  ({', '.join(sources)})")
             elif not key:
-                report(f"    Not in library: {artist} - {title}")
+                report(f"    {found_label(False)}: {artist} - {title}")
         if len(keys) + len(pool) >= wanted or need <= 1:
             break
         report(f"  {len(keys) + len(pool)} tracks with {need} or more sources agreeing, so relaxed to {need - 1}.")
@@ -6091,7 +6396,7 @@ def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=Fal
         keys.append(key)
         per[owner] = per.get(owner, 0) + 1
         drift.note(artist, title, key, len(sources))
-    report(f"  Suggested {len(candidates)}, checked {len(checked)}, in library {len(keys) + len(pool) - len(picks)}.")
+    report(f"  Suggested {len(candidates)}, checked {len(checked)}, {where_found()} {len(keys) + len(pool) - len(picks)}.")
     if len(picks) < len(pool):
         report(f"  Picked {len(picks)} of those {len(pool)} at random, the closest the most likely, for variety.")
     drift.checked |= checked
@@ -6122,7 +6427,7 @@ def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=Fal
         played.done()
         debug("Queue refreshed")
     else:
-        report("Problem: nothing suggested is in your library.")
+        report(f"Problem: nothing suggested is {where_found(True)}.")
         queued = send_mix_only(fast, seed_info, report)
         if not queued:   # nothing found and no added playlist: If All Else Fails
             queued = if_all_else_fails('tracks', seed_info, report)
@@ -6327,24 +6632,24 @@ def create_vibe_playlist(vibe, report=print, count=None, prompt=None, if_short=N
             session_log(session_id, artist, track, "AI", found=True)
             continue
         if key:
-            report(f"    In library: {artist} - {track}")
+            report(f"    {found_label(True)}: {artist} - {track}")
             if key not in keys and played.fresh(key):
                 keys.append(key)
                 drift.note(artist, track, key, 1)
                 fast.play(key)
             session_log(session_id, artist, track, "AI", found=True)
         else:
-            report(f"    Not in library: {artist} - {track}")
+            report(f"    {found_label(False)}: {artist} - {track}")
             misses += 1
             drift.ai_tried.add((artist, track))   # so Drift using the AI doesn't ask for it again
             session_log(session_id, artist, track, "AI", found=False)
-    report(f"  AI picks: {len(keys)} in library, {misses} not.")
+    report(f"  AI picks: {len(keys)} {where_found()}, {misses} not.")
     if check is not None:
         check.summary()
     # the AI's own picks aren't moderated; Drift tracks from the sources can be (Settings > Playlist)
 
     if not keys:
-        report("Problem: nothing the AI picked is in your library. Try a different description.")
+        report(f"Problem: nothing the AI picked is {where_found(True)}. Try a different description.")
         queued = send_mix_only(fast, None, report)
         if not queued:   # If All Else Fails: the playing track's genre, if anything is playing
             queued = if_all_else_fails("vibe", get_playing_info(), report,
@@ -6410,7 +6715,7 @@ def play_top_n(report=print, seed_info=None):
         prefetch_youtube_ids([(artist, t) for t, _ in top_tracks[:n]])
         for track_name, suggested_by in top_tracks[:n]:
             key = find_jriver_key_by_track(artist, track_name)
-            report(f"    {'In library' if key else 'Not in library'}: {artist} - {track_name}  "
+            report(f"    {found_label(bool(key))}: {artist} - {track_name}  "
                    f"({', '.join(suggested_by)})")
             if key and key not in ordered_keys and played.fresh(key):
                 ordered_keys.append(key)
@@ -6426,7 +6731,7 @@ def play_top_n(report=print, seed_info=None):
         return
     played.done()
     if not ordered_keys:
-        report("Problem: none of the top tracks are in your library." if not played.skipped else
+        report(f"Problem: none of the top tracks are {where_found(True)}." if not played.skipped else
                "Note: every top track in your library was played recently, so there's nothing to play. "
                "Settings > Playlist > Artist's Top Tracks")
         queued = send_mix_only(fast, seed_info, report)
