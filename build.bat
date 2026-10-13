@@ -2,9 +2,16 @@
 setlocal
 cd /d "%~dp0"
 
-rem --- 0. Full test suite: a failure stops the release before anything else happens ---
-echo Running the tests (a few minutes)...
-python -m pytest -q
+rem --- 0. Tests: a failure stops the release before anything else happens ---
+rem     build.bat        the full suite (about fifteen minutes; its window tests need the mouse left alone)
+rem     build.bat quick  everything except the tests that open windows (a few minutes), for small releases
+if /i "%~1"=="quick" (
+    echo Quick build: running the tests that don't open windows (a few minutes^)...
+    python -m pytest -q -m "not windows"
+) else (
+    echo Running the full test suite, windows included (about fifteen minutes^)...
+    python -m pytest -q
+)
 if errorlevel 1 (
     echo.
     echo Tests FAILED, so nothing was built. Fix them and run build.bat again.

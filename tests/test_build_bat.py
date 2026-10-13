@@ -37,3 +37,29 @@ def test_opens_the_new_24bit7_after_publishing():
     reopen = first(lambda l: l.startswith("if exist") and "start " in l and r"dist\24bit7\24bit7.exe" in l)
     done = first(lambda l: l == "echo Build complete.")
     assert publish < reopen < done
+
+
+def test_quick_build_skips_only_the_window_tests():
+    text = open(BAT, encoding="utf-8").read()
+    assert 'if /i "%~1"=="quick"' in text
+    assert 'python -m pytest -q -m "not windows"' in text, "build.bat quick leaves out the window tests"
+    full = [line for line in lines() if line.startswith("python -m pytest")]
+    assert "python -m pytest -q" in full, "a plain build.bat still runs everything"
+    assert first(lambda line: "pytest" in line) < first(lambda line: "PyInstaller" in line), "tests before the build"
+
+
+def test_window_tests_are_labelled():
+    """What build.bat quick leaves out: every test that opens windows, and nothing else."""
+    import subprocess
+    import sys
+    repo = os.path.dirname(BAT)
+
+    def collected(mark):
+        out = subprocess.run([sys.executable, "-m", "pytest", "--collect-only", "-q", "-m", mark,
+                              "-p", "no:cacheprovider"], cwd=repo, capture_output=True, text=True).stdout
+        return {line.split("::")[0].replace("\\", "/") for line in out.splitlines() if "::" in line}
+    windows, quick = collected("windows"), collected("not windows")
+    for name in ("test_gui.py", "test_tray_maximised.py", "test_flat_borders.py", "test_discover_rounded.py"):
+        assert f"tests/{name}" in windows and f"tests/{name}" not in quick, name
+    for name in ("test_engine.py", "test_tidal_output.py", "test_build_bat.py", "test_name_rules.py"):
+        assert f"tests/{name}" in quick and f"tests/{name}" not in windows, name

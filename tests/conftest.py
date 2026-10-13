@@ -148,3 +148,34 @@ def load_gui(folder):
     sys.modules["gui"] = mod
     loader.exec_module(mod)
     return mod
+
+
+# --- "windows": tests that open real windows ---------------------------------------
+# build.bat quick runs everything else (python -m pytest -m "not windows"), so a small
+# release needs no one keeping off the mouse. Found by what the test file does, not by
+# a list, so a new window test is left out of quick builds without anyone remembering to.
+
+import re as _re
+
+_OPENS_WINDOWS = _re.compile(r"tk\.Tk\(|\bTk\(\)|Toplevel|load_gui|SettingsTab|from test_gui import")
+_window_files = {}
+
+
+def _opens_windows(path):
+    if path not in _window_files:
+        try:
+            with open(path, encoding="utf-8") as f:
+                _window_files[path] = bool(_OPENS_WINDOWS.search(f.read()))
+        except OSError:
+            _window_files[path] = False
+    return _window_files[path]
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "windows: opens real windows (left out of build.bat quick)")
+
+
+def pytest_collection_modifyitems(config, items):
+    for item in items:
+        if "ui" in getattr(item, "fixturenames", ()) or _opens_windows(str(item.fspath)):
+            item.add_marker(pytest.mark.windows)
