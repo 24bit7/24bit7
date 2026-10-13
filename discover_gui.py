@@ -503,6 +503,8 @@ class DiscoverTab(tk.Frame):
         text = f'{sent} of {len(pairs)} in your Tidal playlist "{engine.TIDAL_PLAYLIST_NAME}"'
         if missing:
             text += f", {missing} not found on Tidal"
+        if any("Tidal app isn't installed" in line for line in said):
+            text += ". The Tidal app isn't installed, so it opened on Tidal's website"
         self._set_yt_status(text + ".")
         self._show_tidal_open(engine.TIDAL_PLAYLIST_ID)
 
@@ -515,8 +517,9 @@ class DiscoverTab(tk.Frame):
             self._tidal_open.pack_forget()
             return
         app_url, web_url = engine.tidal_open_links(pid)
-        links = ([("Open in Tidal app", app_url)] if engine.tidal_app_installed() else []) + [
-            ("Open in Tidal web", web_url)]
+        opened = getattr(engine, "TIDAL_OPENED", None)   # the playlist has just opened there: offer the other
+        links = ([("Open in Tidal app", app_url)] if engine.tidal_app_installed() and opened != "app" else []) + (
+            [("Open in Tidal web", web_url)] if opened != "web" else [])
         for n, (text, url) in enumerate(links):
             if n:
                 tk.Label(self._tidal_open, text="·").pack(side="left", padx=4)

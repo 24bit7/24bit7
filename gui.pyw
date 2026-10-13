@@ -826,10 +826,17 @@ class PlayTab(tk.Frame):
         self.log.config(state="disabled")
 
     def _append_tidal_links(self, pid):
-        """Open in Tidal app (when it's installed) and Open in Tidal web, as links under the build."""
+        """
+        Open in Tidal app (when it's installed) and Open in Tidal web, as links under the build,
+        leaving out the one the playlist has just opened in.
+        """
         app_url, web_url = engine.tidal_open_links(pid)
-        links = ([("Open in Tidal app", app_url, "tidal_app")] if engine.tidal_app_installed() else []) + [
-            ("Open in Tidal web", web_url, "tidal_web")]
+        opened = getattr(engine, "TIDAL_OPENED", None)
+        links = ([("Open in Tidal app", app_url, "tidal_app")]
+                 if engine.tidal_app_installed() and opened != "app" else []) + (
+            [("Open in Tidal web", web_url, "tidal_web")] if opened != "web" else [])
+        if not links:
+            return
         self._live.append("  " + "  ·  ".join(text for text, _, _ in links))
         if not self._live_visible():
             return

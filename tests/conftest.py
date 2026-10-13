@@ -91,6 +91,11 @@ def app(tmp_path, monkeypatch):
     ai = fakes.FakeAI(web)
     yt = fakes.FakeYTMusic(web)
     fakes.install(monkeypatch, jriver, web)
+    # Nothing a test does may open the Tidal app or a browser: what would open is kept instead
+    opened = []
+    import webbrowser
+    monkeypatch.setattr(webbrowser, "open", lambda url, *a, **k: opened.append(url) or True)
+    monkeypatch.setattr(os, "startfile", lambda url, *a, **k: opened.append(url), raising=False)
     import anthropic
     monkeypatch.setattr(anthropic, "Anthropic", ai.Client)
     import ytmusicapi
@@ -118,7 +123,7 @@ def app(tmp_path, monkeypatch):
         engine.load_settings()
 
     ns = SimpleNamespace(folder=folder, env=env, set_env=set_env, engine=engine, library=library, voice=voice,
-                         saved_playlists=saved_playlists, jriver=jriver, web=web, ai=ai, yt=yt, printed=printed,
+                         saved_playlists=saved_playlists, jriver=jriver, web=web, ai=ai, yt=yt, printed=printed, opened=opened,
                          Lines=Lines)
     yield ns
     try:

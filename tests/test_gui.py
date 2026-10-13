@@ -1533,3 +1533,26 @@ def test_discover_listen_on_tidal_button(app, ui):
     d.refresh()
     ui.pump(0.3)
     assert "Tidal" in [b.cget("text") for b in d._site_buttons]
+
+
+def test_tidal_open_in_setting_and_the_other_link(app, ui, monkeypatch):
+    s, play = ui.settings, ui.play
+    _tick(ui, "Tidal")
+    assert s.vars["TIDAL_OPEN"].get() == "Tidal App", "the app by default"
+    s.vars["EXTRA_OUTPUTS"]["tidal"].set(False)
+    s._extra_outputs_changed()
+    combo = s._output_parts["tidal"][1]
+    assert str(combo.cget("state")) == "disabled", "greyed while Tidal is unticked"
+    s.vars["EXTRA_OUTPUTS"]["tidal"].set(True)
+    s._extra_outputs_changed()
+    assert str(combo.cget("state")) == "readonly"
+    s.vars["TIDAL_OPEN"].set("Tidal Web")
+    s._save()
+    assert "TIDAL_OPEN=web" in (app.folder / ".env").read_text()
+    monkeypatch.setattr(app.engine, "tidal_app_installed", lambda: True)
+    app.engine.TIDAL_OPENED = "web"   # it has just opened on the website: only the app is offered
+    play._append_tidal_links("abc")
+    last = play.log.get("1.0", "end").strip().splitlines()[-1]
+    assert "Open in Tidal app" in last and "Open in Tidal web" not in last
+    app.engine.TIDAL_OPENED = None
+    assert not ui.errors, ui.errors

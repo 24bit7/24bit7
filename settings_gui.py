@@ -851,6 +851,8 @@ class SettingsTab(tk.Frame):
         for group in ("PLAYLIST_SITES", "EXTRA_OUTPUTS"):
             if group in self.vars:
                 updates[group] = ",".join(code for code, v in self.vars[group].items() if v.get())
+        if "TIDAL_OPEN" in self.vars:
+            updates["TIDAL_OPEN"] = "web" if self.vars["TIDAL_OPEN"].get() == "Tidal Web" else "app"
         for n in range(1, engine.CUSTOM_SITE_SLOTS + 1):
             name = self.vars[f"CUSTOM_SITE_{n}_NAME"].get().strip()
             url = self.vars[f"CUSTOM_SITE_{n}_URL"].get().strip()
@@ -4290,7 +4292,18 @@ class SettingsTab(tk.Frame):
                       "what was there. Rename it in Tidal to keep it.")
         self._tidal_output_note = tk.Label(box, text="", fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w")
         self._tidal_output_note.grid(row=4, column=0, columnspan=3, sticky="w", padx=(24, 0), pady=4)
-        self._output_parts["tidal"] = [self._tidal_output_note]
+        title = tk.Label(box, text="Open In", anchor="w")
+        title.grid(row=5, column=0, sticky="w", padx=(24, 0), pady=4)
+        Tooltip(title, "Where the playlist opens once it's filled: the Tidal app, or Tidal's website in your "
+                       "browser. If the app isn't installed, it opens on the website. The console offers the "
+                       "other one too.")
+        self.vars["TIDAL_OPEN"] = tk.StringVar(
+            value="Tidal Web" if self.env.get("TIDAL_OPEN", "app").strip().lower() == "web" else "Tidal App")
+        open_cb = ttk.Combobox(box, textvariable=self.vars["TIDAL_OPEN"], values=["Tidal App", "Tidal Web"],
+                               state="readonly", width=12)
+        open_cb.grid(row=5, column=1, sticky="w", padx=(12, 0))
+        open_cb.bind("<<ComboboxSelected>>", lambda e: (open_cb.selection_clear(), self._save()))
+        self._output_parts["tidal"] = [self._tidal_output_note, open_cb]
         self._sync_output_parts()
 
     def _sync_output_parts(self):
@@ -4304,7 +4317,7 @@ class SettingsTab(tk.Frame):
             on = self.vars["EXTRA_OUTPUTS"][code].get()
             for w in parts:
                 try:
-                    w.config(state="normal" if on else "disabled")
+                    w.config(state=("readonly" if isinstance(w, ttk.Combobox) else "normal") if on else "disabled")
                 except tk.TclError:
                     pass
 

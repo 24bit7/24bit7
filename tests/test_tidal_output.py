@@ -240,3 +240,48 @@ def test_artist_checks_grouped_twenty_at_a_time(app):
     searches = [c for c in app.web.calls if c[0] == "tidal" and c[1] == "/v2/searchResults"]
     assert len(searches) == len(set(pairs))
     assert len(details) <= 6, f"{len(details)} detail requests for {len(pairs)} tracks"   # not one per track
+
+
+# --- Open In (Settings > Other > Additional Outputs > Tidal) ---
+
+def test_build_opens_the_playlist_in_the_app_by_default(app, monkeypatch):
+    tidal_out(app)
+    e = app.engine
+    assert e.TIDAL_OPEN == "app"
+    monkeypatch.setattr(e, "tidal_app_installed", lambda: True)
+    r = app.Lines()
+    e.create_similar_playlist(report=r, seed_info=seed(app))
+    assert app.opened == [f"tidal://playlist/{e.TIDAL_PLAYLIST_ID}"], r.text()
+    assert e.TIDAL_OPENED == "app"
+
+
+def test_open_in_web(app, monkeypatch):
+    tidal_out(app, TIDAL_OPEN="web")
+    e = app.engine
+    monkeypatch.setattr(e, "tidal_app_installed", lambda: True)
+    e.create_similar_playlist(report=app.Lines(), seed_info=seed(app))
+    assert app.opened == [f"https://listen.tidal.com/playlist/{e.TIDAL_PLAYLIST_ID}"]
+    assert e.TIDAL_OPENED == "web"
+
+
+def test_no_app_opens_the_website_and_says_so(app, monkeypatch):
+    tidal_out(app)
+    e = app.engine
+    monkeypatch.setattr(e, "tidal_app_installed", lambda: False)
+    r = app.Lines()
+    e.create_similar_playlist(report=r, seed_info=seed(app))
+    assert app.opened == [f"https://listen.tidal.com/playlist/{e.TIDAL_PLAYLIST_ID}"]
+    assert r.has("The Tidal app isn't installed, so the playlist opened on Tidal's website."), r.text()
+
+
+def test_nothing_opens_when_nothing_went_in(app):
+    tidal_out(app, TIDAL_REFRESH_TOKEN="")
+    app.engine.create_similar_playlist(report=app.Lines(), seed_info=seed(app))
+    assert app.opened == []
+
+
+def test_open_in_setting_reads(app):
+    e = app.engine
+    for raw, want in (("web", "web"), ("app", "app"), ("", "app"), ("nonsense", "app")):
+        app.set_env(TIDAL_OPEN=raw)
+        assert e.TIDAL_OPEN == want, raw

@@ -270,7 +270,7 @@ def load_settings():
     global PREFER_OFFICIAL_VIDEOS, THEME
     global VOICE_ENABLED, VOICE_KEY, VOICE_PORT
     global START_IN_TRAY, CLOSE_TO_TRAY
-    global LISTEN_SITES, CUSTOM_SITES, PLAYLIST_SITES, EXTRA_OUTPUTS
+    global LISTEN_SITES, CUSTOM_SITES, PLAYLIST_SITES, EXTRA_OUTPUTS, TIDAL_OPEN
     global SKIP_LONG_CLOSERS, LONG_CLOSER_MINUTES
     global SIMILAR_ARTIST_TRACK_COUNT, SIMILAR_ARTIST_TRACK_LIMIT, DRIFT
     global AI_MODERATOR, MODERATOR_WARNED, SKIP_PLAYED
@@ -324,6 +324,8 @@ def load_settings():
                       if x.strip().lower() in dict(PLAYLIST_OPTIONS)]
     EXTRA_OUTPUTS = [x.strip().lower() for x in os.getenv("EXTRA_OUTPUTS", "youtube").split(",")
                      if x.strip().lower() in dict(OUTPUT_OPTIONS)]
+    # Additional Outputs > Tidal > Open In: where a filled Tidal playlist opens, the app unless set to web
+    TIDAL_OPEN = "web" if os.getenv("TIDAL_OPEN", "app").strip().lower() == "web" else "app"
     CUSTOM_SITES = read_custom_sites()
     DEBUG = True   # always recorded since 1.11.0: the console's Simple/Advanced switch shows or hides them
     CONSOLE_QUERY = os.getenv("CONSOLE_QUERY", "0").strip().lower() in ("1", "true", "yes")   # off by default
@@ -629,6 +631,8 @@ PLAYLIST_SITES=youtube
 # 24bit7). Set from the Play tab. Additional Outputs: the services the Play tab offers.
 OUTPUT_TARGET=jriver
 EXTRA_OUTPUTS=youtube
+# Where a filled Tidal playlist opens: app (the Tidal app, the website if it isn't installed) or web
+TIDAL_OPEN=app
 YOUTUBE_PLAYLIST_LENGTH=50
 # Use official music videos on YouTube where they exist, instead of audio with a cover image (1 or 0)
 PREFER_OFFICIAL_VIDEOS=0
@@ -1014,7 +1018,7 @@ def session_start(mode, seed_info, sources=""):
     nonstop_begin(mode, seed_info)
     if output_streaming():
         globals()["LAST_OUTPUT"] = output_streaming()
-    globals().update(STREAM_MISSES=0, TIDAL_SENT=None, TIDAL_PLAYLIST_ID=None)
+    globals().update(STREAM_MISSES=0, TIDAL_SENT=None, TIDAL_PLAYLIST_ID=None, TIDAL_OPENED=None)
     TIDAL_MISSED.clear()
     cur = db().execute(
         "INSERT INTO sessions (started_at, mode, seed_artist, seed_track, seed_album, sources, queued) "
@@ -2990,8 +2994,9 @@ def tidal_fill_playlist(track_ids, description=""):
 
 def send_to_tidal(keys, seed_info=None, report=print):
     """
-    A finished build's Tidal track IDs into the 24bit7 playlist. Says how it went
-    in the console; a problem stops it with a plain line rather than an error.
+    A finished build's Tidal track IDs into the 24bit7 playlist, which then opens where
+    Settings > Other > Additional Outputs says. Says how it went in the console; a
+    problem stops it with a plain line rather than an error.
     """
     global TIDAL_PLAYLIST_ID, TIDAL_SENT
     ids = list(dict.fromkeys(str(k) for k in keys if k))
@@ -3012,7 +3017,35 @@ def send_to_tidal(keys, seed_info=None, report=print):
     note = f" ({refused} Tidal wouldn't play here)" if refused else ""
     report(f'  Tidal playlist "{TIDAL_PLAYLIST_NAME}" updated: {n} track{"" if n == 1 else "s"}{note}. '
            f"Rename it in Tidal to keep it.")
+    if n:
+        opened = open_tidal_playlist(pid)
+        if opened == "web" and TIDAL_OPEN == "app":
+            report("  The Tidal app isn't installed, so the playlist opened on Tidal's website.")
     return n
+
+
+TIDAL_OPENED = None   # where the last filled playlist opened ("app" or "web"), so the console offers the other
+
+
+def open_tidal_playlist(pid):
+    """
+    Opens the playlist in the Tidal app or on Tidal's website, as Open In says; the website
+    when the app isn't installed. Returns where it opened, or None if it couldn't.
+    """
+    import webbrowser
+    global TIDAL_OPENED
+    app_url, web_url = tidal_open_links(pid)
+    where = "app" if TIDAL_OPEN == "app" and tidal_app_installed() else "web"
+    try:
+        if where == "app":
+            os.startfile(app_url)   # the Tidal app, straight to the playlist
+        else:
+            webbrowser.open(web_url)
+    except OSError as e:
+        debug(f"Couldn't open the Tidal playlist ({e})")
+        where = None
+    TIDAL_OPENED = where
+    return where
 
 
 TIDAL_MISSED = set()   # tracks Tidal hadn't got, this build only (misses aren't cached, so new rules get a go)

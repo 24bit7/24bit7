@@ -423,7 +423,10 @@ class ReviewPanel:
             self._tidal_links = engine.TIDAL_PLAYLIST_ID   # Open in Tidal, under the console line
             missed = len(pairs) - len([i for i in ids if i])
             n = f"{sent} track{'' if sent == 1 else 's'}"
-            return f"Review: {n} sent to Tidal" + (f", {missed} not found there." if missed else ".")
+            line = f"Review: {n} sent to Tidal" + (f", {missed} not found there." if missed else ".")
+            if any("Tidal app isn't installed" in p for p in problems):
+                line += " The Tidal app isn't installed, so it opened on Tidal's website."
+            return line
         self._run(work)
 
     def _save(self):
