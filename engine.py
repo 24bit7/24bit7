@@ -28,7 +28,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.20.1"
+VERSION = "1.21.0"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
@@ -252,6 +252,22 @@ AI_PROVIDER, OPENAI_API_KEY, GEMINI_API_KEY = "anthropic", "", ""   # set by loa
 OLLAMA_URL, OLLAMA_MODEL = OLLAMA_DEFAULT_URL, ""
 
 
+def _builtin_key(name):
+    """
+    A key build.bat packed into the release from Ben's .env (builtin_keys.py,
+    never in git), used when the user hasn't entered their own. Blank when run
+    from source.
+    """
+    try:
+        import builtin_keys
+    except ImportError:
+        return ""
+    return (getattr(builtin_keys, name, "") or "").strip()
+
+
+BUILTIN_LASTFM_KEY = _builtin_key("LASTFM_API_KEY")
+
+
 def load_settings():
     """
     (Re)reads every setting from .env into module-level globals. Called once at
@@ -287,7 +303,7 @@ def load_settings():
     AUTH = (os.getenv("JRIVER_USER"), os.getenv("JRIVER_PASS"))
     JRIVER_HOST = os.getenv("JRIVER_HOST", "127.0.0.1:52199")
     JRIVER_BASE = f"http://{JRIVER_HOST}/MCWS/v1"
-    LASTFM_KEY = os.getenv("LASTFM_API_KEY")
+    LASTFM_KEY = (os.getenv("LASTFM_API_KEY") or "").strip() or BUILTIN_LASTFM_KEY   # the user's own key wins
     LISTENBRAINZ_TOKEN = os.getenv("LISTENBRAINZ_TOKEN")
     DISCOGS_TOKEN = os.getenv("DISCOGS_TOKEN")
     TIDAL_CLIENT_ID = (os.getenv("TIDAL_CLIENT_ID") or "").strip()
@@ -549,7 +565,9 @@ JRIVER_HOST=127.0.0.1:52199
 JRIVER_USER=
 JRIVER_PASS=
 
-# Service keys. Deezer and YouTube need no keys, so 24bit7 works out of the box.
+# Service keys. Deezer and YouTube need no keys, and the release comes with a
+# Last.fm key built in, so 24bit7 works out of the box. A Last.fm key of your own
+# entered here is used instead of the built-in one.
 # The notes in Settings > Keys explain how to get each of these (all free except
 # the paid AI providers, which are pay-as-you-go; Ollama is free).
 LASTFM_API_KEY=
@@ -569,15 +587,16 @@ OLLAMA_MODEL=
 
 # Recommendation sources (comma-separated: lastfm, listenbrainz, deezer, tidal, ai, youtube)
 # youtube is for SIMILAR_SOURCES only and needs no key.
-# A fresh install starts on the two sources that need no key. Once you add a
-# Last.fm or ListenBrainz key, tick that source under Settings > Sources.
-SIMILAR_SOURCES=deezer,youtube
+# A fresh install finds similar artists with Last.fm (built-in key), and similar
+# tracks with Last.fm and YouTube. Once you add a ListenBrainz token, tick that
+# source under Settings > Sources.
+SIMILAR_SOURCES=lastfm
 TOP_TRACK_SOURCES=deezer
 LISTENBRAINZ_ALGORITHM=alltime
 # How many similar-artist sources must agree on an artist (1 = off, up to 5)
 SIMILAR_MIN_AGREEMENT=1
 # Similar Tracks sources (lastfm, listenbrainz, youtube, ai) and how many must agree on a track
-SIMILAR_TRACK_SOURCES=listenbrainz,youtube
+SIMILAR_TRACK_SOURCES=lastfm,youtube
 SIMILAR_TRACK_MIN_AGREEMENT=2
 LISTENBRAINZ_TRACK_ALGORITHM=alltime
 

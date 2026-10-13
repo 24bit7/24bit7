@@ -1,4 +1,6 @@
 .env
+# build.bat's packed Last.fm key, made from .env for the release only
+builtin_keys.py
 __pycache__/
 *.pyc
 24bit7.db

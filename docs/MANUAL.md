@@ -38,7 +38,7 @@ To run from source instead, you need Python 3.10 or newer. Run `pip install -r r
 
 ### The first run
 
-24bit7 opens on Settings and says hello once. Deezer and YouTube Music are already ticked as sources. For better playlists, add free keys for Last.fm and ListenBrainz under **Settings > Keys**, then tick them under **Settings > Sources**. Each key has a **?** button with the steps for getting it.
+24bit7 opens on Settings and says hello once. It comes with a Last.fm key built in, so Similar Artists starts on Last.fm, and Similar Tracks on Last.fm and YouTube Music, with nothing to set up. For more sources, add a free ListenBrainz token under **Settings > Keys**, then tick it under **Settings > Sources**. Each key has a **?** button with the steps for getting it.
 
 ### Upgrading
 
@@ -261,7 +261,8 @@ The sites that get a button on the Discover tab: **Stores** (at least one stays 
 
 Keys and passwords for each service, hidden until you tick **Show**. Each **?** explains where to get the key:
 
-- **Last.fm** and **ListenBrainz**: free, and well worth adding.
+- **Last.fm**: built in, so you can leave it empty. A free key of your own is used instead if you fill it in.
+- **ListenBrainz**: free, and well worth adding.
 - **Discogs**: free, for album credits and a second source for Label.
 - **Tidal**: free. At developer.tidal.com, sign in with a Tidal account, open Dashboard and choose Create App, then copy the Client ID and Client Secret into the two Tidal fields. Tidal needs both. To send playlists to Tidal as well, press **Sign In to Tidal** on the Tidal account row, after adding the redirect address and playlist scopes its **?** describes to your app at developer.tidal.com. Tidal's own sign-in page opens in your browser; 24bit7 never sees your password, and remembers the sign-in until you press **Sign Out**.
 - **AI**: needed for AI Playlist, AI as a source, the Moderator and Console Query. It sits last, in its own box, starting with **Provider**: **Anthropic** (Claude), **OpenAI**, **Google Gemini** or **Ollama (Local)**. Only the chosen provider's fields show, and every key stays saved, so switching back loses nothing. The cloud providers are paid, a few pence at most per build, and each needs its own key (the **?** says where to get it). **Ollama** runs a model on your own PC for free: install it from ollama.com, pull a model (for example `ollama pull gemma3:4b`), then pick it under **OLLAMA_MODEL**, where **Refresh** lists what Ollama has installed. The address is filled in for you. Smaller local models give rougher results, and Console Query isn't available with Ollama, as it sends more than a local model can hold. If Ollama isn't running, or the model isn't installed, the console says so. Only Anthropic has been fully tested so far: OpenAI, Google Gemini and Ollama should work, and reports on how they do are very welcome on the JRiver forum or GitHub. **Use AI** under the provider, On or Off, pauses everything that spends AI credits without removing the key: AI Playlist and the Moderator dropdown grey out, the AI as a source is skipped, Drift using the AI falls back to the sources, and Console Query and Assess Tone stand down, with one console line per build saying so. Switch back On and every setting is as you left it. **AI Usage** sits underneath: the tokens each AI feature has used since you last cleared the count, with estimated costs, and a **Guide** to what $1 buys and what each feature costs per run (your own average once you've used it three times). **Query** asks the AI where the tokens go and which settings would use fewer, and answers in the console. **Show in Now Playing** puts the total at the right of Now Playing, in dollars or tokens; click it to switch. The costs are estimates from the chosen provider's standard rates on the date shown, which may have changed since; your provider's own console has your actual bill. With Ollama the Guide shows Free.
@@ -652,7 +653,7 @@ The AI is sent the build on screen, your settings with every key and password le
 | Source | Used for | Key |
 |---|---|---|
 | JRiver | Now playing, library search, queueing | No (on the same PC by default) |
-| Last.fm | Similar artists, similar tracks, top tracks | Free |
+| Last.fm | Similar artists, similar tracks, top tracks | Built in, or your own (free) |
 | ListenBrainz and MusicBrainz | Similar artists, similar tracks, top recordings, record labels | Free, only for top recordings |
 | Deezer | Similar artists, top tracks, checking names | None |
 | Tidal | Similar artists, similar tracks, top tracks | Free |

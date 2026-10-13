@@ -302,7 +302,11 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.20.0
+## What's new in 1.21.0
+
+- **Last.fm built in**: 24bit7 now comes with a Last.fm key, so a fresh install finds similar artists with Last.fm and similar tracks with Last.fm and YouTube Music straight away. A key of your own under Settings > Keys is still used if you add one.
+
+### Earlier: 1.20.0
 
 - **Deep Cuts**: playlists can be topped up from the corners of your collection you rarely play. Switch it on in the Play tab's More Options, **Spaced** or **Shuffled**; Similar Artists adds the artists in the seed's genre you've played least lately, Similar Tracks and AI Playlist the genre's least played tracks. **Top Up with Deep Cuts by** under Settings > Playlist sets how many, 10% to 100%. It uses your own Genre tags, so it works best when they're well organised.
 - **Moderator**: the AI Moderator is now just the Moderator, still magenta while it's on.

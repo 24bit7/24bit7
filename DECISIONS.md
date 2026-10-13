@@ -240,3 +240,6 @@ Shorter names for a busier More Options row. Magenta still marks the Moderator a
 **13 Oct 2026: The Play tab's hover notes show only while ? is on.**
 With every Play tab control explained, the notes got in the way of everyday use. A ? at the right of the More Options row switches them on, off by default; notes saying why something is greyed out always show, as a greyed-out button otherwise gives no clue. The rest of 24bit7 keeps hover notes as before.
 
+**13 Oct 2026: A Last.fm key built into the release.**
+New users were starting on Deezer and YouTube until they found and pasted a Last.fm key, and Last.fm gives the best similar artists. build.bat now packs the key from Ben's .env into the build (builtin_keys.py, gitignored and deleted after), so the public repo never holds it; running from source still needs your own. A user's own key always wins. Fresh installs now start on Last.fm for Similar Artists and Last.fm plus YouTube for Similar Tracks; existing settings are left alone. Risk: anyone can pull the key from the zip, and every user without their own shares its limits. If Last.fm ever throttles it, the fix is a new key in the next release.
+

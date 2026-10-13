@@ -34,10 +34,19 @@ if exist "dist\24bit7\.env" copy /y "dist\24bit7\.env" "%BK%\app\" >nul
 if exist "dist\24bit7\24bit7.db" copy /y "dist\24bit7\24bit7.db" "%BK%\app\" >nul
 echo Backed up settings and history to %BK%
 
-rem --- 2. Build ---
-python -m pip install --upgrade pyinstaller
-python -m PyInstaller --noconfirm --clean --windowed --name 24bit7 --icon 24bit7.ico --collect-data ytmusicapi --add-data "24bit7.ico;." --add-data "source_test_*.json;." --hidden-import pystray._win32 gui.pyw
+rem --- 2. Build, with the Last.fm key from .env packed in (builtin_keys.py, never in git, removed after) ---
+powershell -NoProfile -Command "$m = Select-String -Path '.env' -Pattern '^\s*LASTFM_API_KEY\s*=\s*(\w+)\s*$' | Select-Object -First 1; if (-not $m) { exit 1 }; Set-Content -Path 'builtin_keys.py' -Encoding ascii -Value ('LASTFM_API_KEY = \"' + $m.Matches[0].Groups[1].Value + '\"')"
 if errorlevel 1 (
+    echo.
+    echo No Last.fm key in .env, so the release would have none built in. Nothing was built.
+    pause
+    exit /b 1
+)
+python -m pip install --upgrade pyinstaller
+python -m PyInstaller --noconfirm --clean --windowed --name 24bit7 --icon 24bit7.ico --collect-data ytmusicapi --add-data "24bit7.ico;." --add-data "source_test_*.json;." --hidden-import pystray._win32 --hidden-import builtin_keys gui.pyw
+set BUILT=%errorlevel%
+if exist "builtin_keys.py" del "builtin_keys.py"
+if not "%BUILT%"=="0" (
     echo.
     echo Build FAILED. Your settings and history are safe in %BK%
     pause

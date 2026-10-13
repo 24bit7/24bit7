@@ -72,13 +72,14 @@ def app(tmp_path, monkeypatch):
     folder = tmp_path / "24bit7"
     folder.mkdir()
     for name in os.listdir(REPO):
-        if name.endswith((".py", ".pyw", ".ico", ".md")) and not name.startswith("apply_"):
+        if name.endswith((".py", ".pyw", ".ico", ".md")) and not name.startswith("apply_") \
+                and name != "builtin_keys.py":   # build.bat's packed key: tests never use a real one
             shutil.copy2(os.path.join(REPO, name), folder / name)
     shutil.copytree(os.path.join(REPO, "alexa"), folder / "alexa")
     env = dict(BASE_ENV, VOICE_PORT=str(free_port()))
     write_env(folder / ".env", env)
 
-    for mod in APP_MODULES:
+    for mod in APP_MODULES + ["builtin_keys"]:
         sys.modules.pop(mod, None)
     monkeypatch.syspath_prepend(str(folder))
     monkeypatch.chdir(folder)

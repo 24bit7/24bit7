@@ -101,7 +101,9 @@ TRACK_SOURCE_NAMES = [("ai", "AI"), ("lastfm", "Last.fm"), ("listenbrainz", "Lis
 KEY_HELP = {
     "LASTFM_API_KEY": ("Last.fm API key",
         "Create an API account at last.fm/api (Get an API account).\n"
-        "Your key is shown on your account's API page. It's free."),
+        "Your key is shown on your account's API page. It's free.\n"
+        "24bit7 comes with a key built in, so this is optional.\n"
+        "A key of your own is used instead when you fill it in."),
     "LISTENBRAINZ_TOKEN": ("ListenBrainz token",
         "Sign in at listenbrainz.org (uses a MusicBrainz account),\n"
         "then copy your User Token from listenbrainz.org/settings."),
@@ -908,6 +910,8 @@ class SettingsTab(tk.Frame):
                 key = "LISTENBRAINZ_TOKEN"
             var = self.vars.get(key) if key else None
             missing = var is not None and not var.get().strip()
+            if code == "lastfm" and engine.BUILTIN_LASTFM_KEY:   # the release's own key covers it
+                missing = False
             if code == "tidal":   # needs both halves
                 missing = any(k in self.vars and not self.vars[k].get().strip()
                               for k in ("TIDAL_CLIENT_ID", "TIDAL_CLIENT_SECRET"))
