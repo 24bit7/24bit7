@@ -1556,3 +1556,23 @@ def test_tidal_open_in_setting_and_the_other_link(app, ui, monkeypatch):
     assert "Open in Tidal app" in last and "Open in Tidal web" not in last
     app.engine.TIDAL_OPENED = None
     assert not ui.errors, ui.errors
+
+
+def test_settings_deep_cuts_section(app, ui):
+    s = ui.settings
+    visit_every_page(ui, next(c for c in s.winfo_children() if hasattr(c, "select")))
+    page = s._main_playlist
+    assert set(page.deep_cuts) == {"ARTISTS", "TRACKS", "VIBE"}, "not Artist's Top Tracks"
+    share = [w for w in _everything(s) if isinstance(w, tk.Spinbox)
+             and str(w.cget("textvariable")) == str(page.vars["DEEP_CUTS_TRACKS_SHARE"])][0]
+    assert str(share.cget("state")) == "disabled", "the share greys out while Deep Cuts is Off"
+    page.vars["DEEP_CUTS_TRACKS"].set("Shuffled")
+    page.deep_cuts["TRACKS"]()
+    assert str(share.cget("state")) == "readonly"
+    page.vars["DEEP_CUTS_TRACKS_SHARE"].set("30")
+    s._save()
+    env = (app.folder / ".env").read_text()
+    assert "DEEP_CUTS_TRACKS=shuffled" in env and "DEEP_CUTS_TRACKS_SHARE=30" in env
+    app.engine.refresh_settings_if_changed()
+    assert app.engine.DEEP_CUTS["tracks"] == {"mode": "shuffled", "share": 30}
+    assert not ui.errors, ui.errors

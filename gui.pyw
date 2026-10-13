@@ -68,6 +68,7 @@ NONSTOP_GROUPS = ("artists", "tracks", "top", "vibe")
 PLAY_RESEED = [("last", "Last track"), ("second", "2nd track")]
 PLAY_NONSTOP = [("off", "Off"), ("tight", "Keep It Tight"), ("journey", "Wander")]
 PLAY_BEHAVIOUR = [("instant", "Play"), ("review", "Review")]   # every build from the app, not voice
+PLAY_DEEP_CUTS = [("off", "Off"), ("spaced", "Spaced"), ("shuffled", "Shuffled")]   # as Settings > Playlist has them
 PLAY_DRIFT = [("off", "Off"), ("close", "Keep It Tight"), ("spread", "Spread")]   # as Settings > Playlist shows them   # as Settings > Playlist shows them
 
 
@@ -327,6 +328,14 @@ class PlayTab(tk.Frame):
         self.drift_cb = ClickThrough(self.extras_row, "Drift", self.drift_var, [s for _, s in PLAY_DRIFT],
                                      command=self._on_drift_changed)
         self.drift_cb.pack(side="left", padx=(0, 8))
+        # Deep Cuts: the same second door, for Similar Artists, Similar Tracks and AI Playlist
+        self.deepcuts_var = tk.StringVar(value="Off")
+        self.deepcuts_cb = ClickThrough(self.extras_row, "Deep Cuts", self.deepcuts_var,
+                                        [s for _, s in PLAY_DEEP_CUTS], command=self._on_deepcuts_changed)
+        self.deepcuts_cb.pack(side="left", padx=(0, 8))
+        Tooltip(self.deepcuts_cb, "Tops each playlist up with the least played artists or tracks in the seed's "
+                                  "genre, by the share set in Settings > Playlist (10% to start). Spaced places "
+                                  "them evenly; Shuffled at random. Click to change, right-click to go back.")
         self.nonstop_var = tk.StringVar(value="Off")
         self.nonstop_cb = ClickThrough(self.extras_row, "∞", self.nonstop_var, [s for _, s in PLAY_NONSTOP],
                                        command=self._on_nonstop_changed)   # Non-stop, shown as the infinity sign
@@ -519,6 +528,8 @@ class PlayTab(tk.Frame):
         by = engine.NONSTOP_BY
         states = {(by[g].get("mode", "journey") if by[g]["on"] else "off") for g in NONSTOP_GROUPS if g in by}
         self.nonstop_var.set(dict(PLAY_NONSTOP).get(states.pop() if len(states) == 1 else "off", "Off"))
+        cuts = {engine.DEEP_CUTS[g]["mode"] for g in engine.DEEP_CUT_GROUPS if g in engine.DEEP_CUTS}
+        self.deepcuts_var.set(dict(PLAY_DEEP_CUTS).get(cuts.pop() if len(cuts) == 1 else "off", "Off"))
 
     def _save_play_switches(self, updates, apply):
         """
@@ -556,6 +567,19 @@ class PlayTab(tk.Frame):
             if getattr(page, "drift", None):
                 sync_drift(page)
         self.drift_cb.selection_clear()
+        self._save_play_switches(updates, apply)
+
+    def _on_deepcuts_changed(self, *_):
+        code = {shown: c for c, shown in PLAY_DEEP_CUTS}.get(self.deepcuts_var.get(), "off")
+        updates = {f"DEEP_CUTS_{g.upper()}": code for g in engine.DEEP_CUT_GROUPS}
+
+        def apply(page):
+            for g in engine.DEEP_CUT_GROUPS:
+                G = g.upper()
+                if f"DEEP_CUTS_{G}" in page.vars:
+                    page.vars[f"DEEP_CUTS_{G}"].set(self.deepcuts_var.get())
+                    page.deep_cuts[G]()   # greys its share in or out
+        self.deepcuts_cb.selection_clear()
         self._save_play_switches(updates, apply)
 
     def _on_nonstop_changed(self, *_):

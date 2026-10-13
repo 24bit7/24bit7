@@ -131,3 +131,35 @@ def test_moderator_and_infinity_names(app, ui):
     p.nonstop_cb.set("Wander")
     assert p.nonstop_cb.cget("text") == "∞: Wander"
     p.nonstop_cb.set("Off")
+
+
+def test_deep_cuts_button_sits_between_drift_and_infinity(app, ui):
+    p = ui.play
+    p._show_more(True)
+    ui.pump(0.2)
+    texts = [w.cget("text") for w in p.extras_row.pack_slaves() if hasattr(w, "_label")]
+    order = [t.split(":")[0] for t in texts]
+    assert order[:6] == ["Seed", "Play Mode", "Moderator", "Drift", "Deep Cuts", "∞"], texts
+
+
+def test_deep_cuts_button_sets_every_option(app, ui):
+    p, e = ui.play, app.engine
+    p.deepcuts_var.set("Spaced")
+    p._on_deepcuts_changed()
+    env = (app.folder / ".env").read_text()
+    for g in ("ARTISTS", "TRACKS", "VIBE"):
+        assert f"DEEP_CUTS_{g}=spaced" in env
+    assert all(e.DEEP_CUTS[g]["mode"] == "spaced" for g in e.DEEP_CUT_GROUPS)
+    assert "DEEP_CUTS_TOP" not in env
+    p.deepcuts_var.set("Off")
+    p._on_deepcuts_changed()
+    assert all(e.DEEP_CUTS[g]["mode"] == "off" for g in e.DEEP_CUT_GROUPS)
+
+
+def test_deep_cuts_button_shows_off_when_options_differ(app, ui):
+    app.set_env(DEEP_CUTS_ARTISTS="spaced", DEEP_CUTS_TRACKS="shuffled", DEEP_CUTS_VIBE="spaced")
+    ui.play._sync_play_switches()
+    assert ui.play.deepcuts_var.get() == "Off"
+    app.set_env(DEEP_CUTS_TRACKS="spaced")
+    ui.play._sync_play_switches()
+    assert ui.play.deepcuts_var.get() == "Spaced"

@@ -512,6 +512,11 @@ class ProfilePage:
             if group != "vibe":
                 out[f"NONSTOP_{g}_USING"] = option_code(NONSTOP_USING_OPTIONS, v[f"NONSTOP_{g}_USING"].get())
         out["NONSTOP_VIBE_WITH"] = option_code(NONSTOP_WITH_OPTIONS, v["NONSTOP_VIBE_WITH"].get())
+        for group in engine.DEEP_CUT_GROUPS:
+            g = group.upper()
+            if f"DEEP_CUTS_{g}" in v:
+                out[f"DEEP_CUTS_{g}"] = option_code(DEEP_CUTS_OPTIONS, v[f"DEEP_CUTS_{g}"].get())
+                out[f"DEEP_CUTS_{g}_SHARE"] = v[f"DEEP_CUTS_{g}_SHARE"].get().strip() or "10"
         out["NONSTOP_TOP_REST"] = "1" if v["NONSTOP_TOP_REST"].get() else "0"
         out["NONSTOP_TOP_REST_COUNT"] = v["NONSTOP_TOP_REST_COUNT"].get().strip().lower()
         return out
@@ -630,6 +635,9 @@ def drift_using_options(group):
 # The Play options, as the tabs inside Sources and Playlist
 PLAY_OPTIONS = [("artists", "Similar Artists"), ("tracks", "Similar Tracks"),
                 ("top", "Artist's Top Tracks"), ("vibe", "AI Playlist")]
+
+# Deep Cuts (Settings > Playlist, and the Play tab's button): (saved value, label shown)
+DEEP_CUTS_OPTIONS = [("off", "Off"), ("spaced", "Spaced"), ("shuffled", "Shuffled")]
 
 # Non-stop dropdowns: (saved value, label shown)
 NONSTOP_USING_OPTIONS = [("artists", "Similar artists"), ("tracks", "Similar tracks")]
@@ -2551,6 +2559,54 @@ class SettingsTab(tk.Frame):
                 place(mod_row, pady=(0, 4))
                 p.vibe_mod_cb = mod_cb
 
+        def deep_cuts(group):
+            """The Deep Cuts section: Off, Spaced or Shuffled, and how much to top up by."""
+            g = group.upper()
+            mode = (p.env.get(f"DEEP_CUTS_{g}") or "off").strip().lower()
+            try:
+                share = min(100, max(10, int(p.env.get(f"DEEP_CUTS_{g}_SHARE") or 10) // 10 * 10))
+            except ValueError:
+                share = 10
+            cfg = {"mode": mode if mode in engine.DEEP_CUT_MODES else "off", "share": share}   # this page's own
+            how = ("the artists in the seed's genre you've played least lately, then their top tracks"
+                   if group == "artists" else "the tracks in the seed's genre you've played least")
+            if group == "vibe":
+                how += " (the genre most of the AI's picks share, as there's no seed track)"
+            begin(group, "Deep Cuts",
+                  f"Tops the playlist up with {how}, so the corners of your collection get a turn. The genre "
+                  "comes from your own Genre tags, so this works best when they're well organised. Each build's "
+                  "console says what was added, or why nothing was.")
+            box = where["box"]
+            row = tk.Frame(box)
+            title = tk.Label(row, text="Deep Cuts")
+            title.pack(side="left")
+            Tooltip(title, "Off adds none. Spaced places them evenly through the playlist, so the start keeps "
+                           "the seed's feel. Shuffled drops them in at random. The first track always leads.")
+            p.vars[f"DEEP_CUTS_{g}"] = tk.StringVar(value=option_label(DEEP_CUTS_OPTIONS, cfg["mode"]))
+            mode_cb = ttk.Combobox(row, textvariable=p.vars[f"DEEP_CUTS_{g}"],
+                                   values=[s for _, s in DEEP_CUTS_OPTIONS], state="readonly", width=12)
+            mode_cb.pack(side="left", padx=(6, 0))
+            share_title = tk.Label(row, text="Top Up with Deep Cuts by")
+            share_title.pack(side="left", padx=(24, 6))
+            Tooltip(share_title, "How many deep cuts, as a share of the playlist, added on top of it: 10% of "
+                                 "30 tracks adds 3; 100% adds as many again, an even mix.")
+            p.vars[f"DEEP_CUTS_{g}_SHARE"] = tk.StringVar(value=str(cfg["share"]))
+            share_sb = tk.Spinbox(row, from_=10, to=100, increment=10, width=5,
+                                  textvariable=p.vars[f"DEEP_CUTS_{g}_SHARE"], command=p.save, state="readonly")
+            share_sb.pack(side="left")
+            tk.Label(row, text="%").pack(side="left", padx=(2, 0))
+
+            def sync(_e=None):
+                mode_cb.selection_clear()
+                off = option_code(DEEP_CUTS_OPTIONS, p.vars[f"DEEP_CUTS_{g}"].get()) == "off"
+                share_sb.config(state="disabled" if off else "readonly")
+            mode_cb.bind("<<ComboboxSelected>>", lambda e: (sync(), p.save()))
+            sync()
+            if not hasattr(p, "deep_cuts"):
+                p.deep_cuts = {}
+            p.deep_cuts[g] = sync   # the Play tab's Deep Cuts button sets the mode, then calls this
+            place(row, pady=(0, 4))
+
         def nonstop(group):
             """The Non-stop section: its tick box, then how this option's playlists carry on."""
             g, cfg = group.upper(), nonstop_cfg[group]
@@ -2835,6 +2891,7 @@ class SettingsTab(tk.Frame):
         pool_var.trace_add("write", lambda *a: sync_pick_limit(p))
         recent("artists")
         drift("artists")
+        deep_cuts("artists")
         nonstop("artists")
         hidden("artists")
         fallback("artists")
@@ -2873,6 +2930,7 @@ class SettingsTab(tk.Frame):
                "Shuffled mixes them up.", note="Every column")
         recent("tracks")
         drift("tracks")
+        deep_cuts("tracks")
         nonstop("tracks")
         hidden("tracks")
         fallback("tracks")
@@ -2896,6 +2954,7 @@ class SettingsTab(tk.Frame):
         spin("Number of tracks", "VIBE_TRACK_COUNT", "20", 5, 100, TARGET_HELP)
         recent("vibe")
         drift("vibe")
+        deep_cuts("vibe")
         nonstop("vibe")
         hidden("vibe")
         fallback("vibe")
