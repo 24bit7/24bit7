@@ -68,6 +68,31 @@ NONSTOP_GROUPS = ("artists", "tracks", "top", "vibe")
 PLAY_RESEED = [("last", "Last track"), ("second", "2nd track")]
 PLAY_NONSTOP = [("off", "Off"), ("tight", "Keep It Tight"), ("journey", "Wander")]
 PLAY_BEHAVIOUR = [("instant", "Play"), ("review", "Review")]   # every build from the app, not voice
+# What each Play tab control does, shown on hover only while the More Options row's ? is on
+PLAY_NOTES = {
+    "Similar Artists": "Finds artists like the seed's, then plays their best known tracks you own.",
+    "Similar Tracks": "Finds songs like the seed track, from every source ticked in Settings > Sources.",
+    "Artist's Top Tracks": "Plays the seed artist's most popular tracks that you own.",
+    "AI Playlist": "Describe a mood or moment and the AI picks tracks for it, from your library. Uses AI credits.",
+    "More Options": "Opens the row below: Seed, Mode, Moderator, Drift, Deep Cuts, Non-stop and your own playlists.",
+    "Output": "Where the finished playlist goes: the zone you seeded from, another JRiver zone, or YouTube or "
+              "Tidal (ticked under Settings > Other > Additional Outputs).",
+    "Zone": "Which JRiver zone Now Playing shows and seeds from.",
+    "Seed": "What Similar Artists and Similar Tracks start from: the current track, or every track in Playing Now.",
+    "Mode": "Play Mode plays the playlist straight away. Review Mode lists it first, so you choose what goes.",
+    "Moderator": "Uses the AI to check each playlist and take out tracks that clash with the seed's mood. "
+                 "Relaxed takes out the least, Strict the most. Uses AI credits.",
+    "Drift": "When a build comes up short, carries on from what it found until the playlist is full. Keep It "
+             "Tight stays close to the seed; Spread wanders further.",
+    "Deep Cuts": "Tops each playlist up with the least played artists or tracks in the seed's genre, by the share "
+                 "set in Settings > Playlist. Spaced places them evenly; Shuffled at random.",
+    "Non-stop": "Non-stop: when a playlist from 24bit7 reaches its last track, more are added, so the music "
+                "keeps going. Keep It Tight stays close to the start; Wander lets it drift.",
+    "+ Add Playlist": "Joins one of your own JRiver playlists to the next build.",
+    "Show Credits": "Lists the producer, engineer, musicians and other credits for what's playing, from Discogs.",
+    "Help": "Hover notes for the Play tab: on, hovering over anything here explains it; off, no pop-ups.",
+}
+
 PLAY_DEEP_CUTS = [("off", "Off"), ("spaced", "Spaced"), ("shuffled", "Shuffled")]   # as Settings > Playlist has them
 PLAY_DRIFT = [("off", "Off"), ("close", "Keep It Tight"), ("spread", "Spread")]   # as Settings > Playlist shows them   # as Settings > Playlist shows them
 
@@ -333,28 +358,67 @@ class PlayTab(tk.Frame):
         self.deepcuts_cb = ClickThrough(self.extras_row, "Deep Cuts", self.deepcuts_var,
                                         [s for _, s in PLAY_DEEP_CUTS], command=self._on_deepcuts_changed)
         self.deepcuts_cb.pack(side="left", padx=(0, 8))
-        Tooltip(self.deepcuts_cb, "Tops each playlist up with the least played artists or tracks in the seed's "
-                                  "genre, by the share set in Settings > Playlist (10% to start). Spaced places "
-                                  "them evenly; Shuffled at random. Click to change, right-click to go back.")
         self.nonstop_var = tk.StringVar(value="Off")
-        self.nonstop_cb = ClickThrough(self.extras_row, "∞", self.nonstop_var, [s for _, s in PLAY_NONSTOP],
+        self.nonstop_cb = ClickThrough(self.extras_row, "∞", self.nonstop_var, [s for _, s in PLAY_NONSTOP], symbol=True,
                                        command=self._on_nonstop_changed)   # Non-stop, shown as the infinity sign
         self.nonstop_cb.pack(side="left", padx=(0, 8))
-        Tooltip(self.nonstop_cb, "Non-stop: when a playlist from 24bit7 reaches its last track, more are added, "
-                                 "so the music keeps going. Keep It Tight stays close to the start; Wander lets "
-                                 "it drift. Click to change, right-click to go back.")
         tk.Frame(self.extras_row, width=1, height=24, bg=PALETTE["line"]).pack(side="left", padx=(8, 16))
         # Add playlist: JRiver playlists joined to the next build from the app (not voice)
-        FlatButton(self.extras_row, text="+ Add Playlist", quiet=True, width=14, height=1,
-                   command=lambda: self.mix_rows.add()).pack(side="left", padx=(0, 8))
+        self.add_playlist_button = FlatButton(self.extras_row, text="+ Add Playlist", quiet=True, width=14,
+                                              height=1, command=lambda: self.mix_rows.add())
+        self.add_playlist_button.pack(side="left", padx=(0, 8))
         self.credits_button = FlatButton(self.extras_row, text="Show Credits", command=self.on_credits,
                                          quiet=True, width=14, height=1)
         self.credits_button.pack(side="left")
         self.buttons.append(self.credits_button)   # greyed out during a build, and on the Search tab
+        # ?: hover notes for the whole Play tab, off until switched on (remembered)
+        self.help_var = tk.StringVar(value="On" if read_env().get("PLAY_HELP", "0") == "1" else "Off")
+        self.help_cb = ClickThrough(self.extras_row, "", self.help_var, ["Off", "On"], command=self._on_help_changed,
+                                    plain=("Off",), labels={"Off": "?", "On": "?"},
+                                    lit={"On": PALETTE.get("link") or PALETTE["button_fg"]})
+        self.help_cb.pack(side="right")
+        self._add_play_notes(frame)
         self._sync_seed_bars()
         self.mix_rows = MixRows(self.more_box, padx=16)
         self.mix_rows.on_change = self._update_more_label
         self._show_more(playmix.is_open(), save=False)
+
+    def help_on(self):
+        """True while the More Options row's ? is on: the Play tab's hover notes show."""
+        try:
+            return self.help_var.get() == "On"
+        except (AttributeError, tk.TclError):
+            return False
+
+    def _on_help_changed(self, *_):
+        try:
+            write_env({"PLAY_HELP": "1" if self.help_on() else "0"})
+        except Exception as e:
+            messagebox.showerror("Save failed", str(e), parent=self)
+
+    def note_wrap(self):
+        """How wide the Play tab's notes are: two and a half of its main buttons (Similar Artists and so on)."""
+        try:
+            return int(self.buttons[0]._size[0] * 2.5)
+        except (AttributeError, IndexError):
+            return None
+
+    def _add_play_notes(self, button_row):
+        """A note on every Play tab control, shown on hover only while ? is on."""
+        on, wrap = self.help_on, self.note_wrap
+        for b in self.buttons:
+            text = b.cget("text")
+            if text in PLAY_NOTES:
+                if text == "AI Playlist":   # its "why it's greyed out" note shows whatever ? says
+                    Tooltip(b, PLAY_NOTES[text], when=lambda: on() and engine.ai_enabled(), wrap=wrap)
+                else:
+                    Tooltip(b, PLAY_NOTES[text], when=on, wrap=wrap)
+        for widget, name in ((self.more_button, "More Options"), (self.output_cb, "Output"),
+                             (self.zone_cb, "Zone"), (self.seed_cb, "Seed"), (self.behaviour_cb, "Mode"),
+                             (self.drift_cb, "Drift"), (self.deepcuts_cb, "Deep Cuts"), (self.nonstop_cb, "Non-stop"),
+                             (self.add_playlist_button, "+ Add Playlist"), (self.help_cb, "Help")):
+            Tooltip(widget, PLAY_NOTES[name], when=on, wrap=wrap)
+        Tooltip(self.moderator_cb, PLAY_NOTES["Moderator"], when=lambda: on() and engine.ai_enabled(), wrap=wrap)
 
     def _toggle_more(self):
         self._show_more(not self.extras_row.winfo_manager())
@@ -572,15 +636,8 @@ class PlayTab(tk.Frame):
     def _on_deepcuts_changed(self, *_):
         code = {shown: c for c, shown in PLAY_DEEP_CUTS}.get(self.deepcuts_var.get(), "off")
         updates = {f"DEEP_CUTS_{g.upper()}": code for g in engine.DEEP_CUT_GROUPS}
-
-        def apply(page):
-            for g in engine.DEEP_CUT_GROUPS:
-                G = g.upper()
-                if f"DEEP_CUTS_{G}" in page.vars:
-                    page.vars[f"DEEP_CUTS_{G}"].set(self.deepcuts_var.get())
-                    page.deep_cuts[G]()   # greys its share in or out
         self.deepcuts_cb.selection_clear()
-        self._save_play_switches(updates, apply)
+        self._save_play_switches(updates, lambda page: None)   # Settings has only the share: nothing to set there
 
     def _on_nonstop_changed(self, *_):
         code = {shown: c for c, shown in PLAY_NONSTOP}.get(self.nonstop_var.get(), "off")

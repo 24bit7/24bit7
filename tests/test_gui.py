@@ -1559,20 +1559,16 @@ def test_tidal_open_in_setting_and_the_other_link(app, ui, monkeypatch):
 
 
 def test_settings_deep_cuts_section(app, ui):
+    """Settings > Playlist has only how much to top up by: on or off is the Play tab's button."""
     s = ui.settings
     visit_every_page(ui, next(c for c in s.winfo_children() if hasattr(c, "select")))
     page = s._main_playlist
-    assert set(page.deep_cuts) == {"ARTISTS", "TRACKS", "VIBE"}, "not Artist's Top Tracks"
-    share = [w for w in _everything(s) if isinstance(w, tk.Spinbox)
-             and str(w.cget("textvariable")) == str(page.vars["DEEP_CUTS_TRACKS_SHARE"])][0]
-    assert str(share.cget("state")) == "disabled", "the share greys out while Deep Cuts is Off"
-    page.vars["DEEP_CUTS_TRACKS"].set("Shuffled")
-    page.deep_cuts["TRACKS"]()
-    assert str(share.cget("state")) == "readonly"
+    for g in ("ARTISTS", "TRACKS", "VIBE"):
+        assert f"DEEP_CUTS_{g}_SHARE" in page.vars and f"DEEP_CUTS_{g}" not in page.vars
+    assert "DEEP_CUTS_TOP_SHARE" not in page.vars, "not Artist's Top Tracks"
+    app.set_env(DEEP_CUTS_TRACKS="spaced")
     page.vars["DEEP_CUTS_TRACKS_SHARE"].set("30")
     s._save()
-    env = (app.folder / ".env").read_text()
-    assert "DEEP_CUTS_TRACKS=shuffled" in env and "DEEP_CUTS_TRACKS_SHARE=30" in env
     app.engine.refresh_settings_if_changed()
-    assert app.engine.DEEP_CUTS["tracks"] == {"mode": "shuffled", "share": 30}
+    assert app.engine.DEEP_CUTS["tracks"] == {"mode": "spaced", "share": 30}, "saving the share leaves the switch alone"
     assert not ui.errors, ui.errors

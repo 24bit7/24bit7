@@ -363,6 +363,58 @@ def _rgba(widget, colour):
     return (r >> 8, g >> 8, b >> 8, 255)
 
 
+SYMBOL_GAP = "  "   # between a click-through button's symbol and its value
+_PIL_FONTS = {}
+
+
+def _pil_font(px):
+    """Segoe UI Bold at px pixels (the buttons' own font), for drawing text into a button's picture."""
+    if px not in _PIL_FONTS:
+        from PIL import ImageFont
+        font = None
+        for name in ("segoeuib.ttf", "seguisb.ttf", "arialbd.ttf", "DejaVuSans-Bold.ttf"):
+            try:
+                font = ImageFont.truetype(name, max(6, px))
+                break
+            except OSError:
+                continue
+        _PIL_FONTS[px] = font or ImageFont.load_default()
+    return _PIL_FONTS[px]
+
+
+def symbol_layout(w, h, symbol, value, sym_font, val_font):
+    """
+    Where a symbol button's two parts go: ((symbol x, y), (value x, y)). The pair is centred
+    across; the symbol is centred up and down on its own shape (an infinity sign sits low in
+    its line), and the value on the font's height, as every button's text is.
+    """
+    gap_value = SYMBOL_GAP + value
+    sym_w, val_w = sym_font.getlength(symbol), val_font.getlength(gap_value)
+    x = (w - sym_w - val_w) / 2
+    left, top, right, bottom = sym_font.getbbox(symbol)
+    sym_y = h / 2 - (top + bottom) / 2
+    ascent, descent = val_font.getmetrics()
+    val_y = (h - (ascent + descent)) / 2
+    return (round(x), round(sym_y)), (round(x + sym_w), round(val_y))
+
+
+def symbol_shape(widget, w, h, radius, fill, edge, line, colour, symbol, value, sym_font, val_font):
+    """A rounded button picture with a symbol and its value drawn in, so nothing sits on top of it."""
+    key = ("symbol", w, h, radius, fill, edge, line, colour, symbol, value, sym_font.size, val_font.size)
+    if key in _SHAPES:
+        return _SHAPES[key]
+    from PIL import Image, ImageDraw, ImageTk
+    base = ImageTk.getimage(rounded_shape(widget, w, h, radius, fill, edge, line)).convert("RGBA")
+    draw = ImageDraw.Draw(base)
+    (sx, sy), (vx, vy) = symbol_layout(w, h, symbol, value, sym_font, val_font)
+    rgba = _rgba(widget, colour)
+    draw.text((sx, sy), symbol, font=sym_font, fill=rgba)
+    draw.text((vx, vy), SYMBOL_GAP + value, font=val_font, fill=rgba)
+    photo = ImageTk.PhotoImage(base, master=widget)
+    _SHAPES[key] = photo
+    return photo
+
+
 def rounded_shape(widget, w, h, radius, fill, edge, line, bar=None, bar_h=0, open_bottom=False):
     """
     A rounded rectangle as a Tk image: an outline of width line in edge, filled with
@@ -726,14 +778,20 @@ class ClickThrough(FlatButton):
     its text, so the row grows and shrinks as values change. Off (or the first value of a
     two-way choice, such as Play Mode) is drawn plain; any other value is lit in its colour.
       ClickThrough(parent, "Drift", var, ["Off", "Keep It Tight", "Spread"], command=handler)
+    symbol=True draws the prefix as a symbol, bigger and bold, with the value beside it at the
+    usual size ("∞  Wander" for Non-stop), instead of "Prefix: Value". Both are drawn into
+    the button's picture, so a neighbour changing size can never paint over them.
     var holds the value as shown ("Keep It Tight"); setting it from code redraws the button.
     For older code it also answers like the dropdown it replaced: set(), state(), instate(),
     selection_clear(), and <<ComboboxSelected>> runs the command.
     """
 
+    SYMBOL_GROW = 1.6   # how much bigger the symbol is than the button text
+
     def __init__(self, master, prefix, variable, values, command=None, lit=None, plain=("Off",),
-                 labels=None, **kw):
+                 labels=None, symbol=False, **kw):
         self._var, self._values, self._prefix = variable, list(values), prefix
+        self._symbol = bool(symbol and prefix)
         self._user_command = command
         self._lit = lit or {}             # value -> colour; values not listed use the button text colour
         self._plain = set(plain)          # values drawn plain
@@ -743,8 +801,33 @@ class ClickThrough(FlatButton):
             widget.bind("<Button-3>", lambda e: self._step(-1) if self._state == "normal" else None)
         self.bind("<<ComboboxSelected>>", lambda e: self._changed())
         variable.trace_add("write", lambda *a: self._refresh())
+        if self._symbol:
+            self._size = self._measure("")
+            self._draw()
+
+    def _measure(self, text):
+        if not getattr(self, "_symbol", False):
+            return super()._measure(text)
+        px, line = self._px, self._px(1)
+        sym_font, val_font = self._symbol_fonts()
+        w = sym_font.getlength(self._prefix) + val_font.getlength(SYMBOL_GAP + self._var.get()) + 2 * px(8)
+        h = self._font.metrics("linespace")   # the usual height, so the row stays level
+        return int(w) + px(6) + 2 * line, h + px(4) + 2 * line + px(BUTTON_BAR)
+
+    def _symbol_fonts(self):
+        """The symbol's font (bigger, bold) and the value's (the button text's), in pixels, as PIL fonts."""
+        size = self._font.actual("size")
+        pixels = abs(size) if size < 0 else size * self.winfo_fpixels("1i") / 72.0
+        return _pil_font(round(pixels * self.SYMBOL_GROW)), _pil_font(round(pixels))
+
+    def cget(self, key):
+        if key == "text" and getattr(self, "_symbol", False):
+            return f"{self._prefix}: {self._var.get()}"
+        return super().cget(key)
 
     def _text(self):
+        if getattr(self, "_symbol", False):
+            return ""   # drawn by the symbol and value labels instead
         value = self._var.get()
         if value in self._labels:
             return self._labels[value]
@@ -783,7 +866,11 @@ class ClickThrough(FlatButton):
             fill = mix_colour(self, edge if edge != PALETTE["button_outline"] else PALETTE["button_fg"],
                               base, 0.28 if self._pressed else 0.10)
         w, h = self._size
-        image = rounded_shape(self, w, h, self._px(CORNER), fill, edge, self._px(1))
+        if getattr(self, "_symbol", False):
+            image = symbol_shape(self, w, h, self._px(CORNER), fill, edge, self._px(1), text,
+                                 self._prefix, self._var.get(), *self._symbol_fonts())
+        else:
+            image = rounded_shape(self, w, h, self._px(CORNER), fill, edge, self._px(1))
         # a button with a note takes the question-mark pointer, as every title with a note does
         pointer = "question_arrow" if hasattr(self._label, "_tooltip") else "hand2"
         self._label.config(image=image, fg=text, cursor=pointer if on else "")

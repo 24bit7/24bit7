@@ -200,8 +200,9 @@ class Tooltip:
     click (when click is True), when when() says so. Kept fully on screen.
     """
 
-    def __init__(self, widget, text, when=lambda: True, click=True, delay=NOTE_DELAY_MS):
+    def __init__(self, widget, text, when=lambda: True, click=True, delay=NOTE_DELAY_MS, wrap=None):
         self.widget, self.text, self.when, self.tip = widget, text, when, None
+        self.wrap = wrap   # its width in pixels, or a function giving it; the usual width if None
         self.delay, self._pending = delay, None
         widget._has_note = True
         widget._tooltip = self
@@ -238,7 +239,7 @@ class Tooltip:
         self.tip = tk.Toplevel(self.widget)
         self.tip.wm_overrideredirect(True)
         tk.Label(self.tip, text=self.text, bg=PALETTE["tooltip_bg"], fg=PALETTE["tooltip_fg"], relief="solid",
-                 borderwidth=1, justify="left", wraplength=scaled(self.widget, NOTE_WRAP), font=("Segoe UI", 9),
+                 borderwidth=1, justify="left", wraplength=self._wrap(), font=("Segoe UI", 9),
                  padx=10, pady=6).pack()
         self.tip.update_idletasks()   # its size, so it can be kept on screen
         w, h = self.tip.winfo_reqwidth(), self.tip.winfo_reqheight()
@@ -247,6 +248,10 @@ class Tooltip:
         if y + h > sh - 4:   # no room below: above the widget instead
             y = max(0, self.widget.winfo_rooty() - h - 4)
         self.tip.wm_geometry(f"+{x}+{y}")
+
+    def _wrap(self):
+        wrap = self.wrap() if callable(self.wrap) else self.wrap
+        return wrap or scaled(self.widget, NOTE_WRAP)
 
     def hide(self):
         self._cancel()
@@ -514,8 +519,7 @@ class ProfilePage:
         out["NONSTOP_VIBE_WITH"] = option_code(NONSTOP_WITH_OPTIONS, v["NONSTOP_VIBE_WITH"].get())
         for group in engine.DEEP_CUT_GROUPS:
             g = group.upper()
-            if f"DEEP_CUTS_{g}" in v:
-                out[f"DEEP_CUTS_{g}"] = option_code(DEEP_CUTS_OPTIONS, v[f"DEEP_CUTS_{g}"].get())
+            if f"DEEP_CUTS_{g}_SHARE" in v:   # on or off is the Play tab's Deep Cuts button
                 out[f"DEEP_CUTS_{g}_SHARE"] = v[f"DEEP_CUTS_{g}_SHARE"].get().strip() or "10"
         out["NONSTOP_TOP_REST"] = "1" if v["NONSTOP_TOP_REST"].get() else "0"
         out["NONSTOP_TOP_REST_COUNT"] = v["NONSTOP_TOP_REST_COUNT"].get().strip().lower()
@@ -635,9 +639,6 @@ def drift_using_options(group):
 # The Play options, as the tabs inside Sources and Playlist
 PLAY_OPTIONS = [("artists", "Similar Artists"), ("tracks", "Similar Tracks"),
                 ("top", "Artist's Top Tracks"), ("vibe", "AI Playlist")]
-
-# Deep Cuts (Settings > Playlist, and the Play tab's button): (saved value, label shown)
-DEEP_CUTS_OPTIONS = [("off", "Off"), ("spaced", "Spaced"), ("shuffled", "Shuffled")]
 
 # Non-stop dropdowns: (saved value, label shown)
 NONSTOP_USING_OPTIONS = [("artists", "Similar artists"), ("tracks", "Similar tracks")]
@@ -2560,51 +2561,29 @@ class SettingsTab(tk.Frame):
                 p.vibe_mod_cb = mod_cb
 
         def deep_cuts(group):
-            """The Deep Cuts section: Off, Spaced or Shuffled, and how much to top up by."""
+            """The Deep Cuts section: how much to top up by. It's switched on from the Play tab."""
             g = group.upper()
-            mode = (p.env.get(f"DEEP_CUTS_{g}") or "off").strip().lower()
             try:
                 share = min(100, max(10, int(p.env.get(f"DEEP_CUTS_{g}_SHARE") or 10) // 10 * 10))
             except ValueError:
                 share = 10
-            cfg = {"mode": mode if mode in engine.DEEP_CUT_MODES else "off", "share": share}   # this page's own
             how = ("the artists in the seed's genre you've played least lately, then their top tracks"
                    if group == "artists" else "the tracks in the seed's genre you've played least")
             if group == "vibe":
                 how += " (the genre most of the AI's picks share, as there's no seed track)"
             begin(group, "Deep Cuts",
-                  f"Tops the playlist up with {how}, so the corners of your collection get a turn. The genre "
-                  "comes from your own Genre tags, so this works best when they're well organised. Each build's "
-                  "console says what was added, or why nothing was.")
-            box = where["box"]
-            row = tk.Frame(box)
-            title = tk.Label(row, text="Deep Cuts")
+                  f"Tops the playlist up with {how}, so the corners of your collection get a turn. Switch it "
+                  "on, Spaced or Shuffled, with Deep Cuts in the Play tab's More Options. The genre comes from "
+                  "your own Genre tags, so this works best when they're well organised.")
+            row = tk.Frame(where["box"])
+            title = tk.Label(row, text="Top Up with Deep Cuts by")
             title.pack(side="left")
-            Tooltip(title, "Off adds none. Spaced places them evenly through the playlist, so the start keeps "
-                           "the seed's feel. Shuffled drops them in at random. The first track always leads.")
-            p.vars[f"DEEP_CUTS_{g}"] = tk.StringVar(value=option_label(DEEP_CUTS_OPTIONS, cfg["mode"]))
-            mode_cb = ttk.Combobox(row, textvariable=p.vars[f"DEEP_CUTS_{g}"],
-                                   values=[s for _, s in DEEP_CUTS_OPTIONS], state="readonly", width=12)
-            mode_cb.pack(side="left", padx=(6, 0))
-            share_title = tk.Label(row, text="Top Up with Deep Cuts by")
-            share_title.pack(side="left", padx=(24, 6))
-            Tooltip(share_title, "How many deep cuts, as a share of the playlist, added on top of it: 10% of "
-                                 "30 tracks adds 3; 100% adds as many again, an even mix.")
-            p.vars[f"DEEP_CUTS_{g}_SHARE"] = tk.StringVar(value=str(cfg["share"]))
-            share_sb = tk.Spinbox(row, from_=10, to=100, increment=10, width=5,
-                                  textvariable=p.vars[f"DEEP_CUTS_{g}_SHARE"], command=p.save, state="readonly")
-            share_sb.pack(side="left")
+            Tooltip(title, "How many deep cuts, as a share of the playlist, added on top of it: 10% of "
+                           "30 tracks adds 3; 100% adds as many again, an even mix.")
+            p.vars[f"DEEP_CUTS_{g}_SHARE"] = tk.StringVar(value=str(share))
+            tk.Spinbox(row, from_=10, to=100, increment=10, width=5, state="readonly",
+                       textvariable=p.vars[f"DEEP_CUTS_{g}_SHARE"], command=p.save).pack(side="left", padx=(6, 0))
             tk.Label(row, text="%").pack(side="left", padx=(2, 0))
-
-            def sync(_e=None):
-                mode_cb.selection_clear()
-                off = option_code(DEEP_CUTS_OPTIONS, p.vars[f"DEEP_CUTS_{g}"].get()) == "off"
-                share_sb.config(state="disabled" if off else "readonly")
-            mode_cb.bind("<<ComboboxSelected>>", lambda e: (sync(), p.save()))
-            sync()
-            if not hasattr(p, "deep_cuts"):
-                p.deep_cuts = {}
-            p.deep_cuts[g] = sync   # the Play tab's Deep Cuts button sets the mode, then calls this
             place(row, pady=(0, 4))
 
         def nonstop(group):

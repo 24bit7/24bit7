@@ -200,17 +200,17 @@ class ReviewPanel:
             self._pill(head, text, command).pack(side="left", padx=(6, 0))
         self.smaller_btn = self._pill(head, "A\u2212", lambda: self.set_size(self.size - 1), pad=18)
         self.smaller_btn.pack(side="left", padx=(16, 0))
-        Tooltip(self.smaller_btn, "Smaller text in the track list.")
+        Tooltip(self.smaller_btn, "Smaller text in the track list.", when=self._notes_on, wrap=self._note_wrap)
         self.bigger_btn = self._pill(head, "A+", lambda: self.set_size(self.size + 1), pad=18)
         self.bigger_btn.pack(side="left", padx=(4, 0))
-        Tooltip(self.bigger_btn, "Bigger text in the track list.")
+        Tooltip(self.bigger_btn, "Bigger text in the track list.", when=self._notes_on, wrap=self._note_wrap)
         self.preview_bar = tk.Frame(head, bg=p["bg"])       # Preview zone and Stop Preview
         self.preview_bar.pack(side="right")
         tk.Label(self.preview_bar, text="Preview in", font=FONT, bg=p["bg"], fg=p["muted"]).pack(side="left")
         self.preview_btn = tk.Label(self.preview_bar, text="", font=BOLD, bg=p["bg"], fg=ORANGE, cursor="hand2")
         self.preview_btn.pack(side="left", padx=(8, 10))
         self.preview_btn.bind("<Button-1>", lambda e: self._preview_menu())
-        Tooltip(self.preview_btn, PREVIEW_TIP)
+        Tooltip(self.preview_btn, PREVIEW_TIP, when=self._notes_on, wrap=self._note_wrap)
         self.stop_preview_btn = self._pill(self.preview_bar, "Stop Preview", self.stop_preview,
                                            fg=ORANGE, edge=ORANGE, font=BOLD)
         self.stop_preview_btn.pack(side="left")
@@ -248,7 +248,7 @@ class ReviewPanel:
         b.bind("<Button-1>", lambda e: command())
         b.bind("<Enter>", lambda e: self._paint_action(b, hover=True), add="+")
         b.bind("<Leave>", lambda e: self._paint_action(b), add="+")
-        Tooltip(b, tip)
+        Tooltip(b, tip, when=self._notes_on, wrap=self._note_wrap)
         return b
 
     def _paint_action(self, b, hover=False):
@@ -294,6 +294,16 @@ class ReviewPanel:
         # What last happened, kept for the tests and the console; not shown (the console says it)
         self.status_label = tk.Label(bar, text="", font=FONT, bg=p["bg"], fg=p["muted"], anchor="w")
         self._show_output_actions()
+
+    def _note_wrap(self):
+        """Review's notes are as wide as the rest of the Play tab's."""
+        wrap = getattr(self.play, "note_wrap", None)
+        return wrap() if wrap else None
+
+    def _notes_on(self):
+        """Review sits in the Play tab, so its hover notes follow the More Options row's ?."""
+        on = getattr(self.play, "help_on", None)
+        return on() if on else True
 
     def _can_act(self):
         return bool(self.order) and not self.busy
@@ -523,8 +533,7 @@ class ReviewPanel:
                             padx=4, anchor="e" if title in ("Time", "BPM") else "w")
             head.grid(row=0, column=c, sticky="ew", pady=(7, 5))
             if title == "BPM":   # where the figures come from, and how to get them
-                Tooltip(head, BPM_TIP, click=False)
-                head.config(cursor="question_arrow")
+                Tooltip(head, BPM_TIP, click=False, when=self._notes_on, wrap=self._note_wrap)
         tk.Frame(self.grid, bg=p["line"], height=1).grid(row=1, column=0, columnspan=len(columns), sticky="ew")
         r = 2
         for row in self.rows:

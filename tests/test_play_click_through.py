@@ -90,7 +90,7 @@ def test_row_order_and_separator(app, ui):
     assert p.more_line.winfo_manager()
     texts = [getattr(w, "cget")("text") for w in p.extras_row.pack_slaves() if hasattr(w, "_label")]
     assert texts[0].startswith("Seed:") and texts[1] == "Play Mode"
-    assert texts[-2:] == ["+ Add Playlist", "Show Credits"], texts
+    assert texts[-3:] == ["+ Add Playlist", "Show Credits", "?"], texts   # ? packed at the right-hand end
     p._show_more(False)
     ui.pump(0.2)
     assert not p.more_line.winfo_manager()
@@ -163,3 +163,66 @@ def test_deep_cuts_button_shows_off_when_options_differ(app, ui):
     app.set_env(DEEP_CUTS_TRACKS="spaced")
     ui.play._sync_play_switches()
     assert ui.play.deepcuts_var.get() == "Spaced"
+
+
+
+def test_infinity_is_bigger_and_bold(app, ui):
+    p = ui.play
+    sym_font, val_font = p.nonstop_cb._symbol_fonts()
+    assert sym_font.size > val_font.size * 1.4, "the symbol a couple of sizes bigger"
+    assert "Bold" in " ".join(sym_font.getname()), sym_font.getname()
+
+
+def test_infinity_is_drawn_in_so_nothing_can_cover_it(app, ui):
+    """Drawn into the button's picture: no windows on top for a neighbour's redraw to paint over."""
+    p = ui.play
+    assert not p.nonstop_cb._label.winfo_children()
+    before = p.nonstop_cb._label.cget("image")
+    p.nonstop_cb.set("Wander")
+    assert p.nonstop_cb._label.cget("image") != before, "a new picture for the new value"
+    p.deepcuts_cb._step(1)   # a neighbour changes size
+    ui.pump(0.2)
+    assert p.nonstop_cb.cget("text") == "∞: Wander"
+    p.nonstop_cb.set("Off")
+    p.deepcuts_cb.set("Off")
+
+
+def test_infinity_centred_up_and_down(app, ui):
+    import tabs
+    b = ui.play.nonstop_cb
+    w, h = b._size
+    sym_font, val_font = b._symbol_fonts()
+    (sx, sy), _ = tabs.symbol_layout(w, h, "∞", "Wander", sym_font, val_font)
+    _, top, _, bottom = sym_font.getbbox("∞")
+    assert abs((sy + top + sy + bottom) / 2 - h / 2) <= 1, "the glyph itself sits in the middle"
+
+
+def test_help_switch_gates_the_play_tab_notes(app, ui):
+    p = ui.play
+    assert p.help_var.get() == "Off", "off by default"
+    for widget in (p.deepcuts_cb, p.drift_cb, p.more_button, p.output_cb, p.buttons[0]):
+        assert not widget._tooltip.when(), "no notes while ? is off"
+    p.help_var.set("On")
+    p._on_help_changed()
+    for widget in (p.deepcuts_cb, p.drift_cb, p.more_button, p.output_cb, p.buttons[0]):
+        assert widget._tooltip.when()
+    assert "PLAY_HELP=1" in (app.folder / ".env").read_text(), "remembered"
+    assert p.review_panel._notes_on(), "Review follows it too"
+    p.help_var.set("Off")
+    p._on_help_changed()
+    assert not p.review_panel._notes_on()
+
+
+def test_greyed_out_notes_show_whatever_help_says(app, ui):
+    p = ui.play
+    app.set_env(ANTHROPIC_API_KEY="")
+    assert p._moderator_tip.when(), "why the Moderator is greyed out shows with ? off"
+
+
+def test_play_notes_are_two_and_a_half_buttons_wide(app, ui):
+    p = ui.play
+    width = p.buttons[0]._size[0]
+    assert p.note_wrap() == int(width * 2.5)
+    for widget in (p.deepcuts_cb, p.more_button, p.buttons[0]):
+        assert widget._tooltip._wrap() == int(width * 2.5)
+    assert p.review_panel._note_wrap() == int(width * 2.5), "Review's notes match"
