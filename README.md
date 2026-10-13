@@ -75,6 +75,10 @@ Similar Artists, Similar Tracks and AI Playlist each have a target length, and a
 
 In an AI Playlist, Drift using similar artists or similar tracks tops up from your music sources, not the AI, and the settings and log say so: "Similar artists (no AI)". It can also drift using **AI**: each round asks the AI again with your description, telling it what has already been found or tried so it suggests something new. That uses a little AI credit per round (nothing with Ollama), so it's never the default; pick it if you want it.
 
+### Deep Cuts
+
+The sources lean towards the well known, so in a big collection some corners never come up. **Deep Cuts** (Play tab, More Options: Off, Spaced or Shuffled) tops each Similar Artists, Similar Tracks and AI Playlist build up from them, by **Top Up with Deep Cuts by** under Settings > Playlist (10% to start, so three more on a 30-track playlist; 100% is an even mix). The genre is the seed track's own Genre tag. Similar Artists picks from the fifth of that genre's artists you've played least in the last year, across all their tracks, then plays one of their best known tracks; Similar Tracks and AI Playlist pick from the genre's least played fifth of tracks. One per artist, nothing already in the playlist, no short interludes or hidden closers, and your Filters, Skip Played and the Moderator all apply. It uses only your library and its tags, so it works best when your genres are well organised; with no genre to go on, the console says so and nothing is added.
+
 ### Moderator
 
 Most playlists are right apart from one track: the stadium anthem in the middle of a run of acoustic songs. The Moderator is an optional check that catches it. When it's on, each playlist (and each Drift round) goes to the AI's quick model once (Claude Haiku on Anthropic, or the quick model of the AI you chose), with the seed and the list of tracks, and it removes the ones that would jolt a listener out of the mood. It judges tone, energy and mood only, and genre is never a reason on its own: a folk song and an electronic track can sit together, and two songs in the same genre can clash. It keeps anything it doesn't know well enough to judge, and logs each removal with its reason. How hard it looks is up to you:
@@ -298,7 +302,18 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.19.0
+## What's new in 1.20.0
+
+- **Deep Cuts**: playlists can be topped up from the corners of your collection you rarely play. Switch it on in the Play tab's More Options, **Spaced** or **Shuffled**; Similar Artists adds the artists in the seed's genre you've played least lately, Similar Tracks and AI Playlist the genre's least played tracks. **Top Up with Deep Cuts by** under Settings > Playlist sets how many, 10% to 100%. It uses your own Genre tags, so it works best when they're well organised.
+- **Moderator**: the AI Moderator is now just the Moderator, still magenta while it's on.
+- **∞**: Non-stop's button on the Play tab is a bigger, bold infinity sign.
+- **?** at the right of the More Options row switches the Play tab's hover notes on; they're off until you want them.
+
+### Earlier: 1.19.1
+
+- **Tidal playlists open straight away**, in the Tidal app or on its website (Settings > Other > Additional Outputs > Tidal > Open In).
+
+### Earlier: 1.19.0
 
 - **Output to Tidal**: pick Tidal under Output and a build fills your Tidal playlist called **24bit7**, in place of what was there, ready in the Tidal app, on the web or on your phone. The console then offers **Open in Tidal app** and **Open in Tidal web**. Tracks are found on Tidal by name, as with YouTube, so it's for listening beyond your library. Rename the playlist in Tidal to keep it; the next build makes a fresh one. It needs a one-off **Sign In to Tidal** under Settings > Keys, and Tidal ticked under Settings > Other > Additional Outputs.
 - **Tidal on Discover**: **Create Tidal Playlist** puts the ticked rows in the same 24bit7 playlist, and a **Tidal** button searches the selected track there. Both are ticked under Settings > Discover.

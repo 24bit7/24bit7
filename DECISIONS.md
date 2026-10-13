@@ -230,3 +230,13 @@ The Tidal test showed the library matcher and the source and lookup rules had dr
 
 **13 Oct 2026: Settings > Discover, Create Playlist and Additional Outputs.**
 Settings > Search became Settings > Discover, as everything on it makes buttons on the Discover tab, and Record Label moved in with the reference sites rather than having a section of its own. Two new sets of ticks, kept apart on purpose: Create Playlist (Settings > Discover) picks Discover's playlist buttons, and Additional Outputs (Settings > Other) picks the services in the Play tab's Output list. They affect different screens, and someone may want Tidal for one and not the other. Both default to YouTube only, as before; an output that's unticked is never used, even if .env still names it.
+
+**13 Oct 2026: Deep Cuts, from the library's own genres.**
+In a big library the sources keep coming back to the well known, so some corners never get played. Deep Cuts tops a build up from the seed's genre with what's been played least: the least played fifth of the genre's artists for Similar Artists (scored across all their tracks, so one recent play doesn't make an artist "recent"), and the least played fifth of its tracks for Similar Tracks and AI Playlist. Version one uses only the library's Genre tags, no Last.fm tags or outside index; on Ben's library, with every track tagged in 40 genres, it picked well. A standard genre list mapped from Last.fm's album tags was worked through for libraries with messy genres and left for later, if asked for. The share is added on top of the build, so the normal playlist is never cut short. It's switched on from the Play tab only (Off, Spaced or Shuffled); Settings > Playlist keeps just the share, per option.
+
+**13 Oct 2026: The AI Moderator becomes the Moderator; Non-stop's button becomes the infinity sign.**
+Shorter names for a busier More Options row. Magenta still marks the Moderator as using the AI. Old usage records and builds in the Log still read under the new name.
+
+**13 Oct 2026: The Play tab's hover notes show only while ? is on.**
+With every Play tab control explained, the notes got in the way of everyday use. A ? at the right of the More Options row switches them on, off by default; notes saying why something is greyed out always show, as a greyed-out button otherwise gives no clue. The rest of 24bit7 keeps hover notes as before.
+

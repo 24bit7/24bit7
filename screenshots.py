@@ -16,7 +16,7 @@ Use:
 
 An image is only rewritten when the picture has actually changed, so git only
 shows real changes. Long Settings pages are scrolled and stitched into one image.
-The shots take whatever theme 24bit7 is set to; switch to Light first for a light manual.
+The shots are always in the light theme (DEMO_ENV), whatever 24bit7 itself is set to.
 Windows only (uses Pillow's ImageGrab). Leave the mouse and keyboard alone while it runs.
 """
 
@@ -74,7 +74,10 @@ DEMO_KEYS = {"LASTFM_API_KEY": "demo" * 8, "LISTENBRAINZ_TOKEN": "demo" * 9, "DI
 DEMO_ENV = {"HIDDEN_ZONES": "", "DEFAULT_ZONE": "Speakers", "FOLLOW_ACTIVE_ZONE": "0", "VOICE_ENABLED": "1",
             "CONSOLE_MODE": "simple", "CONSOLE_TABS": "0", "HOTKEY_SWITCH_ZONES": "Ctrl+Alt+5",
             # Tidal ticked everywhere, signed in (a dummy login), so the shots show it
-            "EXTRA_OUTPUTS": "youtube,tidal", "PLAYLIST_SITES": "youtube,tidal", "LISTEN_SITES": "youtube,tidal"}
+            "EXTRA_OUTPUTS": "youtube,tidal", "PLAYLIST_SITES": "youtube,tidal", "LISTEN_SITES": "youtube,tidal",
+            # Deep Cuts on, Spaced, so More Options and the console show it; ? off, as it starts
+            "DEEP_CUTS_ARTISTS": "spaced", "DEEP_CUTS_TRACKS": "spaced", "DEEP_CUTS_VIBE": "spaced", "PLAY_HELP": "0",
+            "THEME": "light"}   # the manual is light, whatever 24bit7 itself is set to
 # JRiver Playlists: one playlist blended and one with Non-stop, so the shot shows both
 DEMO_SAVED_ROWS = {"201": {"blend": "tracks"}, "202": {"nonstop": "artists"}}
 DEMO_DEVICES = [("demo-kitchen", "Kitchen Echo", "Kitchen", 0, "2026-10-04 10:41"),
@@ -136,9 +139,11 @@ DEMO_CONSOLE = [
     "  Moderator (Balanced): checking 34 tracks against the seed...",
     "    Removed The Who - Won't Get Fooled Again: louder and harder than the seed.",
     "  Moderator: 1 removed.",
-    "  Sending 30 tracks...",
+    "  Deep Cuts (Rock, spaced): 3 from tracks you rarely play: The Move - Flowers In The Rain, "
+    "Badfinger - Take It All, The Zombies - Beechwood Park.",
+    "  Sending 33 tracks...",
     "  Queued in Speakers after the current track.",
-    "Done: 30 tracks queued in Speakers, 62 not in library, 14 s.",
+    "Done: 33 tracks queued in Speakers, 62 not in library, 14 s.",
 ]
 
 # The console's Log: kept builds, with fixed times so the shots repeat. (at, tab, from, zone, zone ID, kind,
@@ -309,17 +314,42 @@ def start_demo(gui, temp):
         pass
 
 
+def draw_at_100(root):
+    """
+    Draws the demo window at 100% sizes whatever Windows' display scaling (300% on a 4K
+    screen), so the shots match whether taken on the PC itself, over Remote Desktop or on
+    a laptop: Tk is told the screen is 96 dots per inch, and its own fonts, set in screen
+    pixels at the real scaling, are put back in points.
+    """
+    import tkinter as tk
+    import tkinter.font as tkfont
+    real = root.winfo_fpixels("1i")
+    if real <= 96.5:
+        return
+    root.tk.call("tk", "scaling", 96 / 72.0)
+    # Windows' own scrollbars (the console's) take the real scaling's width unless told otherwise
+    probe = tk.Scrollbar(root)
+    root.option_add("*Scrollbar.width", max(1, round(int(probe.cget("width")) * 96 / real)))
+    probe.destroy()
+    for name in tkfont.names(root):
+        f = tkfont.nametofont(name, root)
+        size = f.cget("size")
+        if size < 0:   # pixels at the real scaling: back to points
+            f.configure(size=max(1, round(-size * 72 / real)))
+
+
 def build_window(gui):
     """The main window as gui.main() builds it, minus voice, shortcuts, tray and the library read."""
     tk, engine, PALETTE = gui.tk, gui.engine, gui.PALETTE
     gui._enable_dpi_awareness()
     root = tk.Tk()
+    draw_at_100(root)
     gui._set_window_icon(root)
     gui.apply_theme(root, engine.THEME)
     root.title(f"24bit7  v{engine.VERSION}")
     scale = root.winfo_fpixels("1i") / 96.0
     global SCALE
-    SCALE = scale   # the shots are brought back to their 100% size, whatever Windows' display scaling
+    SCALE = scale   # 1 once drawn at 100%; kept so a shot is never saved at another size
     w = min(int(1180 * scale), root.winfo_screenwidth() - 80)
     h = min(int(820 * scale), root.winfo_screenheight() - 120)
     root.geometry(f"{w}x{h}+40+40")
