@@ -53,6 +53,7 @@ PROFILE_KEYS = {
                  "DRIFT_ARTISTS", "DRIFT_ARTISTS_USING", "DRIFT_ARTISTS_ROUNDS",
                  "DRIFT_TRACKS", "DRIFT_TRACKS_USING", "DRIFT_TRACKS_ROUNDS",
                  "DRIFT_VIBE", "DRIFT_VIBE_USING", "DRIFT_VIBE_ROUNDS", "AI_MODERATOR_VIBE",
+                 *[f"DEEP_CUTS_{g}{part}" for g in ("ARTISTS", "TRACKS", "VIBE") for part in ("", "_SHARE")],
                  *[f"DRIFT_{g}_{part}" for g in ("ARTISTS", "TRACKS", "VIBE")
                    for part in ("SOURCES_MODE", "ARTIST_SOURCES", "ARTIST_AGREE", "TRACK_SOURCES", "TRACK_AGREE")],
                  "SKIP_LONG_CLOSERS", "LONG_CLOSER_MINUTES",
@@ -69,7 +70,9 @@ PROFILE_KEYS = {
                  "RUN_AFTER_ARTISTS", "RUN_AFTER_ARTISTS_PATH", "RUN_AFTER_TRACKS", "RUN_AFTER_TRACKS_PATH",
                  "RUN_AFTER_TOP", "RUN_AFTER_TOP_PATH", "RUN_AFTER_VIBE", "RUN_AFTER_VIBE_PATH"],
 }
-PLAYED_GROUPS = ("artists", "tracks", "top", "vibe")   # Similar Artists, Similar Tracks, Artist's Top Tracks, Vibe
+PLAYED_GROUPS = ("artists", "tracks", "top", "vibe")
+DEEP_CUT_GROUPS = ("artists", "tracks", "vibe")   # Top Tracks has no Deep Cuts: it's one artist's list
+DEEP_CUT_MODES = ("off", "spaced", "shuffled")   # Similar Artists, Similar Tracks, Artist's Top Tracks, Vibe
 CSV_FILE = os.path.join(APP_DIR, "FutureDiscoveries.csv")      # legacy log, imported once into the database
 DB_FILE = os.path.join(APP_DIR, "24bit7.db")
 
@@ -272,7 +275,7 @@ def load_settings():
     global START_IN_TRAY, CLOSE_TO_TRAY
     global LISTEN_SITES, CUSTOM_SITES, PLAYLIST_SITES, EXTRA_OUTPUTS, TIDAL_OPEN
     global SKIP_LONG_CLOSERS, LONG_CLOSER_MINUTES
-    global SIMILAR_ARTIST_TRACK_COUNT, SIMILAR_ARTIST_TRACK_LIMIT, DRIFT
+    global SIMILAR_ARTIST_TRACK_COUNT, SIMILAR_ARTIST_TRACK_LIMIT, DRIFT, DEEP_CUTS
     global AI_MODERATOR, MODERATOR_WARNED, SKIP_PLAYED
     global NONSTOP, NONSTOP_USING, NONSTOP_RESEED, NONSTOP_TOP_REST, NONSTOP_TOP_REST_COUNT, NONSTOP_VIBE
     global NONSTOP_BY, LONG_CLOSERS, AI_MODERATOR_BY, RUN_AFTER
@@ -357,6 +360,13 @@ def load_settings():
     SIMILAR_ARTIST_TRACK_COUNT = _int_setting("SIMILAR_ARTIST_TRACK_COUNT", 30, 5, 100)
     # Limit total tracks to: unticked, every track found goes in
     SIMILAR_ARTIST_TRACK_LIMIT = os.getenv("SIMILAR_ARTIST_TRACK_LIMIT", "1").strip().lower() in ("1", "true", "yes")
+    # Deep Cuts, per Play option: Off, Spaced or Shuffled, and how much to top up by (10 to 100%)
+    DEEP_CUTS = {}
+    for group in DEEP_CUT_GROUPS:
+        mode = os.getenv(f"DEEP_CUTS_{group.upper()}", "off").strip().lower()
+        share = _int_setting(f"DEEP_CUTS_{group.upper()}_SHARE", 10, 10, 100)
+        DEEP_CUTS[group] = {"mode": mode if mode in DEEP_CUT_MODES else "off", "share": share - share % 10 or 10}
+
     # Drift, per Play mode group: on/off, what it drifts using, and how many rounds.
     # An older .env with Similar Tracks' "Top up from Similar Artists" ticked carries
     # over as Drift on for Similar Tracks, using similar artists, one round (the same thing).
@@ -1012,6 +1022,9 @@ CLOSERS_DROPPED = 0    # tracks the hidden-track check left out when sending, so
 _SESSION_STARTED = {}
 
 
+CURRENT_SESSION = None   # the build in progress, for what's logged after its picks (Deep Cuts)
+
+
 def session_start(mode, seed_info, sources=""):
     globals()["CLOSERS_DROPPED"] = 0
     ai_off_reset()
@@ -1027,6 +1040,7 @@ def session_start(mode, seed_info, sources=""):
          seed_info.get("Artist"), seed_info.get("Name"), seed_info.get("Album"), sources))
     db().commit()
     _SESSION_STARTED[cur.lastrowid] = time.time()
+    globals()["CURRENT_SESSION"] = cur.lastrowid
     try:   # a finished source test the user hasn't opened yet: say so again
         import source_test
         source_test.remind_if_ready()
@@ -5419,6 +5433,88 @@ def combine_with_mix(keys, report=print):
     return before + _spread(ours, mixes) + after
 
 
+def deep_cut_genres(seed_info, keys=()):
+    """
+    The genres Deep Cuts pick from, and where they came from: the seed track's own Genre
+    tags; for a seed not in the library, the artist's most common genre there; for AI
+    Playlist (no seed track), the genre most of its picks share.
+    """
+    import deepcuts
+    seed_info = seed_info or {}
+    if NONSTOP_CONTEXT.get("kind") == "vibe" and not seed_info.get("FileKey"):
+        genre = deepcuts.common_genre(keys)
+        return ([genre], "the genre most of the AI's picks share") if genre else ([], "")
+    if seed_info.get("FileKey"):
+        own = deepcuts.seed_genres(seed_info["FileKey"])
+        if own:
+            return own, "the seed track's genre"
+    genre, _, where = seed_genre(seed_info)
+    return ([genre], where) if genre else ([], "")
+
+
+def add_deep_cuts(keys, seed_info, report=print):
+    """
+    Deep Cuts (Settings > Playlist, per Play option): tops a finished playlist up with
+    tracks from the corners of the seed's genre that rarely get played, by the set share
+    (10% of 30 is 3 more; 100% is as many again), Spaced evenly through it or Shuffled
+    in at random, the first track always leading. Similar Artists picks the least played
+    artists, then their top tracks; Similar Tracks and AI Playlist the least played tracks.
+    The Moderator, if on, checks them too. Says in the console what it added, or why none.
+    """
+    kind = NONSTOP_CONTEXT.get("kind")
+    cfg = DEEP_CUTS.get(kind) if kind in DEEP_CUT_GROUPS else None
+    if not cfg or cfg["mode"] == "off" or not keys:
+        return keys
+    count = max(1, round(len(keys) * cfg["share"] / 100))
+    try:
+        import deepcuts
+        import library
+        library.ensure_loaded()
+        genres, _ = deep_cut_genres(seed_info, keys)
+        seeds = seed_artists(seed_info) if seed_info and seed_info.get("Artist") else []
+        in_build = [k for k in keys if library.track_row(k)]
+        artists = seeds + [deepcuts.first_artist(library.track_row(k)) for k in in_build]
+        played = PlayedFilter(kind, report=lambda *_: None, filters=True)
+        moderating = moderator_level() != "off"
+        want = count * 2 if moderating else count   # spares, so the Moderator's removals are replaced
+        if kind == "artists":
+            picks, note = deepcuts.pick_by_artist(genres, want, artists, in_build, played.fresh,
+                                                  top_tracks=_deep_cut_top_tracks, group=kind)
+        else:
+            picks, note = deepcuts.pick_by_track(genres, want, artists, in_build, played.fresh, group=kind)
+    except Exception as e:
+        report(f"  Problem: Deep Cuts didn't run ({e}).")
+        return keys
+    if not picks:
+        report(f"  Deep Cuts: none this time, as {note}.")
+        return keys
+    if moderating and len(picks) > 1:
+        seed = (f"vibe: {NONSTOP_CONTEXT.get('vibe')}" if kind == "vibe" else seed_label(seed_info or {}))
+        removed = moderate(picks, seed, report)
+        picks = [p for p in picks if p[0] not in removed]
+    picks = picks[:count]
+    cut_keys = []
+    for key, artist, title in picks:
+        if output_streaming():   # YouTube or Tidal: the same track found there
+            key = find_jriver_key_by_track(artist, title)
+        if key:
+            cut_keys.append(key)
+        if CURRENT_SESSION:
+            session_log(CURRENT_SESSION, artist, title, ["Deep Cuts"], found=bool(key))
+    if not cut_keys:
+        report(f"  Deep Cuts: none this time, as none of the picks were {where_found(True)}.")
+        return keys
+    how = "artists you haven't played lately" if kind == "artists" else "tracks you rarely play"
+    names = ", ".join(f"{a} - {t}" for (_, a, t) in picks[:len(cut_keys)])
+    report(f"  Deep Cuts ({'; '.join(genres)}, {cfg['mode']}): {len(cut_keys)} from {how}: {names}.")
+    return _spread(keys, [(cut_keys, "random" if cfg["mode"] == "shuffled" else "spaced")])
+
+
+def _deep_cut_top_tracks(artist):
+    """A deep cut artist's top tracks, best first, from the ticked Top Tracks sources (cached when known)."""
+    return [t for t, _ in blended_top_tracks(artist, 10)[0]]
+
+
 def finish_playlist(keys, drift, fast, seed_info, report, detail=""):
     """
     Sends a first pass, then lets Drift top it up. JRiver output: the first pass
@@ -5428,6 +5524,7 @@ def finish_playlist(keys, drift, fast, seed_info, report, detail=""):
     they sit around the whole set. YouTube output: Drift runs first, as the link
     is made once. Returns how many were sent.
     """
+    keys = add_deep_cuts(keys, seed_info, report)
     if mix_active():
         drift.run(keys)
         final = combine_with_mix(keys, report)
