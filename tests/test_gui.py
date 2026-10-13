@@ -1572,3 +1572,27 @@ def test_settings_deep_cuts_section(app, ui):
     app.engine.refresh_settings_if_changed()
     assert app.engine.DEEP_CUTS["tracks"] == {"mode": "spaced", "share": 30}, "saving the share leaves the switch alone"
     assert not ui.errors, ui.errors
+
+
+def test_device_with_own_settings_has_its_deep_cuts_switch(app, ui):
+    """An Echo Dot or speaker with settings of its own switches Deep Cuts on its own Playlist tab."""
+    s = ui.settings
+    app.voice.set_device_page(KITCHEN, "playlist", {})
+    s._layout_device_pane("playlist")
+    info = s._panes["playlist"]
+    page = info["devices"][KITCHEN]
+    info["pane"].select(page["outer"])
+    s._fill_device_page("playlist", KITCHEN)
+    ui.pump(0.5)
+    visit_every_page(ui, info["pane"])
+    switches = [w for w in _everything(page["inner"]) if isinstance(w, ttk.Combobox)
+                and tuple(w.cget("values")) == ("Off", "Spaced", "Shuffled")]
+    assert len(switches) == 3, "Similar Artists, Similar Tracks and AI Playlist"
+    switches[0].set("Spaced")
+    switches[0].event_generate("<<ComboboxSelected>>")
+    ui.pump(0.3)
+    assert app.voice.device_page(KITCHEN, "playlist").get("DEEP_CUTS_ARTISTS") == "spaced"
+    main = s._main_playlist
+    assert "DEEP_CUTS_ARTISTS_SHARE" in main.vars and not any(
+        f"DEEP_CUTS_{g}" in main.vars for g in ("ARTISTS", "TRACKS", "VIBE")), "Windows (Main) uses the Play tab"
+    assert not ui.errors, ui.errors

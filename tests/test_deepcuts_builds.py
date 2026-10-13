@@ -131,3 +131,18 @@ def test_tidal_output_gets_the_same_tracks_from_tidal(app, monkeypatch):
     e.create_similar_tracks_playlist(report=r, seed_info=seed(app))
     assert added(r), r.text()
     assert not app.jriver.calls_to("Playback/PlayByKey")
+
+
+def test_a_device_with_its_own_settings_gets_deep_cuts(app):
+    """A voice build for a device with settings of its own follows that device's Deep Cuts switch."""
+    e = app.engine
+    assert e.DEEP_CUTS["tracks"]["mode"] == "off"
+    e.use_profile({"DEEP_CUTS_TRACKS": "spaced", "DEEP_CUTS_TRACKS_SHARE": "20"})
+    try:
+        assert e.DEEP_CUTS["tracks"] == {"mode": "spaced", "share": 20}
+        r = app.Lines()
+        e.create_similar_tracks_playlist(report=r, seed_info=seed(app))
+        assert added(r), r.text()
+    finally:
+        e.use_profile({})
+    assert e.DEEP_CUTS["tracks"]["mode"] == "off", "Windows (Main)'s own setting again"
