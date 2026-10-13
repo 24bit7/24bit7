@@ -214,7 +214,7 @@ def moderator_level_value(raw, fallback="off"):
 
 
 def moderator_settings(get):
-    """The AI Moderator level per Play option: {group: level}. The old single tick is the starting value."""
+    """The Moderator level per Play option: {group: level}. The old single tick is the starting value."""
     base = moderator_level_value(get("AI_MODERATOR", "0"))
     levels = {group: moderator_level_value(get(f"AI_MODERATOR_{group.upper()}", ""), base)
               for group in MODERATOR_GROUPS}
@@ -226,7 +226,7 @@ def moderator_settings(get):
 # Anthropic is the one fully tested; OpenAI, Google Gemini and Ollama (a local model)
 # are offered untested, for people to try and report back. Each cloud provider has a
 # main model (the AI as a source, AI Playlist, Steer, Assess Tone) and a quick one
-# (the AI Moderator and the two Queries), checked with ai_usage.PRICES before each release.
+# (the Moderator and the two Queries), checked with ai_usage.PRICES before each release.
 AI_PROVIDERS = [("anthropic", "Anthropic"), ("openai", "OpenAI"), ("gemini", "Google Gemini"),
                 ("ollama", "Ollama (Local)")]
 AI_PROVIDER_NAMES = dict(AI_PROVIDERS)
@@ -375,7 +375,7 @@ def load_settings():
             on = False
         ok = ("artists", "tracks", "ai") if group == "vibe" else ("artists", "tracks")   # AI only for vibe
         DRIFT[group] = {"on": on, "using": using if using in ok else own, "rounds": rounds}
-        # Drift From (where each round seeds from) and its own AI Moderator level
+        # Drift From (where each round seeds from) and its own Moderator level
         frm = os.getenv(f"{name}_FROM", "spread").strip().lower()
         DRIFT[group]["from"] = "close" if frm == "close" else "spread"   # Keep It Tight; Last Round became Spread
         mod = os.getenv(f"{name}_MODERATOR", "same").strip().lower()
@@ -409,7 +409,7 @@ def load_settings():
         CREDITS_FIRST = "track"
     VIBE_TRACK_COUNT = _int_setting("VIBE_TRACK_COUNT", 20, 5, 100)  # target size for vibe playlists
     # Hidden-track check: leave out an album's last track when it runs longer than this
-    # AI Moderator (Play tab Yes/No) and whether its one-off credits warning has been shown
+    # Moderator (Play tab Yes/No) and whether its one-off credits warning has been shown
     AI_MODERATOR = moderator_level_value(os.getenv("AI_MODERATOR", "0"))
     MODERATOR_WARNED = os.getenv("MODERATOR_WARNED", "0").strip().lower() in ("1", "true", "yes")
     # Skip tracks played recently, per Play mode group: {group: (on, days)}
@@ -581,7 +581,7 @@ TRACKS_PER_ARTIST_PICK=3
 TOP_TRACKS_COUNT=10
 TOP_TRACKS_ORDER=popular
 VIBE_TRACK_COUNT=20
-# AI Moderator: an AI check that drops tracks clashing with the seed's tone,
+# Moderator: an AI check that drops tracks clashing with the seed's tone,
 # energy and mood (set on the Play tab). Needs the AI set up in Settings > Keys > AI.
 AI_MODERATOR=0
 MODERATOR_WARNED=0
@@ -2237,7 +2237,7 @@ def ai_request(prompt, max_tokens, feature="AI", tier="main", system=None, annou
 
 
 _TEMPERATURE_REFUSED = set()   # (provider, model) that refused a fixed temperature this session
-TEMPERATURE_NOTES = []         # what to say about a refusal, for the feature that asked (the AI Moderator)
+TEMPERATURE_NOTES = []         # what to say about a refusal, for the feature that asked (the Moderator)
 
 
 def _refuses_temperature(e):
@@ -2248,7 +2248,7 @@ def _refuses_temperature(e):
 
 def _ai_request(prompt, max_tokens, feature="AI", tier="main", system=None, announce=True, temperature=None):
     """
-    One request, with a fixed temperature when asked for (the AI Moderator asks for 0, so the
+    One request, with a fixed temperature when asked for (the Moderator asks for 0, so the
     same tracks get the same answer as far as the provider allows). A model that refuses the
     setting gets the request again without it, once, and isn't sent it again this session.
     """
@@ -4544,7 +4544,7 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
 
 
 # ---------------------------------------------------------------------------
-# AI Moderator (Play tab Off/Relaxed/Balanced/Strict; per device in Settings > Sources)
+# Moderator (Play tab Off/Relaxed/Balanced/Strict; per device in Settings > Sources)
 # ---------------------------------------------------------------------------
 
 MODERATOR_MODEL = AI_MODELS["anthropic"][1]   # the quick model: one call per playlist (and per Drift round)
@@ -4648,7 +4648,7 @@ def moderator_pick(tracks, item):
         n = None
     named = f"{item.get('artist')} - {item.get('title')}"
     if not title:
-        debug(f"AI Moderator: flag with no title kept nothing (number {n})")
+        debug(f"Moderator: flag with no title kept nothing (number {n})")
         return None
     if n is not None and 1 <= n <= len(tracks) and same(tracks[n - 1]):
         return n - 1
@@ -4656,9 +4656,9 @@ def moderator_pick(tracks, item):
     pointed = (f"{tracks[n - 1][1]} - {tracks[n - 1][2]}" if n is not None and 1 <= n <= len(tracks)
                else "nothing")
     if len(hits) == 1:
-        debug(f"AI Moderator: number {n} pointed at {pointed}, went by the name {named}")
+        debug(f"Moderator: number {n} pointed at {pointed}, went by the name {named}")
         return hits[0]
-    debug(f"AI Moderator: {named} " + ("is in the list more than once" if hits else "isn't in the list")
+    debug(f"Moderator: {named} " + ("is in the list more than once" if hits else "isn't in the list")
           + f" (number {n} pointed at {pointed}), so nothing was removed for it")
     return None
 
@@ -4679,7 +4679,7 @@ def moderator_reply(text):
         if isinstance(obj, dict) and "remove" in obj:
             extra = re.sub(r"```(?:json)?", "", text[:m.start()] + " " + text[end:]).strip()
             if extra:
-                debug(f"AI Moderator: ignored text around the reply: {' '.join(extra.split())[:200]}")
+                debug(f"Moderator: ignored text around the reply: {' '.join(extra.split())[:200]}")
             flagged = obj.get("remove") or []
             return flagged if isinstance(flagged, list) else []
     raise ValueError("no JSON in the reply")
@@ -4697,18 +4697,18 @@ def moderate(tracks, seed, report=print, level=None, reference=None):
     level = level or moderator_wanted()   # what's set, before checking the AI can run it
     if level in MODERATOR_LEVELS and level != "off":   # set, but it can't run: say why, once a build
         if not ai_configured():
-            if "AI Moderator: no AI" not in _AI_OFF_NOTED:
-                _AI_OFF_NOTED.add("AI Moderator: no AI")
-                report("  Note: AI Moderator skipped: the AI isn't set up (Settings > Keys > AI).")
+            if "Moderator: no AI" not in _AI_OFF_NOTED:
+                _AI_OFF_NOTED.add("Moderator: no AI")
+                report("  Note: Moderator skipped: the AI isn't set up (Settings > Keys > AI).")
             level = "off"
         elif not USE_AI:
-            note_ai_off(report, "AI Moderator")
+            note_ai_off(report, "Moderator")
             level = "off"
     if level not in MODERATOR_LEVELS or level == "off" or not tracks:
         return set()   # off by choice, or nothing to check: nothing to say
     if len(tracks) == 1 and level == "relaxed":
         # Relaxed removes at most a fifth of what it checks, which on one track is none of it
-        report(f"  AI Moderator (Relaxed): skipped {tracks[0][1]} - {tracks[0][2]}, as there's only 1 "
+        report(f"  Moderator (Relaxed): skipped {tracks[0][1]} - {tracks[0][2]}, as there's only 1 "
                "track to check and Relaxed removes at most a fifth.")
         return set()
     cap = max(1, int(len(tracks) * MODERATOR_CAP[level]))
@@ -4720,25 +4720,25 @@ def moderate(tracks, seed, report=print, level=None, reference=None):
     if reference:   # what's already passed: the playlist's sound, not just the seed's
         ref_text = ("\n\nAlready in the playlist, and they fit, so judge the candidates against these as "
                     "well as the seed:\n" + "\n".join(f"- {artist} - {title}" for _, artist, title in reference[:15]))
-    report(f"  AI Moderator ({level.title()}): checking {len(tracks)} track{'' if len(tracks) == 1 else 's'} "
+    report(f"  Moderator ({level.title()}): checking {len(tracks)} track{'' if len(tracks) == 1 else 's'} "
            "against the seed"
            + (" and the playlist so far..." if reference else "..."))
     try:
-        reply = ai_request(f"{seed_line}{ref_text}\n\nCandidates:\n{listing}", 2000, "AI Moderator", tier="quick",
+        reply = ai_request(f"{seed_line}{ref_text}\n\nCandidates:\n{listing}", 2000, "Moderator", tier="quick",
                            system=MODERATOR_PROMPT.format(level_rules=MODERATOR_RULES[level], limit_rule=limit_rule),
                            announce=False, temperature=0)
         while TEMPERATURE_NOTES:
-            report(f"  Note: AI Moderator: {TEMPERATURE_NOTES.pop(0)}.")
+            report(f"  Note: Moderator: {TEMPERATURE_NOTES.pop(0)}.")
         flagged = moderator_reply(reply.text)
     except ImportError:
-        report("  Problem: AI Moderator didn't run, as the anthropic package (needed for Anthropic) isn't "
+        report("  Problem: Moderator didn't run, as the anthropic package (needed for Anthropic) isn't "
                "installed.")
         return set()
     except Exception as e:
         if ai_out_of_credit(e):
-            report(f"  Problem: AI Moderator didn't run, as {ai_credit_text()}.")
+            report(f"  Problem: Moderator didn't run, as {ai_credit_text()}.")
         else:
-            report(f"  Problem: AI Moderator didn't run, as the check didn't come back ({str(e)[:120]}).")
+            report(f"  Problem: Moderator didn't run, as the check didn't come back ({str(e)[:120]}).")
         return set()
     removed = set()
     for item in flagged:
@@ -4751,7 +4751,7 @@ def moderate(tracks, seed, report=print, level=None, reference=None):
         if key not in removed:
             removed.add(key)
             report(f"    Removed {artist} - {title}: {str(item.get('reason') or '').strip()}")
-    report(f"  AI Moderator: {len(removed)} removed." if removed else "  AI Moderator: nothing clashed.")
+    report(f"  Moderator: {len(removed)} removed." if removed else "  Moderator: nothing clashed.")
     return removed
 
 
@@ -4954,7 +4954,7 @@ class Drift:
         self.check = None         # Steer's BpmCheck, applied to the AI's picks in its rounds too
         self.ai_tried = set()     # (artist, title) the AI suggested that weren't used
         self.played = played      # the mode's PlayedFilter, so Drift skips recent plays too
-        self.seed = seed          # what the AI Moderator judges each round against
+        self.seed = seed          # what the Moderator judges each round against
         self.group, self.cfg = group, cfg
         self.on = cfg.get("on", False)
         self.using = cfg.get("using", "artists")
@@ -4968,7 +4968,7 @@ class Drift:
         if self.using == "ai" and not ai_enabled():
             self.using = "tracks"                           # Use AI Off, or no key: the sources instead
         self.drift_from = cfg.get("from", "spread")     # Keep It Tight ("close") or Spread
-        self.mod_choice = cfg.get("moderator", "same")  # Drift's own AI Moderator level, or the build's
+        self.mod_choice = cfg.get("moderator", "same")  # Drift's own Moderator level, or the build's
         self.parent = {}          # Drift track key -> the key of the track it was seeded from
         self.blocked = set()      # keys of chains the moderator found going off course
         self.base = None          # the first round's keys, set when Drift starts
@@ -5002,7 +5002,7 @@ class Drift:
         self.checked.add((a, clean_name(title)))
 
     def tracks(self, keys):
-        """[(key, artist, title)] for keys this Drift has noted, for the AI Moderator."""
+        """[(key, artist, title)] for keys this Drift has noted, for the Moderator."""
         info = {k: (a, t) for a, t, k, _ in self.finds}
         return [(k, *info[str(k)]) for k in keys if str(k) in info]
 
@@ -5018,7 +5018,7 @@ class Drift:
 
     def moderate(self, keys, candidates, report=None, drift_round=False):
         """
-        Runs the AI Moderator over candidates (a slice of keys) and removes what it flags from keys.
+        Runs the Moderator over candidates (a slice of keys) and removes what it flags from keys.
         For a Drift round: Drift's own level if one is set, the first round's tracks as reference,
         and chains that went off course dropped.
         """
@@ -5131,14 +5131,14 @@ class Drift:
         if extra and survivors <= extra:   # dropping them would leave this round with nothing
             for parent, rest in drops:
                 if rest:
-                    self.report(f"  AI Moderator: half or more of what came from {name(parent, 'a Drift seed')} "
+                    self.report(f"  Moderator: half or more of what came from {name(parent, 'a Drift seed')} "
                                 f"went off course, but dropping the rest would leave this round with nothing, "
                                 f"so {and_list([name(k) for k in rest])} "
                                 + ("stays." if len(rest) == 1 else "stay."))
             return set()
         for parent, rest in drops:
             self.blocked |= self._chain(parent)
-            self.report(f"  AI Moderator: half or more of what came from {name(parent, 'a Drift seed')} went off course"
+            self.report(f"  Moderator: half or more of what came from {name(parent, 'a Drift seed')} went off course"
                         + (f", so {and_list([name(k) for k in rest])} went too" if rest else "")
                         + ". Drift won't seed from that chain again.")
         return extra
@@ -6254,7 +6254,7 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
         drift.mark_seed(artist, title)
     use_stream = bool(output_streaming())
     variety = VARIETY_POOL if SIMILAR_TRACK_VARIETY else 1
-    extra = moderator_extra(target)   # with the AI Moderator on, a few extra, so its removals are replaced
+    extra = moderator_extra(target)   # with the Moderator on, a few extra, so its removals are replaced
     extra_each = -(-extra // len(samples)) if extra else 0
 
     keys, per, groups, labels = [], {}, [], []
@@ -6396,7 +6396,7 @@ def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=Fal
     drift = Drift("tracks", target, session_id, report, per_artist=per_artist,
                   exclude_keys=[seed_info.get("FileKey"), first_key], seed=f"{seed_info['Artist']} - {track}",
                   played=played)
-    # With the AI Moderator on, find a few extra, so anything it removes is replaced
+    # With the Moderator on, find a few extra, so anything it removes is replaced
     wanted = target + moderator_extra(target)
     for seed in seeds:
         drift.mark_seed(seed, track)

@@ -2,7 +2,7 @@
 24bit7 - AI Usage.
 
 Counts the tokens every AI request uses (the AI as a source, AI Playlist and its
-ideas, AI Moderator, Console Query and the usage Query itself), so Settings > Keys
+ideas, Moderator, Console Query and the usage Query itself), so Settings > Keys
 can show a running total since it was last cleared, with an estimated cost, a guide
 to what each feature typically uses per run, and Query, which asks Claude where the
 tokens go and which settings would cut them. Answers reused from the cache cost
@@ -52,14 +52,16 @@ GUIDE = [
      "per artist: a Similar Artists build asks for around 20"),
     ("AI Playlist", MAIN, 300, 0, 0, 1000, ""),
     ("AI Playlist ideas", MAIN, 100, 0, 0, 50, ""),
-    ("AI Moderator", QUICK, 1000, 0, 0, 300, ""),
+    ("Moderator", QUICK, 1000, 0, 0, 300, ""),
     ("Console Query", QUICK, 5000, 65000, 0, 400,
      "first question; follow-ups within 5 minutes cost about a tenth"),
     ("Usage Query", QUICK, 1500, 0, 0, 400, ""),
 ]
+# Features since renamed: usage saved under the old name counts under the new one
+RENAMED = {"AI Moderator": "Moderator"}
 OWN_AFTER = 3   # runs of a feature before the guide shows your own average
 
-QUERY_MODEL = "claude-haiku-4-5-20251001"   # Anthropic's quick model, as Console Query and the AI Moderator use
+QUERY_MODEL = "claude-haiku-4-5-20251001"   # Anthropic's quick model, as Console Query and the Moderator use
 SINCE_KEY = "ai_usage_since"
 QUESTION = "Where are my AI tokens going, and how could I use fewer?"
 
@@ -182,6 +184,7 @@ def totals():
                             "SUM(output) FROM ai_usage GROUP BY feature, model").fetchall()
     by = {}
     for feature, model, n, i, cw, cr, o in rows:
+        feature = RENAMED.get(feature, feature)   # usage recorded under an older name
         i, cw, cr, o = int(i or 0), int(cw or 0), int(cr or 0), int(o or 0)
         f = by.setdefault(feature, [feature, 0, 0, 0, 0.0])
         f[1] += int(n or 0)
@@ -242,6 +245,7 @@ def guide():
                             "SUM(output) FROM ai_usage GROUP BY feature, model").fetchall()
     mine = {}
     for feature, model, n, i, cw, cr, o in rows:
+        feature = RENAMED.get(feature, feature)   # usage recorded under an older name
         f = mine.setdefault(feature, [0, 0, 0.0])
         f[0] += int(n or 0)
         f[1] += int(i or 0) + int(cw or 0) + int(cr or 0) + int(o or 0)
@@ -261,14 +265,14 @@ def dollar_line(rows=None):
     """What $1 typically buys, from the guide (so it follows your own averages too)."""
     per = {feature: dollars for feature, _, dollars, _, _ in (rows or guide())}
     builds = per.get("Similar Tracks (AI source)") or 0
-    checks = per.get("AI Moderator") or 0
+    checks = per.get("Moderator") or 0
     if not builds or not checks:
         return ""
 
     def roughly(n):
         return int(round(n, -1)) if n >= 20 else int(round(n))
     return (f"As a rough guide, $1 buys about {roughly(1 / builds):,} Similar Tracks builds with the AI "
-            f"as a source, or about {roughly(1 / checks):,} AI Moderator checks.")
+            f"as a source, or about {roughly(1 / checks):,} Moderator checks.")
 
 
 # --- Query -----------------------------------------------------------------------------
@@ -276,7 +280,7 @@ def dollar_line(rows=None):
 SYSTEM = """You help someone keep the AI token use of 24bit7 down. 24bit7 is a Windows app that \
 builds playlists from their own music library; the AI is optional, and its features are: the AI as a \
 source for Similar Artists, Similar Tracks and Artist's Top Tracks, AI Playlist (and its ideas), the \
-AI Moderator (Off, Relaxed, Balanced, Strict), and Console Query. You get the token counts since they \
+Moderator (Off, Relaxed, Balanced, Strict), and Console Query. You get the token counts since they \
 were last cleared, by feature, with estimated costs, and the current settings (keys and passwords left out).
 
 Output tokens cost several times more than input tokens, so weigh them more. Answers reused from \
@@ -285,7 +289,7 @@ estimates from rates that may be out of date; say so if you quote them.
 
 Reply with: two or three sentences on where the tokens go; then up to three changes, most saving \
 first, each with roughly how much it would cut; and say plainly when use is small enough to leave \
-alone. Describe a setting by what it does and its current value (for example "the AI Moderator is \
+alone. Describe a setting by what it does and its current value (for example "the Moderator is \
 on Strict for Similar Tracks; Relaxed would check the same playlists with shorter replies"), not by \
 menu paths, which you can't see. Be careful not to invent settings. Keep it short. Plain text only: \
 no bold, no headings, no asterisks; use "- " for a list. Plain British English. No em dashes."""

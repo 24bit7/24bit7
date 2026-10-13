@@ -63,13 +63,13 @@ def test_moderator_steps_both_ways(app, ui):
     app.set_env(ANTHROPIC_API_KEY="test-key", USE_AI="1")
     p.sync_moderator()
     p.moderator_cb.config(state="normal")
-    assert p.moderator_cb.cget("text") == "AI Moderator: Off"
+    assert p.moderator_cb.cget("text") == "Moderator: Off"
     right_click(p.moderator_cb)
-    assert p.moderator_cb.cget("text") == "AI Moderator: Strict"
+    assert p.moderator_cb.cget("text") == "Moderator: Strict"
     click(p.moderator_cb)
-    assert p.moderator_cb.cget("text") == "AI Moderator: Off"
+    assert p.moderator_cb.cget("text") == "Moderator: Off"
     click(p.moderator_cb)
-    assert p.moderator_cb.cget("text") == "AI Moderator: Relaxed"
+    assert p.moderator_cb.cget("text") == "Moderator: Relaxed"
 
 
 def test_mode_button(app, ui):
@@ -121,3 +121,13 @@ def test_rounded_search_boxes(app, ui):
     p.on_similar()
     ui.wait_idle()
     assert "Similar Artists: The Beatles" in console(ui), console(ui)
+
+
+def test_moderator_and_infinity_names(app, ui):
+    """Moderator (magenta while on: it's the AI) and Non-stop shown as the infinity sign."""
+    p = ui.play
+    assert p.moderator_cb.cget("text").startswith("Moderator: ")
+    assert p.nonstop_cb.cget("text") == "∞: Off"
+    p.nonstop_cb.set("Wander")
+    assert p.nonstop_cb.cget("text") == "∞: Wander"
+    p.nonstop_cb.set("Off")

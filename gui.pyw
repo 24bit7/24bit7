@@ -288,7 +288,7 @@ class PlayTab(tk.Frame):
         self.output_cb.bind("<<ComboboxSelected>>", self._on_output_changed)
         self._sync_behaviour()
 
-        # The More Options row: click-through buttons (Seed, Mode, AI Moderator, Drift, Non-stop), then
+        # The More Options row: click-through buttons (Seed, Mode, Moderator, Drift, Non-stop as ∞), then
         # + Add Playlist and Show Credits, with the playlist rows under it. Held in a frame that's always
         # packed, so it opens in the same place, under a thin line that separates it from the buttons above.
         self.more_box = tk.Frame(self)
@@ -314,9 +314,9 @@ class PlayTab(tk.Frame):
                                          plain=("Play",), lit={"Review": review_colour},
                                          labels={"Play": "Play Mode", "Review": "Review Mode"})
         self.behaviour_cb.pack(side="left", padx=(0, 8))
-        # AI Moderator sets Windows (Main)'s moderator; devices with settings of their own keep theirs.
+        # Moderator sets Windows (Main)'s moderator; devices with settings of their own keep theirs.
         self.moderator_var = tk.StringVar(value="Off")
-        self.moderator_cb = ClickThrough(self.extras_row, "AI Moderator", self.moderator_var, MODERATOR_CHOICES,
+        self.moderator_cb = ClickThrough(self.extras_row, "Moderator", self.moderator_var, MODERATOR_CHOICES,
                                          command=self._on_moderator_changed,
                                          lit={v: PALETTE["ai_purple"] for v in MODERATOR_CHOICES})
         self.moderator_cb.pack(side="left", padx=(0, 8))
@@ -328,9 +328,12 @@ class PlayTab(tk.Frame):
                                      command=self._on_drift_changed)
         self.drift_cb.pack(side="left", padx=(0, 8))
         self.nonstop_var = tk.StringVar(value="Off")
-        self.nonstop_cb = ClickThrough(self.extras_row, "Non-stop", self.nonstop_var, [s for _, s in PLAY_NONSTOP],
-                                       command=self._on_nonstop_changed)
+        self.nonstop_cb = ClickThrough(self.extras_row, "∞", self.nonstop_var, [s for _, s in PLAY_NONSTOP],
+                                       command=self._on_nonstop_changed)   # Non-stop, shown as the infinity sign
         self.nonstop_cb.pack(side="left", padx=(0, 8))
+        Tooltip(self.nonstop_cb, "Non-stop: when a playlist from 24bit7 reaches its last track, more are added, "
+                                 "so the music keeps going. Keep It Tight stays close to the start; Wander lets "
+                                 "it drift. Click to change, right-click to go back.")
         tk.Frame(self.extras_row, width=1, height=24, bg=PALETTE["line"]).pack(side="left", padx=(8, 16))
         # Add playlist: JRiver playlists joined to the next build from the app (not voice)
         FlatButton(self.extras_row, text="+ Add Playlist", quiet=True, width=14, height=1,
@@ -999,7 +1002,7 @@ class PlayTab(tk.Frame):
 
     # (title, width in characters); Sources Used (width 1) takes whatever room is left
     LOG_COLUMNS = [("Date and Time", 13), ("From", 12), ("Zone", 9), ("Playlist Type", 30),
-                   ("Sources Used", 1), ("Hits / Misses", 13), ("AI Moderator", 20), ("Problems", 17), ("", 15)]
+                   ("Sources Used", 1), ("Hits / Misses", 13), ("Moderator", 20), ("Problems", 17), ("", 15)]
     SOURCES_COLUMN = 4
 
     def _sync_head_strip(self):

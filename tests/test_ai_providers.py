@@ -188,7 +188,7 @@ def test_costs_follow_the_provider(app):
     assert "costs nothing" in ai_usage.rates_line("ollama") and ai_usage.pricing_page("ollama") is None
     app.set_env(AI_PROVIDER="openai", OPENAI_API_KEY="sk-o")
     guide = {f: c for f, _, c, _, _ in ai_usage.guide()}
-    assert guide["AI Moderator"] == pytest.approx(ai_usage.cost("gpt-6-luna", 1000, 0, 0, 300))
+    assert guide["Moderator"] == pytest.approx(ai_usage.cost("gpt-6-luna", 1000, 0, 0, 300))
 
 
 # --- Settings -------------------------------------------------------------------------------

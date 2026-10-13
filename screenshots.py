@@ -133,9 +133,9 @@ DEMO_CONSOLE = [
     "    Not in library: Harry Nilsson - Everybody's Talkin'",
     "    ...",
     "  Suggested 96, checked 96, in library 34.",
-    "  AI Moderator (Balanced): checking 34 tracks against the seed...",
+    "  Moderator (Balanced): checking 34 tracks against the seed...",
     "    Removed The Who - Won't Get Fooled Again: louder and harder than the seed.",
-    "  AI Moderator: 1 removed.",
+    "  Moderator: 1 removed.",
     "  Sending 30 tracks...",
     "  Queued in Speakers after the current track.",
     "Done: 30 tracks queued in Speakers, 62 not in library, 14 s.",
@@ -153,10 +153,10 @@ Similar Tracks: The Beatles - Here Comes The Sun  (target 30, at most 2 per arti
     Not in library: The Zombies - Time Of The Season
     ...
   Suggested 96, checked 96, in library 34.
-  AI Moderator (Balanced): checking 34 tracks against the seed...
+  Moderator (Balanced): checking 34 tracks against the seed...
     Removed The Who - Won't Get Fooled Again: louder and harder than the seed.
     Removed Queen - We Will Rock You: stadium energy, breaks the mood.
-  AI Moderator: 2 removed.
+  Moderator: 2 removed.
   Note: Drift is off, so the playlist stops at 30 tracks. Settings > Playlist > Drift
   Sending 30 tracks...
   Queued in Kitchen after the current track.

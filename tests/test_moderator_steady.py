@@ -1,5 +1,5 @@
 """
-The AI Moderator asks for a fixed temperature (issue #5), and Drift's chain drop names what it
+The Moderator asks for a fixed temperature (issue #5), and Drift's chain drop names what it
 drops and never empties a round (issue #6).
 """
 

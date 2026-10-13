@@ -117,8 +117,8 @@ YouTube and Tidal only appear here while they're ticked under Settings > Other >
 
 - **Seed: Current Track** or **Seed: Playing Now** (teal). See [The seed](#the-seed).
 - **Play Mode** or **Review Mode** (orange). See [The seed](#the-seed) and [Review](#review).
-- **AI Moderator: Off, Relaxed, Balanced or Strict** (magenta) checks each playlist for tracks that clash with the seed's mood. See [AI Moderator](#ai-moderator).
-- **Drift** (Off, Keep It Tight or Spread) and **Non-stop** (Off, Keep It Tight or Wander) set those settings for every Play option at once. Each shows a mode only when every option agrees. See [Drift](#drift) and [Non-stop](#non-stop).
+- **Moderator: Off, Relaxed, Balanced or Strict** (magenta while on, as it uses the AI) checks each playlist for tracks that clash with the seed's mood. See [Moderator](#moderator).
+- **Drift** (Off, Keep It Tight or Spread) and **∞**, which is Non-stop (Off, Keep It Tight or Wander), set those settings for every Play option at once. Each shows a mode only when every option agrees. See [Drift](#drift) and [Non-stop](#non-stop).
 - **Show Credits** lists the producer, engineer, musicians and other credits for what's playing, from Discogs, in two lists: the playing track's own credits (or every track's, under its number and title) and the album's. Credits Discogs marks for some tracks only, such as a drummer on tracks 2 to 4, go to those tracks. Settings > Other > Show Credits chooses the current track or all tracks, and which list comes first. It needs a Discogs token.
 - **+ Add Playlist** joins one of your JRiver playlists to the next build. See [Adding your own playlists](#adding-your-own-playlists).
 
@@ -129,7 +129,7 @@ The black panel shows what each build did: which sources answered, what matched 
 - The first line has the time and what was built, such as `21:14  Similar Tracks: The Beatles - Here Comes The Sun`.
 - The steps are indented beneath it, in green.
 - `Note:` lines, in amber, are something to know. `Problem:` lines, in red, are something that went wrong. Where a setting would help, it's named at the end, such as `Settings > Playlist > Drift`.
-- AI lines, such as the AI Moderator's, are magenta.
+- AI lines, such as the Moderator's, are magenta.
 - Every build ends with one line: `Done: 30 tracks queued in Speakers, 62 not in library, 14 s.`
 
 Click into the console for a strip of buttons:
@@ -159,7 +159,7 @@ A build only clears the screen when its own tab, or All, is showing, so a voice 
 
 ![The console's Log](images/console_log.png)
 
-The Log lists the last 50 builds from each source, newest first: when, who asked (Main Window, Shortcut, an Alexa device, or Non-stop), the zone, the Play option, the sources used (hover for the full list), tracks queued and not in library, what the AI Moderator did, and how many problems and notes it had.
+The Log lists the last 50 builds from each source, newest first: when, who asked (Main Window, Shortcut, an Alexa device, or Non-stop), the zone, the Play option, the sources used (hover for the full list), tracks queued and not in library, what the Moderator did, and how many problems and notes it had.
 
 A Non-stop playlist shows as a chain. The build that started it becomes Non-stop 001 and each top-up takes the next number, so you can see how long an evening ran and spot which top-up went wrong.
 
@@ -212,7 +212,7 @@ Which services suggest music, set separately for Similar Artists, Similar Tracks
 - **ListenBrainz algorithm**: all-time, or recent listening.
 - **Tidal** needs its two free keys (Settings > Keys). In Similar Artists it's marked **!!**: its artist suggestions are weaker than its track suggestions, and resting the pointer on it says so.
 - **Test My Sources**, on the right of the Sources bar, asks every source what's similar to a fixed set of seed tracks across 17 genres, and counts how many of the answers are in your library. Choose **Full** or **Quick** (the window says roughly how long each takes), and tick **Include AI** to test the AI too, which costs a few pence. It runs in the background, pausing while a build runs, so you can keep using 24bit7, and the console says when it's ready. Each source then shows **Score** (how many of its suggestions are in your library, against the best source for each genre; it measures reach, not taste), **Best At** and **Worst At** (its three best and worst genres), and **Full Results** shows every genre against every source. Until you run it, the figures come from the developer's library, with a note saying yours will differ. The genre is only the label on each test seed: nothing is judged by your Genre tags.
-- **AI Moderator**, for Similar Artists and Similar Tracks: Off, Relaxed, Balanced or Strict. See [AI Moderator](#ai-moderator).
+- **Moderator**, for Similar Artists and Similar Tracks: Off, Relaxed, Balanced or Strict. See [Moderator](#moderator).
 
 ![Settings, Sources, Similar Tracks](images/settings_sources_similar_tracks.png)
 
@@ -225,7 +225,7 @@ How each Play option builds its playlist, with a tab for each option.
 - **Playlist**: Similar Artists sets **Limit total tracks to**, how many artists, how many of each artist's top tracks to draw from, and how many to pick per artist. A similar artist only counts once it gives a track from your library; one that doesn't is skipped and the next one down is read instead. Untick the limit to keep every track found; with the last two the same (say 5 of 5) as well, there's no random pick at all. Similar Tracks sets how many tracks, the most any one artist gets, and, for every column, the order and **Variety**. Artist's Top Tracks sets shuffled or popular order.
   On Windows (Main), Similar Artists and Similar Tracks have four columns: **Seed** (Current Track and Playing Now) and **Review Mode** (Current Track and Playing Now). Playing Now adds **Artists sampled from Playing Now** or **Tracks sampled from Playing Now**, and its Number of artists or tracks is per sampled artist or track; the defaults (5 artists with 4 similar each, or 5 tracks with 6 similar each) give about the same size of playlist as Current Track. Review Mode's columns follow their seed while **Mirror Current Track** or **Mirror Playing Now** is ticked; untick one to give Review Mode a shortlist of its own. Artist's Top Tracks has Current Track and Review Mode. Everything else in the section is shared, and voice builds never review or use Playing Now, so devices have the Current Track column only.
 - **Skip tracks played in the last ... days** leaves out anything JRiver has played recently, so a favourite doesn't come round again the same evening. The seed track is never left out. Off by default.
-- **Drift** (Off, Keep It Tight or Spread) searches again when your library falls short of the target length. Similar Artists and Similar Tracks also have **AI Moderator on Drift tracks**. See [Drift](#drift).
+- **Drift** (Off, Keep It Tight or Spread) searches again when your library falls short of the target length. Similar Artists and Similar Tracks also have **Moderator on Drift tracks**. See [Drift](#drift).
 - **Non-stop** (Off, Keep It Tight or Wander) keeps a playlist going when it reaches its last track. See [Non-stop](#non-stop).
 - **Hidden Tracks** skips the last track on an album when it's longer than a set number of minutes (6 by default). Those are often a long silence and a hidden bonus track, which feel out of place in a playlist. Albums, songs and playlists you ask for by name always play in full.
 - **If All Else Fails**, off to start: tick **If nothing is found** and choose what happens when a build finds nothing, or nothing beyond the seed track itself. **Shuffle Genre** shuffles songs from your library in the seed's genre: the seed track's Genre tag, or the artist's most common genre in your library, at a similar tempo when the seed has a BPM tag and enough tracks are within 10% of it. It plays that playlist type's usual number of tracks, with Skip Recently Played, Filters and the per-artist limit applied and the seed artist left out. **Run File** starts a file of your own, such as a .bat, and Run After Building is skipped for that build. **Play Playlist** plays one of your JRiver playlists or smartlists, picked with **Choose...**, as JRiver gives it. Tick **Say why in the room first** (off to start, one setting for every playlist type) and a voice command or keyboard shortcut hears why before the music: Windows' own voice, saved as a short WAV file and played on that zone, so it shows in Playing Now. It needs JRiver on the same PC. With If All Else Fails unticked, the console says "I couldn't find a match. Please try another seed." and a build from the app shows the same in a message. It doesn't run when an added playlist has already played.
@@ -233,7 +233,7 @@ How each Play option builds its playlist, with a tab for each option.
 
 ![Settings, Playlist, AI Playlist](images/settings_playlist_ai_playlist.png)
 
-The AI Playlist tab has its own Drift choices, including drifting with the AI, and **AI Moderator on Drift tracks** for what Drift adds from your music sources.
+The AI Playlist tab has its own Drift choices, including drifting with the AI, and **Moderator on Drift tracks** for what Drift adds from your music sources.
 
 ### Filters
 
@@ -262,7 +262,7 @@ Keys and passwords for each service, hidden until you tick **Show**. Each **?** 
 - **Last.fm** and **ListenBrainz**: free, and well worth adding.
 - **Discogs**: free, for album credits and a second source for Label.
 - **Tidal**: free. At developer.tidal.com, sign in with a Tidal account, open Dashboard and choose Create App, then copy the Client ID and Client Secret into the two Tidal fields. Tidal needs both. To send playlists to Tidal as well, press **Sign In to Tidal** on the Tidal account row, after adding the redirect address and playlist scopes its **?** describes to your app at developer.tidal.com. Tidal's own sign-in page opens in your browser; 24bit7 never sees your password, and remembers the sign-in until you press **Sign Out**.
-- **AI**: needed for AI Playlist, AI as a source, the AI Moderator and Console Query. It sits last, in its own box, starting with **Provider**: **Anthropic** (Claude), **OpenAI**, **Google Gemini** or **Ollama (Local)**. Only the chosen provider's fields show, and every key stays saved, so switching back loses nothing. The cloud providers are paid, a few pence at most per build, and each needs its own key (the **?** says where to get it). **Ollama** runs a model on your own PC for free: install it from ollama.com, pull a model (for example `ollama pull gemma3:4b`), then pick it under **OLLAMA_MODEL**, where **Refresh** lists what Ollama has installed. The address is filled in for you. Smaller local models give rougher results, and Console Query isn't available with Ollama, as it sends more than a local model can hold. If Ollama isn't running, or the model isn't installed, the console says so. Only Anthropic has been fully tested so far: OpenAI, Google Gemini and Ollama should work, and reports on how they do are very welcome on the JRiver forum or GitHub. **Use AI** under the provider, On or Off, pauses everything that spends AI credits without removing the key: AI Playlist and the AI Moderator dropdown grey out, the AI as a source is skipped, Drift using the AI falls back to the sources, and Console Query and Assess Tone stand down, with one console line per build saying so. Switch back On and every setting is as you left it. **AI Usage** sits underneath: the tokens each AI feature has used since you last cleared the count, with estimated costs, and a **Guide** to what $1 buys and what each feature costs per run (your own average once you've used it three times). **Query** asks the AI where the tokens go and which settings would use fewer, and answers in the console. **Show in Now Playing** puts the total at the right of Now Playing, in dollars or tokens; click it to switch. The costs are estimates from the chosen provider's standard rates on the date shown, which may have changed since; your provider's own console has your actual bill. With Ollama the Guide shows Free.
+- **AI**: needed for AI Playlist, AI as a source, the Moderator and Console Query. It sits last, in its own box, starting with **Provider**: **Anthropic** (Claude), **OpenAI**, **Google Gemini** or **Ollama (Local)**. Only the chosen provider's fields show, and every key stays saved, so switching back loses nothing. The cloud providers are paid, a few pence at most per build, and each needs its own key (the **?** says where to get it). **Ollama** runs a model on your own PC for free: install it from ollama.com, pull a model (for example `ollama pull gemma3:4b`), then pick it under **OLLAMA_MODEL**, where **Refresh** lists what Ollama has installed. The address is filled in for you. Smaller local models give rougher results, and Console Query isn't available with Ollama, as it sends more than a local model can hold. If Ollama isn't running, or the model isn't installed, the console says so. Only Anthropic has been fully tested so far: OpenAI, Google Gemini and Ollama should work, and reports on how they do are very welcome on the JRiver forum or GitHub. **Use AI** under the provider, On or Off, pauses everything that spends AI credits without removing the key: AI Playlist and the Moderator dropdown grey out, the AI as a source is skipped, Drift using the AI falls back to the sources, and Console Query and Assess Tone stand down, with one console line per build saying so. Switch back On and every setting is as you left it. **AI Usage** sits underneath: the tokens each AI feature has used since you last cleared the count, with estimated costs, and a **Guide** to what $1 buys and what each feature costs per run (your own average once you've used it three times). **Query** asks the AI where the tokens go and which settings would use fewer, and answers in the console. **Show in Now Playing** puts the total at the right of Now Playing, in dollars or tokens; click it to switch. The costs are estimates from the chosen provider's standard rates on the date shown, which may have changed since; your provider's own console has your actual bill. With Ollama the Guide shows Free.
 - **JRiver** user name and password: only if you set them in JRiver under Tools > Options > Media Network > Authentication.
 
 Keys never leave your PC except to the service they belong to, and they never appear in a log.
@@ -342,9 +342,9 @@ If the first round finds nothing at all, Drift on **Custom Sources** starts agai
 
 In an AI Playlist, Drift can top up from your music sources, which uses no credit, or ask the AI again, telling it what's already been tried.
 
-### AI Moderator
+### Moderator
 
-Most playlists are right apart from one track: the stadium anthem in the middle of a run of acoustic songs. The AI Moderator sends each playlist to the AI once (the chosen provider's quick model), with the seed, and removes tracks that would jolt a listener out of the mood. It judges tone, energy and mood, never genre on its own. Tracks it doesn't know well enough to judge are kept, and each removal is logged with its reason.
+Most playlists are right apart from one track: the stadium anthem in the middle of a run of acoustic songs. The Moderator sends each playlist to the AI once (the chosen provider's quick model), with the seed, and removes tracks that would jolt a listener out of the mood. It judges tone, energy and mood, never genre on its own. Tracks it doesn't know well enough to judge are kept, and each removal is logged with its reason.
 
 - **Relaxed** removes only clear clashes, at most a fifth of the tracks.
 - **Balanced** removes anything that noticeably shifts the tone, energy or mood, at most two fifths.
@@ -352,7 +352,7 @@ Most playlists are right apart from one track: the stadium anthem in the middle 
 
 A few extra tracks are found up front so removals are replaced. It costs a fraction of a penny per playlist (nothing with Ollama). If the check fails, the playlist builds as normal and the console says why. A single track is checked too on Balanced and Strict; Relaxed skips it and says so, as at most a fifth of one track is none of it. Whenever the Moderator is set but can't run (no AI set up, or Use AI Off), the console says why once per build.
 
-Drift rounds are checked against the playlist so far as well as the seed, which makes an odd one out much easier to spot. **AI Moderator on Drift tracks** (Similar Artists and Similar Tracks) can check Drift harder than the first round, or not at all; Same as build follows the build's own level. When half or more of what one seed brought in is off course, the rest of it goes too (the console names each track) and Drift doesn't seed from that chain again, within the level's limit. It never does this when it would leave the round with nothing: then only the flagged tracks go. The Moderator asks the AI for its most consistent answer, so the same tracks get the same verdict as far as each provider allows, and Strict keeps a track that's only borderline.
+Drift rounds are checked against the playlist so far as well as the seed, which makes an odd one out much easier to spot. **Moderator on Drift tracks** (Similar Artists and Similar Tracks) can check Drift harder than the first round, or not at all; Same as build follows the build's own level. When half or more of what one seed brought in is off course, the rest of it goes too (the console names each track) and Drift doesn't seed from that chain again, within the level's limit. It never does this when it would leave the round with nothing: then only the flagged tracks go. The Moderator asks the AI for its most consistent answer, so the same tracks get the same verdict as far as each provider allows, and Strict keeps a track that's only borderline.
 
 ### Non-stop
 
@@ -458,7 +458,7 @@ By default every device uses the same settings as the Windows app, called **Wind
 
 A device with its own settings can also be named under **Applies on** in a filter, such as keeping the kitchen to a "Kitchen Favourites" playlist. Keys, search sites and zones stay shared.
 
-Two speakers make it easy to compare two sets of settings: the same command in the kitchen and the lounge, one with the AI Moderator on and one without. Untick **Own settings** and the device goes back to Windows (Main); its own settings are kept for next time.
+Two speakers make it easy to compare two sets of settings: the same command in the kitchen and the lounge, one with the Moderator on and one without. Untick **Own settings** and the device goes back to Windows (Main); its own settings are kept for next time.
 
 ### Good to know
 
@@ -612,13 +612,13 @@ A reply with `ok: True` and 24bit7's version means everything on the PC side wor
 | YouTube Music stops returning anything | YouTube has probably changed something. It usually comes back with the next update of the ytmusicapi library; untick it meanwhile. |
 | A playlist comes out short | Your library may not hold enough of what the sources suggest. Lower **Sources that must agree**, tick more sources, or switch on **Drift**. |
 | "I couldn't find a match" | Nothing the sources suggested is in your library, and there was no genre to fall back on (or If All Else Fails is off). Try another seed, add a Genre tag to the seed's tracks, or tick **If All Else Fails** in Settings > Playlist. |
-| One track sounds out of place | Try the **AI Moderator** on Relaxed or Balanced. |
+| One track sounds out of place | Try the **Moderator** on Relaxed or Balanced. |
 | A speaker such as a Sonos is missing from the zones | Tick DLNA Controller in JRiver (Tools > Options > Media Network > Advanced), then press **Rescan** under Settings > Other > Zones. |
 | Windows says "Windows protected your PC" | Click **More info**, then **Run anyway**. The app isn't code-signed. |
 
 ### Console Query
 
-When a playlist comes out short or odd, you can ask why. Tick **Enable Console Query** under Settings > Other (it asks first, as it uses AI credit; it isn't available with Ollama), click into the console and press **Query**. Type a question and press Enter: "Why was this track included?", "Why was the playlist so short?", "What did the AI Moderator remove?". The answer appears in the console in magenta, and the box stays open for follow-ups.
+When a playlist comes out short or odd, you can ask why. Tick **Enable Console Query** under Settings > Other (it asks first, as it uses AI credit; it isn't available with Ollama), click into the console and press **Query**. Type a question and press Enter: "Why was this track included?", "Why was the playlist so short?", "What did the Moderator remove?". The answer appears in the console in magenta, and the box stays open for follow-ups.
 
 The AI is sent the build on screen, your settings with every key and password left out, what's playing, and 24bit7's own code and README, so it knows the rules and the names of the settings. It suggests up to three changes, named as they appear in Settings. The build on screen can be any of the last 50, opened from the Log. Switch the console to **Advanced** first and it gets the debug lines too. The first question costs a few pence; with Anthropic, follow-ups soon after cost much less.
 
@@ -642,6 +642,6 @@ The AI is sent the build on screen, your settings with every key and password le
 | Tidal | Similar artists, similar tracks, top tracks | Free |
 | YouTube Music | Similar artists and tracks, YouTube output | None |
 | Discogs | Album credits, record labels | Free |
-| Your chosen AI: Anthropic (Claude), OpenAI, Google Gemini or Ollama | AI suggestions, AI Playlist, AI Moderator, Console Query | Paid, pennies per build; Ollama is free and runs on your PC |
+| Your chosen AI: Anthropic (Claude), OpenAI, Google Gemini or Ollama | AI suggestions, AI Playlist, Moderator, Console Query | Paid, pennies per build; Ollama is free and runs on your PC |
 
 Your music files never leave your PC. Services are sent the artist and track names they're asked about, and Console Query sends the console as described above. Everything 24bit7 learns is kept in `24bit7.db` beside the app, and your keys in `.env`. Neither file is ever included in a log or a release.

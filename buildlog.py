@@ -4,7 +4,7 @@
 Every finished build is kept in 24bit7.db with its full console text and the
 figures the Log shows: when, who asked (the Main Window, a shortcut, an Alexa
 device, or Non-stop), the zone, the Play option, the sources used, tracks queued
-and not in library, what the AI Moderator did, and how many Problem and Note
+and not in library, what the Moderator did, and how many Problem and Note
 lines it had. A voice command that comes to nothing is kept too.
 
 Each source keeps its last KEEP builds: the Main Window (shortcuts included) and
@@ -53,11 +53,11 @@ def _kind_from_text(text):
 
 
 def _moderator(text):
-    """'Balanced, 3 removed' from the AI Moderator's lines, Drift rounds included; '' if it didn't run."""
-    level = re.search(r"AI Moderator \((\w+)\): checking", text)
+    """'Balanced, 3 removed' from the Moderator's lines, Drift rounds included; '' if it didn't run."""
+    level = re.search(r"(?:AI )?Moderator \((\w+)\): checking", text)   # "AI Moderator" before 1.20.0
     if not level:
         return ""
-    removed = sum(int(n) for n in re.findall(r"AI Moderator: (\d+) removed", text))
+    removed = sum(int(n) for n in re.findall(r"(?:AI )?Moderator: (\d+) removed", text))
     return f"{level.group(1)}, {removed} removed"
 
 

@@ -1349,7 +1349,7 @@ def test_use_ai_off_moderator_notes_once_and_sources_skip(app, ui):
     e.create_similar_playlist(report=r, seed_info=e.typed_seed_info("The Beatles", "Something"))
     text = "\n".join(r)
     assert "AI is ticked but Use AI is Off" in text
-    assert text.count("AI Moderator skipped: Use AI is Off") <= 1
+    assert text.count("Moderator skipped: Use AI is Off") <= 1
     assert not any(c for c in app.ai.calls), "the AI was never called"
 
 

@@ -290,7 +290,7 @@ def test_ai_requests_have_thinking_off(app):
     assert app.ai.calls and app.ai.calls[0][2].get("thinking") == {"type": "disabled"}
 
 
-# --- AI Moderator ---------------------------------------------------------------------------
+# --- Moderator ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("level,cap", [("relaxed", 0.2), ("balanced", 0.4), ("strict", 1.0)])
 def test_moderator_caps(app, level, cap):
@@ -307,7 +307,7 @@ def test_moderator_replacements_keep_target(app):
     app.ai.remove = [2, 3]
     r = app.Lines()
     app.engine.create_similar_tracks_playlist(report=r, seed_info=seed(app, "The Beatles", "Here Comes The Sun"))
-    assert r.has("AI Moderator"), r.text()
+    assert r.has("Moderator"), r.text()
     assert len(app.jriver.zone("Speakers").playlist) == 15, r.text()
 
 
@@ -410,7 +410,7 @@ def test_ai_moderator_usage_is_counted(app, monkeypatch):
     import ai_usage
     monkeypatch.setattr(app.engine, "MODERATOR_OVERRIDE", "balanced")
     app.engine.moderate([("1", "A", "x"), ("2", "B", "y")], "Seed - Song", report=lambda *a: None)
-    assert [f for f, *_ in ai_usage.totals()["by_feature"]] == ["AI Moderator"]
+    assert [f for f, *_ in ai_usage.totals()["by_feature"]] == ["Moderator"]
 
 
 def test_usage_query_answers_and_counts_itself(app):
@@ -602,7 +602,7 @@ def test_permanent_cache_keeps_old_answers_and_clear_by_age(app):
     assert e.cache_counts()["all"] == 0
 
 
-# --- AI Moderator: number and name must agree (issue #2) -----------------------------------
+# --- Moderator: number and name must agree (issue #2) -----------------------------------
 
 def _mod_reply(app, items):
     import json as _json
@@ -647,7 +647,7 @@ def test_moderator_bare_number_keeps_everything(app):
     assert app.engine.moderate(MOD_TRACKS, "The Rolling Stones - Beast of Burden", report=app.Lines()) == set()
 
 
-# --- AI Moderator: a note around the JSON doesn't break the check (issue #3) ----------------
+# --- Moderator: a note around the JSON doesn't break the check (issue #3) ----------------
 
 def test_moderator_ignores_note_after_json(app):
     _mod_on(app)

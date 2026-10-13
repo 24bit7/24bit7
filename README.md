@@ -30,7 +30,7 @@ Four playlist buttons on the **Play** tab, plus **More Options**. The seed is wh
 | **Similar Tracks** | A playlist of tracks like the seed track, suggested track by track by Last.fm, ListenBrainz, YouTube Music and, if you tick it, AI, and blended, so a playlist follows the song rather than the artist's reputation. |
 | **Artist's Top Tracks** | The artist's most popular tracks that you actually own, in random or popularity order. From the Search tab it needs only the artist. |
 | **AI Playlist** | Type a mood or scene, pick More tracks like the song that's playing, or pick one of three AI suggestions, and the AI picks a playlist to match from your library. |
-| **More Options** | Opens a row underneath with the **AI Moderator**, **Drift** and **Non-stop** (both change Settings > Playlist for every Play option at once), **Show Credits** (producer, engineer and other credits for the current album, from Discogs; not offered from the Search tab, which has no album to look up) and **+ Add Playlist** (see below). It remembers whether it's open. |
+| **More Options** | Opens a row underneath with the **Moderator**, **Drift** and **Non-stop** (both change Settings > Playlist for every Play option at once), **Show Credits** (producer, engineer and other credits for the current album, from Discogs; not offered from the Search tab, which has no album to look up) and **+ Add Playlist** (see below). It remembers whether it's open. |
 
 **Output** sits beside the buttons and decides where the finished playlist goes: **Same zone** (the default: the zone you seeded from), any JRiver zone by name, or **YouTube**, which opens it in your browser as an instant playlist. The **Zone** dropdown on the Now Playing tab picks which zone you seed from.
 
@@ -75,9 +75,9 @@ Similar Artists, Similar Tracks and AI Playlist each have a target length, and a
 
 In an AI Playlist, Drift using similar artists or similar tracks tops up from your music sources, not the AI, and the settings and log say so: "Similar artists (no AI)". It can also drift using **AI**: each round asks the AI again with your description, telling it what has already been found or tried so it suggests something new. That uses a little AI credit per round (nothing with Ollama), so it's never the default; pick it if you want it.
 
-### AI Moderator
+### Moderator
 
-Most playlists are right apart from one track: the stadium anthem in the middle of a run of acoustic songs. The AI Moderator is an optional check that catches it. When it's on, each playlist (and each Drift round) goes to the AI's quick model once (Claude Haiku on Anthropic, or the quick model of the AI you chose), with the seed and the list of tracks, and it removes the ones that would jolt a listener out of the mood. It judges tone, energy and mood only, and genre is never a reason on its own: a folk song and an electronic track can sit together, and two songs in the same genre can clash. It keeps anything it doesn't know well enough to judge, and logs each removal with its reason. How hard it looks is up to you:
+Most playlists are right apart from one track: the stadium anthem in the middle of a run of acoustic songs. The Moderator is an optional check that catches it. When it's on, each playlist (and each Drift round) goes to the AI's quick model once (Claude Haiku on Anthropic, or the quick model of the AI you chose), with the seed and the list of tracks, and it removes the ones that would jolt a listener out of the mood. It judges tone, energy and mood only, and genre is never a reason on its own: a folk song and an electronic track can sit together, and two songs in the same genre can clash. It keeps anything it doesn't know well enough to judge, and logs each removal with its reason. How hard it looks is up to you:
 
 - **Relaxed** removes only clear clashes, at most a fifth of the tracks.
 - **Balanced** removes anything that noticeably shifts the tone, energy or mood away from the seed, at most two fifths.
@@ -85,17 +85,17 @@ Most playlists are right apart from one track: the stadium anthem in the middle 
 
 It's **Off** by default. A few extra tracks are found up front, more at the stricter levels, so the ones it removes are replaced. The fast start track is never checked, and Artist's Top Tracks isn't moderated, since it's one artist.
 
-It needs the AI set up under Settings > Keys and uses a little credit each time, a fraction of a penny per playlist (nothing with Ollama); the first time you switch it on, 24bit7 says so. Without that the option is greyed out. If the check fails or the credit runs out, the playlist builds as normal and the log says why. Pick the level as you go from **More Options** on the Play tab. It applies to Similar Artists and Similar Tracks. An AI Playlist's own picks are never checked, because the AI has already picked every track against your description, but its Drift section has **AI Moderator on Drift tracks** for what Drift adds from your sources. It's greyed out unless Drift is on and isn't using the AI. A voice device with settings of its own keeps its own choice under Settings > Sources; one copying Windows (Main) follows the Play tab (see Voice Commands below).
+It needs the AI set up under Settings > Keys and uses a little credit each time, a fraction of a penny per playlist (nothing with Ollama); the first time you switch it on, 24bit7 says so. Without that the option is greyed out. If the check fails or the credit runs out, the playlist builds as normal and the log says why. Pick the level as you go from **More Options** on the Play tab. It applies to Similar Artists and Similar Tracks. An AI Playlist's own picks are never checked, because the AI has already picked every track against your description, but its Drift section has **Moderator on Drift tracks** for what Drift adds from your sources. It's greyed out unless Drift is on and isn't using the AI. A voice device with settings of its own keeps its own choice under Settings > Sources; one copying Windows (Main) follows the Play tab (see Voice Commands below).
 
 ### The console
 
 The console on the Play tab shows what each build did, written the same way every time: the time and what was built on the first line, the steps beneath it, `Note:` (amber) for something to know, `Problem:` (red) for something that went wrong, AI lines in magenta, and one closing line: `Done: 30 tracks queued in Speakers, 62 not in library, 14 s.` **Simple** hides the debug lines and **Advanced** shows them; they're always recorded, so switching works on the build already there.
 
-A small green arrow at the top of the console opens its tabs: **All**, **Main Window**, one per Alexa device, and **Log**. Each tab shows its own latest build, so a voice command in the kitchen doesn't wipe a build you're reading at the PC, and a command that fails shows under its device with what Alexa said. The **Log** lists the last 50 builds from each source, newest first, with the zone, Play option, sources, tracks queued and missed, what the AI Moderator did and any problems. Non-stop top-ups are numbered in their chain (001, 002, 003). Double-click a row, or click **Load to Console**, to open that build, then Copy, Query or Export it.
+A small green arrow at the top of the console opens its tabs: **All**, **Main Window**, one per Alexa device, and **Log**. Each tab shows its own latest build, so a voice command in the kitchen doesn't wipe a build you're reading at the PC, and a command that fails shows under its device with what Alexa said. The **Log** lists the last 50 builds from each source, newest first, with the zone, Play option, sources, tracks queued and missed, what the Moderator did and any problems. Non-stop top-ups are numbered in their chain (001, 002, 003). Double-click a row, or click **Load to Console**, to open that build, then Copy, Query or Export it.
 
 ### Console Query
 
-When a playlist comes out short or odd, you can ask why. Tick **Enable Console Query** in Settings > Other (it's off by default, and asks before it switches on), then click into the console and press **Query**. Type a question under the console and press Enter: "Why was this track included?", "Why was the playlist so short?", "What did the AI Moderator remove?". The answer appears in the console in magenta, and the box stays open for follow-ups.
+When a playlist comes out short or odd, you can ask why. Tick **Enable Console Query** in Settings > Other (it's off by default, and asks before it switches on), then click into the console and press **Query**. Type a question under the console and press Enter: "Why was this track included?", "Why was the playlist so short?", "What did the Moderator remove?". The answer appears in the console in magenta, and the box stays open for follow-ups.
 
 The AI's quick model is sent what's in the console, your settings with every key, token, password and user name left out, what's playing, and 24bit7's own code and README, so it knows the rules and the names of the settings. It explains what most likely happened and suggests up to three changes, named as they appear in Settings. Plain music questions, such as which album a song is from, are answered from general knowledge. Running from source, it reads the code in the folder; the packaged app downloads it once from GitHub, for the version you're running. Query reads the build on screen, which can be any of the last 50 opened from the Log; switching the console to Advanced first sends the debug lines too. It costs a few pence for the first question and, with Anthropic, much less for follow-ups within a few minutes. It isn't available with Ollama, as it sends more than a local model can hold. Clear empties the console, and with it what the AI can see.
 
@@ -261,7 +261,7 @@ Every response from every source is cached in a local SQLite database with a con
 | Tidal | Similar artists, similar tracks, top tracks | Yes (free developer app) | Marked **!!** in Similar Artists: its artist suggestions are weaker than its track suggestions. |
 | YouTube Music | Similar artists and similar tracks from the up next queue, playlist output, Discover playlists | No | No sign-in. Uses the unofficial ytmusicapi library, so it may break now and then. |
 | Discogs | Album credits, record labels | Yes (free) | Credits, and a second source for the Label button. |
-| Anthropic (Claude) | AI-suggested similar artists and tracks, AI Playlist, AI Moderator, Console Query | Yes (paid, pennies per run) | Every suggestion is verified against Deezer before it is trusted. The moderator uses Claude Haiku, a fraction of a penny per playlist. |
+| Anthropic (Claude) | AI-suggested similar artists and tracks, AI Playlist, Moderator, Console Query | Yes (paid, pennies per run) | Every suggestion is verified against Deezer before it is trusted. The moderator uses Claude Haiku, a fraction of a penny per playlist. |
 | OpenAI, Google Gemini or Ollama | The same, in place of Anthropic (Settings > Keys > AI) | OpenAI and Gemini: yes (paid). Ollama: none, it runs on your PC | Untested so far; reports welcome. Console Query isn't available with Ollama. |
 
 Enable any combination of similar-artist sources in Settings. One is enough; several are better. Deezer and YouTube Music need no keys, so 24bit7 works out of the box.
@@ -285,7 +285,7 @@ JRiver is only needed for the Now Playing seed and for JRiver output. The Search
 3. Windows will most likely show a blue **"Windows protected your PC"** box the first time, because the exe isn't code-signed. Click **More info**, then **Run anyway**. It only asks once.
 4. On first run the app opens on Settings. Add keys for the sources you want; each field has a **?** button with instructions for getting that key. Deezer and YouTube Music work with no key at all, and they are the two sources a fresh install has ticked.
 
-Your keys and history live in two files next to the exe: `.env` (settings and keys) and `24bit7.db` (cache and discoveries). When you upgrade to a new version, copy those two files into the new folder and you'll carry everything over. Settings from older versions are migrated automatically: the single digital store from 1.0.x becomes the first ticked store, the on/off agreement setting from 1.1.0 becomes 2 or Off, Similar Tracks' "Top up from Similar Artists" from 1.3.0 becomes Drift, using similar artists, one round, and the single AI Moderator, Hidden Tracks and Non-stop settings become the starting value on every Play option's tab.
+Your keys and history live in two files next to the exe: `.env` (settings and keys) and `24bit7.db` (cache and discoveries). When you upgrade to a new version, copy those two files into the new folder and you'll carry everything over. Settings from older versions are migrated automatically: the single digital store from 1.0.x becomes the first ticked store, the on/off agreement setting from 1.1.0 becomes 2 or Off, Similar Tracks' "Top up from Similar Artists" from 1.3.0 becomes Drift, using similar artists, one round, and the single Moderator, Hidden Tracks and Non-stop settings become the starting value on every Play option's tab.
 
 ### Path B: run from source
 
@@ -330,9 +330,9 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 - **If All Else Fails**: when a build finds nothing (or only the seed), it can shuffle songs in the seed's genre at a similar tempo where BPM tags allow, run a file of your own, or play one of your JRiver playlists, instead of stopping. Off by default, per playlist type, in Settings > Playlist. Tick **Say why in the room first** and a voice command or shortcut hears why before the music.
 - **Only library artists count**: a similar artist only counts towards Number of artists once it gives a track from your library; the next one down is read instead.
 - **Cancel**: while a build runs, the console's strip shows **Cancel**, which stops it at its next step and says what had already gone out.
-- **More Options as buttons**: Seed, Play Mode / Review Mode, AI Moderator, Drift and Non-stop step through their choices with a click (right-click steps back).
+- **More Options as buttons**: Seed, Play Mode / Review Mode, Moderator, Drift and Non-stop step through their choices with a click (right-click steps back).
 - **Search by artist alone** for Similar Artists, rounded buttons and softer search boxes on Discover, with **A-** and **A+** for the text size.
-- **Fixes**: the AI Moderator now checks a Drift round that found a single track (Balanced and Strict; Relaxed says when it skips); with OpenAI, Google Gemini or Ollama chosen, nothing mentions Anthropic credit.
+- **Fixes**: the Moderator now checks a Drift round that found a single track (Balanced and Strict; Relaxed says when it skips); with OpenAI, Google Gemini or Ollama chosen, nothing mentions Anthropic credit.
 
 ### Earlier: 1.16.0
 
@@ -365,7 +365,7 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 - **A built-in title bar**: the tabs run to the top of the window, with minimise, maximise and close. Settings > Other > **Use the Windows title bar** brings Windows' own back.
 - **Switch to a Sonos without starting again**: a DLNA zone now carries on from the same point, fine-tuned with **Switch Timing Adjustment**.
 - **Keep It Tight**: Drift is Off, Keep It Tight or Spread; Non-stop is Off, Keep It Tight or Let's See Where This Goes; JRiver playlists can reseed from the **Whole playlist**.
-- **AI Moderator on Drift tracks** for Similar Artists and Similar Tracks, a moderator that compares with the playlist so far, and chains that went off course dropped.
+- **Moderator on Drift tracks** for Similar Artists and Similar Tracks, a moderator that compares with the playlist so far, and chains that went off course dropped.
 - **AI Usage** in Settings > Keys: tokens per feature, estimated costs, a per-run guide and a Query, with an optional total in Now Playing.
 - **More variety** from Similar Tracks (optional from 1.14.0).
 - **Set as Default** on JRiver Playlists; dropped-g titles match; the cache can be kept for a month, a year or permanently, and cleared by age; Discover opens on the latest session; Label is an option; **Support** replaces Buy me a coffee.
@@ -407,9 +407,9 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ### Earlier: 1.9.0
 
-- **AI Moderator levels.** Off, Relaxed, Balanced or Strict, on the Play tab and per device. Off by default; if you had it on, it's now Balanced (see AI Moderator above).
+- **Moderator levels.** Off, Relaxed, Balanced or Strict, on the Play tab and per device. Off by default; if you had it on, it's now Balanced (see Moderator above).
 - **Drift with Custom Sources.** Each Drift section can use its own sources and its own "must agree", or stay the same as Settings > Sources (see Drift above).
-- **Vibe Playlist is now AI Playlist.** Its first suggestion is More tracks like the song that's playing. The AI's own picks are never moderated, and its Drift says plainly when it's using your sources rather than the AI, with an optional AI Moderator for those tracks.
+- **Vibe Playlist is now AI Playlist.** Its first suggestion is More tracks like the song that's playing. The AI's own picks are never moderated, and its Drift says plainly when it's using your sources rather than the AI, with an optional Moderator for those tracks.
 - **Bracketed titles match both ways.** "Long Cool Woman (in a Black Dress)" finds "Long Cool Woman in a Black Dress", and the reverse.
 - **Nothing found still finishes the job.** Run After Building runs after every build, matches or not, and added playlists play on their own when nothing matched.
 
@@ -417,7 +417,7 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 - **Console Query.** Ask Claude why a playlist came out the way it did, and get suggested setting changes. Off by default: Settings > Other > Enable Console Query (see Console Query above).
 - **Copy and Clear.** Click into the console to copy what you've highlighted (or all of it), or to clear it.
-- **Drift and Non-stop on the Play tab.** Both sit in More Options beside the AI Moderator and change Settings > Playlist for every Play option at once.
+- **Drift and Non-stop on the Play tab.** Both sit in More Options beside the Moderator and change Settings > Playlist for every Play option at once.
 - **Band names matched both ways.** "The Jimi Hendrix Experience" finds a library tagged "Jimi Hendrix", and the reverse. "At most 3 per artist" counts them as one artist.
 - **Playlists and smartlists set apart.** "Use global playlist settings" has a row for each, so a random-album smartlist can keep its own order.
 - **Now Playing refreshes on click,** on its tab or anywhere in its panel.
@@ -426,10 +426,10 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 ### Earlier: 1.7.0
 
 - **Your own playlists in a build.** Add JRiver playlists and smartlists before, after or mixed through any Play tab build, spaced evenly or at random, in the order you list them. The ones you use most come first in the picker.
-- **More options.** One row for Show Credits, the AI Moderator and Add playlist, opened from where Show Credits was. It remembers whether it's open, and counts what's on when it's closed.
-- **AI Moderator on the Play tab.** Switched on or off as you go, for Similar Artists and Similar Tracks. Voice devices with settings of their own keep theirs.
+- **More options.** One row for Show Credits, the Moderator and Add playlist, opened from where Show Credits was. It remembers whether it's open, and counts what's on when it's closed.
+- **Moderator on the Play tab.** Switched on or off as you go, for Similar Artists and Similar Tracks. Voice devices with settings of their own keep theirs.
 - **Run after building.** Settings > Playlist can run a file once a playlist is in JRiver, per Play option and per device.
-- **Purple for AI.** Anything that spends Anthropic credit is marked in purple: the AI Moderator, Vibe Playlist's bar and the Anthropic key.
+- **Purple for AI.** Anything that spends Anthropic credit is marked in purple: the Moderator, Vibe Playlist's bar and the Anthropic key.
 - **Tidier header.** The tagline sits beside the logo, and the track title in Now Playing is smaller.
 
 ### Earlier: 1.6.2
@@ -449,9 +449,9 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 - **Filters.** Named filters with Applies on, Only pick from a playlist or smartlist, and rules on rating, year, plays, dates, genre, artist, album, duration, file type, bit depth, sample rate and location.
 - **Keyboard shortcuts.** Global keys for a remote, aimed at one zone, seeding from the last track played when Playing Now is empty.
 - **JRiver Playlists.** Shuffle, Non-stop, Reseed from and Skip recent for the playlists you ask for by voice, per playlist or for all of them, with folders, types, sorting and a folder filter. Alexa asks which one when two share a name.
-- **A tab per Play option.** Settings > Sources and Playlist have Similar Artists, Similar Tracks, Artist's Top Tracks and Vibe Playlist tabs, each with its own Drift, Non-stop, Hidden Tracks and AI Moderator. Sources are listed one per line, with the ListenBrainz algorithm beside ListenBrainz.
+- **A tab per Play option.** Settings > Sources and Playlist have Similar Artists, Similar Tracks, Artist's Top Tracks and Vibe Playlist tabs, each with its own Drift, Non-stop, Hidden Tracks and Moderator. Sources are listed one per line, with the ListenBrainz algorithm beside ListenBrainz.
 - **AI Drift for vibe playlists.** Drift can ask the AI again with your description, avoiding repeats. Never the default, as it uses a little credit per round.
-- **Changed.** The Play tab buttons seed from the last track played when Playing Now is empty. Number of tracks has a ? explaining it's a target. Vibe playlists no longer use the AI Moderator. Settings tabs now run Sources, Playlist, Filters, Search, Keys, Voice Commands, JRiver Playlists, Other.
+- **Changed.** The Play tab buttons seed from the last track played when Playing Now is empty. Number of tracks has a ? explaining it's a target. Vibe playlists no longer use the Moderator. Settings tabs now run Sources, Playlist, Filters, Search, Keys, Voice Commands, JRiver Playlists, Other.
 
 ### Earlier: 1.5.2
 
@@ -475,7 +475,7 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 - **Fast start.** With nothing playing, the first track starts within a second or two and the rest of the playlist follows it in. Voice "shuffle songs by" opens on one of the artist's top five.
 - **Drift.** Similar Artists, Similar Tracks and Vibe Playlist can search again from what they found when a playlist comes up short, using similar tracks or similar artists, for 1 to 6 rounds. Off by default.
-- **AI Moderator.** An optional Claude Haiku check that removes tracks clashing with the seed's tone, energy and mood, never on genre alone, with each removal and its reason in the log. Switched on under Settings > Sources.
+- **Moderator.** An optional Claude Haiku check that removes tracks clashing with the seed's tone, energy and mood, never on genre alone, with each removal and its reason in the log. Switched on under Settings > Sources.
 - **Settings per device.** Tick Own settings for an Alexa device and it gets its own Sources and Playlist tabs, copying the Windows app's settings until you change them.
 - **Skip tracks played recently.** Each Play mode can leave out anything JRiver has played in the last so many days, 1 by default. Off by default.
 - **Hidden Tracks.** Long album closers, where a hidden bonus track follows a long silence, are skipped from built playlists.
@@ -524,7 +524,7 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 **Solid**: Similar Artists, Artist's Top Tracks, Show Credits, Discover, Settings, cache, mid-album queueing, multi-value artists, the agreement number.
 
-**Newer**: Drift's Custom Sources, the AI Moderator's levels, added playlists, run after building, non-stop, filters, keyboard shortcuts, JRiver Playlists settings, the dark theme, fast start, Drift, the AI Moderator, settings per device, skipping recent plays, Hidden Tracks, the Label button, Similar Tracks, zones, voice control, Discover's YouTube playlists, the tray, the Search tab, YouTube Music as a source and YouTube output. All are in daily use on the development PC. Voice Commands are the least plug-and-play part, as their setup guide says, and the YouTube parts rest on an unofficial library, so expect the occasional breakage. AI Playlist works well and is still learning its limits.
+**Newer**: Drift's Custom Sources, the Moderator's levels, added playlists, run after building, non-stop, filters, keyboard shortcuts, JRiver Playlists settings, the dark theme, fast start, Drift, the Moderator, settings per device, skipping recent plays, Hidden Tracks, the Label button, Similar Tracks, zones, voice control, Discover's YouTube playlists, the tray, the Search tab, YouTube Music as a source and YouTube output. All are in daily use on the development PC. Voice Commands are the least plug-and-play part, as their setup guide says, and the YouTube parts rest on an unofficial library, so expect the occasional breakage. AI Playlist works well and is still learning its limits.
 
 **Removed**: a producer-based playlist mode built on Discogs credits. Discogs credit data is too patchy to be reliable, so it was dropped rather than shipped half-working.
 
@@ -532,7 +532,7 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 - Remembering Deezer artist IDs, for quicker first runs
 - Voice: "add this track to a playlist"
-- Voice and keyboard on/off switches for non-stop, shuffle and the AI Moderator
+- Voice and keyboard on/off switches for non-stop, shuffle and the Moderator
 - A web browser as a Now Playing source
 - More players and outputs beyond JRiver and YouTube (distant)
 - A shared recommendation database built from the hit/miss data (very distant)

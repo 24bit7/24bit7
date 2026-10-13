@@ -150,7 +150,7 @@ UNTESTED_NOTE = "Untested so far: please report how it goes on the JRiver forum 
 NO_KEY_TEXT = "You need to set up the AI under Settings > Keys to use this function"
 CONSOLE_QUERY_WARNING = ("Console Query sends the console, your settings (without keys) and 24bit7's "
                          "code to your AI provider each time you ask a question. The first question costs a few "
-                         "pence, more than the AI Moderator.\n\nTurn it on?")
+                         "pence, more than the Moderator.\n\nTurn it on?")
 MODERATOR_CHOICES = ["Off", "Relaxed", "Balanced", "Strict"]
 MODERATOR_LEVELS_HELP = (
     "Relaxed: removes only clear clashes, at most a fifth of the tracks.\n"
@@ -159,12 +159,12 @@ MODERATOR_LEVELS_HELP = (
     "playlist up.\n"
     "Tracks it doesn't know well enough to judge are always kept, and genre is never a reason on its own.")
 def moderator_warning():
-    """The one-off note when AI Moderator is first switched on, naming the chosen provider."""
+    """The one-off note when Moderator is first switched on, naming the chosen provider."""
     if engine.AI_PROVIDER == "ollama":
-        return ("AI Moderator checks each playlist with your own AI model (Ollama), on your PC. "
+        return ("Moderator checks each playlist with your own AI model (Ollama), on your PC. "
                 "It costs nothing.")
     name = engine.ai_provider_name()
-    return (f"AI Moderator checks each playlist using your chosen AI ({name}), which uses a little "
+    return (f"Moderator checks each playlist using your chosen AI ({name}), which uses a little "
             f"credit from your {name} account. Each playlist costs a fraction of a penny.")
 
 
@@ -256,10 +256,10 @@ class Tooltip:
 
 
 def warn_moderator_once(parent):
-    """The one-off credits warning, the first time AI Moderator is switched on anywhere."""
+    """The one-off credits warning, the first time Moderator is switched on anywhere."""
     if engine.MODERATOR_WARNED:
         return
-    messagebox.showinfo("AI Moderator", moderator_warning(), parent=parent)
+    messagebox.showinfo("Moderator", moderator_warning(), parent=parent)
     write_env({"MODERATOR_WARNED": "1"})
     engine.MODERATOR_WARNED = True
 
@@ -611,7 +611,7 @@ DRIFT_MODE_HELP = ("When a playlist comes up short, Drift searches again using w
                    "console says when.\n"
                    "Spread: seeds from across the whole playlist, including what Drift has added, so it "
                    "can travel further while branching in several directions.")
-# AI Moderator on Drift tracks, for Similar Artists and Similar Tracks
+# Moderator on Drift tracks, for Similar Artists and Similar Tracks
 DRIFT_MODERATOR_OPTIONS = [("same", "Same as build"), ("off", "Off"), ("relaxed", "Relaxed"),
                            ("balanced", "Balanced"), ("strict", "Strict")]
 DRIFT_ARTIST_SOURCE_NAMES = [s for s in SOURCE_NAMES if s[0] != "ai"]   # Drift from the sources never uses the AI
@@ -2037,8 +2037,8 @@ class SettingsTab(tk.Frame):
             cb.state(["!disabled"] if tick.get() else ["disabled"])
 
     def _moderator_section(self, p, page, group):
-        """An AI Moderator tick for one Play option, greyed out until the AI is set up."""
-        box = section(page, "AI Moderator",
+        """A Moderator tick for one Play option, greyed out until the AI is set up."""
+        box = section(page, "Moderator",
                       "Checks each playlist (and each Drift round) once with your AI's quick model, and "
                       "removes tracks that clash with the seed's tone, energy and mood. "
                       "Logs each removal with its reason. Uses a little AI credit each time, a fraction of a "
@@ -2165,7 +2165,7 @@ class SettingsTab(tk.Frame):
         return bool(typed) or (provider == engine.AI_PROVIDER and engine.ai_configured())
 
     def _sync_moderator_box(self, p):
-        """Every AI Moderator tick is greyed out until the AI is set up (Settings > Keys)."""
+        """Every Moderator tick is greyed out until the AI is set up (Settings > Keys)."""
         for tick in getattr(p, "moderator_boxes", []):
             tick.state(["!disabled"] if self._ai_set_up() else ["disabled"])
 
@@ -2442,7 +2442,7 @@ class SettingsTab(tk.Frame):
             drift_mod_cb = None
             if group != "vibe":   # AI Playlist has its own, below
                 dm_row = tk.Frame(box)
-                tk.Label(dm_row, text="AI Moderator on Drift tracks", fg=PALETTE["ai_purple"]).pack(side="left")
+                tk.Label(dm_row, text="Moderator on Drift tracks", fg=PALETTE["ai_purple"]).pack(side="left")
                 p.vars[f"{name}_MODERATOR"] = tk.StringVar(value=option_label(
                     DRIFT_MODERATOR_OPTIONS, p.env.get(f"{name}_MODERATOR", "same").strip().lower()))
                 drift_mod_cb = ttk.Combobox(dm_row, textvariable=p.vars[f"{name}_MODERATOR"],
@@ -2456,7 +2456,7 @@ class SettingsTab(tk.Frame):
                         warn_moderator_once(self)
                     p.save()
                 drift_mod_cb.bind("<<ComboboxSelected>>", dm_chosen)
-                help_mark(dm_row, "Checks the tracks each Drift round adds. Same as build uses the AI Moderator "
+                help_mark(dm_row, "Checks the tracks each Drift round adds. Same as build uses the Moderator "
                                   "level of the build itself; a stronger level here checks Drift harder than the "
                                   "first round. When most of what one seed brought in is off course, the rest of "
                                   "it goes too and Drift doesn't seed from that chain again.\n"
@@ -2527,9 +2527,9 @@ class SettingsTab(tk.Frame):
                 p.save()
             mode_cb.bind("<<ComboboxSelected>>", sources_changed)
             using_cb.bind("<<ComboboxSelected>>", lambda e: sync_drift(p), add="+")
-            if group == "vibe":   # AI Playlist: an AI Moderator for what Drift adds from the sources
+            if group == "vibe":   # AI Playlist: a Moderator for what Drift adds from the sources
                 mod_row = tk.Frame(box)
-                tk.Label(mod_row, text="AI Moderator on Drift tracks", fg=PALETTE["ai_purple"]).pack(side="left")
+                tk.Label(mod_row, text="Moderator on Drift tracks", fg=PALETTE["ai_purple"]).pack(side="left")
                 p.vars["AI_MODERATOR_VIBE"] = tk.StringVar(
                     value=engine.moderator_settings(p.env.get)["vibe"].title())
                 mod_cb = ttk.Combobox(mod_row, textvariable=p.vars["AI_MODERATOR_VIBE"], values=MODERATOR_CHOICES,
@@ -2932,7 +2932,7 @@ class SettingsTab(tk.Frame):
         use_title = tk.Label(use, text="Use AI", font=LABEL_FONT, fg=PALETTE["ai_purple"])
         use_title.pack(side="left", padx=(0, 12))
         help_mark(use, "Off pauses everything that spends AI credits, without removing your key: AI Playlist, "
-                       "the AI Moderator, the AI as a source, Drift using the AI, Console Query and Assess Tone "
+                       "the Moderator, the AI as a source, Drift using the AI, Console Query and Assess Tone "
                        "all stand down, and the console says so once per build. Switch back On and every "
                        "setting is as you left it. Part of Profiles, so a No AI profile is one Load away.",
                   on=use_title)
@@ -3003,7 +3003,7 @@ class SettingsTab(tk.Frame):
                           values=[name for _, name in engine.AI_PROVIDERS])
         cb.pack(side="left")
         cb.bind("<<ComboboxSelected>>", lambda e: (cb.selection_clear(), self._ai_provider_chosen()))
-        help_mark(row, "The AI that AI Playlist, the AI Moderator, the AI as a source, Steer, Assess Tone and "
+        help_mark(row, "The AI that AI Playlist, the Moderator, the AI as a source, Steer, Assess Tone and "
                        "the Queries use. Anthropic (Claude) is the one fully tested. OpenAI and Google Gemini "
                        "need their own key and should work the same way. Ollama runs a model on your own PC "
                        "for free; smaller models give rougher results, and Console Query isn't available with "
@@ -3564,7 +3564,7 @@ class SettingsTab(tk.Frame):
         help_mark(row, "Adds Query to the console's Copy and Clear strip. Ask the AI why a playlist came "
                        "out the way it did, and get suggested setting changes. Each question sends the "
                        "console, your settings (without keys) and 24bit7's code, so it uses more AI "
-                       "credit than AI Moderator. Not available with Ollama."
+                       "credit tha Moderator. Not available with Ollama."
                   ).pack(side="left", padx=(8, 0))
 
         # Show Credits: the playing track's credits or every track's, and which list comes first

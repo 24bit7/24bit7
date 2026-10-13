@@ -22,14 +22,14 @@ import requests
 
 import engine
 
-QUERY_MODEL = "claude-haiku-4-5-20251001"   # the same model as AI Moderator
+QUERY_MODEL = "claude-haiku-4-5-20251001"   # the same model as Moderator
 REPO_RAW = "https://raw.githubusercontent.com/24bit7/24bit7/{ref}/{path}"
 CODE_FILES = ("engine.py", "playmix.py", "README.md")
 SECRET = re.compile(r"KEY|TOKEN|SECRET|PASS|USER", re.I)   # settings never sent
 CONSOLE_LIMIT = 60000   # characters of console sent, the most recent kept
 
 HINT = ("Try: Why was this track included?   Why was the playlist so short?   "
-        "What did the AI Moderator remove?   Which settings would give me more variety?")
+        "What did the Moderator remove?   Which settings would give me more variety?")
 
 SYSTEM = """You help someone get the best out of 24bit7, a Windows app that builds playlists from \
 their own JRiver music library (Similar Artists, Similar Tracks, Artist's Top Tracks, Vibe Playlist), \
@@ -42,7 +42,7 @@ from your own knowledge, opening with "From general knowledge:", then add anythi
 shows, such as which sources suggested the track or whether it's in their library. If you're not sure \
 of a fact, say so rather than guess.
 - A question about how 24bit7 behaved (why a track was included or left out, why a playlist was \
-short, what the AI Moderator did): explain what most likely happened from the console and the rules \
+short, what the Moderator did): explain what most likely happened from the console and the rules \
 in the code, saying when you're inferring. Then recommend up to three changes that would help.
 
 Only recommend changes when the question is about how 24bit7 behaved, or when one would clearly help. \

@@ -1,5 +1,5 @@
 """
-AI Moderator and single tracks (datdude's GitHub issue): a Drift round that finds one track
+Moderator and single tracks (datdude's GitHub issue): a Drift round that finds one track
 used to go through unchecked and silently. Balanced and Strict now check it; Relaxed skips
 it and says so; whenever the moderator is set but can't run, the console says why.
 """
@@ -25,7 +25,7 @@ def test_single_drift_track_is_checked(app, level):
     r = app.Lines()
     removed = app.engine.moderate(DOWN_RODEO, "Portishead - Glory Box", report=r, reference=SO_FAR)
     assert removed == {"k1"}, r.text()
-    assert r.has(f"AI Moderator ({level.title()}): checking 1 track against the seed and the playlist so far"), r.text()
+    assert r.has(f"Moderator ({level.title()}): checking 1 track against the seed and the playlist so far"), r.text()
     assert r.has("Removed Rage Against the Machine - Down Rodeo"), r.text()
 
 
@@ -36,7 +36,7 @@ def test_relaxed_skips_a_single_track_and_says_so(app):
     waiting = len(app.ai.script)
     r = app.Lines()
     assert app.engine.moderate(DOWN_RODEO, "Portishead - Glory Box", report=r, reference=SO_FAR) == set()
-    assert r.has("AI Moderator (Relaxed): skipped Rage Against the Machine - Down Rodeo, as there's only 1 track"), \
+    assert r.has("Moderator (Relaxed): skipped Rage Against the Machine - Down Rodeo, as there's only 1 track"), \
         r.text()
     assert len(app.ai.script) == waiting, "the AI wasn't asked"
 
@@ -47,7 +47,7 @@ def test_relaxed_still_checks_two_or_more(app):
     remove_reply(app)
     r = app.Lines()
     app.engine.moderate(DOWN_RODEO + SO_FAR, "Portishead - Glory Box", report=r)
-    assert r.has("AI Moderator (Relaxed): checking 3 tracks"), r.text()
+    assert r.has("Moderator (Relaxed): checking 3 tracks"), r.text()
 
 
 def test_set_but_no_ai_says_why_once(app):
@@ -57,7 +57,7 @@ def test_set_but_no_ai_says_why_once(app):
     r = app.Lines()
     app.engine.moderate(DOWN_RODEO, "Portishead - Glory Box", report=r)
     app.engine.moderate(SO_FAR, "Portishead - Glory Box", report=r)
-    lines = [l for l in r if "AI Moderator skipped: the AI isn't set up" in l]
+    lines = [l for l in r if "Moderator skipped: the AI isn't set up" in l]
     assert len(lines) == 1, r.text()
 
 
