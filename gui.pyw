@@ -380,7 +380,7 @@ class PlayTab(tk.Frame):
         self._add_play_notes(frame)
         self._sync_seed_bars()
         self.mix_rows = MixRows(self.more_box, padx=16)
-        self.mix_rows.on_change = self._update_more_label
+        self.mix_rows.on_change = self._on_mix_rows_changed
         self._show_more(playmix.is_open(), save=False)
 
     def help_on(self):
@@ -437,6 +437,14 @@ class PlayTab(tk.Frame):
         if save:
             playmix.set_open(open_)
         self._update_more_label()
+
+    def _on_mix_rows_changed(self):
+        """An added playlist changed: the console says what the next build will do, once per change."""
+        self._update_more_label()
+        line = "Note: " + playmix.summary(self.mix_rows.rows)
+        if line != getattr(self, "_mix_note_shown", None):
+            self._mix_note_shown = line
+            self._append_log(line)
 
     def _update_more_label(self):
         """The More options button's arrow: up while the row is open, down while it's closed."""

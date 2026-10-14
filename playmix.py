@@ -97,10 +97,10 @@ def picker_order(playlists, text=""):
 
 
 def summary(current):
-    """One line saying what the next build will do with these rows, or "" with none."""
+    """One sentence saying what the next build will do with these rows, for the console."""
     current = [r for r in current if r.get("id")]
     if not current:
-        return ""
+        return "the next build is 24bit7's tracks only."
     parts = [r["name"] for r in current if r["mode"] == "before"]
     mixed = [f"{r['name']} ({SPREADS[r['spread']].lower()})" for r in current if r["mode"] == "mix"]
     middle = "24bit7's tracks"
@@ -108,4 +108,4 @@ def summary(current):
         middle += " mixed with " + (mixed[0] if len(mixed) == 1 else ", ".join(mixed[:-1]) + " and " + mixed[-1])
     parts.append(middle)
     parts += [r["name"] for r in current if r["mode"] == "after"]
-    return "Next build: " + ", then ".join(parts) + "."
+    return "the next build is " + ", then ".join(parts) + "."

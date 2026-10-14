@@ -4,7 +4,8 @@
 Each row: a handle to drag it up or down, the playlist (a picker with search,
 most used first, a divider, then A to Z), how it joins (Mix, Add before, Add
 after) and, for Mix, Spaced evenly or Mixed randomly. The x removes a row.
-Saved as you go (playmix.py). Combining happens in the engine.
+Saved as you go (playmix.py), and the Play tab says in the console what the next
+build will do. Combining happens in the engine.
 """
 
 import tkinter as tk
@@ -36,7 +37,6 @@ class MixRows(tk.Frame):
         self._target = None
         self.body = tk.Frame(self)
         self.body.pack(fill="x")
-        self.note = tk.Label(self, font=("Segoe UI", 8), fg=PALETTE["text_muted"], anchor="w", justify="left")
         self._draw()
 
     # --- rows -----------------------------------------------------------------
@@ -48,19 +48,8 @@ class MixRows(tk.Frame):
 
     def _save(self):
         playmix.set_rows(self.rows)
-        self._show_note()
         if callable(getattr(self, "on_change", None)):
-            self.on_change()   # the More options button counts the rows
-
-    def _show_note(self):
-        text = playmix.summary(self.rows)
-        self.note.config(text=text)
-        if text:
-            self.note.pack(fill="x", pady=(4, 0))
-        else:
-            self.note.pack_forget()
-        if not self.rows:
-            self.configure(height=1)   # nothing showing: no leftover space
+            self.on_change()   # the Play tab notes the change in the console
 
     def _draw(self):
         for child in self.body.winfo_children():
@@ -100,14 +89,11 @@ class MixRows(tk.Frame):
         # Tk keeps a frame's old size once its last child goes, so with no rows the
         # rows' frame is unpacked and shrunk, leaving no gap above the log
         if self.rows:
-            if self.note.winfo_manager():
-                self.body.pack(fill="x", before=self.note)
-            else:
-                self.body.pack(fill="x")
+            self.body.pack(fill="x")
         else:
             self.body.pack_forget()
             self.body.configure(height=1)
-        self._show_note()
+            self.configure(height=1)   # nothing showing: no leftover space
 
     def _set_mode(self, i, label):
         self.rows[i]["mode"] = next(k for k, v in playmix.MODES.items() if v == label)

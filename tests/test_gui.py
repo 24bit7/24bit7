@@ -1710,3 +1710,27 @@ def test_clear_while_greeting_types_drops_the_held_lines(ui):
     p._clear_from_strip()
     ui.pump(0.2)
     assert console(ui).strip() == "" and not p._greeting_active
+
+
+# --- added playlists: the console says what the next build will do ---
+
+def test_added_playlist_note_goes_to_the_console(app, ui):
+    p = ui.play
+    p._end_greeting(keep=False)
+    rows = p.mix_rows
+    assert not hasattr(rows, "note"), "no grey bar under the rows any more"
+    pl = next(x for x in app.jriver.playlists if x["Type"] == "Playlist")
+    rows.rows.append({"id": pl["ID"], "name": pl["Name"], "mode": "after", "spread": "even"})
+    rows._save()
+    rows._draw()
+    ui.pump(0.2)
+    assert f"Note: the next build is 24bit7's tracks, then {pl['Name']}." in console(ui), console(ui)
+    rows._set_mode(0, "Add before")
+    ui.pump(0.2)
+    assert f"Note: the next build is {pl['Name']}, then 24bit7's tracks." in console(ui)
+    rows._remove(0)
+    ui.pump(0.2)
+    text = console(ui)
+    assert "Note: the next build is 24bit7's tracks only." in text
+    assert text.count("Note: the next build") == 3, "one line per change, none repeated"
+    assert not ui.errors, ui.errors

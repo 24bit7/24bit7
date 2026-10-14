@@ -197,7 +197,7 @@ Open **More Options** and press **+ Add Playlist** to join a JRiver playlist or 
 - **Add after**: its tracks follow 24bit7's, in their own order.
 - **Mix**: its tracks are woven through 24bit7's. **Spaced evenly** spreads both lists over the whole playlist so they finish together; with equal lengths that's one of each in turn. **Mixed randomly** scatters them.
 
-Rows play in the order they're listed, so two Add after playlists follow one another, top to bottom. The picker shows the playlists you use most first, then the rest A to Z, with a search box.
+Rows play in the order they're listed, so two Add after playlists follow one another, top to bottom. The picker shows the playlists you use most first, then the rest A to Z, with a search box. Each change is noted in the console, saying what the next build will do.
 
 The playlists come through exactly as JRiver gives them, so a smartlist's own rules (ratings, play history and so on) decide what's in it. 24bit7's filters, recent-play skip and hidden-track check leave them alone. The only thing it drops is a song already in its own picks, so nothing plays twice. With a playlist added, Drift finishes before anything is sent, so Add after really does come last. With Add before and a stopped zone, fast start plays that playlist's first track.
 
