@@ -1671,14 +1671,33 @@ def test_review_close_puts_the_console_back_cleared(app, ui):
     assert not ui.errors, ui.errors
 
 
-def test_review_close_sits_above_stop_preview(app, ui):
+def test_review_close_sits_on_the_switch_row(app, ui):
+    """Close Review shares the Console | Review row, at its right, drawn the same way."""
     _review_with_zone(app, ui)
     panel = ui.play.review_panel
     ui.pump(0.2)
-    close, stop = panel.close_btn, panel.stop_preview_btn
-    assert close.winfo_rooty() + close.winfo_height() <= stop.winfo_rooty(), "Close Review is above Stop Preview"
+    assert panel.close_edge.master is panel.switch_row and panel.close_edge.winfo_manager()
+    assert panel.close_btn.winfo_rooty() < panel.title_label.winfo_rooty(), "above Review's header, with it"
     right = lambda w: w.winfo_rootx() + w.winfo_width()
-    assert abs(right(close) - right(panel.preview_bar)) <= 2, "and right aligned with it"
+    assert abs(right(panel.close_edge) - right(panel.switch_row)) <= 2, "at the right of the row"
+    assert panel.close_edge.cget("bg") == panel.switch_edge.cget("bg"), "the same edge"
+    assert panel.close_btn.cget("fg") == panel.console_btn.cget("fg"), "and the same text colour as an unlit tab"
+    assert panel.close_btn.cget("font") == panel.console_btn.cget("font")
+    panel.show_console()
+    ui.pump(0.2)
+    assert panel.close_edge.winfo_manager(), "still there from the Console view, where it closes the Review too"
+    assert panel.close_btn.cget("fg") == panel.review_btn.cget("fg")
+
+
+def test_more_options_row_sits_evenly_between_line_and_console(ui):
+    p = ui.play
+    if not p.extras_row.winfo_manager():
+        p._show_more(True, save=False)
+    ui.pump(0.3)
+    b = p.seed_cb
+    above = b.winfo_rooty() - (p.more_line.winfo_rooty() + p.more_line.winfo_height())
+    below = p.console_box.winfo_rooty() - (b.winfo_rooty() + b.winfo_height())
+    assert abs(above - below) <= 4, f"the buttons sit {above} under the line and {below} above the console"
 
 
 # --- the greeting: lines arriving while it types wait until it clears ---

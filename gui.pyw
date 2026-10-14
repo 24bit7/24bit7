@@ -320,7 +320,7 @@ class PlayTab(tk.Frame):
         self.more_box = tk.Frame(self)
         self.more_box.pack(fill="x")
         self.more_line = tk.Frame(self.more_box, height=1, bg=PALETTE["line"])
-        self.extras_row = tk.Frame(self.more_box, padx=16, pady=6)
+        self.extras_row = tk.Frame(self.more_box, padx=16)
         dark = engine.THEME == "dark"
         self.seed_colour = "#22d3ee" if dark else "#0e7490"     # teal: Seed on Playing Now
         review_colour = "#f28c28" if dark else "#a85400"         # orange: Review Mode
@@ -427,7 +427,7 @@ class PlayTab(tk.Frame):
         """Opens or closes the More options row. Open or closed is remembered between launches."""
         if open_:
             self.more_line.pack(fill="x", padx=16, pady=(6, 0))
-            self.extras_row.pack(fill="x")
+            self.extras_row.pack(fill="x", pady=(12, 2))   # the console below has its own top margin
             self.mix_rows.pack(fill="x")
         else:
             self.mix_rows.pack_forget()

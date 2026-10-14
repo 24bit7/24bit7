@@ -192,9 +192,11 @@ def test_infinity_centred_up_and_down(app, ui):
     b = ui.play.nonstop_cb
     w, h = b._size
     sym_font, val_font = b._symbol_fonts()
-    (sx, sy), _ = tabs.symbol_layout(w, h, "∞", "Wander", sym_font, val_font)
+    (sx, sy), (vx, vy) = tabs.symbol_layout(w, h, "∞", "Wander", sym_font, val_font)
     _, top, _, bottom = sym_font.getbbox("∞")
-    assert abs((sy + top + sy + bottom) / 2 - h / 2) <= 1, "the glyph itself sits in the middle"
+    _, x_top, _, x_bottom = val_font.getbbox("x")
+    value_middle = vy + (x_top + x_bottom) / 2
+    assert abs((sy + top + sy + bottom) / 2 - value_middle) <= 1, "the glyph sits level with the value, not the button"
 
 
 def test_help_switch_gates_the_play_tab_notes(app, ui):

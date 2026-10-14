@@ -385,16 +385,19 @@ def _pil_font(px):
 def symbol_layout(w, h, symbol, value, sym_font, val_font):
     """
     Where a symbol button's two parts go: ((symbol x, y), (value x, y)). The pair is centred
-    across; the symbol is centred up and down on its own shape (an infinity sign sits low in
-    its line), and the value on the font's height, as every button's text is.
+    across. The value sits on the font's height, as every button's text does, and the symbol
+    is centred on the value's visual middle (the middle of its x-height), so an infinity sign
+    reads level with "Off" rather than with the button.
     """
     gap_value = SYMBOL_GAP + value
     sym_w, val_w = sym_font.getlength(symbol), val_font.getlength(gap_value)
     x = (w - sym_w - val_w) / 2
-    left, top, right, bottom = sym_font.getbbox(symbol)
-    sym_y = h / 2 - (top + bottom) / 2
     ascent, descent = val_font.getmetrics()
     val_y = (h - (ascent + descent)) / 2
+    x_top, x_bottom = val_font.getbbox("x")[1], val_font.getbbox("x")[3]
+    middle = val_y + (x_top + x_bottom) / 2
+    left, top, right, bottom = sym_font.getbbox(symbol)
+    sym_y = middle - (top + bottom) / 2
     return (round(x), round(sym_y)), (round(x + sym_w), round(val_y))
 
 

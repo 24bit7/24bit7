@@ -132,6 +132,13 @@ class ReviewPanel:
         self.review_btn.pack(side="left")
         self.console_btn.bind("<Button-1>", lambda e: self.show_console())
         self.review_btn.bind("<Button-1>", lambda e: self.show_review())
+        # Close Review, at the right of the same row, drawn like the switch
+        self.close_edge = tk.Frame(self.switch_row, bg=CONSOLE["accent"], padx=1, pady=1)
+        self.close_edge.pack(side="right")
+        self.close_btn = tk.Label(self.close_edge, text="Close Review", font=BOLD, padx=16, pady=3, cursor="hand2")
+        self.close_btn.pack()
+        self.close_btn.bind("<Button-1>", lambda e: self.close())
+        Tooltip(self.close_btn, CLOSE_TIP, when=self._notes_on, wrap=self._note_wrap)
         self._style_switch()
 
     def _show_switch(self):
@@ -154,6 +161,8 @@ class ReviewPanel:
         self.switch_edge.config(bg=c["accent"])
         self.switch_mid.config(bg=c["accent"])
         on, off = dict(bg=c["accent"], fg=c["on_accent"]), dict(bg=c["bg"], fg=c["accent"])
+        self.close_edge.config(bg=c["accent"])
+        self.close_btn.config(**off)
         self.console_btn.config(text=f"Console {DOT}" if self.dot and self.showing else "Console",
                                 **(off if self.showing else on))
         ticked = len(self.order)
@@ -192,11 +201,6 @@ class ReviewPanel:
     def _build_frame(self):
         p = self.p
         self.frame = tk.Frame(self.box, bg=p["bg"])
-        top = tk.Frame(self.frame, bg=p["bg"])   # Close Review, at the right above the header
-        top.pack(fill="x", padx=14, pady=(6, 0))
-        self.close_btn = self._pill(top, "Close Review", self.close)
-        self.close_btn.pack(side="right")
-        Tooltip(self.close_btn, CLOSE_TIP, when=self._notes_on, wrap=self._note_wrap)
         head = tk.Frame(self.frame, bg=p["bg"])
         head.pack(fill="x", padx=14, pady=(4, 8))
         self.title_label = tk.Label(head, text="", font=BOLD, bg=p["bg"], fg=p["text"], anchor="w")
