@@ -27,14 +27,15 @@ LOUNGE = "amzn1.ask.device.LOUNGE"
 @pytest.fixture
 def ui(app, monkeypatch):
     """The main window's tabs, built the way gui.main() builds them, without its mainloop."""
-    from tkinter import messagebox, filedialog, simpledialog
+    from tkinter import messagebox, filedialog
     answers = []
     for name in ("showinfo", "showwarning", "showerror"):
         monkeypatch.setattr(messagebox, name, lambda *a, _n=name, **k: answers.append((_n, a)))
     for name in ("askyesno", "askokcancel", "askyesnocancel"):
         monkeypatch.setattr(messagebox, name, lambda *a, _n=name, **k: answers.append((_n, a)) or False)
     monkeypatch.setattr(filedialog, "askopenfilename", lambda *a, **k: "")
-    monkeypatch.setattr(simpledialog, "askstring", lambda *a, **k: None)
+    import tabs
+    monkeypatch.setattr(tabs, "ask_name", lambda *a, **k: None)   # the name prompt: Cancel
     import webbrowser
     monkeypatch.setattr(webbrowser, "open", lambda *a, **k: True)
 
@@ -814,8 +815,8 @@ def test_review_actions_need_a_tick(app, ui):
 
 
 def test_review_save_as_playlist(app, ui, monkeypatch):
-    from tkinter import simpledialog
-    monkeypatch.setattr(simpledialog, "askstring", lambda *a, **k: "Wedding Extras")
+    import tabs
+    monkeypatch.setattr(tabs, "ask_name", lambda *a, **k: "Wedding Extras")
     keys = _review_with_zone(app, ui, _album(app))
     before = list(app.jriver.zone("Speakers").playlist)
     panel = ui.play.review_panel
@@ -829,8 +830,8 @@ def test_review_save_as_playlist(app, ui, monkeypatch):
 
 
 def test_review_save_asks_before_replacing(app, ui, monkeypatch):
-    from tkinter import simpledialog
-    monkeypatch.setattr(simpledialog, "askstring", lambda *a, **k: "Sunday Morning")   # already exists
+    import tabs
+    monkeypatch.setattr(tabs, "ask_name", lambda *a, **k: "Sunday Morning")   # already exists
     keys = _review_with_zone(app, ui)
     panel = ui.play.review_panel
     panel.toggle(keys[0])
@@ -977,14 +978,13 @@ def _env(app):
 
 
 def test_profile_save_change_and_load_back(app, ui, monkeypatch):
-    import profiles, settings_gui
-    from tkinter import simpledialog
+    import profiles, settings_gui, tabs
     s = ui.settings
     settings_gui.write_env({"SIMILAR_TRACK_COUNT": "25", "PLAY_BEHAVIOUR": "review", "THEME": "dark",
                             "ANTHROPIC_API_KEY": "sk-original"})
     app.engine.db().execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('play_mix', '{\"rows\": [1]}')")
     app.engine.db().commit()
-    monkeypatch.setattr(simpledialog, "askstring", lambda *a, **k: "DJ")
+    monkeypatch.setattr(tabs, "ask_name", lambda *a, **k: "DJ")
     s._profile_save_as()
     assert profiles.names() == ["DJ"] and profiles.current() == "DJ"
     saved = profiles.read("DJ")
@@ -1596,3 +1596,57 @@ def test_device_with_own_settings_has_its_deep_cuts_switch(app, ui):
     assert "DEEP_CUTS_ARTISTS_SHARE" in main.vars and not any(
         f"DEEP_CUTS_{g}" in main.vars for g in ("ARTISTS", "TRACKS", "VIBE")), "Windows (Main) uses the Play tab"
     assert not ui.errors, ui.errors
+
+
+# --- the name prompt: 24bit7's own, in place of Tk's stock box ---
+
+def _open_prompt(ui, title, prompt, initial=""):
+    """Opens the real prompt over the main window and returns it once it's shown."""
+    import tabs
+    win = tabs.NamePrompt(ui.root, title, prompt, initial)
+    ui.pump(until=lambda: win.winfo_viewable(), timeout=10)
+    return win
+
+
+def test_name_prompt_enter_gives_the_name(ui):
+    win = _open_prompt(ui, "Save Profile", "Name for this profile:", "DJ")
+    assert win.entry.get() == "DJ" and win.entry.selection_present(), "the old name is selected to type over"
+    win.entry.delete(0, "end")
+    win.entry.insert(0, "Sunday")
+    win.event_generate("<Return>")
+    ui.pump(0.3)
+    assert win.result == "Sunday" and not win.winfo_exists()
+    assert not ui.errors, ui.errors
+
+
+def test_name_prompt_escape_gives_none(ui):
+    win = _open_prompt(ui, "New Filter", "Name for the new filter:")
+    win.entry.insert(0, "Half typed")
+    win.event_generate("<Escape>")
+    ui.pump(0.3)
+    assert win.result is None and not win.winfo_exists()
+
+
+def test_name_prompt_matches_the_theme(ui):
+    import tabs
+    win = _open_prompt(ui, "Rename Filter", "New name for the filter:", "Quiet")
+    bg = tabs.PALETTE.get("window_bg") or ui.root.cget("bg")
+    frames = [w for w in win.winfo_children() if isinstance(w, tk.Frame)]
+    assert frames and frames[0].cget("bg") == bg, "the box takes the theme's window colour, not Tk's grey"
+    assert not isinstance(win.ok_button, tk.Button), "drawn buttons, as on the rest of 24bit7"
+    win.cancel()
+    ui.pump(0.2)
+
+
+def test_review_save_asks_with_the_app_prompt(app, ui, monkeypatch):
+    """Save as Playlist goes through 24bit7's prompt, titled and filled in as the stock box was."""
+    import tabs
+    asked = []
+    monkeypatch.setattr(tabs, "ask_name", lambda parent, title, prompt, initial="": asked.append(
+        (title, prompt, initial)) or None)
+    keys = _review_with_zone(app, ui, _album(app))
+    panel = ui.play.review_panel
+    panel.toggle(keys[0])
+    panel._save()
+    ui.pump(0.3)
+    assert asked == [("Save as Playlist", "Name for the JRiver playlist:", panel.title)], asked

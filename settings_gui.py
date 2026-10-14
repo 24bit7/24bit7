@@ -17,7 +17,7 @@ import sys
 import threading
 import tkinter as tk
 import webbrowser
-from tkinter import ttk, messagebox, simpledialog, filedialog
+from tkinter import ttk, messagebox, filedialog
 
 import engine
 import tray
@@ -26,6 +26,7 @@ import hotkeys
 import saved_playlists
 import filters
 import ai_usage
+import tabs
 from tabs import TabbedPane, PALETTE, FlatButton
 from datetime import datetime
 
@@ -1401,7 +1402,7 @@ class SettingsTab(tk.Frame):
         right.keep = keep   # hold the variables while the page shows
 
     def _filter_new(self):
-        name = simpledialog.askstring("New filter", "Name for the new filter:", parent=self)
+        name = tabs.ask_name(self, "New Filter", "Name for the new filter:")
         if not name or not name.strip():
             return
         self._filters.append(filters.blank(name.strip()))
@@ -1413,7 +1414,7 @@ class SettingsTab(tk.Frame):
         if self._filter_i is None:
             return
         item = self._filters[self._filter_i]
-        name = simpledialog.askstring("Rename filter", "New name:", initialvalue=item["name"], parent=self)
+        name = tabs.ask_name(self, "Rename Filter", "New name for the filter:", item["name"])
         if name and name.strip():
             item["name"] = name.strip()
             self._filter_save()
@@ -3521,8 +3522,8 @@ class SettingsTab(tk.Frame):
 
     def _profile_save_as(self):
         import profiles
-        name = simpledialog.askstring("Save Profile", "Name for this profile:",
-                                      initialvalue=profiles.current() or self.profile_var.get(), parent=self)
+        name = tabs.ask_name(self, "Save Profile", "Name for this profile:",
+                             profiles.current() or self.profile_var.get())
         name = re.sub(r"[^\w\- ]+", "", name or "").strip()
         if not name:
             return

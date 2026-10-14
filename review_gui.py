@@ -23,12 +23,13 @@ a time. Stop Preview, any action, a new Review build or choosing None stops it.
 import threading
 import time
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox
 
 import tkinter.font as tkfont
 
 import engine
 from settings_gui import Tooltip, read_env, write_env
+import tabs
 from tabs import rounded_shape
 
 # The console stays black and green in both themes; Review follows the theme (the 7 Oct mockups).
@@ -443,8 +444,7 @@ class ReviewPanel:
         if not self._can_act():
             return
         default = self.title.replace("\\", " ").replace("/", " ") or "24bit7 Review"
-        name = simpledialog.askstring("Save as Playlist", "Name for the JRiver playlist:",
-                                      initialvalue=default, parent=self.frame)
+        name = tabs.ask_name(self.frame, "Save as Playlist", "Name for the JRiver playlist:", default)
         name = (name or "").strip().replace("\\", " ").replace("/", " ")
         if not name:
             return

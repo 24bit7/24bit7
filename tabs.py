@@ -985,3 +985,168 @@ class RoundedEntry(tk.Frame):
 
     def focus_set(self):
         self.entry.focus_set()
+
+
+# --- a small prompt for a name, in the app's own style ---------------------------------
+
+GWL_STYLE, WS_CAPTION, SWP_FRAME = -16, 0x00C00000, 0x0027
+DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND = 33, 2
+
+
+def strip_title_bar(window):
+    """Windows: takes a window's own title bar away (the app draws its own header, which is the
+    handle) and asks Windows 11 for rounded corners. Does nothing elsewhere."""
+    try:
+        import ctypes
+        window.update_idletasks()
+        hwnd = ctypes.windll.user32.GetParent(window.winfo_id())
+        if not hwnd:
+            return
+        style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_STYLE)
+        ctypes.windll.user32.SetWindowLongW(hwnd, GWL_STYLE, style & ~WS_CAPTION)
+        ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_FRAME)
+        pref = ctypes.c_int(DWMWCP_ROUND)
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ctypes.byref(pref),
+                                                   ctypes.sizeof(pref))
+    except Exception:
+        pass   # not Windows, or an older one: a plain window, which is fine
+
+
+class NamePrompt(tk.Toplevel):
+    """
+    Asks for a name, in place of Tk's stock simpledialog, which ignores the theme. A black header
+    strip with the title (the drag handle, with a close mark at its right), the question, the name
+    in a rounded box selected ready to type over, then OK and Cancel drawn like the app's buttons.
+    Enter is OK, Escape is Cancel. The answer is in .result: the name typed, or None.
+    """
+
+    def __init__(self, parent, title, prompt, initial=""):
+        top = parent.winfo_toplevel()
+        super().__init__(top)
+        self.withdraw()   # built out of sight: shown once, dressed and in place, with no flicker
+        self.result = None
+        self._images = []
+        try:
+            scale = max(1.0, self.winfo_fpixels("1i") / 96.0)
+        except tk.TclError:
+            scale = 1.0
+        px = self._px = lambda n: max(1, int(round(n * scale)))
+        bg = PALETTE.get("window_bg") or top.cget("bg")
+        fg = PALETTE.get("text") or "#000000"
+        line = PALETTE["line"]
+        head_bg = PALETTE.get("head_bg") or bg
+        head_fg = PALETTE.get("head_fg") or PALETTE["brand_blue"]
+        self.title(title)
+        self.transient(top)
+        self.resizable(False, False)
+        self.configure(bg=line, padx=px(1), pady=px(1))   # a one pixel edge in the line colour
+        body = tk.Frame(self, bg=bg)
+        body.pack(fill="both", expand=True)
+
+        head = tk.Frame(body, bg=head_bg)
+        head.pack(fill="x")
+        name = tk.Label(head, text=title, font=("Segoe UI", 10, "bold"), bg=head_bg, fg=head_fg, padx=px(14),
+                        pady=px(8), anchor="w")
+        name.pack(side="left", fill="x", expand=True)
+        close = tk.Label(head, text="✕", font=("Segoe UI", 10), bg=head_bg,
+                         fg=PALETTE.get("text_faint") or "#999999", padx=px(14), cursor="hand2")
+        close.pack(side="right", fill="y")
+        close.bind("<Button-1>", lambda e: self.cancel())
+        for w in (head, name):
+            w.bind("<ButtonPress-1>", self._drag_start)
+            w.bind("<B1-Motion>", self._drag_move)
+        if head_bg == bg:   # light: no black strip, so a line under the header instead
+            tk.Frame(body, bg=line, height=px(1)).pack(fill="x")
+
+        inner = tk.Frame(body, bg=bg, padx=px(18), pady=px(16))
+        inner.pack(fill="both", expand=True)
+        tk.Label(inner, text=prompt, font=("Segoe UI", 10), bg=bg, fg=fg, anchor="w").pack(anchor="w",
+                                                                                           pady=(0, px(8)))
+        self.box = RoundedEntry(inner, width=44, font=("Segoe UI", 10))
+        self.box.pack(anchor="w")
+        self.entry = self.box.entry
+        if initial:
+            self.entry.insert(0, initial)
+            self.entry.select_range(0, "end")
+            self.entry.icursor("end")
+        buttons = tk.Frame(inner, bg=bg)
+        buttons.pack(anchor="e", pady=(px(16), 0))
+        self.cancel_button = self._button(buttons, "Cancel", self.cancel, bg, line)
+        self.cancel_button.pack(side="left", padx=(0, px(8)))
+        self.ok_button = self._button(buttons, "OK", self.ok, PALETTE.get("field_bg") or PALETTE["button_bg"],
+                                      PALETTE["button_accent"])
+        self.ok_button.pack(side="left")
+
+        self.bind("<Return>", lambda e: self.ok())
+        self.bind("<Escape>", lambda e: self.cancel())
+        self.protocol("WM_DELETE_WINDOW", self.cancel)
+        self.after(10, lambda: self._show_over(top))
+
+    def _button(self, parent, text, command, fill, edge):
+        """A rounded button drawn as an image with the text on top, as the AI Playlist window's."""
+        px = self._px
+        font = ("Segoe UI", 10, "bold")
+        w = tkfont.Font(root=self, font=font).measure(text) + px(28)
+        hover_fill = PALETTE["button_hover"]
+        plain = rounded_shape(self, w, px(30), px(7), fill, edge, px(1))
+        lit = rounded_shape(self, w, px(30), px(7), hover_fill, edge, px(1))
+        self._images += [plain, lit]
+        b = tk.Label(parent, text=text, image=plain, compound="center", font=font, bd=0,
+                     bg=parent.cget("bg"), fg=PALETTE["button_fg"], cursor="hand2")
+        b.bind("<Button-1>", lambda e: command())
+        b.bind("<Enter>", lambda e: b.config(image=lit))
+        b.bind("<Leave>", lambda e: b.config(image=plain))
+        return b
+
+    def _show_over(self, top):
+        """Sized to its content, centred over the window that asked, then shown."""
+        try:
+            self.update_idletasks()
+            w, h = self.winfo_reqwidth(), self.winfo_reqheight()
+            x = top.winfo_rootx() + max(0, (top.winfo_width() - w) // 2)
+            y = top.winfo_rooty() + max(0, (top.winfo_height() - h) // 3)
+            self.geometry(f"{w}x{h}+{max(0, x)}+{max(0, y)}")
+            try:
+                self.wm_attributes("-alpha", 0.0)   # shown invisible first, so the dressing happens unseen
+            except tk.TclError:
+                pass
+            self.deiconify()
+            self.update_idletasks()
+            strip_title_bar(self)
+            self.geometry(f"{w}x{h}+{max(0, x)}+{max(0, y)}")   # again: Windows moves it when the bar goes
+            self.update_idletasks()
+            try:
+                self.wm_attributes("-alpha", 1.0)
+            except tk.TclError:
+                pass
+            self.lift()
+            self.entry.focus_set()
+        except tk.TclError:
+            pass
+
+    def _drag_start(self, event):
+        self._drag = (event.x_root - self.winfo_x(), event.y_root - self.winfo_y())
+
+    def _drag_move(self, event):
+        dx, dy = self._drag
+        self.geometry(f"+{event.x_root - dx}+{event.y_root - dy}")
+
+    def ok(self):
+        self.result = self.entry.get()
+        self.destroy()
+
+    def cancel(self):
+        self.result = None
+        self.destroy()
+
+
+def ask_name(parent, title, prompt, initial=""):
+    """Opens a NamePrompt over parent's window and waits. Returns the name typed, or None for Cancel,
+    Escape or the close mark. Used like simpledialog.askstring, which it replaces."""
+    win = NamePrompt(parent, title, prompt, initial)
+    try:
+        win.grab_set()
+    except tk.TclError:
+        pass
+    win.wait_window()
+    return win.result
