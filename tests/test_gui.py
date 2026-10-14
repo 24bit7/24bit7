@@ -1650,3 +1650,32 @@ def test_review_save_asks_with_the_app_prompt(app, ui, monkeypatch):
     panel._save()
     ui.pump(0.3)
     assert asked == [("Save as Playlist", "Name for the JRiver playlist:", panel.title)], asked
+
+
+# --- Review: Close Review ---
+
+def test_review_close_puts_the_console_back_cleared(app, ui):
+    """Close Review: the list and the switch go, the console shows again, empty."""
+    keys = _review_with_zone(app, ui)
+    panel = ui.play.review_panel
+    panel.toggle(keys[0])
+    assert panel.showing and panel.switch_row.winfo_manager()
+    ui.play._append_log("Something from the build")
+    assert console(ui).strip()
+    panel.close()
+    ui.pump(0.3)
+    assert not panel.showing and not panel.rows and not panel.order
+    assert not panel.switch_row.winfo_manager(), "the Console | Review switch goes with the list"
+    assert ui.play.log.frame.winfo_manager(), "the console is back"
+    assert console(ui).strip() == "", "and cleared"
+    assert not ui.errors, ui.errors
+
+
+def test_review_close_sits_above_stop_preview(app, ui):
+    _review_with_zone(app, ui)
+    panel = ui.play.review_panel
+    ui.pump(0.2)
+    close, stop = panel.close_btn, panel.stop_preview_btn
+    assert close.winfo_rooty() + close.winfo_height() <= stop.winfo_rooty(), "Close Review is above Stop Preview"
+    right = lambda w: w.winfo_rootx() + w.winfo_width()
+    assert abs(right(close) - right(panel.preview_bar)) <= 2, "and right aligned with it"

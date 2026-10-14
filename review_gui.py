@@ -71,6 +71,7 @@ BPM_TIP = ("From your files' BPM tags. JRiver can fill these in for your whole l
            "Analyze Audio, choosing only files not yet analyzed. Steer's Faster and Slower check against these "
            "where they exist.")
 SAVE_TIP = "Nothing plays and Playing Now isn't touched. Saves these as a JRiver playlist."
+CLOSE_TIP = "Closes Review: the list goes, and the console comes back cleared."
 
 # (title, width in characters, stretch): Artist, Title and Album share the spare room
 COLUMNS = [("Add", 4, 0), ("Artist", 18, 2), ("Title", 24, 3), ("Album", 18, 2), ("Time", 6, 0), ("BPM", 5, 0)]
@@ -191,6 +192,11 @@ class ReviewPanel:
     def _build_frame(self):
         p = self.p
         self.frame = tk.Frame(self.box, bg=p["bg"])
+        top = tk.Frame(self.frame, bg=p["bg"])   # Close Review, at the right above the header
+        top.pack(fill="x", padx=14, pady=(6, 0))
+        self.close_btn = self._pill(top, "Close Review", self.close)
+        self.close_btn.pack(side="right")
+        Tooltip(self.close_btn, CLOSE_TIP, when=self._notes_on, wrap=self._note_wrap)
         head = tk.Frame(self.frame, bg=p["bg"])
         head.pack(fill="x", padx=14, pady=(4, 8))
         self.title_label = tk.Label(head, text="", font=BOLD, bg=p["bg"], fg=p["text"], anchor="w")
@@ -495,6 +501,22 @@ class ReviewPanel:
             self.frame.pack_forget()
             self._restore_console()   # puts the arrow back, beside the switch
         self._style_switch()
+
+    def close(self):
+        """Close Review: any preview stops, the list and the switch go, and the console shows cleared,
+        as before the first Review build."""
+        if self.busy:
+            return
+        self.stop_preview(quiet=True)
+        self.rows, self.order, self.title, self.zone = [], [], "", None
+        self.status_label.config(text="")
+        self._render()
+        self.show_console()
+        self.switch_row.pack_forget()
+        p = self.play
+        p._greeting_active = False
+        p._clear_log()
+        p.console_strip.place_forget()
 
     def console_activity(self):
         """A console line arrived while Review was showing: a dot on Console says so."""
