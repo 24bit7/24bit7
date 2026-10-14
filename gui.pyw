@@ -1754,6 +1754,21 @@ def show_from_tray(root, memo):
     root.focus_force()
 
 
+# --- a maximised window opens maximised next time ---
+# The maximised state is saved to .env (WINDOW_MAXIMISED) whenever it changes, not on
+# the way out, so it holds however 24bit7 ends: Quit, the tray, a restart or Windows
+# shutting down. Hidden and minimised states leave the last one noted alone.
+
+def note_window_state(root, memo, save):
+    state = root.state()
+    if state not in ("zoomed", "normal"):
+        return
+    zoomed = state == "zoomed"
+    if memo.get("zoomed") != zoomed:
+        memo["zoomed"] = zoomed
+        save(zoomed)
+
+
 def main():
     _enable_dpi_awareness()
     _set_app_id()
@@ -1851,7 +1866,19 @@ def main():
         root.after(13000, lambda: play.report("Closed the copy of 24bit7 that was already running."))
 
     # --- tray: Start in the tray (when Windows launches it) and Close to tray ---
-    tray_memo = {}   # whether the window was maximised when it went to the tray
+    # whether the window was maximised when it went to the tray, or when 24bit7 last closed
+    tray_memo = {"zoomed": read_env().get("WINDOW_MAXIMISED", "0").strip() == "1"}
+
+    def save_maximised(zoomed):
+        try:
+            write_env({"WINDOW_MAXIMISED": "1" if zoomed else "0"})
+        except OSError:
+            pass
+
+    def on_window_configure(event):
+        if event.widget is root:
+            note_window_state(root, tray_memo, save_maximised)
+    root.bind("<Configure>", on_window_configure, add="+")
 
     def show_window():
         show_from_tray(root, tray_memo)
@@ -1886,7 +1913,7 @@ def main():
         if tray.start(root, show_window, quit_app) and tray.started_by_windows() and engine.START_IN_TRAY:
             hidden = True   # started by Windows into the tray: stays out of sight
     if not hidden:
-        root.deiconify()
+        show_from_tray(root, tray_memo)   # maximised again if it was last time
 
     root.mainloop()
     if restart["on"]:
