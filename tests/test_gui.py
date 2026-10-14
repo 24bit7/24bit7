@@ -1734,3 +1734,31 @@ def test_added_playlist_note_goes_to_the_console(app, ui):
     assert "Note: the next build is 24bit7's tracks only." in text
     assert text.count("Note: the next build") == 3, "one line per change, none repeated"
     assert not ui.errors, ui.errors
+
+
+# --- the playlist picker: an x takes a playlist out of Most used ---
+
+def test_picker_most_used_rows_have_a_remove_mark(app, ui):
+    import playmix
+    p = ui.play
+    p._end_greeting(keep=False)
+    playmix.record_use(["201"])   # Sunday Morning is the one used playlist
+    rows = p.mix_rows
+    rows.rows.append({"id": "", "name": "", "mode": "after", "spread": "even"})
+    rows._draw()
+    rows._open_picker(0)
+    ui.pump(0.5)
+    pop = rows._popup
+    assert pop is not None and list(pop.marks) == ["201"], "one x, on the Most used line only"
+    mark = pop.marks["201"]
+    lb = next(w for w in _everything(pop) if isinstance(w, tk.Listbox))
+    assert mark.winfo_rootx() + mark.winfo_width() <= lb.winfo_rootx() + lb.winfo_width(), "at the right"
+    assert "Most used" in lb.get(0, "end")
+    mark.event_generate("<Button-1>")
+    ui.pump(0.5)
+    assert not pop.marks and "Most used" not in lb.get(0, "end"), "no used playlists left"
+    assert "Sunday Morning" in lb.get(0, "end"), "still offered under All playlists"
+    assert not playmix.load()["counts"]
+    assert rows._popup is pop, "the picker stays open"
+    rows._close_picker()
+    assert not ui.errors, ui.errors

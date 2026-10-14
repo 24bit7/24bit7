@@ -81,6 +81,16 @@ def record_use(ids):
     _save(data)
 
 
+def forget_use(pid):
+    """Takes a playlist out of Most used: its count and last use go. Rows that use it stay as they are."""
+    data = load()
+    pid = str(pid)
+    if pid in data["counts"] or pid in data["last_used"]:
+        data["counts"].pop(pid, None)
+        data["last_used"].pop(pid, None)
+        _save(data)
+
+
 def picker_order(playlists, text=""):
     """
     ([(playlist, count)], [playlist]) matching text: used ones, most used first

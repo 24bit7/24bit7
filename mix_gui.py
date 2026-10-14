@@ -2,7 +2,8 @@
 24bit7 - the Add playlist rows on the Play tab.
 
 Each row: a handle to drag it up or down, the playlist (a picker with search,
-most used first, a divider, then A to Z), how it joins (Mix, Add before, Add
+most used first, each with an x at its right that takes it out of Most used, a
+divider, then A to Z), how it joins (Mix, Add before, Add
 after) and, for Mix, Spaced evenly or Mixed randomly. The x removes a row.
 Saved as you go (playmix.py), and the Play tab says in the console what the next
 build will do. Combining happens in the engine.
@@ -14,9 +15,11 @@ from tkinter import ttk
 import playmix
 import saved_playlists
 import tabs
+from settings_gui import Tooltip
 from tabs import PALETTE
 
 HANDLE = "\u2261"     # the grab handle
+FORGET_TIP = "Takes it out of Most used. The playlist stays in JRiver, and in any row that uses it."
 DIVIDER = "\u2500" * 34
 
 
@@ -181,6 +184,32 @@ class MixRows(tk.Frame):
         bar.pack(side="left", fill="y")
         items = []   # one per line: a playlist, or None for headings, the divider and notes
         muted = PALETTE["text_muted"]
+        used_at = {}      # line number -> playlist ID, for the Most used lines
+        pop.marks = {}    # playlist ID -> the x at the right of its Most used line
+
+        def place_marks(*_):
+            """An x at the right of each Most used line on screen, over the list; again after a scroll."""
+            for m in pop.marks.values():
+                m.destroy()
+            pop.marks = {}
+            for index, pid in used_at.items():
+                bb = lb.bbox(index)
+                if not bb:
+                    continue   # scrolled out of view
+                m = tk.Label(holder, text="✕", font=("Segoe UI", 9), bg=fbg, fg=muted, cursor="hand2", padx=4)
+                m.place(in_=lb, relx=1.0, x=-4, y=bb[1] - 1, anchor="ne")
+                m.bind("<Button-1>", lambda e, pid=pid: forget(pid))
+                m.bind("<Enter>", lambda e, m=m: m.config(fg=ffg))
+                m.bind("<Leave>", lambda e, m=m: m.config(fg=muted))
+                Tooltip(m, FORGET_TIP)
+                pop.marks[pid] = m
+
+        def forget(pid):
+            playmix.forget_use(pid)
+            fill()
+            search.focus_force()   # the picker stays open
+
+        lb.config(yscrollcommand=lambda *a: (bar.set(*a), place_marks()))
 
         def label(p):
             name = p["Name"]
@@ -197,6 +226,8 @@ class MixRows(tk.Frame):
         def fill(*_):
             lb.delete(0, "end")
             items.clear()
+            used_at.clear()
+            place_marks()
             if playlists is None:
                 line("JRiver isn't answering, so there are no playlists to show.", faint=True)
                 return
@@ -205,6 +236,8 @@ class MixRows(tk.Frame):
                 line("Most used", faint=True)
                 for p, count in used:
                     line(f"{label(p)}   ({count})", p)
+                    used_at[lb.size() - 1] = p["ID"]
+                lb.after_idle(place_marks)   # once the lines have their places
             if used and rest:
                 line(DIVIDER, faint=True)
             if rest:

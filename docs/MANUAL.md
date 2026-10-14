@@ -174,7 +174,7 @@ Open **More Options** and press **+ Add Playlist** to join a JRiver playlist or 
 - **Add after**: its tracks follow 24bit7's, in their own order.
 - **Mix**: its tracks are woven through 24bit7's. **Spaced evenly** spreads both lists over the whole playlist so they finish together. **Mixed randomly** scatters them.
 
-Rows play in the order they're listed. The picker shows the playlists you use most first, then the rest A to Z, with a search box. Each change is noted in the console, saying what the next build will do.
+Rows play in the order they're listed. The picker shows the playlists you use most first, then the rest A to Z, with a search box; the x at the right of a most used playlist takes it out of that list, nothing more. Each change is noted in the console, saying what the next build will do.
 
 Added playlists come through exactly as JRiver gives them, so a smartlist's own rules decide what's in it. 24bit7's filters, recent-play skip and hidden-track check leave them alone, and the only thing dropped is a song already in 24bit7's picks. If nothing in the build matches your library, the added playlists still play, so you never get silence.
 

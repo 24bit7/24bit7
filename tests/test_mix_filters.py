@@ -262,3 +262,18 @@ def test_keep_it_tight_runs_out_then_carries_on(app):
     r = app.Lines()
     assert nonstop._tight_seed("10001", entry, r) is None
     assert r.has("carrying on as Wander")
+
+
+def test_forget_use_takes_a_playlist_out_of_most_used(app):
+    import playmix
+    playmix.set_rows([{"id": "201", "name": "Sunday Morning", "mode": "after", "spread": "even"}])
+    playmix.record_use(["201", "202"])
+    playlists = [{"ID": "201", "Name": "Sunday Morning"}, {"ID": "202", "Name": "Road Trip"}]
+    used, rest = playmix.picker_order(playlists)
+    assert [p["ID"] for p, _ in used] == ["201", "202"] and not rest
+    playmix.forget_use("201")
+    used, rest = playmix.picker_order(playlists)
+    assert [p["ID"] for p, _ in used] == ["202"] and [p["ID"] for p in rest] == ["201"]
+    assert playmix.rows()[0]["id"] == "201", "the row that uses it stays"
+    assert "201" not in playmix.load()["last_used"]
+    playmix.forget_use("999")   # unknown: nothing happens
