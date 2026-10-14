@@ -1679,3 +1679,34 @@ def test_review_close_sits_above_stop_preview(app, ui):
     assert close.winfo_rooty() + close.winfo_height() <= stop.winfo_rooty(), "Close Review is above Stop Preview"
     right = lambda w: w.winfo_rootx() + w.winfo_width()
     assert abs(right(close) - right(panel.preview_bar)) <= 2, "and right aligned with it"
+
+
+# --- the greeting: lines arriving while it types wait until it clears ---
+
+def test_greeting_is_not_cut_by_lines_arriving_while_it_types(ui):
+    p = ui.play
+    assert p._greeting_active, "the fixture starts with the greeting typing"
+    ui.pump(0.5)
+    p._append_log("[debug] Library: 12 tracks read from JRiver")
+    p._append_log("Note: something else happened at start-up")
+    ui.pump(0.3)
+    text = console(ui)
+    assert "[debug]" not in text and "Note:" not in text, text
+    typed = text.strip()
+    assert typed and "Follow the white rabbit."[:len(typed)] == typed, f"the greeting is in one piece: {text!r}"
+    p._clear_greeting()
+    ui.pump(0.2)
+    text = console(ui)
+    assert "rabbit" not in text
+    assert "[debug] Library" in text and "Note: something else" in text, "the held lines show once it clears"
+    assert text.index("[debug]") < text.index("Note:"), "in the order they came"
+    assert not p._greeting_active and not ui.errors
+
+
+def test_clear_while_greeting_types_drops_the_held_lines(ui):
+    p = ui.play
+    ui.pump(0.3)
+    p._append_log("[debug] arrived during the greeting")
+    p._clear_from_strip()
+    ui.pump(0.2)
+    assert console(ui).strip() == "" and not p._greeting_active

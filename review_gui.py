@@ -514,7 +514,7 @@ class ReviewPanel:
         self.show_console()
         self.switch_row.pack_forget()
         p = self.play
-        p._greeting_active = False
+        p._end_greeting(keep=False)
         p._clear_log()
         p.console_strip.place_forget()
 

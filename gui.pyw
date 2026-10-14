@@ -698,6 +698,7 @@ class PlayTab(tk.Frame):
         self._build_console_head()
         self.review_panel = ReviewPanel(self)   # Console | Review
         self._greeting_active = True
+        self._held = []   # console lines that arrive while the greeting types: shown once it clears
         self._type_greeting("Follow the white rabbit.", 0)
 
     def _window_visible(self):
@@ -768,7 +769,7 @@ class PlayTab(tk.Frame):
             self.master.select(self)   # asked from Settings: show the console
         except Exception:
             pass
-        self._greeting_active = False
+        self._end_greeting()
         self._query_busy = True
         self._append_query(f"\nYou asked: {ai_usage.QUESTION}\n", bold=True)
 
@@ -872,9 +873,19 @@ class PlayTab(tk.Frame):
             self.after(10000, self._clear_greeting)
 
     def _clear_greeting(self):
-        if self._greeting_active:
-            self._greeting_active = False
-            self._clear_log()
+        self._end_greeting()
+
+    def _end_greeting(self, keep=True):
+        """The greeting goes. keep: the lines that arrived while it typed go on screen in its place;
+        otherwise (Clear, Close Review, a build starting) they're dropped, as the screen is being cleared."""
+        held, self._held = self._held, []
+        if not self._greeting_active:
+            return
+        self._greeting_active = False
+        self._clear_log()
+        if keep:
+            for line in held:
+                self._insert_line(line)
 
     @staticmethod
     def _line_kind(line):
@@ -899,6 +910,13 @@ class PlayTab(tk.Frame):
         self._live.append(line)
         if getattr(self, "review_panel", None) is not None:
             self.review_panel.console_activity()   # a dot on Console while Review is showing
+        if self._greeting_active:
+            self._held.append(line)   # not into the middle of the greeting: shown once it clears
+            return
+        self._insert_line(line)
+
+    def _insert_line(self, line):
+        """Puts a line on screen, coloured by its kind, if the tab it belongs to is the one showing."""
         if not self._live_visible():
             return   # another tab is showing: the line is kept for when this build's tab is chosen
         at_bottom = self.log.yview()[1] >= 0.999   # scrolled up to read? new lines don't pull you down
@@ -1410,7 +1428,7 @@ class PlayTab(tk.Frame):
         self.after(800, done)
 
     def _clear_from_strip(self):
-        self._greeting_active = False   # stops the greeting typing on into an empty console
+        self._end_greeting(keep=False)   # stops the greeting typing on into an empty console
         self._clear_log()
         self.console_strip.place_forget()
         self.console_buttons["Clear"].config(bg="#000000")
@@ -1495,7 +1513,7 @@ class PlayTab(tk.Frame):
         engine.CANCEL_REQUESTED.clear()
         self._sync_cancel_strip()
         self._job_origin = origin   # who asked, for the build's record: None is the Main Window
-        self._greeting_active = False
+        self._end_greeting(keep=False)   # the build clears the screen anyway
         for b in self.buttons:
             b.config(state="disabled")
         self._begin_live(origin)
