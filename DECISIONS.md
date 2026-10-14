@@ -246,3 +246,6 @@ New users were starting on Deezer and YouTube until they found and pasted a Last
 
 **14 Oct 2026: 24bit7's own prompt for a name, in place of Tk's stock box.**
 Save as Playlist, Save Profile, New Filter and Rename Filter asked for a name with Tk's simpledialog, which ignores the theme: a white Windows title bar on the dark theme, a plain box and stock buttons. NamePrompt in tabs.py replaces it, built like the AI Playlist window: no Windows title bar, a header strip that's the drag handle, the name in a rounded box selected to type over, and OK and Cancel drawn like the rest of the buttons. One prompt for all four, so they stay alike. The yes/no boxes (Replace it?, Delete?) still use Tk's messagebox; they can follow the same way if they grate.
+
+**14 Oct 2026: The Play tab says things in the console, not under the controls.**
+The line under the added playlist rows saying what the next build would do took a strip of the Play tab for something that only matters when a row changes. It now goes to the console as a Note line, once per change, where the rest of what 24bit7 is about to do already lives. Close Review follows the same thinking: the console is the resting state, and Review is a view on top of it that can be put away.

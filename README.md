@@ -302,7 +302,14 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.21.0
+## What's new in 1.22.0
+
+- **Close Review**, at the top right of Review, drops the list and puts the console back cleared.
+- **Added playlists**: the console now says what the next build will do with them, once per change, in place of the line under the rows. In the picker, an x at the right of a most used playlist takes it out of that list.
+- **The console greeting** is no longer cut in half by start-up lines in Advanced mode.
+- **Name boxes**: Save as Playlist, Save Profile, New Filter and Rename Filter ask in a box drawn like the rest of 24bit7.
+
+### Earlier: 1.21.0
 
 - **Last.fm built in**: 24bit7 now comes with a Last.fm key, so a fresh install finds similar artists with Last.fm and similar tracks with Last.fm and YouTube Music straight away. A key of your own under Settings > Keys is still used if you add one.
 

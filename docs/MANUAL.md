@@ -73,6 +73,8 @@ Tick the tracks you want, in the order you want them (each tick shows its number
 - **Stop Song, Play Now**: the current song stops and your ticked tracks play straight away.
 - **Save as Playlist**: a new JRiver playlist of the ticked tracks, nothing played.
 
+**Close Review**, at the top right above Stop Preview, drops the list and puts the console back, cleared.
+
 The actions go wherever **Output** says when you press them (a zone, or the Now Playing zone for Same zone). With Output on **YouTube**, the four play actions become one, **Play on YouTube**, which opens the ticked tracks as a YouTube playlist in your browser. With Output on **Tidal**, they become **Send to Tidal**, which puts the ticked tracks in your Tidal playlist called 24bit7.
 
 **Preview in** picks a zone with its own speakers or headphones, so you can hear a track before you add it. Choose a zone and a play mark appears on every row: click one and that track alone plays there, without ticking it, while the main room carries on; the previewing row turns orange, and **Stop Preview** stops it. The zone Output sends to is never offered. The preview zone needs its own output device; one sharing a sound card with the main room in WASAPI exclusive mode won't play. **A-** and **A+** set the text size of the list. The BPM column comes from your files' tags; JRiver can fill them in for the whole library with **Library Tools > Analyze Audio** (choose only files not yet analyzed), which also gives Steer's Faster and Slower something to check against.
