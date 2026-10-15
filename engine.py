@@ -28,7 +28,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.23.0"
+VERSION = "1.23.1"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
@@ -6871,6 +6871,8 @@ def play_top_n(report=print, seed_info=None):
     ordered_keys, labels_used = [], []
     fast = FastStart(seed_info, report, enabled=(order == "popular"))
     played = PlayedFilter("top", report=report, filters=True)
+    # a now-playing seed stays where it is in Playing Now, so a top track that is the seed isn't queued again
+    playing_key = "" if seed_info.get("Typed") else str(seed_info.get("FileKey") or "")
     for artist in seeds:
         top_tracks, source_label = blended_top_tracks(artist, limit=n)
         if not top_tracks:
@@ -6885,9 +6887,10 @@ def play_top_n(report=print, seed_info=None):
         prefetch_youtube_ids([(artist, t) for t, _ in top_tracks[:n]])
         for track_name, suggested_by in top_tracks[:n]:
             key = find_jriver_key_by_track(artist, track_name)
-            report(f"    {found_label(bool(key))}: {artist} - {track_name}  "
+            is_playing = bool(key) and str(key) == playing_key
+            report(f"    {'Playing now' if is_playing else found_label(bool(key))}: {artist} - {track_name}  "
                    f"({', '.join(suggested_by)})")
-            if key and key not in ordered_keys and played.fresh(key):
+            if key and not is_playing and key not in ordered_keys and played.fresh(key):
                 ordered_keys.append(key)
                 fast.play(key)
             session_log(session_id, artist, track_name, suggested_by, found=bool(key))
