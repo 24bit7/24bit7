@@ -3,9 +3,14 @@ profiles.py - saved sets of settings for different ways of listening (Settings >
 
 A profile holds Windows (Main)'s listening settings: the Play tab options, Sources,
 Playlist settings, Filters, the JRiver Playlists rows, the Play tab's Add Playlist rows,
-the Preview zone, cache length and the console. It leaves out anything tied to the PC
-or the person: keys, the JRiver connection, Alexa devices (those with Own Settings keep
-theirs), keyboard shortcuts, the tray, the title bar, the theme and Discover's sites.
+the Preview zone, the Default zone and the zone the shortcuts apply to, cache length and
+the console. It leaves out anything tied to the PC or the person: keys, the JRiver
+connection, Alexa devices (those with Own Settings keep theirs), keyboard shortcuts, the
+tray, the title bar, the theme and Discover's sites.
+
+Each profile can have a keyboard shortcut of its own that loads it (Settings > Other >
+Keyboard Shortcuts). Those live in .env as HOTKEY_PROFILE_<name>, with the other
+shortcuts, so they stay with the PC.
 
 Each profile is a small JSON file in the profiles folder beside 24bit7, so profiles
 survive updates and can be copied to another PC. Loading writes the profile as
@@ -26,6 +31,9 @@ SWITCH_OFF_KEY = "PROFILE_SWITCH_OFF"   # in .env: profiles unticked under Enabl
 # .env settings beyond Settings > Sources and Playlist (engine.PROFILE_KEYS)
 EXTRA_ENV_KEYS = ["PLAY_BEHAVIOUR", "OUTPUT_TARGET", "YOUTUBE_PLAYLIST_LENGTH", "PREFER_OFFICIAL_VIDEOS",
                   "REVIEW_PREVIEW_ZONE", "CACHE_KEEP", "CONSOLE_MODE", "CONSOLE_QUERY", "USE_AI",
+                  # Settings > Other > Zones' Default and Follow, and the zone the shortcuts apply to
+                  # (a surround profile plays to a different zone from a stereo one)
+                  "DEFAULT_ZONE", "FOLLOW_ACTIVE_ZONE", "HOTKEY_ZONE",
                   "CREDITS_SCOPE", "CREDITS_FIRST",   # Settings > Other > Show Credits
                   # the AI Playlist window's choices (a DJ profile can open on Steer with its usual chips)
                   "AI_DIALOG_MODE", "AI_CREATE_THEME", "AI_IF_SHORT", "AI_STEER_SEED", "AI_STEER_TONE",
@@ -73,9 +81,24 @@ def snapshot():
     return data
 
 
+def _stem(name):
+    return re.sub(r"[^\w\- ]+", "", name).strip() or "Profile"
+
+
 def _path(name):
-    safe = re.sub(r"[^\w\- ]+", "", name).strip() or "Profile"
-    return os.path.join(PROFILE_DIR, f"{safe}.json")
+    return os.path.join(PROFILE_DIR, f"{_stem(name)}.json")
+
+
+SHORTCUT_PREFIX = "PROFILE_"   # a profile's own shortcut: HOTKEY_PROFILE_<name> in .env
+
+
+def shortcut_code(name):
+    """The shortcut action code for a profile, as hotkeys uses it: PROFILE_Surround_Sound."""
+    return SHORTCUT_PREFIX + re.sub(r"[^\w]+", "_", _stem(name))
+
+
+def shortcut_key(name):
+    return f"HOTKEY_{shortcut_code(name)}"
 
 
 def names():
@@ -120,7 +143,10 @@ def changed(name=None):
     if not saved:
         return True
     now = snapshot()
-    return now["env"] != saved.get("env") or now["meta"] != saved.get("meta")
+    saved_env = saved.get("env") or {}
+    # only the settings the file holds: a profile saved before a setting joined profiles
+    # (the zones, say) isn't "changed" by that setting, and loading it leaves that setting alone
+    return {k: now["env"].get(k) for k in saved_env} != saved_env or now["meta"] != saved.get("meta")
 
 
 def save(name):
@@ -139,8 +165,10 @@ def delete(name):
         os.remove(_path(name))
     except OSError:
         pass
+    updates = {shortcut_key(name): None}   # its own shortcut goes with it
     if (_read_env().get(CURRENT_KEY) or "").strip() == name:
-        _write_env({CURRENT_KEY: None})
+        updates[CURRENT_KEY] = None
+    _write_env(updates)
     if name in _switch_off():
         set_in_switch(name, True)   # forget it from the unticked list too
 

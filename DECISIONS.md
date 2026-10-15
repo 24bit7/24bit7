@@ -249,3 +249,7 @@ Save as Playlist, Save Profile, New Filter and Rename Filter asked for a name wi
 
 **14 Oct 2026: The Play tab says things in the console, not under the controls.**
 The line under the added playlist rows saying what the next build would do took a strip of the Play tab for something that only matters when a row changes. It now goes to the console as a Note line, once per change, where the rest of what 24bit7 is about to do already lives. Close Review follows the same thinking: the console is the resting state, and Review is a view on top of it that can be put away.
+
+
+**15 Oct 2026: A shortcut per profile, kept with the shortcuts rather than in the profile.**
+Switch Profiles steps A to Z, which is fine from the keyboard and no use to an automation that can't see which profile is current (datdude drives a stereo and a surround set-up from a Theater View remote). A key per profile always lands on one, and does nothing when that profile is already loaded, so pressing it twice is safe. The key lives in .env as HOTKEY_PROFILE_<name> with the other shortcuts, because shortcuts belong to the PC: a profile file copied to another PC shouldn't bring a key that clashes there. The zones joined profiles at the same time. The Default zone and the shortcut zone say where you're listening, which is what a profile is for; which zones are shown describes the PC and stays out. A profile is compared on the settings its file holds, so profiles saved before a setting joined aren't all marked changed by it, and loading one leaves that setting alone.

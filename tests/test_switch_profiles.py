@@ -130,3 +130,35 @@ def test_settings_shows_a_tick_per_profile(app, monkeypatch):
         settings = boxes = None
         gc.collect()   # Tk variables go while their window still exists, so none is left for later tests
         root.destroy()
+
+
+def test_settings_shows_a_shortcut_box_per_profile(app, monkeypatch):
+    import tkinter as tk
+    tray = importlib.import_module("tray")
+    monkeypatch.setattr(tray, "available", lambda: False)
+    monkeypatch.setattr(tray, "start", lambda *a, **k: False)
+    from conftest import load_gui
+    p = setup_profiles(app, "DJ", "Explore")
+    app.set_env(HOTKEY_PROFILE_DJ="Ctrl+Alt+7")
+    gui = load_gui(app.folder)
+    root = tk.Tk()
+    try:
+        nb = gui.TabbedPane(root, font=("Segoe UI", 10, "bold"), pad=(16, 6))
+        nb.pack()
+        settings = gui.SettingsTab(nb)
+        titles = [w.cget("text") for w in settings.profile_shortcut_widgets
+                  if isinstance(w, tk.Label) and str(w.cget("text")).startswith("Load ")]
+        assert titles == ["Load DJ", "Load Explore"]
+        assert settings.hotkey_vars["PROFILE_DJ"].get() == "Ctrl+Alt+7"
+        assert settings.hotkey_vars["PROFILE_Explore"].get() == ""
+        p.save("Party")                     # a new profile gets a box as soon as it's saved
+        settings._fill_profiles("Party")
+        assert "PROFILE_Party" in settings.hotkey_vars
+        p.delete("DJ")                      # and a deleted one loses its box
+        settings._fill_profiles()
+        assert "PROFILE_DJ" not in settings.hotkey_vars and "PROFILE_DJ" not in settings.hotkey_notes
+    finally:
+        import gc
+        settings = None
+        gc.collect()
+        root.destroy()

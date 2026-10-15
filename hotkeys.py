@@ -34,6 +34,24 @@ ACTIONS = [   # (code, label): the order they appear in Settings
     ("KEEP_GOING", "Keep It Going"),
 ]
 LABELS = dict(ACTIONS)
+
+
+def profile_actions():
+    """(code, label, profile name) for each saved profile: a shortcut of its own that loads it."""
+    import profiles
+    return [(profiles.shortcut_code(n), f"Load {n}", n) for n in profiles.names()]
+
+
+def is_profile(code):
+    import profiles
+    return code.startswith(profiles.SHORTCUT_PREFIX)
+
+
+def label(code):
+    """The label shown in Settings and the console, for a fixed action or a profile's shortcut."""
+    if code in LABELS:
+        return LABELS[code]
+    return next((text for c, text, _ in profile_actions() if c == code), code)
 NOW_PLAYING_ZONE = "Zone shown in Now Playing"
 
 AVAILABLE = sys.platform.startswith("win")
@@ -103,7 +121,7 @@ def assigned():
     """{action code: 'Ctrl+Alt+1'} for every shortcut set in .env."""
     engine.refresh_settings_if_changed()
     out = {}
-    for code, _ in ACTIONS:
+    for code, _ in ACTIONS + [(c, t) for c, t, _ in profile_actions()]:
         value = os.getenv(f"HOTKEY_{code}", "").strip()
         if value:
             out[code] = value
@@ -229,7 +247,7 @@ def restart():
         _listener.ready.wait(3)
         _errors = dict(_listener.errors)
     for code, problem in _errors.items():
-        print(f"[Shortcuts] {LABELS[code]} ({combos[code]}): {problem}")
+        print(f"[Shortcuts] {label(code)} ({combos[code]}): {problem}")
     return _errors
 
 
@@ -243,9 +261,9 @@ def _pressed(code):
     """Runs on the listener thread: queue the build on the Play tab and get straight back to listening."""
     if _submit is None:
         return
-    if code == "SWITCH_PROFILES" and _busy is not None and _note is not None and _busy():
-        _note("Switch Profiles requested: it will switch once the current build has finished.")
-    _submit(_job(code), f"Shortcut: {LABELS[code]}", {"from": "shortcut"})
+    if (code == "SWITCH_PROFILES" or is_profile(code)) and _busy is not None and _note is not None and _busy():
+        _note(f"{label(code)} requested: it will switch once the current build has finished.")
+    _submit(_job(code), f"Shortcut: {label(code)}", {"from": "shortcut"})
 
 
 def _device_for_zone(zone_name):
@@ -262,12 +280,31 @@ def _device_for_zone(zone_name):
 
 def _switch_profiles(report):
     """Loads the next profile ticked under Enable Switch To; 24bit7 restarts once this job is done."""
-    global _restart_wanted
     import profiles
     target, problem = profiles.switch_target()
     if problem:
         report(f"  Problem: {problem}")
         return
+    _queue_profile(target, report)
+
+
+def _load_profile(code, report):
+    """A profile's own shortcut: loads that profile, unless it's already the one in use."""
+    import profiles
+    name = next((n for c, _, n in profile_actions() if c == code), None)
+    if name is None:
+        report("  Problem: that profile has been deleted. Its shortcut can be cleared under "
+               "Settings > Other > Keyboard Shortcuts.")
+        return
+    if profiles.current() == name and not profiles.changed(name):
+        report(f'  The profile "{name}" is already loaded.')
+        return
+    _queue_profile(name, report)
+
+
+def _queue_profile(target, report):
+    global _restart_wanted
+    import profiles
     current = profiles.current()
     if current and profiles.changed(current):
         report(f'  Note: settings changed since "{current}" was loaded weren\'t saved to it.')
@@ -284,6 +321,9 @@ def _job(code):
     def run(report):
         if code == "SWITCH_PROFILES":   # no zone or seed needed
             _switch_profiles(report)
+            return
+        if is_profile(code):
+            _load_profile(code, report)
             return
         engine.refresh_settings_if_changed()
         wanted = target_zone_setting()

@@ -3450,9 +3450,11 @@ class SettingsTab(tk.Frame):
         box = section(tab, "Profiles",
                       "Save your settings as a profile, such as DJ, Explore or No AI, and switch between them. "
                       "A profile holds the Play tab options, Sources, Playlist settings, Filters, JRiver "
-                      "Playlists, Add Playlist rows, the Preview zone, cache and console settings for Windows "
-                      "(Main). Keys, the JRiver connection, Alexa devices with their own settings, keyboard "
-                      "shortcuts and appearance stay as they are. Loading restarts 24bit7; JRiver keeps playing.")
+                      "Playlists, Add Playlist rows, the Preview zone, the Default zone and the shortcut zone, "
+                      "cache and console settings for Windows (Main). Keys, the JRiver connection, which zones "
+                      "are shown, Alexa devices with their own settings, keyboard shortcuts and appearance stay "
+                      "as they are. Loading restarts 24bit7; JRiver keeps playing. Each profile can have a "
+                      "shortcut of its own under Keyboard Shortcuts.")
         row = tk.Frame(box)
         row.grid(row=0, column=0, sticky="w", pady=4)
         tk.Label(row, text="Profile", anchor="w").pack(side="left", padx=(0, 12))
@@ -3481,6 +3483,7 @@ class SettingsTab(tk.Frame):
             self.profile_var.set(names[0] if names else "")
         self._show_profile_status()
         self._fill_profile_switch(names)
+        self._fill_profile_shortcuts()
 
     def _fill_profile_switch(self, names):
         """One tick per profile: the ones the Switch Profiles shortcut steps through."""
@@ -3569,6 +3572,7 @@ class SettingsTab(tk.Frame):
         profiles.delete(name)
         self.profile_var.set("")
         self._fill_profiles()
+        self._hotkey_restart()   # the deleted profile's shortcut is released
 
     def _build_other(self, nb):
         tab = self._scroll_tab(nb, "Other")
@@ -3863,20 +3867,49 @@ class SettingsTab(tk.Frame):
         zone_cb.grid(row=0, column=1, columnspan=3, sticky="w", padx=(12, 0))
         zone_cb.bind("<<ComboboxSelected>>", lambda e: self._hotkey_zone_changed(zone_cb))
         for r, (code, label) in enumerate(hotkeys.ACTIONS, start=1):
-            tk.Label(box, text=label, anchor="w").grid(row=r, column=0, sticky="w", pady=3)
-            var = tk.StringVar(value=self.env.get(f"HOTKEY_{code}", ""))
-            entry = tk.Entry(box, textvariable=var, width=24, state="readonly", cursor="hand2")
-            entry.grid(row=r, column=1, sticky="w", padx=(12, 0))
-            entry.bind("<Button-1>", lambda e: e.widget.focus_set())
-            entry.bind("<FocusIn>", lambda e, c=code: self._hotkey_capture_start(c))
-            entry.bind("<FocusOut>", lambda e, c=code: self._hotkey_capture_end(c))
-            entry.bind("<KeyPress>", lambda e, c=code: self._hotkey_key(c, e, True))
-            entry.bind("<KeyRelease>", lambda e, c=code: self._hotkey_key(c, e, False))
-            tk.Button(box, text="Clear", width=7, command=lambda c=code: self._hotkey_clear(c)).grid(
-                row=r, column=2, sticky="w", padx=(8, 0))
-            note = tk.Label(box, text="", fg="#a33", font=HELP_FONT, anchor="w", justify="left")
-            note.grid(row=r, column=3, sticky="w", padx=(10, 0))
-            self.hotkey_vars[code], self.hotkey_notes[code] = var, note
+            self._shortcut_row(box, r, code, label, self.env.get(f"HOTKEY_{code}", ""))
+        self.hotkey_box, self.profile_shortcut_widgets = box, []
+        self._fill_profile_shortcuts()
+
+    def _shortcut_row(self, box, r, code, label, value):
+        """One shortcut: its title, the box that takes the keys, Clear, and a note for problems."""
+        title = tk.Label(box, text=label, anchor="w")
+        title.grid(row=r, column=0, sticky="w", pady=3)
+        var = tk.StringVar(value=value)
+        entry = tk.Entry(box, textvariable=var, width=24, state="readonly", cursor="hand2")
+        entry.grid(row=r, column=1, sticky="w", padx=(12, 0))
+        entry.bind("<Button-1>", lambda e: e.widget.focus_set())
+        entry.bind("<FocusIn>", lambda e, c=code: self._hotkey_capture_start(c))
+        entry.bind("<FocusOut>", lambda e, c=code: self._hotkey_capture_end(c))
+        entry.bind("<KeyPress>", lambda e, c=code: self._hotkey_key(c, e, True))
+        entry.bind("<KeyRelease>", lambda e, c=code: self._hotkey_key(c, e, False))
+        clear = tk.Button(box, text="Clear", width=7, command=lambda c=code: self._hotkey_clear(c))
+        clear.grid(row=r, column=2, sticky="w", padx=(8, 0))
+        note = tk.Label(box, text="", fg="#a33", font=HELP_FONT, anchor="w", justify="left")
+        note.grid(row=r, column=3, sticky="w", padx=(10, 0))
+        self.hotkey_vars[code], self.hotkey_notes[code] = var, note
+        return [title, entry, clear, note]
+
+    def _fill_profile_shortcuts(self):
+        """A shortcut box per saved profile, "Load DJ", under the fixed shortcuts; rebuilt as profiles come and go."""
+        box = getattr(self, "hotkey_box", None)
+        if box is None:
+            return
+        for widget in self.profile_shortcut_widgets:
+            widget.destroy()
+        self.profile_shortcut_widgets = []
+        for code in [c for c in self.hotkey_vars if hotkeys.is_profile(c)]:
+            del self.hotkey_vars[code], self.hotkey_notes[code]
+        env = read_env()
+        for i, (code, label, _) in enumerate(hotkeys.profile_actions()):
+            widgets = self._shortcut_row(box, len(hotkeys.ACTIONS) + 1 + i, code, label, env.get(f"HOTKEY_{code}", ""))
+            if i == 0:
+                widgets.append(help_mark(box, "Each saved profile has a shortcut of its own that loads it, restarting "
+                                              "24bit7 while JRiver keeps playing. A key that always lands on one profile "
+                                              "suits a remote or an automation, where Switch Profiles' A to Z order can't "
+                                              "be relied on. Pressed with that profile already loaded, it does nothing.",
+                                         on=widgets[0]))
+            self.profile_shortcut_widgets.extend(widgets)
 
     def refresh_hotkey_notes(self, problems=None):
         """Shows next to each box any shortcut Windows wouldn't take."""
@@ -3949,7 +3982,7 @@ class SettingsTab(tk.Frame):
         combo = hotkeys.combo_text(mods, vk)
         for other, var in self.hotkey_vars.items():
             if other != code and var.get() == combo:
-                note.config(text=f"Already used for {hotkeys.LABELS[other]}.", fg="#a33")
+                note.config(text=f"Already used for {hotkeys.label(other)}.", fg="#a33")
                 return "break"
         self._hotkey_save(code, combo)
         self.focus_set()   # done: leaving the box registers the shortcuts again

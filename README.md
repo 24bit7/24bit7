@@ -302,7 +302,12 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.22.0
+## What's new in 1.23.0
+
+- **Zones in profiles**: a profile now holds the Default zone and Follow tick under Settings > Other > Zones, and the zone the keyboard shortcuts apply to, so a surround profile plays to a different zone from a stereo one.
+- **A shortcut per profile**: Settings > Other > Keyboard Shortcuts has a Load box for each saved profile. It loads that profile and restarts 24bit7, or does nothing if it's already loaded, so a remote always lands on the profile it means.
+
+### Earlier: 1.22.0
 
 - **Close Review**, at the top right of Review, drops the list and puts the console back cleared.
 - **Added playlists**: the console now says what the next build will do with them, once per change, in place of the line under the rows. In the picker, an x at the right of a most used playlist takes it out of that list.
