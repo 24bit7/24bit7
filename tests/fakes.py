@@ -161,6 +161,7 @@ class FakeJRiver:
         self.current = self.zone_order[0]
         self.calls = []          # (path, params)
         self.up = True
+        self.refused = set()   # calls answered 401 Access denied, as Helmut's JRiver did AddFiles
         self.playlists = []
         keys = [r["Key"] for r in self.tracks]
         beatles = [r["Key"] for r in self.tracks if r["Artist"] == "The Beatles"]
@@ -211,6 +212,8 @@ class FakeJRiver:
         self.calls.append((path, dict(params)))
         if not self.up:
             raise requests.ConnectionError("JRiver isn't running (fake)")
+        if path in self.refused:
+            return Resp(401, "Access denied.")
         if path == "Alive":
             return Resp(text=_response({"RuntimeGUID": "x", "LibraryVersion": "24", "ProgramName": "JRiver Media Center",
                                         "ProgramVersion": "34.0.20", "FriendlyName": "FAKE"}))

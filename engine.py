@@ -4247,6 +4247,10 @@ def playlist_exists(name):
     return False
 
 
+class ReviewProblem(Exception):
+    """A Review action that went wrong in a way worth explaining. Its text is the whole console line."""
+
+
 def review_save(keys, name):
     """Saves the ticked Review tracks, in tick order, as a JRiver playlist. Replaces one of that name."""
     keys = [str(k) for k in keys if k]
@@ -4262,7 +4266,12 @@ def review_save(keys, name):
         raise RuntimeError("JRiver didn't create the playlist")
     r = requests.get(f"{JRIVER_BASE}/Playlist/AddFiles",
                      params={"PlaylistType": "ID", "Playlist": pid, "Keys": ",".join(keys)}, auth=AUTH, timeout=10)
-    r.raise_for_status()
+    if not r.ok:   # the playlist is already made, so it's left empty: say so plainly, not with the whole address
+        debug(f"Playlist/AddFiles for playlist {pid}: {r.status_code} {r.text[:200]}")
+        hint = (" If JRiver's Media Network has a username and password, put them in Settings > Keys."
+                if r.status_code == 401 else "")
+        raise ReviewProblem(f"Problem: JRiver made the playlist \"{name}\" but wouldn't add the tracks "
+                            f"(error {r.status_code}), so it's empty.{hint}")
     n = f"{len(keys)} track{'' if len(keys) == 1 else 's'}"
     return f"Review: {n} saved as the JRiver playlist \"{name}\"."
 

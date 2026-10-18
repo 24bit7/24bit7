@@ -378,6 +378,8 @@ class ReviewPanel:
         def worker():
             try:
                 line = work()
+            except engine.ReviewProblem as e:
+                line = str(e)
             except Exception as e:
                 line = f"Problem: Review couldn't send that to JRiver ({e})."
             self.play.root.after(0, lambda: self._done(line))
