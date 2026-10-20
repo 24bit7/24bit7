@@ -95,6 +95,8 @@ def _check_zones():
         key = str(info.get("FileKey") or "")
         if count <= 0 or position != count - 1 or key not in entry["keys"]:
             continue   # not on the last track, or the zone is playing something 24bit7 didn't send
+        if str(info.get("State") or "") in ("0", "1"):
+            continue   # stopped or paused on it: nothing more should play
         marker = (key, count)
         if entry.get("fired") == marker:
             continue   # this last track has had its top-up
@@ -108,6 +110,7 @@ def _check_zones():
         if not on:
             continue
         entry["fired"] = marker
+        entry["ends_at"] = engine.nonstop_track_ends(info)
         if _submit is not None:
             _submit(_job(zone, zone_name, profile, info), f"Non-stop: {zone_name} reached its last track",
                     {"from": "nonstop", "zone": zone})

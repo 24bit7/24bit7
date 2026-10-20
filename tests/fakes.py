@@ -232,7 +232,8 @@ class FakeJRiver:
                      "PlayingNowPosition": z.pos, "PlayingNowTracks": len(z.playlist)}
             if 0 <= z.pos < len(z.playlist):
                 row = self.by_key[z.playlist[z.pos]]
-                items.update(FileKey=row["Key"], Name=row["Name"], Artist=row["Artist"], Album=row["Album"])
+                items.update(FileKey=row["Key"], Name=row["Name"], Artist=row["Artist"], Album=row["Album"],
+                             DurationMS=int(float(row.get("Duration") or 0) * 1000))
             return Resp(text=_response(items))
         if path == "Playback/Playlist":
             z = self._zone_for(params)

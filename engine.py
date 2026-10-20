@@ -1001,6 +1001,38 @@ def nonstop_record(zone, keys, append=False, **fields):
             entry.setdefault("original", set()).update(keys)
 
 
+NONSTOP_GRACE = 3        # seconds: a zone that stops sooner than this before its last track would have ended was stopped by hand
+_clock = time.monotonic  # tests move time on
+
+
+def nonstop_track_ends(info):
+    """When the playing track will end on its own (on _clock), or None if JRiver didn't say."""
+    try:
+        left = int(info.get("DurationMS") or "") - int(info.get("PositionMS") or "0")
+    except (TypeError, ValueError):
+        return None
+    return _clock() + max(0, left) / 1000
+
+
+def nonstop_held(zone):
+    """
+    Why a Non-stop top-up shouldn't go in now, or None. JRiver starts a stopped zone when tracks
+    are added to it, so a zone stopped or paused by hand gets nothing; a zone whose last track
+    simply ran out before the top-up was ready carries on, as Non-stop is meant to.
+    """
+    info = get_playing_info(zone) or {}
+    state = str(info.get("State") or "")
+    if state == "1":
+        return "paused"
+    if state != "0":
+        return None
+    with _nonstop_lock:
+        ends = (NONSTOP_ZONES.get(zone) or {}).get("ends_at")
+    if ends is not None and _clock() < ends - NONSTOP_GRACE:
+        return "stopped"
+    return None
+
+
 def nonstop_sent(zone):
     """Every track 24bit7 has sent to this zone since its playlist started."""
     with _nonstop_lock:
@@ -1320,7 +1352,8 @@ def get_playing_info(zone=None):
         r = requests.get(f"{JRIVER_BASE}/Playback/Info", params={"Zone": zone}, auth=AUTH, timeout=10)
         root = ET.fromstring(xml_safe(r.text))
         info = {"Artist": "Unknown", "Album": "Unknown", "Name": "Unknown",
-                "PlayingNowPosition": "-1", "PlayingNowTracks": "0", "FileKey": "", "ZoneID": ""}
+                "PlayingNowPosition": "-1", "PlayingNowTracks": "0", "FileKey": "", "ZoneID": "",
+                "State": "", "PositionMS": "", "DurationMS": ""}
         for item in root.findall('Item'):
             if item.get('Name') in info:
                 info[item.get('Name')] = item.text
@@ -4443,6 +4476,14 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
         if keys and not fresh_keys:
             report("  Note: nothing new to add, as every track found had already been sent to this zone.")
         keys, append = fresh_keys, True
+        held = nonstop_held(zone) if keys else None
+        if held:
+            with _nonstop_lock:
+                entry = NONSTOP_ZONES.get(zone)
+                if entry:
+                    entry["fired"] = None   # pressing play on the last track again lets Non-stop try again
+            report(f"  Non-stop: {zone_label(zone)} was {held}, so nothing was added.")
+            return
     nonstop_record(zone, keys, append)
     if append:
         if keys:
