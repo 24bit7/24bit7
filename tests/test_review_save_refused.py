@@ -21,6 +21,8 @@ def test_refused_tracks_say_the_playlist_is_empty(app):
     assert line.startswith("Problem: ")
     assert '"Sunday Dub"' in line and "empty" in line
     assert "401" in line and "Settings > Keys" in line
+    assert "without a login" in line and "Tools > Options > Media Network > Authentication" in line, (
+        "no login at all is the usual cause (Helmut), so it says where to set one up in JRiver")
     assert "http" not in line and "Keys=" not in line, "no JRiver address or track numbers"
     made = [p for p in app.jriver.playlists if p["Name"] == "Sunday Dub"]
     assert made and made[0]["keys"] == [], "the line matches what's in JRiver: an empty playlist"

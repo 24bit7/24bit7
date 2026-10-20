@@ -4301,7 +4301,9 @@ def review_save(keys, name):
                      params={"PlaylistType": "ID", "Playlist": pid, "Keys": ",".join(keys)}, auth=AUTH, timeout=10)
     if not r.ok:   # the playlist is already made, so it's left empty: say so plainly, not with the whole address
         debug(f"Playlist/AddFiles for playlist {pid}: {r.status_code} {r.text[:200]}")
-        hint = (" If JRiver's Media Network has a username and password, put them in Settings > Keys."
+        # Helmut, 20 Oct 2026: JRiver 36.0.47 with no login at all made the playlist but refused the tracks
+        hint = (" JRiver wouldn't add them without a login: set a username and password in JRiver "
+                "(Tools > Options > Media Network > Authentication), then enter them in Settings > Keys."
                 if r.status_code == 401 else "")
         raise ReviewProblem(f"Problem: JRiver made the playlist \"{name}\" but wouldn't add the tracks "
                             f"(error {r.status_code}), so it's empty.{hint}")
