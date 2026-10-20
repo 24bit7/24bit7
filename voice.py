@@ -36,7 +36,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import requests
 
 import engine
-from i18n import t, tn
+from i18n import N_, t, tn
 import library
 import saved_playlists
 
@@ -461,10 +461,11 @@ def _zone_command(intent, device, body):
         return "problem", "24bit7 isn't ready yet. Try again in a moment.", {}
     seed = dict(info)
     seed["ZoneID"] = zid
-    shown = f"{title} by {artist}" if artist else title
+    shown = t("{title} by {artist}", title=title, artist=artist) if artist else title
     profile = device_profile(device or "unknown device")
     _submit(_job("more_like", seed, zone, profile, device or "unknown device"),
-            f"Voice, {name}: more like {shown}, to {zone}" + (", with its own settings" if profile else ""),
+            t("Voice, {name}: more like {shown}, to {zone}{own}", name=name, shown=shown, zone=zone,
+              own=t(", with its own settings") if profile else ""),
             {"from": "voice", "device": device or "unknown device"})
     if _is_busy() and not _takes_over(zone):
         return "pending", "Please wait, request pending.", {}
@@ -864,16 +865,21 @@ def handle_command(body, busy=False):
     heard = value
     if intent in ("songs_by", "music_like"):
         value = _library_artist(value)
-    corrected = f" (heard '{heard}')" if isinstance(value, str) and value.lower() != heard.lower() else ""
+    corrected = t(" (heard '{heard}')", heard=heard) if isinstance(value, str) and value.lower() != heard.lower() else ""
 
     shown = f"{value[1]} by {library.spoken(value[0])}" if intent == "tracks_like" else value
     words = {"songs_by": f"Songs by {shown}", "music_like": f"Music like {shown}",
              "genre": f"A {shown} playlist", "tracks_like": f"Tracks like {shown}"}[intent]
-    phrase = {"songs_by": "songs by", "music_like": "music like", "genre": "genre",
-              "tracks_like": "tracks like"}[intent]
+    heading = {"songs_by": N_("Voice, {name}: songs by {shown}{heard}, to {zone}{own}"),
+               "music_like": N_("Voice, {name}: music like {shown}{heard}, to {zone}{own}"),
+               "genre": N_("Voice, {name}: genre {shown}{heard}, to {zone}{own}"),
+               "tracks_like": N_("Voice, {name}: tracks like {shown}{heard}, to {zone}{own}")}[intent]
     profile = device_profile(device or "unknown device")
+    if intent == "tracks_like":   # the console's version; the spoken reply keeps its English
+        shown = t("{title} by {artist}", title=value[1], artist=library.spoken(value[0]))
     _submit(_job(intent, value, zone, profile, device or "unknown device"),
-            f"Voice, {name}: {phrase} {shown}{corrected}, to {zone}" + (", with its own settings" if profile else ""),
+            t(heading, name=name, shown=shown, heard=corrected, zone=zone,
+              own=t(", with its own settings") if profile else ""),
             {"from": "voice", "device": device or "unknown device"})
     if busy and not _takes_over(zone):
         return "pending", "Please wait, request pending.", {}
@@ -935,13 +941,13 @@ def _log_problem(body, speech):
         with _lock:
             _devices_table()
             row = engine.db().execute("SELECT name FROM voice_devices WHERE device_id=?", (device,)).fetchone()
-        name = row[0] if row and row[0] else "an unknown device"
+        name = row[0] if row and row[0] else t("an unknown device")
     except Exception:
-        name = "an unknown device"
+        name = t("an unknown device")
     intent = (body.get("intent") or "").strip().lower()
     asked = " ".join(x for x in (SAID.get(intent, intent or "a command"), (body.get("value") or "").strip()) if x)
-    first = f"{datetime.now().strftime('%H:%M')}  Voice, {name}: {asked}"
-    second = f'  Problem: Alexa said "{speech}"'
+    first = f"{datetime.now().strftime('%H:%M')}  " + t("Voice, {name}: {asked}", name=name, asked=asked)   # asked: what was said, in English
+    second = "  " + t('Problem: Alexa said "{speech}"', speech=speech)
     engine.print(first)
     engine.print(second)
     try:
