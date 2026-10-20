@@ -28,6 +28,7 @@ from tkinter import ttk, messagebox
 import tkinter.font as tkfont
 
 import engine
+from i18n import N_, t, tn
 from settings_gui import Tooltip, read_env, write_env
 import tabs
 from tabs import rounded_shape
@@ -52,29 +53,31 @@ DOT = "\u25cf"
 def palette():
     return DARK if getattr(engine, "THEME", "light") == "dark" else LIGHT
 PLAY_MARK, STOP_MARK = "\u25b6", "\u25a0"
-PREVIEW_TIP = ("Listen to a track before you add it, in a zone with its own speakers or headphones. "
-               "The zone this list goes to isn't offered.")
+PREVIEW_TIP = N_("Listen to a track before you add it, in a zone with its own speakers or headphones. "
+                  "The zone this list goes to isn't offered.")
 
 # (how, button, what it does): the two Adds keep Playing Now, the two Load as New replace it
 ACTIONS = [
-    ("next", "Add as Up Next", "Plays after the current song, then the rest of Playing Now carries on."),
-    ("end", "Add to End", "Goes after everything already in Playing Now."),
-    ("finish", "Finish This Song, Load as New", "The current song finishes, then Playing Now holds only these."),
-    ("stop", "Stop Song, Play Now", "The current song stops and these play straight away. "
-                                       "Playing Now holds only these."),
+    ("next", N_("Add as Up Next"), N_("Plays after the current song, then the rest of Playing Now carries on.")),
+    ("end", N_("Add to End"), N_("Goes after everything already in Playing Now.")),
+    ("finish", N_("Finish This Song, Load as New"),
+     N_("The current song finishes, then Playing Now holds only these.")),
+    ("stop", N_("Stop Song, Play Now"), N_("The current song stops and these play straight away. "
+                                           "Playing Now holds only these.")),
 ]
-YOUTUBE_TIP = "Opens the ticked tracks, in tick order, as a YouTube playlist in your browser."
-TIDAL_TIP = ("Puts the ticked tracks, in tick order, into your Tidal playlist called 24bit7, in place of "
-             "what was there. Rename it in Tidal to keep it.")
-SAME_ZONE = "Same zone"       # Output's first choice: the Now Playing zone
-BPM_TIP = ("From your files' BPM tags. JRiver can fill these in for your whole library: Library Tools > "
-           "Analyze Audio, choosing only files not yet analyzed. Steer's Faster and Slower check against these "
-           "where they exist.")
-SAVE_TIP = "Nothing plays and Playing Now isn't touched. Saves these as a JRiver playlist."
-CLOSE_TIP = "Closes Review: the list goes, and the console comes back cleared."
+YOUTUBE_TIP = N_("Opens the ticked tracks, in tick order, as a YouTube playlist in your browser.")
+TIDAL_TIP = N_("Puts the ticked tracks, in tick order, into your Tidal playlist called 24bit7, in place of "
+               "what was there. Rename it in Tidal to keep it.")
+SAME_ZONE = N_("Same zone")   # Output's first choice: the Now Playing zone (shown, and compared, as t(SAME_ZONE))
+BPM_TIP = N_("From your files' BPM tags. JRiver can fill these in for your whole library: Library Tools > "
+             "Analyze Audio, choosing only files not yet analyzed. Steer's Faster and Slower check against these "
+             "where they exist.")
+SAVE_TIP = N_("Nothing plays and Playing Now isn't touched. Saves these as a JRiver playlist.")
+CLOSE_TIP = N_("Closes Review: the list goes, and the console comes back cleared.")
 
 # (title, width in characters, stretch): Artist, Title and Album share the spare room
-COLUMNS = [("Add", 4, 0), ("Artist", 18, 2), ("Title", 24, 3), ("Album", 18, 2), ("Time", 6, 0), ("BPM", 5, 0)]
+COLUMNS = [(N_("Add"), 4, 0), (N_("Artist"), 18, 2), (N_("Title"), 24, 3), (N_("Album"), 18, 2), (N_("Time"), 6, 0),
+           ("BPM", 5, 0)]
 
 
 def clock(seconds):
@@ -124,7 +127,7 @@ class ReviewPanel:
         self.switch_edge.pack(side="left")
         inner = tk.Frame(self.switch_edge, bg=CONSOLE["bg"])
         inner.pack()
-        self.console_btn = tk.Label(inner, text="Console", font=BOLD, padx=16, pady=3, cursor="hand2")
+        self.console_btn = tk.Label(inner, text=t("Console"), font=BOLD, padx=16, pady=3, cursor="hand2")
         self.console_btn.pack(side="left")
         self.switch_mid = tk.Frame(inner, bg=CONSOLE["accent"], width=1)
         self.switch_mid.pack(side="left", fill="y")
@@ -135,10 +138,10 @@ class ReviewPanel:
         # Close Review, at the right of the same row, drawn like the switch
         self.close_edge = tk.Frame(self.switch_row, bg=CONSOLE["accent"], padx=1, pady=1)
         self.close_edge.pack(side="right")
-        self.close_btn = tk.Label(self.close_edge, text="Close Review", font=BOLD, padx=16, pady=3, cursor="hand2")
+        self.close_btn = tk.Label(self.close_edge, text=t("Close Review"), font=BOLD, padx=16, pady=3, cursor="hand2")
         self.close_btn.pack()
         self.close_btn.bind("<Button-1>", lambda e: self.close())
-        Tooltip(self.close_btn, CLOSE_TIP, when=self._notes_on, wrap=self._note_wrap)
+        Tooltip(self.close_btn, t(CLOSE_TIP), when=self._notes_on, wrap=self._note_wrap)
         self._style_switch()
 
     def _show_switch(self):
@@ -163,7 +166,7 @@ class ReviewPanel:
         on, off = dict(bg=c["accent"], fg=c["on_accent"]), dict(bg=c["bg"], fg=c["accent"])
         self.close_edge.config(bg=c["accent"])
         self.close_btn.config(**off)
-        self.console_btn.config(text=f"Console {DOT}" if self.dot and self.showing else "Console",
+        self.console_btn.config(text=f"{t('Console')} {DOT}" if self.dot and self.showing else t("Console"),
                                 **(off if self.showing else on))
         ticked = len(self.order)
         self.review_btn.config(text=f"Review ({ticked})" if ticked and not self.showing else "Review",
@@ -207,22 +210,22 @@ class ReviewPanel:
         self.title_label.pack(side="left")
         self.count_label = tk.Label(head, text="", font=FONT, bg=p["bg"], fg=p["muted"])
         self.count_label.pack(side="left", padx=(14, 8))
-        for text, command in (("Select All", self.select_all), ("Select None", self.select_none)):
+        for text, command in ((t("Select All"), self.select_all), (t("Select None"), self.select_none)):
             self._pill(head, text, command).pack(side="left", padx=(6, 0))
         self.smaller_btn = self._pill(head, "A\u2212", lambda: self.set_size(self.size - 1), pad=18)
         self.smaller_btn.pack(side="left", padx=(16, 0))
-        Tooltip(self.smaller_btn, "Smaller text in the track list.", when=self._notes_on, wrap=self._note_wrap)
+        Tooltip(self.smaller_btn, t("Smaller text in the track list."), when=self._notes_on, wrap=self._note_wrap)
         self.bigger_btn = self._pill(head, "A+", lambda: self.set_size(self.size + 1), pad=18)
         self.bigger_btn.pack(side="left", padx=(4, 0))
-        Tooltip(self.bigger_btn, "Bigger text in the track list.", when=self._notes_on, wrap=self._note_wrap)
+        Tooltip(self.bigger_btn, t("Bigger text in the track list."), when=self._notes_on, wrap=self._note_wrap)
         self.preview_bar = tk.Frame(head, bg=p["bg"])       # Preview zone and Stop Preview
         self.preview_bar.pack(side="right")
-        tk.Label(self.preview_bar, text="Preview in", font=FONT, bg=p["bg"], fg=p["muted"]).pack(side="left")
+        tk.Label(self.preview_bar, text=t("Preview in"), font=FONT, bg=p["bg"], fg=p["muted"]).pack(side="left")
         self.preview_btn = tk.Label(self.preview_bar, text="", font=BOLD, bg=p["bg"], fg=ORANGE, cursor="hand2")
         self.preview_btn.pack(side="left", padx=(8, 10))
         self.preview_btn.bind("<Button-1>", lambda e: self._preview_menu())
-        Tooltip(self.preview_btn, PREVIEW_TIP, when=self._notes_on, wrap=self._note_wrap)
-        self.stop_preview_btn = self._pill(self.preview_bar, "Stop Preview", self.stop_preview,
+        Tooltip(self.preview_btn, t(PREVIEW_TIP), when=self._notes_on, wrap=self._note_wrap)
+        self.stop_preview_btn = self._pill(self.preview_bar, t("Stop Preview"), self.stop_preview,
                                            fg=ORANGE, edge=ORANGE, font=BOLD)
         self.stop_preview_btn.pack(side="left")
         self._sync_preview()
@@ -289,17 +292,18 @@ class ReviewPanel:
             if n == 2:   # the two Adds, then the two Load as New
                 tk.Frame(self.jriver_actions, bg=p["line"], width=1, height=self._px(24)).pack(side="left",
                                                                                          padx=(2, 10))
-            b = self._action_button(self.jriver_actions, text, lambda h=how: self._act(h), tip)
+            b = self._action_button(self.jriver_actions, t(text), lambda h=how: self._act(h), t(tip))
             b.pack(side="left", padx=(0, 8))
             self._buttons[how] = b
         self.youtube_actions = tk.Frame(row, bg=p["bg"])  # Output on YouTube: just the one
-        self._buttons["youtube"] = self._action_button(self.youtube_actions, "Play on YouTube", self._youtube,
-                                                       YOUTUBE_TIP)
+        self._buttons["youtube"] = self._action_button(self.youtube_actions, t("Play on YouTube"), self._youtube,
+                                                       t(YOUTUBE_TIP))
         self._buttons["youtube"].pack(side="left")
         self.tidal_actions = tk.Frame(row, bg=p["bg"])    # Output on Tidal: just the one
-        self._buttons["tidal"] = self._action_button(self.tidal_actions, "Send to Tidal", self._tidal, TIDAL_TIP)
+        self._buttons["tidal"] = self._action_button(self.tidal_actions, t("Send to Tidal"), self._tidal,
+                                                     t(TIDAL_TIP))
         self._buttons["tidal"].pack(side="left")
-        save = self._action_button(row, "Save as Playlist", self._save, SAVE_TIP, quiet=True)
+        save = self._action_button(row, t("Save as Playlist"), self._save, t(SAVE_TIP), quiet=True)
         save.pack(side="right")
         self._buttons["save"] = save
         # What last happened, kept for the tests and the console; not shown (the console says it)
@@ -345,7 +349,7 @@ class ReviewPanel:
             choice = self.output_choice()
         if choice in ("YouTube", "Tidal"):
             return None
-        if choice and choice != SAME_ZONE:
+        if choice and choice != t(SAME_ZONE):
             return engine.zone_id(choice)
         zid = engine.seed_zone()
         return engine.zone_id() if zid == engine.ACTIVE_ZONE else zid
@@ -373,7 +377,7 @@ class ReviewPanel:
         """Runs a JRiver call off the main thread, then reports it in the console and under the actions."""
         self.busy = True
         self._sync_buttons()
-        self.status_label.config(text="Sending...")
+        self.status_label.config(text=t("Sending..."))
 
         def worker():
             try:
@@ -381,7 +385,7 @@ class ReviewPanel:
             except engine.ReviewProblem as e:
                 line = str(e)
             except Exception as e:
-                line = f"Problem: Review couldn't send that to JRiver ({e})."
+                line = t("Problem: Review couldn't send that to JRiver ({error}).", error=e)
             self.play.root.after(0, lambda: self._done(line))
         threading.Thread(target=worker, daemon=True).start()
 
@@ -406,7 +410,7 @@ class ReviewPanel:
         def work():
             zone = self.target_zone(choice)
             if zone is None:
-                return "Problem: the Output zone isn't in JRiver, so nothing was sent. Pick another under Output."
+                return t("Problem: the Output zone isn't in JRiver, so nothing was sent. Pick another under Output.")
             return engine.review_send(keys, how, zone)
         self._run(work)
 
@@ -422,10 +426,12 @@ class ReviewPanel:
             ids = engine.youtube_ids_for_pairs(pairs)
             sent = engine.open_youtube_playlist(ids)
             missed = len(pairs) - len([i for i in ids if i])
-            n = f"{sent} track{'' if sent == 1 else 's'}"
             if not sent:
-                return "Problem: YouTube had none of those tracks, so nothing was opened."
-            return f"Review: {n} opened on YouTube" + (f", {missed} not found there." if missed else ".")
+                return t("Problem: YouTube had none of those tracks, so nothing was opened.")
+            if missed:
+                return tn("Review: {count} track opened on YouTube, {missed} not found there.",
+                          "Review: {count} tracks opened on YouTube, {missed} not found there.", sent, missed=missed)
+            return tn("Review: {count} track opened on YouTube.", "Review: {count} tracks opened on YouTube.", sent)
         self._run(work)
 
     def _tidal(self):
@@ -442,13 +448,16 @@ class ReviewPanel:
             sent = engine.send_to_tidal([i for i in ids if i], report=problems.append)
             if not sent:
                 said = next((p for p in problems if p.startswith("Problem:")), "")
-                return said or "Problem: Tidal had none of those tracks, so nothing was sent."
+                return said or t("Problem: Tidal had none of those tracks, so nothing was sent.")
             self._tidal_links = engine.TIDAL_PLAYLIST_ID   # Open in Tidal, under the console line
             missed = len(pairs) - len([i for i in ids if i])
-            n = f"{sent} track{'' if sent == 1 else 's'}"
-            line = f"Review: {n} sent to Tidal" + (f", {missed} not found there." if missed else ".")
-            if any("Tidal app isn't installed" in p for p in problems):
-                line += " The Tidal app isn't installed, so it opened on Tidal's website."
+            if missed:
+                line = tn("Review: {count} track sent to Tidal, {missed} not found there.",
+                          "Review: {count} tracks sent to Tidal, {missed} not found there.", sent, missed=missed)
+            else:
+                line = tn("Review: {count} track sent to Tidal.", "Review: {count} tracks sent to Tidal.", sent)
+            if any("Tidal app isn't installed" in p for p in problems):   # engine's English line, until stage 3
+                line += " " + t("The Tidal app isn't installed, so it opened on Tidal's website.")
             return line
         self._run(work)
 
@@ -456,12 +465,12 @@ class ReviewPanel:
         if not self._can_act():
             return
         default = self.title.replace("\\", " ").replace("/", " ") or "24bit7 Review"
-        name = tabs.ask_name(self.frame, "Save as Playlist", "Name for the JRiver playlist:", default)
+        name = tabs.ask_name(self.frame, t("Save as Playlist"), t("Name for the JRiver playlist:"), default)
         name = (name or "").strip().replace("\\", " ").replace("/", " ")
         if not name:
             return
         if engine.playlist_exists(name) and not messagebox.askyesno(
-                "Save as Playlist", f"JRiver already has a playlist called \"{name}\". Replace it?",
+                t("Save as Playlist"), t('JRiver already has a playlist called "{name}". Replace it?', name=name),
                 parent=self.frame):
             return
         keys = list(self.order)
@@ -557,11 +566,11 @@ class ReviewPanel:
         p = self.p
         for c, (title, width, stretch) in enumerate(columns):
             self.grid.grid_columnconfigure(c, weight=stretch)
-            head = tk.Label(self.grid, text=title, font=self._font(-1, True), bg=p["bg"], fg=p["muted"], width=width,
+            head = tk.Label(self.grid, text=t(title), font=self._font(-1, True), bg=p["bg"], fg=p["muted"], width=width,
                             padx=4, anchor="e" if title in ("Time", "BPM") else "w")
             head.grid(row=0, column=c, sticky="ew", pady=(7, 5))
             if title == "BPM":   # where the figures come from, and how to get them
-                Tooltip(head, BPM_TIP, click=False, when=self._notes_on, wrap=self._note_wrap)
+                Tooltip(head, t(BPM_TIP), click=False, when=self._notes_on, wrap=self._note_wrap)
         tk.Frame(self.grid, bg=p["line"], height=1).grid(row=1, column=0, columnspan=len(columns), sticky="ew")
         r = 2
         for row in self.rows:
@@ -618,7 +627,8 @@ class ReviewPanel:
                 mark._img = img
         n = len(self.rows)
         self.title_label.config(text=self.title)
-        self.count_label.config(text=f"{n} track{'' if n == 1 else 's'}, {len(self.order)} ticked")
+        self.count_label.config(text=tn("{count} track, {ticked} ticked", "{count} tracks, {ticked} ticked", n,
+                                        ticked=len(self.order)))
         self._style_switch()
         self._sync_buttons()
         self._sync_preview()
@@ -659,7 +669,7 @@ class ReviewPanel:
         self.preview_zone = zid
 
     def _sync_preview(self):
-        shown = self.preview_name if self.preview_zone else "None"
+        shown = self.preview_name if self.preview_zone else t("None")
         self.preview_btn.config(text=f"{shown} \u25be", fg=ORANGE if self.preview_zone else self.p["muted"])
         on = self.previewing is not None
         if on:
@@ -682,8 +692,9 @@ class ReviewPanel:
         p = self.p
         menu = tk.Menu(self.frame, tearoff=0, bg=p["bg"], fg=p["text"], activebackground=p["row_on"],
                        activeforeground=p["accent"], font=FONT)
-        for name in ["None"] + self.preview_choices():
-            menu.add_command(label=name, command=lambda n=name: self.choose_preview("" if n == "None" else n))
+        menu.add_command(label=t("None"), command=lambda: self.choose_preview(""))
+        for name in self.preview_choices():
+            menu.add_command(label=name, command=lambda n=name: self.choose_preview(n))
         b = self.preview_btn
         try:
             menu.tk_popup(b.winfo_rootx(), b.winfo_rooty() + b.winfo_height())
@@ -720,12 +731,12 @@ class ReviewPanel:
         token = self._preview_token
         self.previewing, self.preview_at = key, zid
         what = " - ".join(x for x in (row.get("artist", ""), row.get("title", "")) if x)
-        self.status_label.config(text=f"Previewing {what} in {where}.")
+        self.status_label.config(text=t("Previewing {what} in {where}.", what=what, where=where))
 
         def failed(e):
             if token == self._preview_token:
                 self.previewing = self.preview_at = None
-                line = f"Problem: Preview couldn't play that in {where} ({e})."
+                line = t("Problem: Preview couldn't play that in {where} ({error}).", where=where, error=e)
                 self.status_label.config(text=line)
                 self.play._append_log(time.strftime("%H:%M") + "  " + line)
                 self._restyle()
@@ -751,7 +762,7 @@ class ReviewPanel:
         self._preview_token += 1
         self.previewing = self.preview_at = None
         if not quiet:
-            self.status_label.config(text="Preview stopped.")
+            self.status_label.config(text=t("Preview stopped."))
         self._background(lambda: engine.review_preview_stop(zid), lambda e: None)
         self._restyle()
 

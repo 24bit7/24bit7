@@ -25,6 +25,7 @@ from tkinter import ttk, scrolledtext, messagebox
 
 import engine
 import i18n
+from i18n import N_, t
 import library
 import tray
 import voice
@@ -49,7 +50,7 @@ import ai_usage
 REFRESH_MS = 10000   # Now Playing panel; paused while minimised or in the tray
 POLL_MS = 100
 DONATE_URL = "https://paypal.me/24bit7"
-SAME_ZONE_LABEL = "Same zone"
+SAME_ZONE_LABEL = N_("Same zone")   # shown and compared as t(SAME_ZONE_LABEL)
 AI_MAGENTA = "#ff33ff"   # AI lines and Query in the console, which is always black
 
 WELCOME_TEXT = (
@@ -309,7 +310,7 @@ class PlayTab(tk.Frame):
         tk.Label(frame, text="Output", font=("Segoe UI", 9, "bold"), fg=PALETTE["text_secondary"]).pack(side="left", padx=(8, 6))
         self.output_var = tk.StringVar(value=self._output_label(engine.OUTPUT_TARGET))
         self.output_cb = ttk.Combobox(frame, textvariable=self.output_var,
-                                      values=[SAME_ZONE_LABEL] + self._extra_outputs(), state="readonly", width=24,
+                                      values=[t(SAME_ZONE_LABEL)] + self._extra_outputs(), state="readonly", width=24,
                                       postcommand=self._fill_output_list)
         self.output_cb.pack(side="left")
         self.output_cb.bind("<<ComboboxSelected>>", self._on_output_changed)
@@ -460,10 +461,10 @@ class PlayTab(tk.Frame):
             return "Tidal"
         if target.startswith("zone:"):
             return target[5:]
-        return SAME_ZONE_LABEL
+        return t(SAME_ZONE_LABEL)
 
     def _fill_output_list(self):
-        self.output_cb.config(values=[SAME_ZONE_LABEL] + engine.zone_names() + self._extra_outputs())
+        self.output_cb.config(values=[t(SAME_ZONE_LABEL)] + engine.zone_names() + self._extra_outputs())
 
     @staticmethod
     def _extra_outputs():
@@ -476,15 +477,15 @@ class PlayTab(tk.Frame):
         """Additional Outputs changed: an Output that's been unticked goes back to Same zone, and says so."""
         was = self.output_var.get()
         if was in dict(engine.OUTPUT_OPTIONS).values() and was not in self._extra_outputs():
-            self.output_var.set(SAME_ZONE_LABEL)
+            self.output_var.set(t(SAME_ZONE_LABEL))
             self._on_output_changed()
             messagebox.showinfo("Output", f"{was} is no longer ticked under Additional Outputs, so Output is "
-                                          f"back to {SAME_ZONE_LABEL}.", parent=self)
+                                          f"back to {t(SAME_ZONE_LABEL)}.", parent=self)
 
     def _on_output_changed(self, *_):
         choice = self.output_var.get()
         target = ("youtube" if choice == "YouTube" else "tidal" if choice == "Tidal" else
-                  "jriver" if choice == SAME_ZONE_LABEL else "zone:" + choice)
+                  "jriver" if choice == t(SAME_ZONE_LABEL) else "zone:" + choice)
         try:
             write_env({"OUTPUT_TARGET": target})
         except Exception as e:

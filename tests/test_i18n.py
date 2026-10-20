@@ -18,7 +18,7 @@ def _de():
 
 
 def _asked_for():
-    """Every t("...") and N_("...") in the app's code, as (file, English)."""
+    """Every t("..."), N_("...") and tn("...", "...") in the app's code, as (file, English)."""
     found = []
     for name in sorted(os.listdir(REPO)):
         if not name.endswith((".py", ".pyw")) or name.startswith(("apply_", "builtin_keys")):
@@ -29,6 +29,10 @@ def _asked_for():
             if (isinstance(node, ast.Call) and getattr(node.func, "id", getattr(node.func, "attr", None)) in ("t", "N_")
                     and node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)):
                 found.append((name, node.args[0].value))
+            if (isinstance(node, ast.Call) and getattr(node.func, "id", getattr(node.func, "attr", None)) == "tn"
+                    and len(node.args) >= 2):
+                found += [(name, a.value) for a in node.args[:2]
+                          if isinstance(a, ast.Constant) and isinstance(a.value, str)]
     return found
 
 
@@ -53,6 +57,15 @@ def test_german_comes_from_the_table(app):
         assert i18n.t("Text nobody has translated") == "Text nobody has translated", "falls back to the English"
     finally:
         i18n.set_language("en")
+
+
+def test_one_and_many(app):
+    import i18n
+    i18n.set_language("en")
+    assert i18n.tn("{count} track, {ticked} ticked", "{count} tracks, {ticked} ticked", 1, ticked=0) == (
+        "1 track, 0 ticked")
+    assert i18n.tn("{count} track, {ticked} ticked", "{count} tracks, {ticked} ticked", 3, ticked=2) == (
+        "3 tracks, 2 ticked")
 
 
 def test_an_unknown_language_means_english(app):
