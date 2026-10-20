@@ -14,6 +14,8 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import ttk
 
+from i18n import t
+
 PALETTE = {
     "tab_selected_bg": None,        # the selected tab takes the window's own colour (None)...
     "tab_selected_fg": "#1f4e9c",   # ...with logo-blue text
@@ -508,7 +510,7 @@ class FlatButton(tk.Frame):
         if self._chars:
             text_w = self._chars * self._font.measure("0")
         else:
-            text_w = max(self._font.measure(t) for t in (text or " ").split("\n")) + 2 * px(8)
+            text_w = max(self._font.measure(part) for part in (text or " ").split("\n")) + 2 * px(8)
         lines = self._lines or max(1, (text or "").count("\n") + 1)
         text_h = lines * self._font.metrics("linespace")
         return text_w + px(6) + 2 * line, text_h + px(4) + 2 * line + px(BUTTON_BAR)
@@ -784,7 +786,8 @@ class ClickThrough(FlatButton):
     symbol=True draws the prefix as a symbol, bigger and bold, with the value beside it at the
     usual size ("∞  Wander" for Non-stop), instead of "Prefix: Value". Both are drawn into
     the button's picture, so a neighbour changing size can never paint over them.
-    var holds the value as shown ("Keep It Tight"); setting it from code redraws the button.
+    var holds the value in English ("Keep It Tight"), which code reads and sets; the button shows the
+    prefix, the value and any label through t(), so it reads in the chosen language.
     For older code it also answers like the dropdown it replaced: set(), state(), instate(),
     selection_clear(), and <<ComboboxSelected>> runs the command.
     """
@@ -813,7 +816,7 @@ class ClickThrough(FlatButton):
             return super()._measure(text)
         px, line = self._px, self._px(1)
         sym_font, val_font = self._symbol_fonts()
-        w = sym_font.getlength(self._prefix) + val_font.getlength(SYMBOL_GAP + self._var.get()) + 2 * px(8)
+        w = sym_font.getlength(self._prefix) + val_font.getlength(SYMBOL_GAP + t(self._var.get())) + 2 * px(8)
         h = self._font.metrics("linespace")   # the usual height, so the row stays level
         return int(w) + px(6) + 2 * line, h + px(4) + 2 * line + px(BUTTON_BAR)
 
@@ -833,8 +836,8 @@ class ClickThrough(FlatButton):
             return ""   # drawn by the symbol and value labels instead
         value = self._var.get()
         if value in self._labels:
-            return self._labels[value]
-        return f"{self._prefix}: {value}" if self._prefix else value
+            return t(self._labels[value])
+        return f"{t(self._prefix)}: {t(value)}" if self._prefix else t(value)
 
     def _step(self, by):
         value = self._var.get()
@@ -871,7 +874,7 @@ class ClickThrough(FlatButton):
         w, h = self._size
         if getattr(self, "_symbol", False):
             image = symbol_shape(self, w, h, self._px(CORNER), fill, edge, self._px(1), text,
-                                 self._prefix, self._var.get(), *self._symbol_fonts())
+                                 self._prefix, t(self._var.get()), *self._symbol_fonts())
         else:
             image = rounded_shape(self, w, h, self._px(CORNER), fill, edge, self._px(1))
         # a button with a note takes the question-mark pointer, as every title with a note does

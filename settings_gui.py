@@ -30,7 +30,7 @@ import i18n
 import tabs
 from tabs import TabbedPane, PALETTE, FlatButton
 from datetime import datetime
-from i18n import t
+from i18n import N_, t
 
 ENV_FILE = engine.ENV_FILE   # single source of truth for where .env lives
 
@@ -152,11 +152,11 @@ AI_FIELDS = {"anthropic": ["ANTHROPIC_API_KEY"], "openai": ["OPENAI_API_KEY"], "
 AI_KEY_FIELDS = {k for fields in AI_FIELDS.values() for k in fields}
 UNTESTED_NOTE = "Untested so far: please report how it goes on the JRiver forum or GitHub."
 
-NO_KEY_TEXT = "You need to set up the AI under Settings > Keys to use this function"
+NO_KEY_TEXT = N_("You need to set up the AI under Settings > Keys to use this function")
 CONSOLE_QUERY_WARNING = ("Console Query sends the console, your settings (without keys) and 24bit7's "
                          "code to your AI provider each time you ask a question. The first question costs a few "
                          "pence, more than the Moderator.\n\nTurn it on?")
-MODERATOR_CHOICES = ["Off", "Relaxed", "Balanced", "Strict"]
+MODERATOR_CHOICES = [N_("Off"), N_("Relaxed"), N_("Balanced"), N_("Strict")]   # English: shown through t()
 MODERATOR_LEVELS_HELP = (
     "Relaxed: removes only clear clashes, at most a fifth of the tracks.\n"
     "Balanced: removes anything that noticeably shifts the tone, energy or mood, at most two fifths.\n"

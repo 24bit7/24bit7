@@ -52,8 +52,9 @@ POLL_MS = 100
 DONATE_URL = "https://paypal.me/24bit7"
 SAME_ZONE_LABEL = N_("Same zone")   # shown and compared as t(SAME_ZONE_LABEL)
 AI_MAGENTA = "#ff33ff"   # AI lines and Query in the console, which is always black
+CONSOLE_MODES = (N_("Simple"), N_("Advanced"))   # the console's Mode button shows these, through t()
 
-WELCOME_TEXT = (
+WELCOME_TEXT = N_(
     "Welcome to 24bit7!\n\n"
     "A starter settings file has been created. Playlists work out of the box "
     "using Deezer and YouTube, which need no keys.\n\n"
@@ -67,36 +68,37 @@ WELCOME_TEXT = (
 # The Play tab's Drift and Non-stop switches: which Play options each covers, and Non-stop's reseed choices
 DRIFT_GROUPS = ("artists", "tracks", "vibe")            # Top Tracks has no Drift
 NONSTOP_GROUPS = ("artists", "tracks", "top", "vibe")
-PLAY_RESEED = [("last", "Last track"), ("second", "2nd track")]
-PLAY_NONSTOP = [("off", "Off"), ("tight", "Keep It Tight"), ("journey", "Wander")]
-PLAY_BEHAVIOUR = [("instant", "Play"), ("review", "Review")]   # every build from the app, not voice
+# The values below stay English in code (the switches hold and compare them); they show through t()
+PLAY_RESEED = [("last", N_("Last track")), ("second", N_("2nd track"))]
+PLAY_NONSTOP = [("off", N_("Off")), ("tight", "Keep It Tight"), ("journey", "Wander")]
+PLAY_BEHAVIOUR = [("instant", N_("Play")), ("review", "Review")]   # every build from the app, not voice
 # What each Play tab control does, shown on hover only while the More Options row's ? is on
 PLAY_NOTES = {
-    "Similar Artists": "Finds artists like the seed's, then plays their best known tracks you own.",
-    "Similar Tracks": "Finds songs like the seed track, from every source ticked in Settings > Sources.",
-    "Artist's Top Tracks": "Plays the seed artist's most popular tracks that you own.",
-    "AI Playlist": "Describe a mood or moment and the AI picks tracks for it, from your library. Uses AI credits.",
-    "More Options": "Opens the row below: Seed, Mode, Moderator, Drift, Deep Cuts, Non-stop and your own playlists.",
-    "Output": "Where the finished playlist goes: the zone you seeded from, another JRiver zone, or YouTube or "
-              "Tidal (ticked under Settings > Other > Additional Outputs).",
-    "Zone": "Which JRiver zone Now Playing shows and seeds from.",
-    "Seed": "What Similar Artists and Similar Tracks start from: the current track, or every track in Playing Now.",
-    "Mode": "Play Mode plays the playlist straight away. Review Mode lists it first, so you choose what goes.",
-    "Moderator": "Uses the AI to check each playlist and take out tracks that clash with the seed's mood. "
-                 "Relaxed takes out the least, Strict the most. Uses AI credits.",
-    "Drift": "When a build comes up short, carries on from what it found until the playlist is full. Keep It "
-             "Tight stays close to the seed; Spread wanders further.",
-    "Deep Cuts": "Tops each playlist up with the least played artists or tracks in the seed's genre, by the share "
-                 "set in Settings > Playlist. Spaced places them evenly; Shuffled at random.",
-    "Non-stop": "Non-stop: when a playlist from 24bit7 reaches its last track, more are added, so the music "
-                "keeps going. Keep It Tight stays close to the start; Wander lets it drift.",
-    "+ Add Playlist": "Joins one of your own JRiver playlists to the next build.",
-    "Show Credits": "Lists the producer, engineer, musicians and other credits for what's playing, from Discogs.",
-    "Help": "Hover notes for the Play tab: on, hovering over anything here explains it; off, no pop-ups.",
+    "Similar Artists": N_("Finds artists like the seed's, then plays their best known tracks you own."),
+    "Similar Tracks": N_("Finds songs like the seed track, from every source ticked in Settings > Sources."),
+    "Artist's Top Tracks": N_("Plays the seed artist's most popular tracks that you own."),
+    "AI Playlist": N_("Describe a mood or moment and the AI picks tracks for it, from your library. Uses AI credits."),
+    "More Options": N_("Opens the row below: Seed, Mode, Moderator, Drift, Deep Cuts, Non-stop and your own playlists."),
+    "Output": N_("Where the finished playlist goes: the zone you seeded from, another JRiver zone, or YouTube or "
+                 "Tidal (ticked under Settings > Other > Additional Outputs)."),
+    "Zone": N_("Which JRiver zone Now Playing shows and seeds from."),
+    "Seed": N_("What Similar Artists and Similar Tracks start from: the current track, or every track in Playing Now."),
+    "Mode": N_("Play Mode plays the playlist straight away. Review Mode lists it first, so you choose what goes."),
+    "Moderator": N_("Uses the AI to check each playlist and take out tracks that clash with the seed's mood. "
+                    "Relaxed takes out the least, Strict the most. Uses AI credits."),
+    "Drift": N_("When a build comes up short, carries on from what it found until the playlist is full. Keep It "
+                "Tight stays close to the seed; Spread wanders further."),
+    "Deep Cuts": N_("Tops each playlist up with the least played artists or tracks in the seed's genre, by the share "
+                    "set in Settings > Playlist. Spaced places them evenly; Shuffled at random."),
+    "Non-stop": N_("Non-stop: when a playlist from 24bit7 reaches its last track, more are added, so the music "
+                   "keeps going. Keep It Tight stays close to the start; Wander lets it drift."),
+    "+ Add Playlist": N_("Joins one of your own JRiver playlists to the next build."),
+    "Show Credits": N_("Lists the producer, engineer, musicians and other credits for what's playing, from Discogs."),
+    "Help": N_("Hover notes for the Play tab: on, hovering over anything here explains it; off, no pop-ups."),
 }
 
-PLAY_DEEP_CUTS = [("off", "Off"), ("spaced", "Spaced"), ("shuffled", "Shuffled")]   # as Settings > Playlist has them
-PLAY_DRIFT = [("off", "Off"), ("close", "Keep It Tight"), ("spread", "Spread")]   # as Settings > Playlist shows them   # as Settings > Playlist shows them
+PLAY_DEEP_CUTS = [("off", N_("Off")), ("spaced", N_("Spaced")), ("shuffled", N_("Shuffled"))]   # as Settings > Playlist has them
+PLAY_DRIFT = [("off", N_("Off")), ("close", "Keep It Tight"), ("spread", N_("Spread"))]   # as Settings > Playlist shows them
 
 
 class PlayTab(tk.Frame):
@@ -150,12 +152,12 @@ class PlayTab(tk.Frame):
         self.seed_nb.pack(fill="x")
 
         frame = tk.Frame(self.seed_nb, padx=26, pady=8)
-        self.seed_nb.add(frame, text="Now Playing")
+        self.seed_nb.add(frame, text=t("Now Playing"))
         # Zone first: which JRiver zone Now Playing reads and seeds from. Not saved,
         # so every launch starts on the active zone. The list rescans when opened.
         zone_box = tk.Frame(frame)
         zone_box.pack(side="left", padx=(0, 32))
-        tk.Label(zone_box, text="Zone", font=("Segoe UI", 9, "bold"), fg=PALETTE["text_secondary"]).pack(side="left", padx=(0, 6))
+        tk.Label(zone_box, text=t("Zone"), font=("Segoe UI", 9, "bold"), fg=PALETTE["text_secondary"]).pack(side="left", padx=(0, 6))
         self.zone_var = tk.StringVar(value="")
         self._zone_picked = False    # picked by hand: stays put until the next launch
         self._zone_settled = False   # launch zone chosen (default or active zone)
@@ -171,7 +173,7 @@ class PlayTab(tk.Frame):
         # so the track title and the artist name start at the same point
         prefix_font = tkfont.Font(family="Segoe UI", size=7)
         self._prefix_font = prefix_font
-        tab = max(prefix_font.measure("Track:"), prefix_font.measure("Artist:")) + prefix_font.measure("  ")
+        tab = max(prefix_font.measure(t("Track:")), prefix_font.measure(t("Artist:"))) + prefix_font.measure("  ")
         self.np_track = InfoLine(info, font=("Segoe UI", 11, "bold"), fg=PALETTE["brand_blue"],
                                  prefix_font=prefix_font, tab=tab)
         self.np_track.pack(anchor="w", fill="x")
@@ -185,9 +187,9 @@ class PlayTab(tk.Frame):
         self.usage_label.pack(side="left", padx=(0, 10))
         self.usage_label.config(cursor="hand2")
         self.usage_label.bind("<Button-1>", self._usage_flip)   # dollars or tokens
-        FlatButton(self.usage_box, text="Clear", command=self._usage_clear, width=6, height=1,
+        FlatButton(self.usage_box, text=t("Clear"), command=self._usage_clear, width=6, height=1,
                    quiet=True).pack(side="left")
-        FlatButton(self.usage_box, text="Query", command=self._usage_query, width=6, height=1,
+        FlatButton(self.usage_box, text=t("Query"), command=self._usage_query, width=6, height=1,
                    quiet=True).pack(side="left", padx=(6, 0))
         self._usage_shown = False
         self._usage_info = info
@@ -203,18 +205,18 @@ class PlayTab(tk.Frame):
         self.seed_nb._tabs[0].bind("<Button-1>", refresh_now, add="+")   # the Now Playing tab
 
         self.search_tab = tk.Frame(self.seed_nb, padx=26, pady=8)
-        self.seed_nb.add(self.search_tab, text="Search")
+        self.seed_nb.add(self.search_tab, text=t("Search"))
         fields = tk.Frame(self.search_tab)   # one row, so each title sits right beside its box
         fields.grid(row=0, column=0, columnspan=4, sticky="w")
-        tk.Label(fields, text="Artist", font=("Segoe UI", 10)).pack(side="left")
+        tk.Label(fields, text=t("Artist"), font=("Segoe UI", 10)).pack(side="left")
         self.search_artist = RoundedEntry(fields, width=30, font=("Segoe UI", 9))
         self.search_artist.pack(side="left", padx=(4, 24))
-        tk.Label(fields, text="Track", font=("Segoe UI", 10)).pack(side="left")
+        tk.Label(fields, text=t("Track"), font=("Segoe UI", 10)).pack(side="left")
         self.search_track = RoundedEntry(fields, width=30, font=("Segoe UI", 9))
         self.search_track.pack(side="left", padx=(4, 0))
-        tk.Label(self.search_tab, text="Build a playlist from any track, even one you don't own. "
-                                       "Similar Artists and Artist's Top Tracks need only the "
-                                       "artist. Press Enter for Similar Artists.",
+        tk.Label(self.search_tab, text=t("Build a playlist from any track, even one you don't own. "
+                                         "Similar Artists and Artist's Top Tracks need only the "
+                                         "artist. Press Enter for Similar Artists."),
                  font=("Segoe UI", 8), fg=PALETTE["text_muted"]).grid(row=1, column=0, columnspan=4, sticky="w", pady=(6, 0))
         for entry in (self.search_artist, self.search_track):
             entry.bind("<Return>", lambda e: self.on_similar())
@@ -278,10 +280,10 @@ class PlayTab(tk.Frame):
         artist = self.search_artist.get().strip()
         track = self.search_track.get().strip()
         if not artist or (need_track and not track):
-            text = "Type an artist and a track first." if need_track else "Type an artist first."
+            text = t("Type an artist and a track first.") if need_track else t("Type an artist first.")
             if need_track and why and artist:
                 text = why
-            messagebox.showinfo("Search", text)
+            messagebox.showinfo(t("Search"), text)
             return None
         return engine.typed_seed_info(artist, track)
 
@@ -289,25 +291,26 @@ class PlayTab(tk.Frame):
         frame = tk.Frame(self, padx=16, pady=4)
         frame.pack(fill="x")
         self.buttons = []
-        for text, handler in [
-            ("Similar Artists", self.on_similar),
-            ("Similar Tracks", self.on_similar_tracks),
-            ("Artist's Top Tracks", self.on_top_tracks),
-            ("AI Playlist", self.on_vibe),
+        for name, handler in [   # name: the English, which the code finds the button by
+            (N_("Similar Artists"), self.on_similar),
+            (N_("Similar Tracks"), self.on_similar_tracks),
+            (N_("Artist's Top Tracks"), self.on_top_tracks),
+            (N_("AI Playlist"), self.on_vibe),
         ]:
-            b = FlatButton(frame, text=text, command=handler, width=18, height=2,
+            b = FlatButton(frame, text=t(name), command=handler, width=18, height=2,
                            accent=PALETTE["ai_purple"] if handler == self.on_vibe else None,   # magenta: AI credits
                            text_fg=PALETTE["ai_purple"] if handler == self.on_vibe else None)
             b.pack(side="left", padx=(0, 8))
+            b._name = name
             self.buttons.append(b)
         # More options: the quieter button. Opens the row below; stays usable during a build.
-        self.more_button = FlatButton(frame, text="More Options", command=self._toggle_more,
+        self.more_button = FlatButton(frame, text=t("More Options"), command=self._toggle_more,
                                       width=18, height=2, quiet=True)
         self.more_button.pack(side="left", padx=(0, 8))
 
         # Output: where the finished playlist goes. Saved straight to .env; the engine
         # reads it at the start of each run, so changing it mid-run affects the next one.
-        tk.Label(frame, text="Output", font=("Segoe UI", 9, "bold"), fg=PALETTE["text_secondary"]).pack(side="left", padx=(8, 6))
+        tk.Label(frame, text=t("Output"), font=("Segoe UI", 9, "bold"), fg=PALETTE["text_secondary"]).pack(side="left", padx=(8, 6))
         self.output_var = tk.StringVar(value=self._output_label(engine.OUTPUT_TARGET))
         self.output_cb = ttk.Combobox(frame, textvariable=self.output_var,
                                       values=[t(SAME_ZONE_LABEL)] + self._extra_outputs(), state="readonly", width=24,
@@ -330,7 +333,7 @@ class PlayTab(tk.Frame):
         # Seed: where Similar Artists and Similar Tracks start from. Windows (Main) app builds only.
         saved = read_env().get("PLAY_SEED", "current").strip().lower()
         self.seed_var = tk.StringVar(value="Playing Now" if saved == "playing_now" else "Current Track")
-        self.seed_cb = ClickThrough(self.extras_row, "Seed", self.seed_var, ["Current Track", "Playing Now"],
+        self.seed_cb = ClickThrough(self.extras_row, "Seed", self.seed_var, [N_("Current Track"), "Playing Now"],
                                     command=self._on_seed_changed, plain=("Current Track",),
                                     lit={"Playing Now": self.seed_colour})
         self.seed_cb.pack(side="left", padx=(0, 8))
@@ -340,7 +343,7 @@ class PlayTab(tk.Frame):
         self.behaviour_cb = ClickThrough(self.extras_row, "", self.behaviour_var,
                                          [shown for _, shown in PLAY_BEHAVIOUR], command=self._on_behaviour_changed,
                                          plain=("Play",), lit={"Review": review_colour},
-                                         labels={"Play": "Play Mode", "Review": "Review Mode"})
+                                         labels={"Play": N_("Play Mode"), "Review": N_("Review Mode")})
         self.behaviour_cb.pack(side="left", padx=(0, 8))
         # Moderator sets Windows (Main)'s moderator; devices with settings of their own keep theirs.
         self.moderator_var = tk.StringVar(value="Off")
@@ -348,7 +351,7 @@ class PlayTab(tk.Frame):
                                          command=self._on_moderator_changed,
                                          lit={v: PALETTE["ai_purple"] for v in MODERATOR_CHOICES})
         self.moderator_cb.pack(side="left", padx=(0, 8))
-        self._moderator_tip = Tooltip(self.moderator_cb, NO_KEY_TEXT, when=lambda: not engine.ai_enabled())
+        self._moderator_tip = Tooltip(self.moderator_cb, t(NO_KEY_TEXT), when=lambda: not engine.ai_enabled())
         # Drift and Non-stop: a second door onto Settings > Playlist for Windows (Main).
         # Changing them here changes them there, for every Play option at once.
         self.drift_var = tk.StringVar(value="Off")
@@ -366,10 +369,10 @@ class PlayTab(tk.Frame):
         self.nonstop_cb.pack(side="left", padx=(0, 8))
         tk.Frame(self.extras_row, width=1, height=24, bg=PALETTE["line"]).pack(side="left", padx=(8, 16))
         # Add playlist: JRiver playlists joined to the next build from the app (not voice)
-        self.add_playlist_button = FlatButton(self.extras_row, text="+ Add Playlist", quiet=True, width=14,
+        self.add_playlist_button = FlatButton(self.extras_row, text=t("+ Add Playlist"), quiet=True, width=14,
                                               height=1, command=lambda: self.mix_rows.add())
         self.add_playlist_button.pack(side="left", padx=(0, 8))
-        self.credits_button = FlatButton(self.extras_row, text="Show Credits", command=self.on_credits,
+        self.credits_button = FlatButton(self.extras_row, text=t("Show Credits"), command=self.on_credits,
                                          quiet=True, width=14, height=1)
         self.credits_button.pack(side="left")
         self.buttons.append(self.credits_button)   # greyed out during a build, and on the Search tab
@@ -396,7 +399,7 @@ class PlayTab(tk.Frame):
         try:
             write_env({"PLAY_HELP": "1" if self.help_on() else "0"})
         except Exception as e:
-            messagebox.showerror("Save failed", str(e), parent=self)
+            messagebox.showerror(t("Save failed"), str(e), parent=self)
 
     def note_wrap(self):
         """How wide the Play tab's notes are: two and a half of its main buttons (Similar Artists and so on)."""
@@ -409,18 +412,18 @@ class PlayTab(tk.Frame):
         """A note on every Play tab control, shown on hover only while ? is on."""
         on, wrap = self.help_on, self.note_wrap
         for b in self.buttons:
-            text = b.cget("text")
-            if text in PLAY_NOTES:
-                if text == "AI Playlist":   # its "why it's greyed out" note shows whatever ? says
-                    Tooltip(b, PLAY_NOTES[text], when=lambda: on() and engine.ai_enabled(), wrap=wrap)
+            name = getattr(b, "_name", None) or b.cget("text")
+            if name in PLAY_NOTES:
+                if name == "AI Playlist":   # its "why it's greyed out" note shows whatever ? says
+                    Tooltip(b, t(PLAY_NOTES[name]), when=lambda: on() and engine.ai_enabled(), wrap=wrap)
                 else:
-                    Tooltip(b, PLAY_NOTES[text], when=on, wrap=wrap)
+                    Tooltip(b, t(PLAY_NOTES[name]), when=on, wrap=wrap)
         for widget, name in ((self.more_button, "More Options"), (self.output_cb, "Output"),
                              (self.zone_cb, "Zone"), (self.seed_cb, "Seed"), (self.behaviour_cb, "Mode"),
                              (self.drift_cb, "Drift"), (self.deepcuts_cb, "Deep Cuts"), (self.nonstop_cb, "Non-stop"),
                              (self.add_playlist_button, "+ Add Playlist"), (self.help_cb, "Help")):
-            Tooltip(widget, PLAY_NOTES[name], when=on, wrap=wrap)
-        Tooltip(self.moderator_cb, PLAY_NOTES["Moderator"], when=lambda: on() and engine.ai_enabled(), wrap=wrap)
+            Tooltip(widget, t(PLAY_NOTES[name]), when=on, wrap=wrap)
+        Tooltip(self.moderator_cb, t(PLAY_NOTES["Moderator"]), when=lambda: on() and engine.ai_enabled(), wrap=wrap)
 
     def _toggle_more(self):
         self._show_more(not self.extras_row.winfo_manager())
@@ -451,7 +454,7 @@ class PlayTab(tk.Frame):
     def _update_more_label(self):
         """The More options button's arrow: up while the row is open, down while it's closed."""
         open_ = bool(self.extras_row.winfo_manager())
-        self.more_button.config(text="More Options \u25b4" if open_ else "More Options \u25be")
+        self.more_button.config(text=t("More Options") + (" \u25b4" if open_ else " \u25be"))
 
     @staticmethod
     def _output_label(target):
@@ -479,8 +482,8 @@ class PlayTab(tk.Frame):
         if was in dict(engine.OUTPUT_OPTIONS).values() and was not in self._extra_outputs():
             self.output_var.set(t(SAME_ZONE_LABEL))
             self._on_output_changed()
-            messagebox.showinfo("Output", f"{was} is no longer ticked under Additional Outputs, so Output is "
-                                          f"back to {t(SAME_ZONE_LABEL)}.", parent=self)
+            messagebox.showinfo(t("Output"), t("{was} is no longer ticked under Additional Outputs, so Output is "
+                                               "back to {same}.", was=was, same=t(SAME_ZONE_LABEL)), parent=self)
 
     def _on_output_changed(self, *_):
         choice = self.output_var.get()
@@ -489,11 +492,11 @@ class PlayTab(tk.Frame):
         try:
             write_env({"OUTPUT_TARGET": target})
         except Exception as e:
-            messagebox.showerror("Save failed", str(e), parent=self)
+            messagebox.showerror(t("Save failed"), str(e), parent=self)
         self.output_cb.selection_clear()
         if target == "tidal" and not engine.tidal_signed_in():
-            messagebox.showinfo("Tidal", "To send playlists to Tidal, sign in first: Settings > Keys, "
-                                         "Sign In to Tidal.", parent=self)
+            messagebox.showinfo("Tidal", t("To send playlists to Tidal, sign in first: Settings > Keys, "
+                                           "Sign In to Tidal."), parent=self)
         self._sync_behaviour()
         panel = getattr(self, "review_panel", None)
         if panel is not None:
@@ -510,7 +513,7 @@ class PlayTab(tk.Frame):
         try:
             write_env({"PLAY_SEED": "playing_now" if playing_now else "current"})
         except Exception as e:
-            messagebox.showerror("Save failed", str(e), parent=self)
+            messagebox.showerror(t("Save failed"), str(e), parent=self)
         self._sync_seed_bars()
         if playing_now and read_env().get("SEED_PLAYING_NOW_SEEN", "").strip() != "1":
             try:
@@ -550,7 +553,7 @@ class PlayTab(tk.Frame):
             return
         teal = self.seed_var.get() == "Playing Now" and not self._seed_is_search()
         for b in self.buttons:
-            if b.cget("text") in ("Similar Artists", "Similar Tracks"):
+            if getattr(b, "_name", None) in ("Similar Artists", "Similar Tracks"):
                 b._accent = self.seed_colour if teal else None
                 b._draw()
 
@@ -559,7 +562,7 @@ class PlayTab(tk.Frame):
         try:
             write_env({"PLAY_BEHAVIOUR": code})
         except Exception as e:
-            messagebox.showerror("Save failed", str(e), parent=self)
+            messagebox.showerror(t("Save failed"), str(e), parent=self)
         self.behaviour_cb.selection_clear()
 
     def _review_mode(self):
@@ -574,15 +577,15 @@ class PlayTab(tk.Frame):
         levels = {by.get("artists", "off"), by.get("tracks", "off")}
         self.moderator_var.set(levels.pop().title() if len(levels) == 1 else "Off")   # Off unless both agree
         self.moderator_cb.state(["!disabled"] if engine.ai_enabled() else ["disabled"])
-        self._moderator_tip.text = (NO_KEY_TEXT if not engine.ai_configured()
-                                    else "Paused: Use AI is Off under Settings > Keys.")
+        self._moderator_tip.text = (t(NO_KEY_TEXT) if not engine.ai_configured()
+                                    else t("Paused: Use AI is Off under Settings > Keys."))
         self._sync_ai_button()
         self._sync_play_switches()
         self._update_more_label()
 
     def _sync_ai_button(self):
         """AI Playlist greys out while Use AI is Off (Settings > Keys) or there's no key."""
-        button = next((b for b in self.buttons if b.cget("text") == "AI Playlist"), None)
+        button = next((b for b in self.buttons if getattr(b, "_name", None) == "AI Playlist"), None)
         if button is None:
             return
         on = engine.ai_enabled()
@@ -590,9 +593,9 @@ class PlayTab(tk.Frame):
             button.config(state="normal" if on else "disabled")
         if not hasattr(self, "_ai_button_tip"):
             self._ai_button_tip = Tooltip(button, "", when=lambda: not engine.ai_enabled())
-        self._ai_button_tip.text = (f"AI Playlist needs {engine.ai_missing_text()} under Settings > Keys."
+        self._ai_button_tip.text = (t("AI Playlist needs {what} under Settings > Keys.", what=engine.ai_missing_text())
                                     if not engine.ai_configured() else
-                                    "Paused: Use AI is Off under Settings > Keys.")
+                                    t("Paused: Use AI is Off under Settings > Keys."))
 
     def _sync_play_switches(self):
         """Drift and Non-stop as Settings > Playlist has them for Windows (Main): No unless every option agrees."""
@@ -618,7 +621,7 @@ class PlayTab(tk.Frame):
                 settings._save()
             write_env(updates)
         except Exception as e:
-            messagebox.showerror("Save failed", str(e), parent=self)
+            messagebox.showerror(t("Save failed"), str(e), parent=self)
         engine.refresh_settings_if_changed()
         self._update_more_label()
 
@@ -680,7 +683,7 @@ class PlayTab(tk.Frame):
         try:
             write_env({"AI_MODERATOR_ARTISTS": value, "AI_MODERATOR_TRACKS": value})
         except Exception as e:
-            messagebox.showerror("Save failed", str(e), parent=self)
+            messagebox.showerror(t("Save failed"), str(e), parent=self)
         self.moderator_cb.selection_clear()
         self._update_more_label()
 
@@ -709,7 +712,7 @@ class PlayTab(tk.Frame):
         self.review_panel = ReviewPanel(self)   # Console | Review
         self._greeting_active = True
         self._held = []   # console lines that arrive while the greeting types: shown once it clears
-        self._type_greeting("Follow the white rabbit.", 0)
+        self._type_greeting(t("Follow the white rabbit."), 0)
 
     def _window_visible(self):
         try:
@@ -761,7 +764,7 @@ class PlayTab(tk.Frame):
             self.settings.usage_unit_var.set(unit.title())
 
     def _usage_clear(self):
-        if messagebox.askyesno("Clear AI Usage", "Clear the token count? It starts again from now.", parent=self):
+        if messagebox.askyesno(t("Clear AI Usage"), t("Clear the token count? It starts again from now."), parent=self):
             ai_usage.clear()
             self._sync_usage_box()
             if self.settings is not None and hasattr(self.settings, "_fill_usage"):
@@ -773,7 +776,7 @@ class PlayTab(tk.Frame):
             return
         engine.refresh_settings_if_changed()
         if not engine.ai_configured():
-            messagebox.showinfo("AI Usage", NO_KEY_TEXT, parent=self)
+            messagebox.showinfo(t("AI Usage"), t(NO_KEY_TEXT), parent=self)
             return
         try:
             self.master.select(self)   # asked from Settings: show the console
@@ -860,14 +863,14 @@ class PlayTab(tk.Frame):
 
     def _show_playing(self, info):
         if info and info.get("PlayingNowPosition", "-1") != "-1":
-            self.np_track.show(("Track:\t", "prefix"), (info.get("Name", "?"), None))
-            self.np_detail.show(("Artist:\t", "prefix"), (info.get("Artist", "?"), None),
+            self.np_track.show((t("Track:") + "\t", "prefix"), (info.get("Name", "?"), None))
+            self.np_detail.show((t("Artist:") + "\t", "prefix"), (info.get("Artist", "?"), None),
                                 ("   \u00b7   ", None),
-                                ("Album: ", "prefix"), (info.get("Album", "?"), None))
+                                (t("Album:") + " ", "prefix"), (info.get("Album", "?"), None))
             self.last_playing = info
         else:
-            self.np_track.show(("Nothing playing", None))
-            self.np_detail.show(("Start a track in this zone to seed from it", None))
+            self.np_track.show((t("Nothing playing"), None))
+            self.np_detail.show((t("Start a track in this zone to seed from it"), None))
             self.last_playing = None
 
     def _type_greeting(self, text, i):
@@ -1017,10 +1020,10 @@ class PlayTab(tk.Frame):
         self.console_strip = tk.Frame(frame, bg=black)
         self.console_buttons = {}
         self.console_frame = frame
-        for name, command in (("Copy", self._copy_log), ("Clear", self._clear_from_strip),
-                              ("Query", self._open_query), ("Export to Log", self._export_log),
-                              ("Mode", self._toggle_console_mode), ("Cancel", self._cancel_build)):
-            b = tk.Label(self.console_strip, text=name, font=("Segoe UI", 8, "bold"), bg=black, fg=green,
+        for name, command in ((N_("Copy"), self._copy_log), (N_("Clear"), self._clear_from_strip),
+                              (N_("Query"), self._open_query), (N_("Export to Log"), self._export_log),
+                              (N_("Mode"), self._toggle_console_mode), (N_("Cancel"), self._cancel_build)):
+            b = tk.Label(self.console_strip, text=t(name), font=("Segoe UI", 8, "bold"), bg=black, fg=green,
                          padx=8, pady=1, cursor="hand2", highlightthickness=1,
                          highlightbackground=green, highlightcolor=green)
             b.pack(side="left", padx=(0, 4))
@@ -1031,7 +1034,7 @@ class PlayTab(tk.Frame):
         # Query is magenta (it uses AI credits) and only shows once Console Query is switched on
         self.console_buttons["Query"].config(fg=AI_MAGENTA, highlightbackground=AI_MAGENTA,
                                              highlightcolor=AI_MAGENTA)
-        self.console_buttons["Mode"].config(text=self.console_mode.title())
+        self.console_buttons["Mode"].config(text=t(self.console_mode.title()))
         self.console_buttons["Query"].pack_forget()
         self.console_buttons["Cancel"].pack_forget()   # shown on its own while a build runs
         self._build_query_panel(frame)
@@ -1061,14 +1064,14 @@ class PlayTab(tk.Frame):
         self.head_strip = tk.Frame(self.head_row, bg=black)
         self.head_strip.pack(side="right")
         self.head_buttons = {}
-        for name, command in (("Copy", self._copy_log), ("Clear", self._clear_from_strip),
-                              ("Query", self._open_query), ("Export to Log", self._export_log),
-                              ("Mode", self._toggle_console_mode), ("Cancel", self._cancel_build)):
-            b = self._head_box(self.head_strip, name, command)
+        for name, command in ((N_("Copy"), self._copy_log), (N_("Clear"), self._clear_from_strip),
+                              (N_("Query"), self._open_query), (N_("Export to Log"), self._export_log),
+                              (N_("Mode"), self._toggle_console_mode), (N_("Cancel"), self._cancel_build)):
+            b = self._head_box(self.head_strip, t(name), command)
             b.pack(side="left", padx=(4, 0))
             self.head_buttons[name] = b
         self.head_buttons["Query"].config(fg=AI_MAGENTA, highlightbackground=AI_MAGENTA, highlightcolor=AI_MAGENTA)
-        self.head_buttons["Mode"].config(text=self.console_mode.title())
+        self.head_buttons["Mode"].config(text=t(self.console_mode.title()))
         self.head_buttons["Cancel"].pack_forget()   # shown on its own while a build runs
         self.head_line = tk.Frame(self.console_head, bg=green, height=1)
         self.view = "all"                     # the tab on screen: "all", "main" or a device ID
@@ -1110,8 +1113,9 @@ class PlayTab(tk.Frame):
     # --- the Log tab: the last 50 builds from each source, newest first ---
 
     # (title, width in characters); Sources Used (width 1) takes whatever room is left
-    LOG_COLUMNS = [("Date and Time", 13), ("From", 12), ("Zone", 9), ("Playlist Type", 30),
-                   ("Sources Used", 1), ("Hits / Misses", 13), ("Moderator", 20), ("Problems", 17), ("", 15)]
+    LOG_COLUMNS = [(N_("Date and Time"), 13), (N_("From"), 12), (N_("Zone"), 9), (N_("Playlist Type"), 30),
+                   (N_("Sources Used"), 1), (N_("Hits / Misses"), 13), (N_("Moderator"), 20), (N_("Problems"), 17),
+                   ("", 15)]
     SOURCES_COLUMN = 4
 
     def _sync_head_strip(self):
@@ -1169,7 +1173,7 @@ class PlayTab(tk.Frame):
         cols = len(self.LOG_COLUMNS)
         grid.grid_columnconfigure(self.SOURCES_COLUMN, weight=1)
         for c, (title, width) in enumerate(self.LOG_COLUMNS):
-            tk.Label(grid, text=title, font=bold, bg=black, fg=white, anchor="w", width=width).grid(
+            tk.Label(grid, text=t(title), font=bold, bg=black, fg=white, anchor="w", width=width).grid(
                 row=0, column=c, sticky="ew", padx=(0, 6), pady=(0, 4))
         tk.Frame(grid, bg=green, height=1).grid(row=1, column=0, columnspan=cols, sticky="ew")
         try:
@@ -1232,7 +1236,7 @@ class PlayTab(tk.Frame):
         self._show_console_text()
         when = (row["at"] or "")[11:16]
         chain = f" (Non-stop {row['chain_pos']:03d})" if row.get("chain_pos") else ""
-        source = "Main Window" if self.view == "main" else buildlog.device_name(self.view)
+        source = t("Main Window") if self.view == "main" else buildlog.device_name(self.view)
         self._show_text(row["text"] or "")
         self.log.config(state="normal")
         self.log.tag_configure("back", foreground="#00ff41", underline=True)
@@ -1240,8 +1244,8 @@ class PlayTab(tk.Frame):
         self.log.tag_bind("back", "<Enter>", lambda e: self.log.config(cursor="hand2"))
         self.log.tag_bind("back", "<Leave>", lambda e: self.log.config(cursor=""))
         self.log.insert("1.0", "\n")
-        self.log.insert("1.0", f"Loaded from Log: {source}, {when}{chain}  \u00b7  ")
-        self.log.insert("1.end", "Back to Latest", ("back",))
+        self.log.insert("1.0", t("Loaded from Log: {source}, {when}", source=source, when=when) + chain + "  \u00b7  ")
+        self.log.insert("1.end", t("Back to Latest"), ("back",))
         self.log.see("1.0")
         self.log.config(state="disabled")
 
@@ -1332,7 +1336,7 @@ class PlayTab(tk.Frame):
         b = getattr(self, "head_buttons", {}).get(name)
         if b is not None:
             b.config(text=text)
-            self.after(800, lambda: b.config(text=name))
+            self.after(800, lambda: b.config(text=t(name)))
 
     def _show_console_strip(self):
         """Top-right inside the console, clear of its scrollbar. Query shows when it's switched on."""
@@ -1376,7 +1380,7 @@ class PlayTab(tk.Frame):
         self.log_queue.put("Cancelling after the AI replies..." if engine.AI_BUSY else "Cancelling...")
         for buttons in (self.console_buttons, getattr(self, "head_buttons", {})):
             if "Cancel" in buttons:
-                buttons["Cancel"].config(text="Cancelling...")
+                buttons["Cancel"].config(text=t("Cancelling..."))
 
     def _maybe_hide_console_strip(self, event):
         """A click anywhere but the console or the strip hides the strip."""
@@ -1389,9 +1393,9 @@ class PlayTab(tk.Frame):
         """Simple hides the debug lines; Advanced shows them. Both are always recorded, and remembered."""
         self.console_mode = "advanced" if self.console_mode == "simple" else "simple"
         self.log.tag_configure("debug", elide=self.console_mode == "simple")
-        self.console_buttons["Mode"].config(text=self.console_mode.title(), bg="#000000")
+        self.console_buttons["Mode"].config(text=t(self.console_mode.title()), bg="#000000")
         if hasattr(self, "head_buttons"):
-            self.head_buttons["Mode"].config(text=self.console_mode.title())
+            self.head_buttons["Mode"].config(text=t(self.console_mode.title()))
         try:
             write_env({"CONSOLE_MODE": self.console_mode})
         except Exception:
@@ -1409,12 +1413,12 @@ class PlayTab(tk.Frame):
         self.clipboard_clear()
         self.clipboard_append(text)
         b = self.console_buttons["Copy"]
-        b.config(text="Copied")
-        self._flash_head("Copy", "Copied")
+        b.config(text=t("Copied"))
+        self._flash_head("Copy", t("Copied"))
 
         def done():
             self.console_strip.place_forget()
-            b.config(text="Copy", bg="#000000")
+            b.config(text=t("Copy"), bg="#000000")
         self.after(800, done)
 
     def _export_log(self):
@@ -1423,10 +1427,10 @@ class PlayTab(tk.Frame):
         try:
             path = engine.export_log(self.log.get("1.0", "end-1c"))
         except Exception as e:
-            messagebox.showerror("Export to Log", f"Couldn't write the log: {e}", parent=self)
+            messagebox.showerror(t("Export to Log"), t("Couldn't write the log: {error}", error=e), parent=self)
             return
-        b.config(text="Saved")
-        self._flash_head("Export to Log", "Saved")
+        b.config(text=t("Saved"))
+        self._flash_head("Export to Log", t("Saved"))
         try:
             subprocess.Popen(["explorer", "/select,", path])
         except Exception:
@@ -1434,7 +1438,7 @@ class PlayTab(tk.Frame):
 
         def done():
             self.console_strip.place_forget()
-            b.config(text="Export to Log", bg="#000000")
+            b.config(text=t("Export to Log"), bg="#000000")
         self.after(800, done)
 
     def _clear_from_strip(self):
@@ -1450,18 +1454,18 @@ class PlayTab(tk.Frame):
         self.query_panel = tk.Frame(frame)
         row = tk.Frame(self.query_panel)
         row.pack(fill="x", pady=(8, 0))
-        tk.Label(row, text="Ask the AI", font=("Segoe UI", 9, "bold"),
+        tk.Label(row, text=t("Ask the AI"), font=("Segoe UI", 9, "bold"),
                  fg=PALETTE["ai_purple"]).pack(side="left", padx=(0, 8))
         self.query_var = tk.StringVar()
         self.query_entry = tk.Entry(row, textvariable=self.query_var, font=("Segoe UI", 10))
         self.query_entry.pack(side="left", fill="x", expand=True)
         self.query_entry.bind("<Return>", lambda e: self._send_query())
-        self.query_send = FlatButton(row, text="Ask", command=self._send_query, width=8, height=1,
+        self.query_send = FlatButton(row, text=t("Ask"), command=self._send_query, width=8, height=1,
                                      accent=PALETTE["ai_purple"])
         self.query_send.pack(side="left", padx=(8, 0))
-        FlatButton(row, text="Close", command=self._close_query, width=8, height=1,
+        FlatButton(row, text=t("Close"), command=self._close_query, width=8, height=1,
                    quiet=True).pack(side="left", padx=(8, 0))
-        tk.Label(self.query_panel, text=console_query.HINT, font=("Segoe UI", 8),
+        tk.Label(self.query_panel, text=t(console_query.HINT), font=("Segoe UI", 8),
                  fg=PALETTE["text_muted"], anchor="w", justify="left").pack(anchor="w", pady=(4, 0))
         self._query_busy = False
 
@@ -1491,14 +1495,14 @@ class PlayTab(tk.Frame):
             return
         engine.refresh_settings_if_changed()
         if not engine.ai_configured():
-            messagebox.showinfo("Console Query", NO_KEY_TEXT, parent=self)
+            messagebox.showinfo(t("Console Query"), t(NO_KEY_TEXT), parent=self)
             return
         self._greeting_active = False
         console = self.log.get("1.0", "end-1c")
         if self.console_mode == "simple":   # Query reads what you see: Advanced sends the debug lines too
             console = "\n".join(x for x in console.split("\n") if not x.lstrip().startswith("[debug]"))
         self._query_busy = True
-        self.query_send.config(text="Asking...", state="disabled")
+        self.query_send.config(text=t("Asking..."), state="disabled")
         self.query_var.set("")
         self._append_query(f"\nYou asked: {question}\n", bold=True)
         console_query.ask(question, console, self.last_playing,
@@ -1506,7 +1510,7 @@ class PlayTab(tk.Frame):
 
     def _query_done(self, answer, error):
         self._query_busy = False
-        self.query_send.config(text="Ask", state="normal")
+        self.query_send.config(text=t("Ask"), state="normal")
         if error:
             self._append_query(f"Console Query didn't come back: {error}\n")
         else:
@@ -1516,8 +1520,8 @@ class PlayTab(tk.Frame):
         if self.running:
             return
         if needs_playing and not self.last_playing:
-            messagebox.showinfo("Nothing playing",
-                                "Start a track in JRiver first, then try again.")
+            messagebox.showinfo(t("Nothing playing"),
+                                t("Start a track in JRiver first, then try again."))
             return
         self.running = True
         engine.CANCEL_REQUESTED.clear()
@@ -1824,14 +1828,14 @@ def main():
     settings.play = play       # Settings > Keys > Use AI greys the Play tab's AI pieces out or back in
     if loaded_profile:
         root.after(800, lambda: print(f'Profile "{loaded_profile}" loaded.'))
-    nb.add(play, text="Play")
-    nb.add(discover, text="Discover")
-    nb.add(settings, text="Settings")
+    nb.add(play, text=t("Play"))
+    nb.add(discover, text=t("Discover"))
+    nb.add(settings, text=t("Settings"))
 
     # Support link: top right of the tab row, so it shows from every tab. It opens the
     # Support window (support_gui.py). It is hidden if the window is too narrow for it
     # to sit clear of the tab buttons.
-    donate = tk.Label(root, text="Support", font=("Segoe UI", 9, "underline"),
+    donate = tk.Label(root, text=t("Support"), font=("Segoe UI", 9, "underline"),
                       fg=PALETTE.get("strip_fg") or PALETTE["link"], bg=PALETTE.get("strip_bg") or root.cget("bg"),
                       cursor="hand2")
     donate.bind("<Button-1>", lambda e: support_gui.show(root))
@@ -1873,7 +1877,7 @@ def main():
     # and say hello once. Never shown again after that.
     if engine.FIRST_RUN:
         nb.select(settings)
-        root.after(400, lambda: messagebox.showinfo("Welcome to 24bit7", WELCOME_TEXT, parent=root))
+        root.after(400, lambda: messagebox.showinfo(t("Welcome to 24bit7"), t(WELCOME_TEXT), parent=root))
 
     library.start()   # the whole library in memory: Similar Tracks and voice match against it
     voice.attach(lambda job, heading, origin=None: play.voice_jobs.put((job, heading, origin)),
