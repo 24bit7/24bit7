@@ -24,6 +24,7 @@ import tkinter.font as tkfont
 from tkinter import ttk, scrolledtext, messagebox
 
 import engine
+import i18n
 import library
 import tray
 import voice
@@ -1800,6 +1801,7 @@ def main():
     _set_app_id()
     closed_other = _close_other_copy()
     loaded_profile = profiles.apply_pending()   # a profile chosen with Load, before anything reads a setting
+    i18n.set_language(engine.UI_LANGUAGE)       # once, before any screen is built: switching restarts the app
     root = tk.Tk()
     root.withdraw()   # built out of sight and shown once it's ready, so it doesn't flash up small first
     _set_window_icon(root)

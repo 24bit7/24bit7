@@ -26,9 +26,11 @@ import hotkeys
 import saved_playlists
 import filters
 import ai_usage
+import i18n
 import tabs
 from tabs import TabbedPane, PALETTE, FlatButton
 from datetime import datetime
+from i18n import t
 
 ENV_FILE = engine.ENV_FILE   # single source of truth for where .env lives
 
@@ -881,6 +883,9 @@ class SettingsTab(tk.Frame):
         updates["DEBUG"] = None   # replaced by the console's Simple/Advanced switch in 1.11.0
         updates["CONSOLE_QUERY"] = "1" if self.vars["CONSOLE_QUERY"].get() else "0"
         updates["THEME"] = self.vars["THEME"].get().lower()
+        if "UI_LANGUAGE" in self.vars:
+            codes = {name: code for code, name in i18n.LANGUAGES}
+            updates["UI_LANGUAGE"] = codes.get(self.vars["UI_LANGUAGE"].get(), "en")
         updates["SIMILAR_REQUIRE_AGREEMENT"] = None   # old on/off key, superseded
         updates["SIMILAR_TRACK_TOPUP"] = None   # replaced by Drift in 1.4.0
         for key in ("START_IN_TRAY", "CLOSE_TO_TRAY", "PREFER_OFFICIAL_VIDEOS", "WINDOWS_TITLE_BAR"):
@@ -900,6 +905,13 @@ class SettingsTab(tk.Frame):
         choice = self.vars["THEME"].get().lower()
         if messagebox.askyesno("Theme", f"Restart 24bit7 now to switch to the {choice} theme?",
                                parent=self):
+            self.winfo_toplevel().event_generate("<<Restart24bit7>>")
+
+    def _on_language_changed(self, *_):
+        """Saves the language, then offers to restart so the whole app switches at once."""
+        self._save()
+        if messagebox.askyesno(t("Language"), t("Restart 24bit7 now to switch to {language}?",
+                                                language=self.vars["UI_LANGUAGE"].get()), parent=self):
             self.winfo_toplevel().event_generate("<<Restart24bit7>>")
 
     def _refresh_key_marks(self):
@@ -3602,6 +3614,31 @@ class SettingsTab(tk.Frame):
         e = tk.Entry(box, textvariable=self.vars["JRIVER_HOST"], width=22)
         e.grid(row=1, column=1, sticky="w", padx=(12, 0))
         e.bind("<FocusOut>", self._save)
+
+        # Language: the offered ones, plus where to ask for another. Applied when 24bit7 restarts.
+        tk.Label(box, text=t("Language"), anchor="w").grid(row=3, column=0, sticky="w", pady=4)
+        names = dict(i18n.LANGUAGES)
+        current = engine.UI_LANGUAGE if engine.UI_LANGUAGE in i18n.OFFERED else "en"
+        self.vars["UI_LANGUAGE"] = tk.StringVar(value=names[current])
+        cell = tk.Frame(box)
+        cell.grid(row=3, column=1, columnspan=2, sticky="w", padx=(12, 0))
+        lang_cb = ttk.Combobox(cell, textvariable=self.vars["UI_LANGUAGE"], state="readonly", width=10,
+                               values=[names[c] for c in i18n.OFFERED])
+        lang_cb.pack(side="left")
+        lang_cb.bind("<<ComboboxSelected>>", self._on_language_changed)
+        help_mark(cell, t("The language 24bit7's screens and console use. Changing it restarts 24bit7. "
+                          "Song, artist and album names are never translated.")).pack(side="left", padx=(8, 0))
+        tk.Label(cell, text=t("Another language? Ask for it on the"), fg=PALETTE["help_fg"],
+                 font=HELP_FONT).pack(side="left", padx=(16, 4))
+        for i, (text, url) in enumerate(((t("JRiver Forum"), FORUM_URL), ("GitHub", REPO_URL + "/issues"))):
+            if not url:
+                continue
+            if i:
+                tk.Label(cell, text=t("or on"), fg=PALETTE["help_fg"], font=HELP_FONT).pack(side="left", padx=4)
+            link = tk.Label(cell, text=text, fg=PALETTE["section_fg"], cursor="hand2",
+                            font=("Segoe UI", 9, "underline"))
+            link.pack(side="left")
+            link.bind("<Button-1>", lambda e, u=url: webbrowser.open_new_tab(u))
 
         tk.Label(box, text="Theme", anchor="w").grid(row=4, column=0, sticky="w", pady=4)
         self.vars["THEME"] = tk.StringVar(

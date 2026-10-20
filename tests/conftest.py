@@ -22,7 +22,7 @@ REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 import fakes  # noqa: E402
 
-APP_MODULES = ["engine", "library", "deepcuts", "voice", "saved_playlists", "nonstop", "playmix", "filters", "buildlog", "blend",
+APP_MODULES = ["i18n", "engine", "library", "deepcuts", "voice", "saved_playlists", "nonstop", "playmix", "filters", "buildlog", "blend",
                "console_query", "ai_usage", "support_gui", "window_chrome", "hotkeys", "tray", "tabs", "mix_gui", "review_gui", "profiles", "ai_dialog", "discover_gui", "settings_gui", "gui", "source_test"]
 
 BASE_ENV = {
@@ -76,6 +76,7 @@ def app(tmp_path, monkeypatch):
                 and name != "builtin_keys.py":   # build.bat's packed key: tests never use a real one
             shutil.copy2(os.path.join(REPO, name), folder / name)
     shutil.copytree(os.path.join(REPO, "alexa"), folder / "alexa")
+    shutil.copytree(os.path.join(REPO, "locale"), folder / "locale")
     env = dict(BASE_ENV, VOICE_PORT=str(free_port()))
     write_env(folder / ".env", env)
 

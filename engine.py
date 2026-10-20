@@ -286,7 +286,7 @@ def load_settings():
     global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, CACHE_DAYS, CACHE_KEEP
     global TABLE_FONT_SIZE, VIBE_TRACK_COUNT
     global OUTPUT_TARGET, YOUTUBE_PLAYLIST_LENGTH, HIDDEN_ZONES, DEFAULT_ZONE, FOLLOW_ACTIVE_ZONE
-    global PREFER_OFFICIAL_VIDEOS, THEME
+    global PREFER_OFFICIAL_VIDEOS, THEME, UI_LANGUAGE
     global VOICE_ENABLED, VOICE_KEY, VOICE_PORT
     global START_IN_TRAY, CLOSE_TO_TRAY
     global LISTEN_SITES, CUSTOM_SITES, PLAYLIST_SITES, EXTRA_OUTPUTS, TIDAL_OPEN
@@ -493,6 +493,8 @@ def load_settings():
     PREFER_OFFICIAL_VIDEOS = os.getenv("PREFER_OFFICIAL_VIDEOS", "0").strip().lower() in ("1", "true", "yes")
     # Settings > Other: light or dark, applied when the app starts
     THEME = "dark" if os.getenv("THEME", "light").strip().lower() == "dark" else "light"
+    # Settings > Other: the language of the screens and console, applied when the app starts (i18n.py)
+    UI_LANGUAGE = os.getenv("UI_LANGUAGE", "en").strip().lower() or "en"
 
 
 def use_profile(values=None):
@@ -667,6 +669,8 @@ YOUTUBE_PLAYLIST_LENGTH=50
 PREFER_OFFICIAL_VIDEOS=0
 # Colour theme: light or dark (Settings > Other)
 THEME=light
+# Language of the screens and console: en (English) or de (Deutsch) (Settings > Other)
+UI_LANGUAGE=en
 # JRiver zones hidden from the Play tab's lists, separated by | (Settings > Other)
 HIDDEN_ZONES=
 # Zone Now Playing opens on (blank = JRiver's active zone), and whether it follows
