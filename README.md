@@ -302,7 +302,12 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.23.0
+## What's new in 1.24.0
+
+- **24bit7 in German**: Settings > Other > Language switches the screens and console to German (Deutsch), with a German manual, 24bit7_Handbuch.pdf, beside the English one. Song, artist and album names stay as they are, and Alexa stays English. Want another language? Ask on the JRiver forum or GitHub.
+- **An empty saved playlist** now says when JRiver refused the tracks for want of a login, and how to set one up.
+
+### Earlier: 1.23.0
 
 - **Zones in profiles**: a profile now holds the Default zone and Follow tick under Settings > Other > Zones, and the zone the keyboard shortcuts apply to, so a surround profile plays to a different zone from a stereo one.
 - **A shortcut per profile**: Settings > Other > Keyboard Shortcuts has a Load box for each saved profile. It loads that profile and restarts 24bit7, or does nothing if it's already loaded, so a remote always lands on the profile it means.
