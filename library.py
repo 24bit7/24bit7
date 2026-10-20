@@ -26,6 +26,7 @@ import xml.etree.ElementTree as ET
 import requests
 
 import engine
+from i18n import t, tn
 
 GOOD = 0.80              # a match at least this close counts as found
 REFRESH_MINUTES = 30     # how often the library is re-read in the background
@@ -201,7 +202,7 @@ def _read_tracks():
                      f"decoding {len(rows):,} tracks took {time.time() - answered:.1f} s")
         return rows
     except ValueError as e:
-        print(f"Note: JRiver's library list couldn't be read as JSON ({e}), so reading it as MPL instead.")
+        print(t("Note: JRiver's library list couldn't be read as JSON ({e}), so reading it as MPL instead.", e=e))
     r = _get("Files/Search", Query=AUDIO, Action="MPL")
     return [{f.get("Name"): f.text or "" for f in item.findall("Field")}
             for item in ET.fromstring(engine.xml_safe(r.text)).findall(".//Item")]
@@ -269,7 +270,7 @@ def load():
         _by_key = by_key
         _closers = closers
         _played, _played_unread = played, bool(seen and not played)
-        _songs, _song_titles = songs, [t for t in songs if t]
+        _songs, _song_titles = songs, [tval for tval in songs if tval]
         _loaded_at = time.time()
     engine.debug(f"Library: {len(tracks):,} tracks read and indexed in {time.time() - started:.1f} s")
     return (f"Library read for voice: {len(albums)} albums, {len(playlists)} playlists "
@@ -281,7 +282,7 @@ def _refresh_loop():
     try:
         print(load())
     except Exception as e:
-        print(f"[Voice] Couldn't read the library from JRiver ({e}). Trying again later.")
+        print(t("[Voice] Couldn't read the library from JRiver ({e}). Trying again later.", e=e))
     _timer = threading.Timer(REFRESH_MINUTES * 60, _refresh_loop)
     _timer.daemon = True
     _timer.start()
@@ -430,19 +431,19 @@ def find_song(heard):
             titles = [want]
         else:
             titles = difflib.get_close_matches(want, _song_titles, n=5, cutoff=GOOD)
-        entries = [(t, e) for t in titles for e in _songs[t]]
+        entries = [(tval, e) for tval in titles for e in _songs[tval]]
     if not entries:
         return False, []
     if by:
-        ranked = sorted(((difflib.SequenceMatcher(None, want, t).ratio() + _artist_score(by, e[1])) / 2, e)
-                        for t, e in entries)
+        ranked = sorted(((difflib.SequenceMatcher(None, want, tval).ratio() + _artist_score(by, e[1])) / 2, e)
+                        for tval, e in entries)
         best_score = ranked[-1][0]
         if best_score < GOOD:
             return False, []
         best = [e for s, e in ranked if s == best_score]
         pick = sorted(best, key=lambda e: _album_version_first(e, norm(e[1])))[0]
         return True, [(pick[0], pick[1], pick[2])]
-    copies = [e for t, e in entries if t == titles[0]]
+    copies = [e for tval, e in entries if tval == titles[0]]
     artists = {}
     for e in copies:
         artists.setdefault(norm(e[1]), []).append(e)
@@ -477,8 +478,8 @@ def find_track_key(artist, title):
             add(_songs.get(w, []))
         if not entries:
             for w in wants:
-                for t in difflib.get_close_matches(w, _song_titles, n=3, cutoff=engine.NEAR_TITLE):
-                    add(_songs[t])
+                for tval in difflib.get_close_matches(w, _song_titles, n=3, cutoff=engine.NEAR_TITLE):
+                    add(_songs[tval])
     matches = [e for e in entries if _artist_score(artist, e[1]) >= GOOD]
     if not matches:
         # 'Mark Ronson feat. Amy Winehouse' against a tag of 'Mark Ronson' (or the other

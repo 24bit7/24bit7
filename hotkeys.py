@@ -23,7 +23,7 @@ import sys
 import threading
 
 import engine
-from i18n import N_
+from i18n import N_, t, tn
 
 ACTIONS = [   # (code, label): the order they appear in Settings
     ("SIMILAR_TRACKS", N_("Similar Tracks")),
@@ -122,7 +122,7 @@ def assigned():
     """{action code: 'Ctrl+Alt+1'} for every shortcut set in .env."""
     engine.refresh_settings_if_changed()
     out = {}
-    for code, _ in ACTIONS + [(c, t) for c, t, _ in profile_actions()]:
+    for code, _ in ACTIONS + [(c, tval) for c, tval, _ in profile_actions()]:
         value = os.getenv(f"HOTKEY_{code}", "").strip()
         if value:
             out[code] = value
@@ -248,7 +248,7 @@ def restart():
         _listener.ready.wait(3)
         _errors = dict(_listener.errors)
     for code, problem in _errors.items():
-        print(f"[Shortcuts] {label(code)} ({combos[code]}): {problem}")
+        print(t("[Shortcuts] {label} ({value}): {problem}", label=label(code), value=combos[code], problem=problem))
     return _errors
 
 
@@ -284,7 +284,7 @@ def _switch_profiles(report):
     import profiles
     target, problem = profiles.switch_target()
     if problem:
-        report(f"  Problem: {problem}")
+        report("  " + t("Problem: {problem}", problem=problem))
         return
     _queue_profile(target, report)
 
@@ -294,11 +294,10 @@ def _load_profile(code, report):
     import profiles
     name = next((n for c, _, n in profile_actions() if c == code), None)
     if name is None:
-        report("  Problem: that profile has been deleted. Its shortcut can be cleared under "
-               "Settings > Other > Keyboard Shortcuts.")
+        report("  " + t("Problem: that profile has been deleted. Its shortcut can be cleared under Settings > Other > Keyboard Shortcuts."))
         return
     if profiles.current() == name and not profiles.changed(name):
-        report(f'  The profile "{name}" is already loaded.')
+        report("  " + t('The profile "{name}" is already loaded.', name=name))
         return
     _queue_profile(name, report)
 
@@ -308,13 +307,13 @@ def _queue_profile(target, report):
     import profiles
     current = profiles.current()
     if current and profiles.changed(current):
-        report(f'  Note: settings changed since "{current}" was loaded weren\'t saved to it.')
+        report("  " + t('Note: settings changed since "{current}" was loaded weren\'t saved to it.', current=current))
     try:
         profiles.queue_load(target)
     except Exception as e:
-        report(f"  Problem: couldn't load the profile ({e}).")
+        report("  " + t("Problem: couldn't load the profile ({e}).", e=e))
         return
-    report(f'  Switching to the profile "{target}". 24bit7 restarts to apply it; JRiver keeps playing.')
+    report("  " + t('Switching to the profile "{target}". 24bit7 restarts to apply it; JRiver keeps playing.', target=target))
     _restart_wanted = True
 
 
@@ -331,13 +330,12 @@ def _job(code):
         if wanted:
             zid = engine.zone_id(wanted)
             if zid is None:
-                report(f"  Problem: the shortcut zone '{wanted}' isn't in JRiver. Pick another under "
-                       f"Settings > Other > Keyboard Shortcuts.")
+                report("  " + t("Problem: the shortcut zone '{wanted}' isn't in JRiver. Pick another under Settings > Other > Keyboard Shortcuts.", wanted=wanted))
                 return
         else:
             zid = engine.seed_zone()
             if zid is None:
-                report("  Problem: the Now Playing zone isn't in JRiver, so the shortcut did nothing.")
+                report("  " + t("Problem: the Now Playing zone isn't in JRiver, so the shortcut did nothing."))
                 return
             if zid == engine.ACTIVE_ZONE:
                 zid = engine.zone_id()
@@ -355,12 +353,13 @@ def _job(code):
         if not seed:
             return
         device_id, device_name, profile = _device_for_zone(zone_name)
-        report(f"  Zone: {zone_name}" + (f", with {device_name}'s own settings" if profile else ""))
+        report("  " + (t("Zone: {zone}, with {device}'s own settings", zone=zone_name, device=device_name) if profile
+                       else t("Zone: {zone}", zone=zone_name)))
         if code == "SHUFFLE_ARTIST":
             import voice
             artist = (engine.split_values(seed.get("Artist")) or [""])[0]
             if not artist or artist == "Unknown":
-                report("  The seed track has no artist, so there's nothing to shuffle.")
+                report("  " + t("The seed track has no artist, so there's nothing to shuffle."))
                 return
             status, speech, _ = voice._play_now("shuffle", artist, zone_name, device_id)
             report(f"  {speech}")

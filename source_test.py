@@ -37,7 +37,7 @@ import time
 from datetime import datetime
 
 import engine
-from i18n import N_, t
+from i18n import N_, t, tn
 
 
 
@@ -290,17 +290,16 @@ def start_background(quick=False, include_ai=False):
             return False
         _stop.clear()
         n = len(load_seeds(quick))
-        engine.print(f"Source test started in the background ({n} seeds, about {minutes_for(n)} minutes). "
-                     f"You can keep using 24bit7.")
+        engine.print(t("Source test started in the background ({n} seeds, about {minutes_for} minutes). You can keep using 24bit7.", n=n, minutes_for=minutes_for(n)))
 
         def work():
             try:
                 if run(quick=quick, include_ai=include_ai, stop=_stop.is_set) is not None:
                     engine.print(READY_LINE)
                 else:
-                    engine.print("Source test cancelled. Nothing was saved, so the last results still show.")
+                    engine.print(t("Source test cancelled. Nothing was saved, so the last results still show."))
             except Exception as e:
-                engine.print(f"Problem: the source test stopped ({e}).")
+                engine.print(t("Problem: the source test stopped ({e}).", e=e))
         _thread = threading.Thread(target=work, daemon=True, name="source-test")
         _thread.start()
         return True
@@ -499,18 +498,19 @@ def report_lines(result, is_sample=False):
 
 def main(argv):
     if "--make-sample" in argv:
-        print(f"Wrote {make_sample()}")
+        print(t("Wrote {make_sample}", make_sample=make_sample()))
         return
     if "--show" not in argv:
         quick, ai = "--quick" in argv, "--ai" in argv
         n = len(load_seeds(quick))
-        print(f"Source test: {n} seeds{', with the AI' if ai else ''}. This takes about {minutes_for(n)} minutes.")
+        print(t("Source test: {n} seeds, with the AI. This takes about {minutes} minutes.", n=n, minutes=minutes_for(n))
+              if ai else t("Source test: {n} seeds. This takes about {minutes} minutes.", n=n, minutes=minutes_for(n)))
         engine.OUTPUT_HOOK = None
         if run(quick=quick, include_ai=ai, progress=print, wait_for_builds=False) is None:
             return
     result, is_sample = load_results()
     if not result:
-        print("No results yet: run `py source_test.py` first.")
+        print(t("No results yet: run `py source_test.py` first."))
         return
     for line in report_lines(result, is_sample):
         print(line)

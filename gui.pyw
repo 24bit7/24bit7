@@ -25,7 +25,7 @@ from tkinter import ttk, scrolledtext, messagebox
 
 import engine
 import i18n
-from i18n import N_, t
+from i18n import N_, t, tn
 import library
 import tray
 import voice
@@ -52,7 +52,10 @@ POLL_MS = 100
 DONATE_URL = "https://paypal.me/24bit7"
 SAME_ZONE_LABEL = N_("Same zone")   # shown and compared as t(SAME_ZONE_LABEL)
 AI_MAGENTA = "#ff33ff"   # AI lines and Query in the console, which is always black
-CONSOLE_MODES = (N_("Simple"), N_("Advanced"))   # the console's Mode button shows these, through t()
+CONSOLE_MODES = (N_("Simple"), N_("Advanced"))
+# The words a console line starts with, which set its colour (and the Log's counts): engine writes them
+# through t(), so they're recognised in English and in the chosen language
+PROBLEM, NOTE, DONE, REMOVED = N_("Problem:"), N_("Note:"), N_("Done:"), N_("Removed")   # the console's Mode button shows these, through t()
 
 WELCOME_TEXT = N_(
     "Welcome to 24bit7!\n\n"
@@ -745,7 +748,7 @@ class PlayTab(tk.Frame):
         except Exception as e:
             if not getattr(self, "_usage_error_said", False):
                 self._usage_error_said = True
-                print(f"  Problem: the AI Usage total couldn't show in Now Playing ({e}).")
+                print("  " + t("Problem: the AI Usage total couldn't show in Now Playing ({e}).", e=e))
 
     def _usage_unit(self):
         unit = os.getenv("AI_USAGE_NP_UNIT", "dollars").strip().lower()
@@ -757,7 +760,7 @@ class PlayTab(tk.Frame):
         try:
             write_env({"AI_USAGE_NP_UNIT": unit})
         except Exception as e:
-            print(f"  Problem: couldn't save the AI Usage display choice ({e}).")
+            print("  " + t("Problem: couldn't save the AI Usage display choice ({e}).", e=e))
             return
         self._sync_usage_box()
         if self.settings is not None and hasattr(self.settings, "usage_unit_var"):
@@ -906,13 +909,14 @@ class PlayTab(tk.Frame):
         body = re.sub(r"^\d\d:\d\d  ", "", line.strip())
         if body.startswith("[debug]"):
             return "debug"
-        if body.startswith("Problem:"):
+        if body.startswith(i18n.either(PROBLEM)):
             return "problem"
-        if body.startswith("Note:"):
+        if body.startswith(i18n.either(NOTE)):
             return "note"
-        if body.startswith("Done:") or (body and not line.startswith((" ", "\n"))):
+        if body.startswith(i18n.either(DONE)) or (body and not line.startswith((" ", "\n"))):
             return "head"
-        if re.search(r"\bAI\b", body) or body.startswith("Removed "):
+        if any(re.search(rf"\b{re.escape(word)}\b", body) for word in i18n.either("AI")) or \
+                body.startswith(i18n.either(REMOVED)):
             return "ai"
         return None
 
@@ -1184,21 +1188,22 @@ class PlayTab(tk.Frame):
         for row in rows:
             when = row["at"]
             try:
-                when = datetime.strptime(row["at"], "%Y-%m-%d %H:%M:%S").strftime("%d %b %H:%M")
+                at = datetime.strptime(row["at"], "%Y-%m-%d %H:%M:%S")
+                when = f"{at:%d} {t(ai_usage.MONTHS[at.month - 1])} {at:%H:%M}"
             except (TypeError, ValueError):
                 pass
             if row["queued"] is None:
                 hits = ""
             elif row["misses"] is None:
-                hits = f"{row['queued']} sent"
+                hits = t("{count} sent", count=row["queued"])
             else:
                 hits = f"{row['queued']} / {row['misses']}"
             trouble = ", ".join(x for x in (
-                f"{row['problems']} problem{'' if row['problems'] == 1 else 's'}" if row["problems"] else "",
-                f"{row['notes']} note{'' if row['notes'] == 1 else 's'}" if row["notes"] else "") if x)
-            values = [(when, green), (row["from_label"] or "", green), (row["zone"] or "", green),
+                tn("{count} problem", "{count} problems", row["problems"]) if row["problems"] else "",
+                tn("{count} note", "{count} notes", row["notes"]) if row["notes"] else "") if x)
+            values = [(when, green), (t(row["from_label"] or ""), green), (row["zone"] or "", green),
                       (buildlog.playlist_type(row), green), (row["sources"] or "", green), (hits, green),
-                      (row["moderator"] or "", AI_MAGENTA),
+                      (buildlog.moderator_shown(row["moderator"]), AI_MAGENTA),
                       (trouble, "#ff6b6b" if row["problems"] else "#ffb000")]
             cells = []
             for c, (value, colour) in enumerate(values):
@@ -1377,7 +1382,7 @@ class PlayTab(tk.Frame):
         if not self.running or engine.CANCEL_REQUESTED.is_set():
             return
         engine.CANCEL_REQUESTED.set()
-        self.log_queue.put("Cancelling after the AI replies..." if engine.AI_BUSY else "Cancelling...")
+        self.log_queue.put(t("Cancelling after the AI replies...") if engine.AI_BUSY else t("Cancelling..."))
         for buttons in (self.console_buttons, getattr(self, "head_buttons", {})):
             if "Cancel" in buttons:
                 buttons["Cancel"].config(text=t("Cancelling..."))
@@ -1555,7 +1560,7 @@ class PlayTab(tk.Frame):
                     overrides = engine.review_overrides()   # Settings > Playlist's Review column
                     if overrides:
                         engine.use_profile(overrides)
-                        self.log_queue.put("  Review settings in use (Settings > Playlist, the Review column).")
+                        self.log_queue.put("  " + t("Review settings in use (Settings > Playlist, the Review column)."))
                 target()
                 if review:
                     engine.REVIEW_ROWS = engine.review_rows(engine.REVIEW_KEYS)
@@ -1563,8 +1568,7 @@ class PlayTab(tk.Frame):
                 self._job_cancelled = True
                 self.log_queue.put(engine.cancel_message())
             except Exception as e:
-                self.log_queue.put(f"Problem: something went wrong ({e}). Press Export to Log "
-                                   f"and attach the file when you report it.")
+                self.log_queue.put(t("Problem: something went wrong ({e}). Press Export to Log and attach the file when you report it.", e=e))
             finally:
                 engine.MIX_ROWS, engine.MIX_KEEP, engine.MIX_FAST_KEY = None, set(), None
                 if overrides:
@@ -1590,7 +1594,7 @@ class PlayTab(tk.Frame):
         try:
             buildlog.record_job(getattr(self, "_job_origin", None), self.log.get("1.0", "end-1c"))
         except Exception as e:
-            print(f"Note: couldn't keep this build in the Log ({e}).")
+            print(t("Note: couldn't keep this build in the Log ({e}).", e=e))
         self._fill_tabs()   # a device's first build gives it a tab
         if hotkeys.take_restart():   # Switch Profiles queued a profile: restart now the job is done
             self.root.after(500, lambda: self.root.event_generate("<<Restart24bit7>>"))
@@ -1602,7 +1606,7 @@ class PlayTab(tk.Frame):
         if (engine.LAST_NO_MATCH and getattr(self, "_job_origin", None) is None
                 and not getattr(self, "_job_cancelled", False)):   # a build from the app found nothing at all
             engine.LAST_NO_MATCH = False
-            self.after(50, lambda: messagebox.showinfo("No Match", engine.APP_NO_MATCH, parent=self))
+            self.after(50, lambda: messagebox.showinfo(t("No Match"), t(engine.APP_NO_MATCH), parent=self))
         for b in self.buttons:
             b.config(state="normal")
         self._sync_ai_button()
@@ -1827,7 +1831,7 @@ def main():
     play.settings = settings   # the Play tab's Drift and Non-stop change Settings > Playlist
     settings.play = play       # Settings > Keys > Use AI greys the Play tab's AI pieces out or back in
     if loaded_profile:
-        root.after(800, lambda: print(f'Profile "{loaded_profile}" loaded.'))
+        root.after(800, lambda: print(t('Profile "{loaded_profile}" loaded.', loaded_profile=loaded_profile)))
     nb.add(play, text=t("Play"))
     nb.add(discover, text=t("Discover"))
     nb.add(settings, text=t("Settings"))
@@ -1863,8 +1867,7 @@ def main():
             chrome_room["w"] = window_chrome.attach(root, nb).width
             root.after(150, place_donate)
         except Exception as e:
-            root.after(13000, lambda e=e: play.report(f"Note: the built-in title bar couldn't be set up ({e}), "
-                                                      f"so the Windows one is used."))
+            root.after(13000, lambda e=e: play.report(t("Note: the built-in title bar couldn't be set up ({e}), so the Windows one is used.", e=e)))
 
     def on_tab_changed(event):
         if nb.select() == str(discover):
@@ -1893,10 +1896,9 @@ def main():
     settings.refresh_hotkey_notes(problems)
     if problems:
         names = ", ".join(hotkeys.LABELS[c] for c in problems)
-        root.after(13000, lambda: play.report(f"Some keyboard shortcuts didn't register ({names}). "
-                                              f"See Settings > Other > Keyboard Shortcuts."))
+        root.after(13000, lambda: play.report(t("Some keyboard shortcuts didn't register ({names}). See Settings > Other > Keyboard Shortcuts.", names=names)))
     if closed_other:
-        root.after(13000, lambda: play.report("Closed the copy of 24bit7 that was already running."))
+        root.after(13000, lambda: play.report(t("Closed the copy of 24bit7 that was already running.")))
 
     # --- tray: Start in the tray (when Windows launches it) and Close to tray ---
     # whether the window was maximised when it went to the tray, or when 24bit7 last closed

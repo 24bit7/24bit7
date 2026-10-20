@@ -36,6 +36,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import requests
 
 import engine
+from i18n import t, tn
 import library
 import saved_playlists
 
@@ -214,7 +215,7 @@ def _job(intent, value, zone, profile=None, device=None):
 
         try:
             if superseded():
-                report(f"  Skipped: a newer voice command for {zone} took over.")
+                report("  " + t("Skipped: a newer voice command for {zone} took over.", zone=zone))
                 return
             with _take_lock:
                 _running[0] = zone
@@ -230,7 +231,7 @@ def _job(intent, value, zone, profile=None, device=None):
         except engine.BuildCancelled:
             if engine.CANCEL_REQUESTED.is_set():
                 raise   # Cancel: the console worker says what had already gone out
-            report(f"  Stopped: a newer voice command for {zone} took over.")
+            report("  " + t("Stopped: a newer voice command for {zone} took over.", zone=zone))
         finally:
             engine.OUTPUT_OVERRIDE = None
             engine.use_profile(None)
@@ -250,9 +251,9 @@ def _build(intent, value, report):
     elif intent == "music_like":
         tracks, _ = engine.blended_top_tracks(value, limit=1)
         if not tracks:
-            report(f"Couldn't find top tracks for '{value}', so there's nothing to seed from.")
+            report(t("Couldn't find top tracks for '{value}', so there's nothing to seed from.", value=value))
             return
-        report(f"  Seed track: {tracks[0][0]} (the artist's most popular track)")
+        report("  " + t("Seed track: {value} (the artist's most popular track)", value=tracks[0][0]))
         engine.create_similar_playlist(report=report, seed_info=engine.typed_seed_info(value, tracks[0][0]))
     elif intent == "tracks_like":
         artist, title = value
@@ -283,7 +284,7 @@ def _top_five_start(artist, keys):
     except Exception:
         return None
     owned = {str(k) for k in keys}
-    hits = [k for k in (library.find_track_key(artist, t) for t, _ in top) if k and str(k) in owned]
+    hits = [k for k in (library.find_track_key(artist, tval) for tval, _ in top) if k and str(k) in owned]
     return random.choice(hits) if hits else None
 
 
@@ -339,7 +340,7 @@ def _play_now(intent, value, zone, device=None):
                                   top_artist=artist, top_first=str(lead) if lead else None)
     if not ok:
         return "problem", "JRiver didn't start it. Is JRiver running on the media PC?", {}
-    print(f"[Voice] Playing {what} on {zone}")
+    print(t("[Voice] Playing {what} on {zone}", what=what, zone=zone))
     return "started", f"Playing {what} on {zone}.", {}
 
 
@@ -431,7 +432,7 @@ def _zone_command(intent, device, body):
                              auth=engine.AUTH, timeout=10)
         if r.status_code != 200:
             return "problem", f"JRiver didn't {intent}. Is it running on the media PC?", {}
-        print(f"[Voice] {name}: {intent} on {zone}")
+        print(t("[Voice] {name}: {intent} on {zone}", name=name, intent=intent, zone=zone))
         return "started", f"{intent.title()}.", {}
 
     if intent == "skip":
@@ -445,14 +446,14 @@ def _zone_command(intent, device, body):
             ok = False
         if not ok:
             return "problem", "JRiver didn't skip. Is it running on the media PC?", {}
-        print(f"[Voice] {name}: skipped {info.get('Name')} on {zone}")
+        print(t("[Voice] {name}: skipped {get} on {zone}", name=name, get=info.get('Name'), zone=zone))
         return "started", "Skipped.", {}
 
     title, artist, album = _speakable(info)
     if intent == "who_is_this":
         speech = f"That's {title}" + (f" by {artist}" if artist else "")
         speech += f", from {album}." if album and album.lower() != title.lower() else "."
-        print(f"[Voice] {name}: who is this on {zone}: {speech}")
+        print(t("[Voice] {name}: who is this on {zone}: {speech}", name=name, zone=zone, speech=speech))
         return "said", speech, {}
 
     # more like this: Similar Tracks seeded from the zone's track, queued after it
@@ -614,7 +615,7 @@ def _handover(sid, tid, target, level):
     try:
         started = _wait_started(tid)
         if started is None:
-            print(f"  {target} didn't start within {SWITCH_START_TIMEOUT} s, so the track starts from the top there.")
+            print("  " + t("{target} didn't start within {switch_start_timeout} s, so the track starts from the top there.", target=target, switch_start_timeout=SWITCH_START_TIMEOUT))
             return
         adjust = switch_adjust_ms()
         took = False
@@ -627,18 +628,18 @@ def _handover(sid, tid, target, level):
             if attempt == 1:
                 time.sleep(SWITCH_RETRY_S)
         if not took:
-            print(f"  {target} didn't accept the jump, so the track starts from the top there.")
+            print("  " + t("{target} didn't accept the jump, so the track starts from the top there.", target=target))
             return
         time.sleep(SWITCH_BUFFER_S)
         engine.debug(f"Switch to {target}: started in {started:.2f} s, adjustment {adjust / 1000:.2f} s, "
                      f"jump on try {attempt}, handover {time.time() - t0:.2f} s")
     except Exception as e:
-        print(f"  Problem: the switch to {target} hit an error ({e}), so the track starts from the top there.")
+        print("  " + t("Problem: the switch to {target} hit an error ({e}), so the track starts from the top there.", target=target, e=e))
     finally:
         try:
             _mcws("Playback/Volume", Level=level, Zone=tid)
         except Exception as e:
-            print(f"  Problem: couldn't put {target}'s volume back ({e}). Set it to {round(level * 100)}% in JRiver.")
+            print("  " + t("Problem: couldn't put {target}'s volume back ({e}). Set it to {round}% in JRiver.", target=target, e=e, round=round(level * 100)))
         _leave(sid, tid)
 
 
@@ -668,7 +669,7 @@ def _move(source, target):
             threading.Thread(target=job, daemon=True, name="switch-handover").start()
         else:
             job()
-        print(f"[Voice] Switched from {source} to {target}")
+        print(t("[Voice] Switched from {source} to {target}", source=source, target=target))
         return True
     if not saved_playlists._send(keys, tid):
         return False
@@ -679,7 +680,7 @@ def _move(source, target):
     if paused:
         _mcws("Playback/Pause", State=1, Zone=tid)
     _leave(sid, tid)
-    print(f"[Voice] Switched from {source} to {target}")
+    print(t("[Voice] Switched from {source} to {target}", source=source, target=target))
     return True
 
 
@@ -757,7 +758,7 @@ def keep_going(zone):
                           # Off there means Wander; otherwise the mode chosen there
                           saved_cfg={"using": cfg["using"],
                                      "reseed": "whole" if cfg.get("on") and cfg.get("mode") == "tight" else cfg["reseed"]})
-    print(f"[Voice] Keep It Going: Non-stop on for {zone}")
+    print(t("[Voice] Keep It Going: Non-stop on for {zone}", zone=zone))
     return "started", f"Non-stop is on for {zone}.", {}
 
 
@@ -820,7 +821,7 @@ def handle_command(body, busy=False):
         try:
             return _switch(device, value, body)
         except Exception as e:
-            print(f"[Voice] switch failed: {e}")
+            print(t("[Voice] switch failed: {e}", e=e))
             return "problem", "I couldn't reach JRiver. Is it running on the media PC?", {}
     if intent in COMING:
         return "said", "That's coming in the next update of 24bit7.", {}
@@ -828,7 +829,7 @@ def handle_command(body, busy=False):
         try:
             return _zone_command(intent, device, body)
         except Exception as e:
-            print(f"[Voice] {intent} failed: {e}")
+            print(t("[Voice] {intent} failed: {e}", intent=intent, e=e))
             return "problem", "I couldn't reach JRiver. Is it running on the media PC?", {}
     if not value:
         missing = {"genre": "the genre", "album": "the album", "song": "the song", "tracks_like": "the song",
@@ -845,7 +846,7 @@ def handle_command(body, busy=False):
         try:
             return _play_now(intent, value, zone, device)
         except Exception as e:
-            print(f"[Voice] {intent} '{value}' failed: {e}")
+            print(t("[Voice] {intent} '{value}' failed: {e}", intent=intent, value=value, e=e))
             return "problem", "I couldn't reach the library in JRiver. Is JRiver running on the media PC?", {}
     if intent == "genre" and engine.vibe_blocker():
         return "problem", "Genre playlists need the AI set up in 24bit7.", {}
@@ -855,7 +856,7 @@ def handle_command(body, busy=False):
         try:
             value, reply = _tracks_like_seed(value)
         except Exception as e:
-            print(f"[Voice] tracks like '{value}' failed: {e}")
+            print(t("[Voice] tracks like '{value}' failed: {e}", value=value, e=e))
             return "problem", "I couldn't reach the library in JRiver. Is JRiver running on the media PC?", {}
         if reply:
             return reply

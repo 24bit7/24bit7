@@ -14,7 +14,8 @@ import types as _types
 import sqlite3
 from datetime import datetime
 
-from i18n import N_
+import i18n
+from i18n import N_, t, tn
 
 
 def app_dir():
@@ -127,7 +128,7 @@ def _int_setting(name, default, lo, hi):
     try:
         value = int(raw) if raw else default
     except ValueError:
-        print(f"Note: the setting {name}='{raw}' isn't a number, so {default} is used.")
+        print(t("Note: the setting {name}='{raw}' isn't a number, so {default} is used.", name=name, raw=raw, default=default))
         value = default
     return max(lo, min(hi, value))
 
@@ -420,7 +421,7 @@ def load_settings():
     TOP_TRACKS_COUNT = _int_setting("TOP_TRACKS_COUNT", 10, 1, 20)
     TOP_TRACKS_ORDER = os.getenv("TOP_TRACKS_ORDER", "popular").strip().lower()
     if TOP_TRACKS_ORDER not in ("popular", "reverse", "random"):
-        print(f"Note: the setting TOP_TRACKS_ORDER='{TOP_TRACKS_ORDER}' isn't recognised, so 'popular' is used.")
+        print(t("Note: the setting TOP_TRACKS_ORDER='{top_tracks_order}' isn't recognised, so 'popular' is used.", top_tracks_order=TOP_TRACKS_ORDER))
         TOP_TRACKS_ORDER = "popular"
     # How long answers are reused: 1 Month, 1 Year or Permanent (an older CACHE_DAYS carries over)
     CACHE_KEEP = os.getenv("CACHE_KEEP", "").strip().lower()
@@ -705,9 +706,9 @@ def ensure_env_exists():
     try:
         with open(ENV_FILE, "w", encoding="utf-8") as f:
             f.write(DEFAULT_ENV)
-        print(f"Created a starter settings file: {ENV_FILE}")
+        print(t("Created a starter settings file: {env_file}", env_file=ENV_FILE))
     except OSError as e:
-        print(f"Problem: couldn't create the settings file {ENV_FILE} ({e}).")
+        print(t("Problem: couldn't create the settings file {env_file} ({e}).", env_file=ENV_FILE, e=e))
 
 
 ensure_env_exists()
@@ -1075,6 +1076,7 @@ LAST_OUTPUT = None     # where the build's tracks went: a zone name, "YouTube" o
 STREAM_MISSES = 0      # tracks the streaming service (YouTube, Tidal) didn't have, for the Done line
 LAST_OUTPUT_ID = None  # ...and that zone's JRiver ID, for Non-stop's chain in the console's Log
 LAST_BUILD = None      # the finished build's mode, sources, tracks queued and misses, for buildlog
+MODERATOR_RUN = {"level": None, "removed": 0}   # this build's Moderator (Drift rounds too), for buildlog
 CLOSERS_DROPPED = 0    # tracks the hidden-track check left out when sending, so the Done line counts what went
 _SESSION_STARTED = {}
 
@@ -1090,6 +1092,7 @@ def session_start(mode, seed_info, sources=""):
         globals()["LAST_OUTPUT"] = output_streaming()
     globals().update(STREAM_MISSES=0, TIDAL_SENT=None, TIDAL_PLAYLIST_ID=None, TIDAL_OPENED=None)
     TIDAL_MISSED.clear()
+    MODERATOR_RUN.update(level=None, removed=0)
     cur = db().execute(
         "INSERT INTO sessions (started_at, mode, seed_artist, seed_track, seed_album, sources, queued) "
         "VALUES (?,?,?,?,?,?,0)",
@@ -1128,7 +1131,8 @@ def session_finish(session_id, queued, sources=None, report=print):
     misses = db().execute("SELECT COUNT(*) FROM discoveries WHERE session_id=? AND found=0",
                           (session_id,)).fetchone()[0]
     row = db().execute("SELECT mode, sources FROM sessions WHERE id=?", (session_id,)).fetchone() or ("", "")
-    globals()["LAST_BUILD"] = {"mode": row[0], "sources": row[1], "queued": queued, "misses": misses}
+    mod = (f"{MODERATOR_RUN['level']}, {MODERATOR_RUN['removed']} removed" if MODERATOR_RUN["level"] else "")
+    globals()["LAST_BUILD"] = {"mode": row[0], "sources": row[1], "queued": queued, "misses": misses, "moderator": mod}
     report(done_line(queued, misses, _SESSION_STARTED.pop(session_id, None)))
     if not NONSTOP_APPEND:   # every finished build, matches or not (not a non-stop top-up)
         run_after_building(report)
@@ -1138,19 +1142,23 @@ def done_line(queued, misses=0, started=None):
     """The one closing line every build ends with: what went where, what was missing, how long it took."""
     started = BUILD_STARTED or started
     took = f", {max(0, round(time.time() - started))} s" if started else ""
-    tracks = f"{queued} track{'' if queued == 1 else 's'}"
+    tracks = tn("{count} track", "{count} tracks", queued)
     if LAST_OUTPUT == "YouTube":
-        return f"Done: {tracks} sent to YouTube{took}."
+        return t("Done: {tracks} sent to YouTube{took}.", tracks=tracks, took=took)
     if LAST_OUTPUT == "Tidal":
         if TIDAL_SENT is None:
-            return f"Done: nothing sent to Tidal{took}."
-        tracks = f"{TIDAL_SENT} track{'' if TIDAL_SENT == 1 else 's'}"
-        return f"Done: {tracks} sent to Tidal, {STREAM_MISSES} not found on Tidal{took}."
+            return t("Done: nothing sent to Tidal{took}.", took=took)
+        return t("Done: {tracks} sent to Tidal, {missed} not found on Tidal{took}.",
+                 tracks=tn("{count} track", "{count} tracks", TIDAL_SENT), missed=STREAM_MISSES, took=took)
     if REVIEW_MODE and not VOICE_TAKEOVER:
-        return f"Done: {tracks} ready in Review, nothing played. {misses} not in library{took}."
-    where = f"{tracks} queued in {LAST_OUTPUT}" if queued and LAST_OUTPUT else (
-        f"{tracks} queued" if queued else "nothing queued")
-    return f"Done: {where}, {misses} not in library{took}."
+        return t("Done: {tracks} ready in Review, nothing played. {misses} not in library{took}.", tracks=tracks,
+                 misses=misses, took=took)
+    if queued and LAST_OUTPUT:
+        return t("Done: {tracks} queued in {zone}, {misses} not in library{took}.", tracks=tracks, zone=LAST_OUTPUT,
+                 misses=misses, took=took)
+    if queued:
+        return t("Done: {tracks} queued, {misses} not in library{took}.", tracks=tracks, misses=misses, took=took)
+    return t("Done: nothing queued, {misses} not in library{took}.", misses=misses, took=took)
 
 
 def run_after_building(report=print):
@@ -1163,7 +1171,7 @@ def run_after_building(report=print):
     if FALLBACK_RAN_FILE:   # If All Else Fails ran its own file instead
         FALLBACK_RAN_FILE = False
         if RUN_AFTER.get(NONSTOP_CONTEXT.get("kind"), (False, ""))[0]:
-            report("  Run After Building skipped, as If All Else Fails ran a file instead.")
+            report("  " + t("Run After Building skipped, as If All Else Fails ran a file instead."))
         return
     if REVIEW_MODE and not VOICE_TAKEOVER:
         return   # Review: nothing is in JRiver yet
@@ -1176,7 +1184,7 @@ def run_after_building(report=print):
 def run_file(path, report=print, label="Run After Building"):
     """Starts a file in the background, by its type. Returns True when it started."""
     if not os.path.isfile(path):
-        report(f"  Problem: {label}: {path} wasn't found, so nothing ran.")
+        report("  " + t("Problem: {label}: {path} wasn't found, so nothing ran.", label=label, path=path))
         return False
     import subprocess
     ext = os.path.splitext(path)[1].lower()
@@ -1195,10 +1203,10 @@ def run_file(path, report=print, label="Run After Building"):
         else:
             os.startfile(path)   # anything else opens as Windows would open it
     except Exception as e:
-        report(f"  Problem: {label}: {os.path.basename(path)} didn't start ({e}).")
+        report("  " + t("Problem: {label}: {basename} didn't start ({e}).", label=label, basename=os.path.basename(path), e=e))
         return False
-    report(f"  Ran after building: {os.path.basename(path)}." if label == "Run After Building"
-           else f"  Ran {os.path.basename(path)} ({label}).")
+    report("  " + (t("Ran after building: {file}.", file=os.path.basename(path)) if label == "Run After Building"
+                   else t("Ran {file} ({label}).", file=os.path.basename(path), label=t(label))))
     return True
 
 
@@ -1221,7 +1229,7 @@ def import_legacy_csv():
             _db.execute("INSERT INTO discoveries (session_id, artist, track, sources, found) VALUES (?,?,?,?,0)",
                         (sessions[key], r.get("Discovered Artist", ""), r.get("Discovered Track", ""),
                          r.get("Source", "")))
-        print(f"Imported {len(rows)} rows from {CSV_FILE} into {DB_FILE} ({len(sessions)} sessions).")
+        print(t("Imported {rows_count} rows from {csv_file} into {db_file} ({sessions_count} sessions).", rows_count=len(rows), csv_file=CSV_FILE, db_file=DB_FILE, sessions_count=len(sessions)))
     _db.execute("INSERT INTO meta (key, value) VALUES ('csv_imported', ?)", (datetime.now().isoformat(),))
     _db.commit()
 
@@ -1367,7 +1375,7 @@ def get_playing_info(zone=None):
     except Exception as e:
         if not _jriver_unreachable:   # say it once; the GUI asks every few seconds
             _jriver_unreachable.append(True)
-            print(f"Problem: JRiver isn't reachable ({e}). The Search tab with YouTube output works without it.")
+            print(t("Problem: JRiver isn't reachable ({e}). The Search tab with YouTube output works without it.", e=e))
         return None
 
 
@@ -1418,7 +1426,7 @@ def seed_or_last_played(zone=None, report=print):
     """
     zone = zone or seed_zone()
     if zone is None:
-        report("Problem: the Now Playing zone isn't in JRiver. Pick another under Zone.")
+        report(t("Problem: the Now Playing zone isn't in JRiver. Pick another under Zone."))
         return None
     if zone == ACTIVE_ZONE:
         zone = zone_id()
@@ -1428,11 +1436,9 @@ def seed_or_last_played(zone=None, report=print):
         return info
     seed = last_played_seed(zone, report)
     if not seed:
-        report("Problem: nothing is playing and there's no last played track. Start a track in JRiver, "
-               "or use the Search tab.")
+        report(t("Problem: nothing is playing and there's no last played track. Start a track in JRiver, or use the Search tab."))
         return None
-    report(f"  Note: nothing is in Playing Now, so seeding from the last track played: "
-           f"{seed['Artist']} - {seed['Name']}.")
+    report("  " + t("Note: nothing is in Playing Now, so seeding from the last track played: {artist} - {name}.", artist=seed['Artist'], name=seed['Name']))
     return seed
 
 
@@ -1459,7 +1465,7 @@ def clear_around_current(zone=ACTIVE_ZONE):
         current_pos = int(info["PlayingNowPosition"])
         count = int(info["PlayingNowTracks"])
     except (ValueError, TypeError):
-        print("  Note: couldn't read the Playing Now position, so nothing was cleared.")
+        print("  " + t("Note: couldn't read the Playing Now position, so nothing was cleared."))
         return
 
     if current_pos < 0 or count <= 1:
@@ -1734,7 +1740,7 @@ def lastfm_similar(artist_name, limit=20):
         names = [a['name'] for a in r.json().get('similarartists', {}).get('artist', [])]
         return [canonicalise_conjunction(n) for n in names]
     except Exception as e:
-        print(f"  Problem: Last.fm didn't answer for similar artists ({e}).")
+        print("  " + t("Problem: Last.fm didn't answer for similar artists ({e}).", e=e))
         return []
 
 
@@ -1745,10 +1751,10 @@ def lastfm_top_tracks_with_counts(artist_name, limit=10):
               "api_key": LASTFM_KEY, "format": "json", "limit": limit}
     try:
         r = requests.get(url, params=params)
-        return [(t['name'], int(t.get('playcount', 0)))
-                for t in r.json().get('toptracks', {}).get('track', [])]
+        return [(tval['name'], int(tval.get('playcount', 0)))
+                for tval in r.json().get('toptracks', {}).get('track', [])]
     except Exception as e:
-        print(f"  Problem: Last.fm didn't answer for {artist_name}'s top tracks ({e}).")
+        print("  " + t("Problem: Last.fm didn't answer for {artist_name}'s top tracks ({e}).", artist_name=artist_name, e=e))
         return []
 
 
@@ -1784,7 +1790,7 @@ def deezer_artist_id(artist_name, verbose=False):
                 debug(f"Deezer: using '{best.get('name')}' (id {artist_id}, "
                       f"{best.get('nb_fan', 0)} fans) from {len(data)} search hits")
     except Exception as e:
-        print(f"  Problem: Deezer didn't answer when searching for {artist_name} ({e}).")
+        print("  " + t("Problem: Deezer didn't answer when searching for {artist_name} ({e}).", artist_name=artist_name, e=e))
     _deezer_id_cache[artist_name] = artist_id
     return artist_id
 
@@ -1800,7 +1806,7 @@ def deezer_similar(artist_name, limit=20):
         names = [a["name"] for a in r.json().get("data", [])]
         return [canonicalise_conjunction(n) for n in names]
     except Exception as e:
-        print(f"  Problem: Deezer didn't answer for similar artists ({e}).")
+        print("  " + t("Problem: Deezer didn't answer for similar artists ({e}).", e=e))
         return []
 
 
@@ -1811,9 +1817,9 @@ def deezer_top_tracks(artist_name, limit=10):
     try:
         r = requests.get(f"https://api.deezer.com/artist/{artist_id}/top",
                          params={"limit": limit})
-        return [t["title"] for t in r.json().get("data", [])]
+        return [tval["title"] for tval in r.json().get("data", [])]
     except Exception as e:
-        print(f"  Problem: Deezer didn't answer for {artist_name}'s top tracks ({e}).")
+        print("  " + t("Problem: Deezer didn't answer for {artist_name}'s top tracks ({e}).", artist_name=artist_name, e=e))
         return []
 
 
@@ -1839,7 +1845,7 @@ def load_known_mbids():
         rows = db().execute("SELECT key, payload, fetched_at FROM cache "
                             "WHERE source='MusicBrainz' AND kind='mbid'").fetchall()
     except Exception as e:
-        print(f"  Note: couldn't read the saved MusicBrainz IDs ({e}), so they'll be looked up again.")
+        print("  " + t("Note: couldn't read the saved MusicBrainz IDs ({e}), so they'll be looked up again.", e=e))
         return
     now = time.time()
     for known, payload, fetched_at in rows:
@@ -1868,7 +1874,7 @@ def save_new_mbids():
         db().commit()
         debug(f"MusicBrainz: {len(pending)} artist IDs saved")
     except Exception as e:
-        print(f"  Note: couldn't save the new MusicBrainz IDs ({e}).")
+        print("  " + t("Note: couldn't save the new MusicBrainz IDs ({e}).", e=e))
 
 
 import threading
@@ -1899,7 +1905,7 @@ def _musicbrainz_query(name):
                 time.sleep(2.0)
                 continue
             if r.status_code != 200:
-                print(f"  Problem: MusicBrainz answered {r.status_code} for {name}.")
+                print("  " + t("Problem: MusicBrainz answered {status_code} for {name}.", status_code=r.status_code, name=name))
                 debug(f"MusicBrainz reply: {r.text[:200]}")
                 return None
             artists = r.json().get("artists", [])
@@ -1907,7 +1913,7 @@ def _musicbrainz_query(name):
                 _mbid_confirmed_misses.add(name)   # MusicBrainz answered, and has nobody by this name
             return artists[0]["id"] if artists else None
         except Exception as e:
-            print(f"  Problem: MusicBrainz didn't answer for {name} ({e}).")
+            print("  " + t("Problem: MusicBrainz didn't answer for {name} ({e}).", name=name, e=e))
             return None
     return None
 
@@ -2002,7 +2008,7 @@ def listenbrainz_similar(artist_name, limit=20, algorithm=None):
             debug(f"ListenBrainz: unrecognised reply, first item: {data[0]}")
         return [canonicalise_conjunction(n) for n in names[:limit]]
     except Exception as e:
-        print(f"  Problem: ListenBrainz didn't answer for similar artists ({e}).")
+        print("  " + t("Problem: ListenBrainz didn't answer for similar artists ({e}).", e=e))
         return []
 
 
@@ -2018,7 +2024,7 @@ def listenbrainz_top_tracks(artist_name, limit=10):
                          headers={"User-Agent": USER_AGENT,
                                   "Authorization": f"Token {LISTENBRAINZ_TOKEN}"})
         if r.status_code != 200:
-            print(f"  Problem: ListenBrainz answered {r.status_code} for top tracks.")
+            print("  " + t("Problem: ListenBrainz answered {status_code} for top tracks.", status_code=r.status_code))
             debug(f"ListenBrainz reply: {r.text[:200]}")
             return []
         try:
@@ -2029,13 +2035,13 @@ def listenbrainz_top_tracks(artist_name, limit=10):
             return []
         if isinstance(data, dict):
             data = data.get("payload") or data.get("recordings") or []
-        names = [t.get("recording_name") or t.get("name") for t in data]
+        names = [tval.get("recording_name") or tval.get("name") for tval in data]
         names = [normalise_punctuation(n) for n in names if n]
         if not names and data:
             debug(f"ListenBrainz: unrecognised top tracks reply, first item: {data[0]}")
         return names[:limit]
     except Exception as e:
-        print(f"  Problem: ListenBrainz didn't answer for {artist_name}'s top tracks ({e}).")
+        print("  " + t("Problem: ListenBrainz didn't answer for {artist_name}'s top tracks ({e}).", artist_name=artist_name, e=e))
         return []
 
 
@@ -2109,7 +2115,7 @@ def _ai_create(client, feature="AI", announce=True, **kwargs):
     """
     global _AI_THINKING_OFF_OK
     if announce:
-        print("  Asking the AI...")
+        print("  " + t("Asking the AI..."))
     started = time.time()
     try:
         message = None
@@ -2152,7 +2158,7 @@ def ai_out_of_credit(error):
 
 def ai_credit_text():
     """'your OpenAI account is out of credit', for whichever provider is chosen."""
-    return f"your {ai_provider_name()} account is out of credit"
+    return t("your {provider} account is out of credit", provider=ai_provider_name())
 
 
 def ai_model(tier="main"):
@@ -2175,9 +2181,9 @@ def ai_configured():
 def ai_missing_text():
     """What the chosen provider still needs, to finish 'needs ...': 'an Anthropic key', 'an Ollama model'."""
     if AI_PROVIDER == "ollama":
-        return "an Ollama model"
+        return t("an Ollama model")
     name = ai_provider_name()
-    return f"{'an' if name[0] in 'AEIOU' else 'a'} {name} key"
+    return t("an {provider} key", provider=name) if name[0] in "AEIOU" else t("a {provider} key", provider=name)
 
 
 def console_query_ready():
@@ -2205,12 +2211,13 @@ def _api_error(r, provider):
         detail = (r.text or "")[:200]
     name = ai_provider_name(provider)
     if r.status_code in (401, 403):
-        return f"{name} refused the key ({r.status_code}). Check it under Settings > Keys"
+        return t("{provider} refused the key ({status}). Check it under Settings > Keys", provider=name,
+                 status=r.status_code)
     if r.status_code == 429:
-        return f"{name} says the rate limit or quota is reached ({str(detail)[:120]})"
+        return t("{provider} says the rate limit or quota is reached ({detail})", provider=name, detail=str(detail)[:120])
     if r.status_code == 404 and provider == "ollama":
-        return f"Ollama doesn't have {OLLAMA_MODEL}: run  ollama pull {OLLAMA_MODEL}"
-    return f"{name} answered {r.status_code}: {str(detail)[:200]}"
+        return t("Ollama doesn't have {model}: run  ollama pull {model}", model=OLLAMA_MODEL)
+    return t("{provider} answered {status}: {detail}", provider=name, status=r.status_code, detail=str(detail)[:200])
 
 
 _OLLAMA_CHECKED = set()   # (address, model) pairs confirmed this session
@@ -2231,14 +2238,14 @@ def ollama_models(url=None):
 def ollama_check():
     """None when Ollama answers and has the chosen model; otherwise why not, for the console."""
     if not OLLAMA_MODEL:
-        return "no Ollama model is chosen. Pick one under Settings > Keys"
+        return t("no Ollama model is chosen. Pick one under Settings > Keys")
     if (OLLAMA_URL, OLLAMA_MODEL) in _OLLAMA_CHECKED:
         return None
     names = ollama_models()
     if names is None:
-        return f"Ollama isn't answering at {OLLAMA_URL}. Start Ollama, or check the address under Settings > Keys"
+        return t("Ollama isn't answering at {url}. Start Ollama, or check the address under Settings > Keys", url=OLLAMA_URL)
     if OLLAMA_MODEL not in names and f"{OLLAMA_MODEL}:latest" not in names:
-        return f"{OLLAMA_MODEL} isn't installed in Ollama. Run  ollama pull {OLLAMA_MODEL}"
+        return t("{model} isn't installed in Ollama. Run  ollama pull {model}", model=OLLAMA_MODEL)
     _OLLAMA_CHECKED.add((OLLAMA_URL, OLLAMA_MODEL))
     return None
 
@@ -2359,7 +2366,7 @@ def _ai_request_once(prompt, max_tokens, feature="AI", tier="main", system=None,
         reply.usage = getattr(message, "usage", reply.usage)
         return reply
     if announce:
-        print("  Asking the AI...")
+        print("  " + t("Asking the AI..."))
     started = time.time()
     try:
         if AI_PROVIDER == "ollama":
@@ -2416,7 +2423,7 @@ def ai_ask_list(prompt, feature="AI"):
                 if found:
                     why = "cut short" if stop == "max_tokens" else "partly unreadable"
                     AI_LAST_ERROR = f"reply {why}, {len(found)} recovered"
-                    print(f"  Note: the AI's reply was {why}; {len(found)} names were recovered.")
+                    print("  " + t("Note: the AI's reply was {why}; {found_count} names were recovered.", why=why, found_count=len(found)))
                     return [x.strip() for x in found if x.strip()]
             if names is not None:
                 AI_LAST_ERROR = ""
@@ -2425,15 +2432,15 @@ def ai_ask_list(prompt, feature="AI"):
             debug(f"AI reply couldn't be read (stop_reason {stop}): {text[:200]!r}")
         except ImportError:
             AI_LAST_ERROR = "anthropic package not installed"
-            print("  Problem: the AI can't run because the anthropic package isn't installed (pip install anthropic).")
+            print("  " + t("Problem: the AI can't run because the anthropic package isn't installed (pip install anthropic)."))
             return []
         except Exception as e:
             AI_LAST_ERROR = f"request failed: {e.__class__.__name__}"
             debug(f"AI request failed: {e}")
         if attempt == 1:
-            print("  Note: the AI request didn't work, so trying once more...")
+            print("  " + t("Note: the AI request didn't work, so trying once more..."))
         else:
-            print(f"  Problem: the AI request didn't work ({AI_LAST_ERROR}).")
+            print("  " + t("Problem: the AI request didn't work ({ai_last_error}).", ai_last_error=AI_LAST_ERROR))
     return []
 
 
@@ -2499,7 +2506,7 @@ def ai_ask_json(prompt, max_tokens=4000, feature="AI"):
             import anthropic  # noqa: F401  (checked once here, so a missing package isn't retried)
         except ImportError:
             AI_LAST_ERROR = "anthropic package not installed"
-            print("  Problem: the AI can't run because the anthropic package isn't installed (pip install anthropic).")
+            print("  " + t("Problem: the AI can't run because the anthropic package isn't installed (pip install anthropic)."))
             return None
     for attempt in (1, 2):
         text, stop = "", ""
@@ -2519,24 +2526,24 @@ def ai_ask_json(prompt, max_tokens=4000, feature="AI"):
             if found:
                 why = "cut short" if stop == "max_tokens" else "partly unreadable"
                 AI_LAST_ERROR = f"reply {why}, {len(found)} recovered"
-                print(f"  Note: the AI's reply was {why}; {len(found)} complete entries were kept.")
+                print("  " + t("Note: the AI's reply was {why}; {found_count} complete entries were kept.", why=why, found_count=len(found)))
                 return found
             AI_LAST_ERROR = "reply couldn't be read"
-            print("  Problem: the AI's reply couldn't be read.")
+            print("  " + t("Problem: the AI's reply couldn't be read."))
             debug(f"AI reply ({e.msg} at {e.pos} of {len(text)}): {text[:200]!r}")
         except Exception as e:
             AI_LAST_ERROR = f"request failed: {e.__class__.__name__}"
             debug(f"AI request failed: {e}")
         if attempt == 1:
-            print("  Note: the AI request didn't work, so trying once more...")
+            print("  " + t("Note: the AI request didn't work, so trying once more..."))
         else:
-            print(f"  Problem: the AI request didn't work ({AI_LAST_ERROR}).")
+            print("  " + t("Problem: the AI request didn't work ({ai_last_error}).", ai_last_error=AI_LAST_ERROR))
     return None
 
 
 def ai_vibe_suggestions():
     """Three random playlist moods for the vibe dialog. Returns a list of strings (may be empty)."""
-    data = ai_ask_json(AI_VIBE_SUGGESTIONS_PROMPT, max_tokens=200, feature="AI Playlist ideas")
+    data = ai_ask_json(AI_VIBE_SUGGESTIONS_PROMPT + i18n.reply_line(), max_tokens=200, feature="AI Playlist ideas")
     if isinstance(data, list):
         return [str(x).strip() for x in data if str(x).strip()][:3]
     return []
@@ -2635,13 +2642,12 @@ def youtube_client():
         try:
             from ytmusicapi import YTMusic
         except ImportError:
-            print("  Problem: YouTube can't be used because the ytmusicapi package isn't installed "
-                  "(py -m pip install ytmusicapi).")
+            print("  " + t("Problem: YouTube can't be used because the ytmusicapi package isn't installed (py -m pip install ytmusicapi)."))
             return None
         try:
             _youtube_client = YTMusic()
         except Exception as e:
-            print(f"  Problem: YouTube Music didn't start ({e}).")
+            print("  " + t("Problem: YouTube Music didn't start ({e}).", e=e))
             return None
     return _youtube_client
 
@@ -2684,15 +2690,15 @@ def _youtube_fetch_up_next(artist, track):
     try:
         watch = yt.get_watch_playlist(videoId=best["videoId"], limit=YOUTUBE_FETCH, radio=True)
     except Exception as e:
-        print(f"  Problem: YouTube didn't return its up next queue ({e}).")
+        print("  " + t("Problem: YouTube didn't return its up next queue ({e}).", e=e))
         return []
 
     pairs = []
-    for t in watch.get("tracks", []) or []:
-        if t.get("videoId") == best["videoId"]:
+    for tval in watch.get("tracks", []) or []:
+        if tval.get("videoId") == best["videoId"]:
             continue
-        names = _youtube_artist_names(t)
-        title = normalise_punctuation((t.get("title") or "").strip())
+        names = _youtube_artist_names(tval)
+        title = normalise_punctuation((tval.get("title") or "").strip())
         if names and title:
             pairs.append([names[0], title])
     return pairs
@@ -2705,7 +2711,7 @@ def youtube_similar(artist_name, limit=20, track=None):
     track picks per artist. Keeps its own cache, keyed on artist + track.
     """
     if not track or track == "Unknown":
-        print("  Note: YouTube needs a track to seed from, so it was left out.")
+        print("  " + t("Note: YouTube needs a track to seed from, so it was left out."))
         return []
     pairs = cached_call("YouTube", "up_next", f"{artist_key(artist_name)}|{clean_name(track)}",
                         lambda: _youtube_fetch_up_next(artist_name, track))
@@ -2786,20 +2792,20 @@ def tidal_token():
     """A client-credentials token, kept until a minute before it expires."""
     ident = (TIDAL_CLIENT_ID, TIDAL_CLIENT_SECRET)
     with _tidal_lock:
-        t = _tidal_token
-        if t["value"] and t["ident"] == ident and time.time() < t["expires"] - 60:
-            return t["value"]
+        tval = _tidal_token
+        if tval["value"] and tval["ident"] == ident and time.time() < tval["expires"] - 60:
+            return tval["value"]
         r = requests.post(TIDAL_TOKEN_URL, data={"grant_type": "client_credentials"}, auth=ident,
                           timeout=TIDAL_TIMEOUT)
         if r.status_code != 200:
             raise RuntimeError(f"Tidal refused the Client ID and Secret ({r.status_code}), "
                                f"check them under {KEY_HELP_LINE}")
         data = r.json()
-        t.update(value=data.get("access_token"), ident=ident,
+        tval.update(value=data.get("access_token"), ident=ident,
                  expires=time.time() + float(data.get("expires_in") or 3600))
-        if not t["value"]:
+        if not tval["value"]:
             raise RuntimeError("Tidal's login gave no token")
-        return t["value"]
+        return tval["value"]
 
 
 def tidal_get(path, params=None):
@@ -2962,16 +2968,16 @@ def tidal_user_token():
     if not TIDAL_REFRESH_TOKEN:
         raise TidalSignInError(f"Not signed in to Tidal. Sign in under {KEY_HELP_LINE}.")
     with _tidal_lock:
-        t = _tidal_user
-        if t["value"] and t["refresh"] == TIDAL_REFRESH_TOKEN and time.time() < t["expires"] - 60:
-            return t["value"]
+        tval = _tidal_user
+        if tval["value"] and tval["refresh"] == TIDAL_REFRESH_TOKEN and time.time() < tval["expires"] - 60:
+            return tval["value"]
         data = _tidal_user_token_request({"grant_type": "refresh_token", "refresh_token": TIDAL_REFRESH_TOKEN})
         if not data or not data.get("access_token"):
-            t.update(value=None, expires=0.0)
+            tval.update(value=None, expires=0.0)
             raise TidalSignInError(f"Tidal sign-in has run out. Sign in to Tidal again under {KEY_HELP_LINE}.")
-        t.update(value=data["access_token"], refresh=TIDAL_REFRESH_TOKEN,
+        tval.update(value=data["access_token"], refresh=TIDAL_REFRESH_TOKEN,
                  expires=time.time() + float(data.get("expires_in") or 3600))
-        return t["value"]
+        return tval["value"]
 
 
 
@@ -3059,7 +3065,7 @@ def tidal_fill_playlist(track_ids, description=""):
     refused = 0
     for n in range(0, len(track_ids), TIDAL_BATCH):
         reply = tidal_user_call("POST", f"/playlists/{pid}/relationships/items",
-                                {"data": [{"id": t, "type": "tracks"} for t in track_ids[n:n + TIDAL_BATCH]]})
+                                {"data": [{"id": tval, "type": "tracks"} for tval in track_ids[n:n + TIDAL_BATCH]]})
         refused += len((reply.get("meta") or {}).get("skipped") or [])
     return pid, refused
 
@@ -3078,21 +3084,28 @@ def send_to_tidal(keys, seed_info=None, report=print):
     try:
         pid, refused = tidal_fill_playlist(ids, description[:500])
     except TidalSignInError as e:
-        report(f"Problem: {e}")
+        report(t("Problem: {e}", e=e))
         return 0
     except (RuntimeError, requests.RequestException) as e:
-        report(f"Problem: the Tidal playlist couldn't be filled ({e}). Nothing was sent.")
+        report(t("Problem: the Tidal playlist couldn't be filled ({e}). Nothing was sent.", e=e))
         return 0
     TIDAL_PLAYLIST_ID, TIDAL_SENT = pid, len(ids) - refused
     globals()["SENT_ANY"] = True
     n = TIDAL_SENT
-    note = f" ({refused} Tidal wouldn't play here)" if refused else ""
-    report(f'  Tidal playlist "{TIDAL_PLAYLIST_NAME}" updated: {n} track{"" if n == 1 else "s"}{note}. '
-           f"Rename it in Tidal to keep it.")
+    if refused:
+        line = tn('Tidal playlist "{name}" updated: {count} track ({refused} Tidal wouldn\'t play here). '
+                  "Rename it in Tidal to keep it.",
+                  'Tidal playlist "{name}" updated: {count} tracks ({refused} Tidal wouldn\'t play here). '
+                  "Rename it in Tidal to keep it.", n, name=TIDAL_PLAYLIST_NAME, refused=refused)
+    else:
+        line = tn('Tidal playlist "{name}" updated: {count} track. Rename it in Tidal to keep it.',
+                  'Tidal playlist "{name}" updated: {count} tracks. Rename it in Tidal to keep it.', n,
+                  name=TIDAL_PLAYLIST_NAME)
+    report("  " + line)
     if n:
         opened = open_tidal_playlist(pid)
         if opened == "web" and TIDAL_OPEN == "app":
-            report("  The Tidal app isn't installed, so the playlist opened on Tidal's website.")
+            report("  " + t("The Tidal app isn't installed, so the playlist opened on Tidal's website."))
     return n
 
 
@@ -3217,10 +3230,10 @@ def tidal_track_details(ids):
         data = tidal_get("/tracks", {"filter[id]": ",".join(chunk), "include": "artists"})
         names = {a["id"]: (a.get("attributes") or {}).get("name", "")
                  for a in data.get("included") or [] if a.get("type") == "artists"}
-        for t in _tidal_items(data):
-            at = t.get("attributes") or {}
-            artist_ids = [a["id"] for a in ((t.get("relationships") or {}).get("artists") or {}).get("data") or []]
-            found[t["id"]] = (t["id"], [names[a] for a in artist_ids if names.get(a)],
+        for tval in _tidal_items(data):
+            at = tval.get("attributes") or {}
+            artist_ids = [a["id"] for a in ((tval.get("relationships") or {}).get("artists") or {}).get("data") or []]
+            found[tval["id"]] = (tval["id"], [names[a] for a in artist_ids if names.get(a)],
                               at.get("title") or "", (at.get("version") or "").strip())
     return [found[i] for i in ids if i in found and found[i][1] and found[i][2]]
 
@@ -3318,7 +3331,7 @@ def tidal_track_ids(pairs, workers=1):
             todo = [p for p in todo if not results.get(p) and fold_name_chars(p[0]) != p[0]]
         if not todo:
             break
-        queries = [f"{fold_name_chars(a) if folded else a} {t}" for a, t in todo]
+        queries = [f"{fold_name_chars(a) if folded else a} {tval}" for a, tval in todo]
         if workers > 1 and len(queries) > 1:
             from concurrent.futures import ThreadPoolExecutor
             with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -3379,7 +3392,7 @@ def tidal_similar_tracks(artist, track, limit=None):
             out.append([names[0], f"{title} ({version})" if version else title])
         return out[:limit]
     except Exception as e:
-        print(f"  Problem: Tidal didn't answer for similar tracks ({e}).")
+        print("  " + t("Problem: Tidal didn't answer for similar tracks ({e}).", e=e))
         return []
 
 
@@ -3393,7 +3406,7 @@ def tidal_similar(artist_name, limit=20):
         ids = tidal_ids(f"/artists/{aid}/relationships/similarArtists", limit)
         return [canonicalise_conjunction(n) for n in tidal_artist_names(ids)]
     except Exception as e:
-        print(f"  Problem: Tidal didn't answer for similar artists ({e}).")
+        print("  " + t("Problem: Tidal didn't answer for similar artists ({e}).", e=e))
         return []
 
 
@@ -3422,7 +3435,7 @@ def tidal_top_tracks(artist_name, limit=10):
                 titles.append(title)
         return titles[:limit]
     except Exception as e:
-        print(f"  Problem: Tidal didn't answer for {artist_name}'s top tracks ({e}).")
+        print("  " + t("Problem: Tidal didn't answer for {artist_name}'s top tracks ({e}).", artist_name=artist_name, e=e))
         return []
 
 
@@ -3468,23 +3481,23 @@ def missing_key_notes(similar=False, top_tracks=False):
     ticked_top = set(TOP_TRACK_SOURCES) if top_tracks else set()
     notes = []
     if "lastfm" in (ticked_similar | ticked_top) and not LASTFM_KEY:
-        notes.append("Last.fm is ticked but has no key, so it was skipped. " + KEY_HELP_LINE)
+        notes.append(t("Last.fm is ticked but has no key, so it was skipped. Settings > Keys"))
     if "ai" in (ticked_similar | ticked_top) and not ai_configured():
-        notes.append(f"AI is ticked but has no {ai_missing_text().split(' ', 1)[1]}, so it was skipped. "
-                     + KEY_HELP_LINE)
+        notes.append(t("AI is ticked but has no {what}, so it was skipped. Settings > Keys",
+                       what=ai_missing_text().split(" ", 1)[1]))
     elif "ai" in (ticked_similar | ticked_top) and not USE_AI:
-        notes.append("AI is ticked but Use AI is Off (Settings > Keys), so it was skipped.")
+        notes.append(t("AI is ticked but Use AI is Off (Settings > Keys), so it was skipped."))
     if "tidal" in (ticked_similar | ticked_top) and not (TIDAL_CLIENT_ID and TIDAL_CLIENT_SECRET):
-        notes.append("Tidal is ticked but has no Client ID and Secret, so it was skipped. " + KEY_HELP_LINE)
+        notes.append(t("Tidal is ticked but has no Client ID and Secret, so it was skipped. Settings > Keys"))
     if "listenbrainz" in ticked_top and not LISTENBRAINZ_TOKEN:
-        notes.append("ListenBrainz is ticked for top tracks but has no user token, "
-                     "so it was skipped there. " + KEY_HELP_LINE)
+        notes.append(t("ListenBrainz is ticked for top tracks but has no user token, so it was skipped there. "
+                       "Settings > Keys"))
     return notes
 
 
 def report_missing_keys(report, similar=False, top_tracks=False):
     for note in missing_key_notes(similar=similar, top_tracks=top_tracks):
-        report("  Note: " + note)
+        report("  " + t("Note: {note}", note=note))
 
 
 # USE_AI: Settings > Keys > Use AI, Off pauses every feature that spends AI credits. Set only by
@@ -3501,7 +3514,7 @@ def note_ai_off(report, feature):
     """One console line per build when a feature stands down because Use AI is Off."""
     if feature not in _AI_OFF_NOTED:
         _AI_OFF_NOTED.add(feature)
-        report(f"  Note: {feature} skipped: Use AI is Off (Settings > Keys).")
+        report("  " + t("Note: {feature} skipped: Use AI is Off (Settings > Keys).", feature=t(feature)))
 
 
 def ai_off_reset():
@@ -3531,10 +3544,9 @@ def sources_from_settings(names, setting_name):
                 continue   # ticked but no key: skipped here, named by report_missing_keys
             chosen.append(PROVIDERS[name])
         else:
-            print(f"Note: unknown source '{name}' in the setting {setting_name}, so it's ignored. "
-                  f"Valid: {', '.join(PROVIDERS)}")
+            print(t("Note: unknown source '{name}' in the setting {setting_name}, so it's ignored. Valid: {items}", name=name, setting_name=setting_name, items=', '.join(PROVIDERS)))
     if not chosen:
-        print(f"Note: no usable sources in the setting {setting_name}, so Last.fm is used.")
+        print(t("Note: no usable sources in the setting {setting_name}, so Last.fm is used.", setting_name=setting_name))
         chosen.append(PROVIDERS["lastfm" if source_has_key("lastfm") else "deezer"])
     return chosen
 
@@ -3651,7 +3663,7 @@ def blended_similar_artists(seed_artist, limit=20, seed_track=None, report=None)
                 pass   # YouTube has already said it needs a track: one line, not two
             else:
                 why = f" ({AI_LAST_ERROR})" if service_name == "AI" and AI_LAST_ERROR else ""
-                print(f"  Note: {service_name} returned no similar artists for {seed}{why}.")
+                print("  " + t("Note: {service_name} returned no similar artists for {seed}{why}.", service_name=service_name, seed=seed, why=why))
     blended = [(a, s) for a, s in blend_lists(results, artist_key) if artist_key(a) not in seed_keys]
     responding = {service_name for service_name, _ in results}
     # The number can't exceed the sources that actually answered this time
@@ -3721,7 +3733,7 @@ def prefetch_top_tracks(artists, limit, report=None):
         return
     if report:
         count = len({a for _, jobs in work.values() for a, _ in jobs})
-        report(f"  Fetching top tracks for {count} artists from {', '.join(work)}, several at a time...")
+        report("  " + t("Fetching top tracks for {count} artists from {items}, several at a time...", count=count, items=', '.join(work)))
     load_known_mbids()   # read the saved MusicBrainz IDs here, so no worker thread touches the database
     started = time.time()
     pools, direct, staged = [], [], []
@@ -3762,7 +3774,7 @@ def prefetch_top_tracks(artists, limit, report=None):
         try:
             names = outer.result().result()
         except Exception as e:
-            print(f"  Problem: {service_name} didn't answer for top tracks ({e}).")
+            print("  " + t("Problem: {service_name} didn't answer for top tracks ({e}).", service_name=service_name, e=e))
             names = []
         store(service_name, key, names)
     for pool in pools:
@@ -3815,7 +3827,7 @@ def get_verified_keys_for_artist(artist_name, pool=None, pick=None):
         return random.sample(top_n, min(pick, len(top_n)))
 
     except Exception as e:
-        print(f"  Problem: the JRiver library search failed for {artist_name} ({e}).")
+        print("  " + t("Problem: the JRiver library search failed for {artist_name} ({e}).", artist_name=artist_name, e=e))
         return []
 
 
@@ -3868,7 +3880,7 @@ def find_jriver_key_by_track(artist_name, track_name):
             debug(f"no match for {artist_name!r} / {track_name!r} (term {search_term!r}, "
                   f"{len(items)} items; first: {'; '.join(sample) or 'none'})")
     except Exception as e:
-        print(f"  Problem: the JRiver library search failed for {track_name} ({e}).")
+        print("  " + t("Problem: the JRiver library search failed for {track_name} ({e}).", track_name=track_name, e=e))
     return None
 
 
@@ -3889,10 +3901,10 @@ def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
     pick = pick or TRACKS_PER_ARTIST_PICK
     fetch = consider + 1 if exclude_track else consider
     top, _ = blended_top_tracks(artist, limit=fetch)
-    names = [t for t, _ in top]
+    names = [tval for tval, _ in top]
     if exclude_track:
         skip = clean_name(exclude_track)
-        names = [t for t in names if clean_name(t) != skip]
+        names = [tval for tval in names if clean_name(tval) != skip]
     names = names[:consider]
     # YouTube's own picks for this artist (from up next) join the pool, with the
     # same chance as the rest (no guaranteed slot since 1.5.0: Last.fm's picks are better)
@@ -3903,26 +3915,26 @@ def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
             names.extend(added)
             debug(f"YouTube pick in the pool: {', '.join(added)}")
     if not names:
-        report(f"    No top tracks returned for {artist}.")
+        report("    " + t("No top tracks returned for {artist}.", artist=artist))
         return [], 0
     chosen = random.sample(names, min(pick, len(names)))
     if defer is not None:
         # YouTube output: the caller looks every pick up together at the end (much faster)
-        defer.extend((artist, t, suggested_by, session_id) for t in chosen)
+        defer.extend((artist, tval, suggested_by, session_id) for tval in chosen)
         return [], 0
-    prefetch_youtube_ids([(artist, t) for t in chosen])
+    prefetch_youtube_ids([(artist, tval) for tval in chosen])
     keys, misses = [], 0
     for track_name in chosen:
         key = find_jriver_key_by_track(artist, track_name)
         if key and skip_keys and str(key) in skip_keys:
-            report(f"    Already in Playing Now: {track_name}")
+            report("    " + t("Already in Playing Now: {track_name}", track_name=track_name))
         elif key:
-            report(f"    {found_label(True)}: {track_name}")
+            report("    " + t("{found_label}: {track_name}", found_label=found_label(True), track_name=track_name))
             keys.append(key)
             if found is not None:
                 found.append((artist, track_name, key))
         else:
-            report(f"    {found_label(False)}: {track_name}")
+            report("    " + t("{found_label}: {track_name}", found_label=found_label(False), track_name=track_name))
             misses += 1
         session_log(session_id, artist, track_name, suggested_by, found=bool(key), seed=seed)
     return keys, misses
@@ -3969,22 +3981,24 @@ def found_label(found):
     """'In library' / 'Not in library' for a checked track, or 'On Tidal' / 'Not on Tidal' (or YouTube)."""
     where = output_streaming()
     if where:
-        return f"On {where}" if found else f"Not on {where}"
-    return "In library" if found else "Not in library"
+        return t("On {service}", service=where) if found else t("Not on {service}", service=where)
+    return t("In library") if found else t("Not in library")
 
 
 def where_found(your=False):
     """Where a build's tracks are found: 'in library' ('in your library'), or 'on Tidal' / 'on YouTube'."""
     where = output_streaming()
-    return f"on {where}" if where else ("in your library" if your else "in library")
+    return t("on {service}", service=where) if where else (t("in your library") if your else t("in library"))
 
 def sending_message(count, detail=""):
     """The log line announcing where a finished playlist is going."""
+    detail = t(detail) if detail else ""   # ", most similar first", " (shuffled)", ", in YouTube's order"
     if output_is_youtube():
-        return f"  Sending {min(count, YOUTUBE_PLAYLIST_LENGTH)} tracks to YouTube{detail}..."
+        return "  " + t("Sending {count} tracks to YouTube{detail}...", count=min(count, YOUTUBE_PLAYLIST_LENGTH),
+                        detail=detail)
     if output_is_tidal():
-        return f"  Sending {count} tracks to Tidal{detail}..."
-    return f"  Sending {count} tracks{detail}..."
+        return "  " + t("Sending {count} tracks to Tidal{detail}...", count=count, detail=detail)
+    return "  " + t("Sending {count} tracks{detail}...", count=count, detail=detail)
 
 
 def _youtube_search_video_id(artist, track):
@@ -4025,8 +4039,8 @@ def _youtube_official_video(yt, song_id, artist, track):
     """
     try:
         watch = yt.get_watch_playlist(videoId=song_id, limit=1)
-        for t in (watch or {}).get("tracks", [])[:1]:
-            vid = (t.get("counterpart") or {}).get("videoId")
+        for tval in (watch or {}).get("tracks", [])[:1]:
+            vid = (tval.get("counterpart") or {}).get("videoId")
             if vid:
                 return vid
     except Exception as e:
@@ -4074,16 +4088,16 @@ def prefetch_youtube_ids(pairs):
         return prefetch_tidal_ids(pairs)
     if not output_is_youtube():
         return
-    todo = [(a, t) for a, t in dict.fromkeys(pairs)
-            if cache_get("YouTube", _youtube_id_kind(), _youtube_id_cache_key(a, t)) is None]
+    todo = [(a, tval) for a, tval in dict.fromkeys(pairs)
+            if cache_get("YouTube", _youtube_id_kind(), _youtube_id_cache_key(a, tval)) is None]
     if len(todo) < 2 or youtube_client() is None:
         return
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=YOUTUBE_LOOKUP_WORKERS) as pool:
         found = list(pool.map(lambda p: _youtube_search_video_id(*p), todo))
-    for (a, t), vid in zip(todo, found):
+    for (a, tval), vid in zip(todo, found):
         if vid:
-            cache_put("YouTube", _youtube_id_kind(), _youtube_id_cache_key(a, t), [vid])
+            cache_put("YouTube", _youtube_id_kind(), _youtube_id_cache_key(a, tval), [vid])
 
 
 YOUTUBE_PLAYLIST_MAX = 50   # the most videos one watch_videos link will take
@@ -4152,17 +4166,29 @@ def typed_seed_key(seed_info, seeds, session_id, report=print):
     name = seed_info.get("Name")
     if not seed_info.get("Typed") or not name:
         return None
-    what = "Last played track" if seed_info.get("LastPlayed") else "Searched track"
+    last = bool(seed_info.get("LastPlayed"))
     for seed in seeds:
         key = find_jriver_key_by_track(seed, name)
         if key:
-            report(f"  {what} found on {output_streaming()}, so it opens the playlist." if output_streaming()
-                   else f"  {what} is in your library, so it opens the playlist.")
+            if output_streaming():
+                line = (t("Last played track found on {service}, so it opens the playlist.", service=output_streaming())
+                        if last else
+                        t("Searched track found on {service}, so it opens the playlist.", service=output_streaming()))
+            else:
+                line = (t("Last played track is in your library, so it opens the playlist.") if last
+                        else t("Searched track is in your library, so it opens the playlist."))
+            report("  " + line)
             session_log(session_id, seed, name, ["seed"], found=True)
             return key
-    report(f"  {what} wasn't found on {output_streaming()}, so the playlist starts without it."
-           if output_streaming()
-           else f"  {what} isn't in your library, so the playlist starts without it.")
+    if output_streaming():
+        line = (t("Last played track wasn't found on {service}, so the playlist starts without it.",
+                  service=output_streaming()) if last else
+                t("Searched track wasn't found on {service}, so the playlist starts without it.",
+                  service=output_streaming()))
+    else:
+        line = (t("Last played track isn't in your library, so the playlist starts without it.") if last
+                else t("Searched track isn't in your library, so the playlist starts without it."))
+    report("  " + line)
     session_log(session_id, seeds[0], name, ["seed"], found=False)
     return None
 
@@ -4247,21 +4273,21 @@ def review_send(keys, how, zone):
     """
     keys = [str(k) for k in keys if k]
     if not keys:
-        return "Review: nothing ticked, so nothing sent."
+        return t("Review: nothing ticked, so nothing sent.")
     label = zone_label(zone)
-    n = f"{len(keys)} track{'' if len(keys) == 1 else 's'}"
+    n = tn("{count} track", "{count} tracks", len(keys))
     if how == "next":
         requests.get(f"{JRIVER_BASE}/Playback/PlayByKey",
                      params={"Key": ",".join(keys), "Location": "Next", "Zone": zone}, auth=AUTH, timeout=10)
-        return f"Review: {n} added as Up Next in {label}."
+        return t("Review: {tracks} added as Up Next in {zone}.", tracks=n, zone=label)
     if how == "end":
         queue_tracks(keys, zone)
-        return f"Review: {n} added to the end of Playing Now in {label}."
+        return t("Review: {tracks} added to the end of Playing Now in {zone}.", tracks=n, zone=label)
     was_playing = not jriver_is_stopped(zone)
     if was_playing and how == "finish":
         clear_around_current(zone)
         queue_tracks(keys, zone)
-        return f"Review: {n} loaded as new in {label}, after the song playing now."
+        return t("Review: {tracks} loaded as new in {zone}, after the song playing now.", tracks=n, zone=label)
     if was_playing:   # Stop Song: stop, empty Playing Now, then load and play as a stopped zone does
         requests.get(f"{JRIVER_BASE}/Playback/Stop", params={"Zone": zone}, auth=AUTH, timeout=10)
         clear_around_current(zone)
@@ -4269,8 +4295,8 @@ def review_send(keys, how, zone):
     requests.get(f"{JRIVER_BASE}/Playback/PlayByKey",
                  params={"Key": ",".join(keys), "Zone": zone}, auth=AUTH, timeout=10)
     if was_playing:
-        return f"Review: song stopped, {n} playing now in {label}."
-    return f"Review: {n} loaded as new in {label}, playing now."
+        return t("Review: song stopped, {tracks} playing now in {zone}.", tracks=n, zone=label)
+    return t("Review: {tracks} loaded as new in {zone}, playing now.", tracks=n, zone=label)
 
 
 def playlist_exists(name):
@@ -4313,8 +4339,8 @@ def review_save(keys, name):
                 if r.status_code == 401 else "")
         raise ReviewProblem(f"Problem: JRiver made the playlist \"{name}\" but wouldn't add the tracks "
                             f"(error {r.status_code}), so it's empty.{hint}")
-    n = f"{len(keys)} track{'' if len(keys) == 1 else 's'}"
-    return f"Review: {n} saved as the JRiver playlist \"{name}\"."
+    return t('Review: {tracks} saved as the JRiver playlist "{name}".', tracks=tn("{count} track", "{count} tracks",
+                                                                                len(keys)), name=name)
 
 
 def review_preview(key, zone):
@@ -4348,13 +4374,13 @@ def check_cancelled():
 def cancel_message():
     """The console's last line for a cancelled build: what, if anything, had already gone out."""
     if REVIEW_MODE and not VOICE_TAKEOVER:
-        return "Cancelled: nothing was sent, and this Review list was dropped."
+        return t("Cancelled: nothing was sent, and this Review list was dropped.")
     if SENT_ANY and LAST_OUTPUT:
-        return f"Cancelled: the tracks already sent to {LAST_OUTPUT} stay there. Nothing more was added."
+        return t("Cancelled: the tracks already sent to {zone} stay there. Nothing more was added.", zone=LAST_OUTPUT)
     if LAST_OUTPUT:
-        return (f"Cancelled: the first track was already playing in {LAST_OUTPUT}, so it carries on. "
-                "Nothing else was sent.")
-    return "Cancelled: nothing was sent to JRiver."
+        return t("Cancelled: the first track was already playing in {zone}, so it carries on. Nothing else was sent.",
+                 zone=LAST_OUTPUT)
+    return t("Cancelled: nothing was sent to JRiver.")
 
 
 def zone_state(zone=ACTIVE_ZONE):
@@ -4389,8 +4415,7 @@ def output_zone(seed_info=None, zone_name=None, report=print):
     if name:
         zid = zone_id(name)
         if zid is None:
-            report(f"Problem: the output zone '{name}' isn't in JRiver, so nothing was sent. "
-                   f"Pick another under Output.")
+            report(t("Problem: the output zone '{name}' isn't in JRiver, so nothing was sent. Pick another under Output.", name=name))
         return zid
     if seed_info and seed_info.get("Typed"):
         # a last-played seed (Playing Now was empty) goes back to the zone it was read for
@@ -4399,7 +4424,7 @@ def output_zone(seed_info=None, zone_name=None, report=print):
         return seed_info["ZoneID"]
     zid = seed_zone()
     if zid is None:
-        report("Problem: the Now Playing zone isn't in JRiver, so nothing was sent. Pick another under Zone.")
+        report(t("Problem: the Now Playing zone isn't in JRiver, so nothing was sent. Pick another under Zone."))
         return None
     return zone_id() if zid == ACTIVE_ZONE else zid
 
@@ -4421,7 +4446,7 @@ def drop_long_closers(keys, keep=(), report=print, group=None):
         import library   # here rather than at the top: library imports engine
         library.ensure_loaded()
     except Exception as e:
-        report(f"  Note: the hidden track check didn't run, as the library couldn't be read ({e}).")
+        report("  " + t("Note: the hidden track check didn't run, as the library couldn't be read ({e}).", e=e))
         return keys
     limit = minutes * 60
     keep = {str(k) for k in keep if k}
@@ -4431,7 +4456,7 @@ def drop_long_closers(keys, keep=(), report=print, group=None):
         if closer and str(key) not in keep and closer[0] > limit:
             seconds, name, artist = closer
             length = f"{int(seconds) // 60}:{int(seconds) % 60:02d}"
-            report(f"  Skipped {name} by {artist}: last on its album and {length} long.")
+            report("  " + t("Skipped {name} by {artist}: last on its album and {length} long.", name=name, artist=artist, length=length))
             globals()["CLOSERS_DROPPED"] = CLOSERS_DROPPED + 1
             continue
         kept.append(key)
@@ -4482,7 +4507,7 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
         sent = nonstop_sent(zone)
         fresh_keys = [k for k in keys if k not in sent]
         if keys and not fresh_keys:
-            report("  Note: nothing new to add, as every track found had already been sent to this zone.")
+            report("  " + t("Note: nothing new to add, as every track found had already been sent to this zone."))
         keys, append = fresh_keys, True
         held = nonstop_held(zone) if keys else None
         if held:
@@ -4490,7 +4515,8 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
                 entry = NONSTOP_ZONES.get(zone)
                 if entry:
                     entry["fired"] = None   # pressing play on the last track again lets Non-stop try again
-            report(f"  Non-stop: {zone_label(zone)} was {held}, so nothing was added.")
+            report("  " + (t("Non-stop: {zone} was paused, so nothing was added.", zone=zone_label(zone)) if held == "paused"
+                           else t("Non-stop: {zone} was stopped, so nothing was added.", zone=zone_label(zone))))
             return
     nonstop_record(zone, keys, append)
     if append:
@@ -4501,7 +4527,7 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
     seed_zone_id = (seed_info or {}).get("ZoneID")
     if seed_info and not typed and seed_key and seed_zone_id and seed_zone_id != zone:
         keys = [seed_key] + [k for k in keys if k != seed_key]
-        report("  Seed track opens the playlist, as it's going to a different zone.")
+        report("  " + t("Seed track opens the playlist, as it's going to a different zone."))
     if not keys:
         return
     if zone_is_free(zone):
@@ -4512,7 +4538,7 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
         requests.get(f"{JRIVER_BASE}/Playback/PlayByKey",
                      params={"Key": ",".join(keys), "Zone": zone}, auth=AUTH)
         return
-    report(f"  Queued in {zone_label(zone)} after the current track.")
+    report("  " + t("Queued in {zone_label} after the current track.", zone_label=zone_label(zone)))
     clear_around_current(zone)
     queue_tracks(keys, zone)
 
@@ -4555,7 +4581,8 @@ def resolve_deferred_picks(deferred, report=print, found=None):
     for artist, track, suggested_by, session_id in deferred:
         key = find_jriver_key_by_track(artist, track)   # a cache hit after the prefetch
         where = output_streaming() or "YouTube"
-        report(f"    {'On ' + where if key else 'Not on ' + where}: {artist} - {track}")
+        report("    " + (t("On {service}: {artist} - {track}", service=where, artist=artist, track=track) if key
+                             else t("Not on {service}: {artist} - {track}", service=where, artist=artist, track=track)))
         session_log(session_id, artist, track, suggested_by, found=bool(key))
         if key and key not in keys:
             keys.append(key)
@@ -4574,7 +4601,7 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
     to Discover under their own session type.
     """
     track = seed_info.get("Name")
-    report("  YouTube is the only source ticked: playing its up next queue as is.")
+    report("  " + t("YouTube is the only source ticked: playing its up next queue as is."))
     session_id = session_start("youtube_queue", seed_info, "YouTube")
     first_key = typed_seed_key(seed_info, seeds, session_id, report)
 
@@ -4584,7 +4611,7 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
         if pairs:
             break
     if not pairs:
-        report("  Problem: YouTube returned no up next queue for this track.")
+        report("  " + t("Problem: YouTube returned no up next queue for this track."))
         session_finish(session_id, send_mix_only(None, seed_info, report), report=report)
         return
 
@@ -4611,25 +4638,25 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
             keys.append(key)
             if any(_youtube_same_artist(raw_artist, s) for s in seeds):
                 seed_artist_keys.append(key)
-        report(f"    {found_label(bool(key))}: {artist} - {title}")
+        report("    " + t("{found_label}: {artist} - {title}", found_label=found_label(bool(key)), artist=artist, title=title))
         session_log(session_id, artist, title, ["YouTube"], found=bool(key))
 
     keys, dropped = cap_seed_artist(keys, seed_artist_keys, first_key)
     if dropped:
-        report(f"  Seed artist kept to about a quarter of the playlist ({dropped} of their tracks left out).")
+        report("  " + t("Seed artist kept to about a quarter of the playlist ({dropped} of their tracks left out).", dropped=dropped))
     queued = 0
     if mix_active():
         if not keys:
-            report(f"Problem: nothing suggested is {where_found(True)}.")
+            report(t("Problem: nothing suggested is {where_found}.", where_found=where_found(True)))
         keys = combine_with_mix(keys, report)
     mix_skipped(report)
     if keys:
-        report(sending_message(len(keys), ", in YouTube's order"))
+        report(sending_message(len(keys), N_(", in YouTube's order")))
         send_to_jriver(keys, seed_info=seed_info, report=report)
         queued = len(keys)
         debug("Queue refreshed")
     else:
-        report(f"Problem: nothing suggested is {where_found(True)}.")
+        report(t("Problem: nothing suggested is {where_found}.", where_found=where_found(True)))
         queued = if_all_else_fails("artists", seed_info, report)
     session_finish(session_id, queued, sources="YouTube (up next queue)", report=report)
 
@@ -4730,8 +4757,8 @@ def moderator_pick(tracks, item):
     title, artist = _name_key(item.get("title")), _name_key(item.get("artist"))
 
     def same(track):
-        a, t = _name_key(track[1]), _name_key(track[2])
-        return bool(title) and t == title and (a == artist or (bool(artist) and (artist in a or a in artist)))
+        a, tval = _name_key(track[1]), _name_key(track[2])
+        return bool(title) and tval == title and (a == artist or (bool(artist) and (artist in a or a in artist)))
 
     try:
         n = int(item.get("number", item.get("index")))
@@ -4790,7 +4817,7 @@ def moderate(tracks, seed, report=print, level=None, reference=None):
         if not ai_configured():
             if "Moderator: no AI" not in _AI_OFF_NOTED:
                 _AI_OFF_NOTED.add("Moderator: no AI")
-                report("  Note: Moderator skipped: the AI isn't set up (Settings > Keys > AI).")
+                report("  " + t("Note: Moderator skipped: the AI isn't set up (Settings > Keys > AI)."))
             level = "off"
         elif not USE_AI:
             note_ai_off(report, "Moderator")
@@ -4799,8 +4826,7 @@ def moderate(tracks, seed, report=print, level=None, reference=None):
         return set()   # off by choice, or nothing to check: nothing to say
     if len(tracks) == 1 and level == "relaxed":
         # Relaxed removes at most a fifth of what it checks, which on one track is none of it
-        report(f"  Moderator (Relaxed): skipped {tracks[0][1]} - {tracks[0][2]}, as there's only 1 "
-               "track to check and Relaxed removes at most a fifth.")
+        report("  " + t("Moderator (Relaxed): skipped {value} - {value2}, as there's only 1 track to check and Relaxed removes at most a fifth.", value=tracks[0][1], value2=tracks[0][2]))
         return set()
     cap = max(1, int(len(tracks) * MODERATOR_CAP[level]))
     limit_rule = ("Flag as many tracks as you need to." if level == "strict"
@@ -4811,25 +4837,30 @@ def moderate(tracks, seed, report=print, level=None, reference=None):
     if reference:   # what's already passed: the playlist's sound, not just the seed's
         ref_text = ("\n\nAlready in the playlist, and they fit, so judge the candidates against these as "
                     "well as the seed:\n" + "\n".join(f"- {artist} - {title}" for _, artist, title in reference[:15]))
-    report(f"  Moderator ({level.title()}): checking {len(tracks)} track{'' if len(tracks) == 1 else 's'} "
-           "against the seed"
-           + (" and the playlist so far..." if reference else "..."))
+    MODERATOR_RUN["level"] = MODERATOR_RUN["level"] or level.title()
+    if reference:
+        line = tn("Moderator ({level}): checking {count} track against the seed and the playlist so far...",
+                  "Moderator ({level}): checking {count} tracks against the seed and the playlist so far...",
+                  len(tracks), level=t(level.title()))
+    else:
+        line = tn("Moderator ({level}): checking {count} track against the seed...",
+                  "Moderator ({level}): checking {count} tracks against the seed...", len(tracks), level=t(level.title()))
+    report("  " + line)
     try:
         reply = ai_request(f"{seed_line}{ref_text}\n\nCandidates:\n{listing}", 2000, "Moderator", tier="quick",
                            system=MODERATOR_PROMPT.format(level_rules=MODERATOR_RULES[level], limit_rule=limit_rule),
                            announce=False, temperature=0)
         while TEMPERATURE_NOTES:
-            report(f"  Note: Moderator: {TEMPERATURE_NOTES.pop(0)}.")
+            report("  " + t("Note: Moderator: {pop}.", pop=TEMPERATURE_NOTES.pop(0)))
         flagged = moderator_reply(reply.text)
     except ImportError:
-        report("  Problem: Moderator didn't run, as the anthropic package (needed for Anthropic) isn't "
-               "installed.")
+        report("  " + t("Problem: Moderator didn't run, as the anthropic package (needed for Anthropic) isn't installed."))
         return set()
     except Exception as e:
         if ai_out_of_credit(e):
-            report(f"  Problem: Moderator didn't run, as {ai_credit_text()}.")
+            report("  " + t("Problem: Moderator didn't run, as {ai_credit_text}.", ai_credit_text=ai_credit_text()))
         else:
-            report(f"  Problem: Moderator didn't run, as the check didn't come back ({str(e)[:120]}).")
+            report("  " + t("Problem: Moderator didn't run, as the check didn't come back ({value}).", value=str(e)[:120]))
         return set()
     removed = set()
     for item in flagged:
@@ -4841,8 +4872,9 @@ def moderate(tracks, seed, report=print, level=None, reference=None):
         key, artist, title = tracks[i]
         if key not in removed:
             removed.add(key)
-            report(f"    Removed {artist} - {title}: {str(item.get('reason') or '').strip()}")
-    report(f"  Moderator: {len(removed)} removed." if removed else "  Moderator: nothing clashed.")
+            report("    " + t("Removed {artist} - {title}: {strip}", artist=artist, title=title, strip=str(item.get('reason') or '').strip()))
+    MODERATOR_RUN["removed"] += len(removed)
+    report("  " + (t("Moderator: {count} removed.", count=len(removed)) if removed else t("Moderator: nothing clashed.")))
     return removed
 
 
@@ -4870,13 +4902,13 @@ class PlayedFilter:
                     library.ensure_loaded()
                     self.closer_library, self.closer_limit = library, minutes * 60
                 except Exception as e:
-                    report(f"  Note: the hidden track check didn't run, as the library couldn't be read ({e}).")
+                    report("  " + t("Note: the hidden track check didn't run, as the library couldn't be read ({e}).", e=e))
         if filters:   # Settings > Filters, for the playlists 24bit7 builds
             try:
                 import filters as filter_settings
                 self.filters = filter_settings.Active(FILTER_DEVICE, report) or None
             except Exception as e:
-                report(f"  Problem: the filters didn't run ({e}).")
+                report("  " + t("Problem: the filters didn't run ({e}).", e=e))
         if not self.on:
             return
         try:
@@ -4884,11 +4916,11 @@ class PlayedFilter:
             library.ensure_loaded()
             self.library = library
         except Exception as e:
-            report(f"  Note: the recently played check didn't run, as the library couldn't be read ({e}).")
+            report("  " + t("Note: the recently played check didn't run, as the library couldn't be read ({e}).", e=e))
             self.on = False
             return
         if library.played_dates_unreadable():
-            report("  Note: the recently played check didn't run, as JRiver's Last Played dates couldn't be read.")
+            report("  " + t("Note: the recently played check didn't run, as JRiver's Last Played dates couldn't be read."))
             self.on = False
         self.cutoff = time.time() - self.days * 86400
 
@@ -4902,8 +4934,7 @@ class PlayedFilter:
                 if str(key) not in self.closers_seen:
                     self.closers_seen.add(str(key))
                     seconds, name, artist = closer
-                    self.report(f"  Skipped {name} by {artist}: last on its album and "
-                                f"{int(seconds) // 60}:{int(seconds) % 60:02d} long.")
+                    self.report("  " + t("Skipped {name} by {artist}: last on its album and {value}:{value2:02d} long.", name=name, artist=artist, value=int(seconds) // 60, value2=int(seconds) % 60))
                 return False
         if self.filters is not None and not self.filters.allows(key):
             return False
@@ -4919,8 +4950,9 @@ class PlayedFilter:
         if self.filters is not None:
             self.filters.done()
         if self.skipped:
-            self.report(f"  Skipped {self.skipped} track{'' if self.skipped == 1 else 's'} "
-                        f"played in the last {self.days} day{'' if self.days == 1 else 's'}.")
+            tracks = tn("{count} track", "{count} tracks", self.skipped)
+            self.report("  " + tn("Skipped {tracks} played in the last {count} day.", "Skipped {tracks} played in the last {count} days.",
+                                  self.days, tracks=tracks))
 
 
 # ---------------------------------------------------------------------------
@@ -4973,7 +5005,7 @@ class FastStart:
             requests.get(f"{JRIVER_BASE}/Playback/PlayByKey",
                          params={"Key": str(key), "Zone": self.zone}, auth=AUTH, timeout=10)
         except Exception as e:
-            self.report(f"  Note: fast start didn't go through ({e}), so the playlist starts when it's built.")
+            self.report("  " + t("Note: fast start didn't go through ({e}), so the playlist starts when it's built.", e=e))
             self.zone = None
             return
         self.key = str(key)
@@ -5024,7 +5056,7 @@ def drift_sources(cfg, using):
 def and_list(items):
     """'A', 'A and B', 'A, B and C'."""
     items = [str(i) for i in items]
-    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1] if items else ""
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " " + t("and") + " " + items[-1] if items else ""
 
 
 class Drift:
@@ -5094,7 +5126,7 @@ class Drift:
 
     def tracks(self, keys):
         """[(key, artist, title)] for keys this Drift has noted, for the Moderator."""
-        info = {k: (a, t) for a, t, k, _ in self.finds}
+        info = {k: (a, tval) for a, tval, k, _ in self.finds}
         return [(k, *info[str(k)]) for k in keys if str(k) in info]
 
     def discard(self, keys):
@@ -5120,7 +5152,7 @@ class Drift:
                 if level == "off":
                     return set()
             cand = {str(k) for k in candidates}
-            reference = [t for t in self.tracks(self.base or []) if str(t[0]) not in cand]
+            reference = [tval for tval in self.tracks(self.base or []) if str(tval[0]) not in cand]
         removed = moderate(self.tracks(candidates), self.seed, report or self.report, level=level,
                            reference=reference)
         if drift_round and removed:
@@ -5173,7 +5205,7 @@ class Drift:
         else:
             picks = picks[:DRIFT_SEEDS_PER_ROUND]
         self.used |= {p[3] for p in picks}
-        return [(a, t, k) for a, t, k, _ in picks]
+        return [(a, tval, k) for a, tval, k, _ in picks]
 
     def _chain(self, key):
         """A key and everything Drift seeded from it, however many rounds down."""
@@ -5222,16 +5254,22 @@ class Drift:
         if extra and survivors <= extra:   # dropping them would leave this round with nothing
             for parent, rest in drops:
                 if rest:
-                    self.report(f"  Moderator: half or more of what came from {name(parent, 'a Drift seed')} "
-                                f"went off course, but dropping the rest would leave this round with nothing, "
-                                f"so {and_list([name(k) for k in rest])} "
-                                + ("stays." if len(rest) == 1 else "stay."))
+                    self.report("  " + tn("Moderator: half or more of what came from {source} went off course, but "
+                                          "dropping the rest would leave this round with nothing, so {tracks} stays.",
+                                          "Moderator: half or more of what came from {source} went off course, but "
+                                          "dropping the rest would leave this round with nothing, so {tracks} stay.",
+                                          len(rest), source=name(parent, t("a Drift seed")),
+                                          tracks=and_list([name(k) for k in rest])))
             return set()
         for parent, rest in drops:
             self.blocked |= self._chain(parent)
-            self.report(f"  Moderator: half or more of what came from {name(parent, 'a Drift seed')} went off course"
-                        + (f", so {and_list([name(k) for k in rest])} went too" if rest else "")
-                        + ". Drift won't seed from that chain again.")
+            if rest:
+                self.report("  " + t("Moderator: half or more of what came from {source} went off course, so {tracks} "
+                                     "went too. Drift won't seed from that chain again.",
+                                     source=name(parent, t("a Drift seed")), tracks=and_list([name(k) for k in rest])))
+            else:
+                self.report("  " + t("Moderator: half or more of what came from {source} went off course. Drift won't "
+                                     "seed from that chain again.", source=name(parent, t("a Drift seed"))))
         return extra
 
     def rescue(self, keys):
@@ -5245,9 +5283,7 @@ class Drift:
                 or self.using not in ("artists", "tracks")):
             return False
         if not drift_custom_sources(self.cfg, self.using):
-            self.report("  Drift: nothing to start from, and it uses the same sources as the playlist, so "
-                        "there was nothing new to try. Custom Sources (Settings > Playlist) gives Drift "
-                        "a different route.")
+            self.report("  " + t("Drift: nothing to start from, and it uses the same sources as the playlist, so there was nothing new to try. Custom Sources (Settings > Playlist) gives Drift a different route."))
             return False
         seeds, idents = [], set()
         for artist, title in self.seed_pairs:
@@ -5259,11 +5295,10 @@ class Drift:
                 seeds.append((artist, title, None))
         seeds = seeds[:DRIFT_SEEDS_PER_ROUND]
         if not seeds:
-            self.report("  Drift: nothing to start from, as there's no seed track to search from.")
+            self.report("  " + t("Drift: nothing to start from, as there's no seed track to search from."))
             return False
-        names = ", ".join(a if self.using == "artists" else f"{a} - {t}" for a, t, _ in seeds)
-        self.report(f"  Drift: nothing found, so it starts from the seed, using {self.using} similar to "
-                    f"{names}{self._from_label()}...")
+        names = ", ".join(a if self.using == "artists" else f"{a} - {tval}" for a, tval, _ in seeds)
+        self.report("  " + t("Drift: nothing found, so it starts from the seed, using {using} similar to {names}{from_label}...", using=self.using, names=names, from_label=self._from_label()))
         saved, before = self.target, len(keys)
         self.target = self.target or 10 ** 6   # no limit on total tracks: everything it finds
         try:
@@ -5278,8 +5313,8 @@ class Drift:
         if new:
             self.moderate(keys, new)
         found = len(keys) - before
-        self.report(f"  Drift: {found} found from the seed." if found
-                    else "  Drift: nothing found from the seed either.")
+        self.report("  " + (t("Drift: {count} found from the seed.", count=found) if found
+                            else t("Drift: nothing found from the seed either.")))
         return found > 0
 
     def run(self, keys, on_round=None):
@@ -5298,20 +5333,18 @@ class Drift:
             if len(keys) >= self.target:
                 break
             if self.using == "ai":   # a vibe playlist asking the AI again
-                self.report(f"  Drift round {n} of {self.rounds}: {len(keys)} of {self.target}, "
-                            f"asking the AI again...")
+                self.report("  " + t("Drift round {n} of {rounds}: {keys_count} of {target}, asking the AI again...", n=n, rounds=self.rounds, keys_count=len(keys), target=self.target))
                 before = len(keys)
                 self._round_ai(keys)
             else:
                 seeds = self._seeds()
                 if not seeds:
-                    self.report("  Note: Keep It Tight has used every track from the first round as a seed, "
-                                "so Drift stopped here." if self.drift_from == "close"
-                                else "  Note: Drift has nothing left to seed from.")
+                    self.report("  " + (t("Note: Keep It Tight has used every track from the first round as a seed, "
+                                          "so Drift stopped here.") if self.drift_from == "close"
+                                        else t("Note: Drift has nothing left to seed from.")))
                     break
-                names = ", ".join(a if self.using == "artists" else f"{a} - {t}" for a, t, _ in seeds)
-                self.report(f"  Drift round {n} of {self.rounds}: {len(keys)} of {self.target}, "
-                            f"using {self.using} similar to {names}{self._from_label()}...")
+                names = ", ".join(a if self.using == "artists" else f"{a} - {tval}" for a, tval, _ in seeds)
+                self.report("  " + t("Drift round {n} of {rounds}: {keys_count} of {target}, using {using} similar to {names}{from_label}...", n=n, rounds=self.rounds, keys_count=len(keys), target=self.target, using=self.using, names=names, from_label=self._from_label()))
                 before = len(keys)
                 with drift_sources(self.cfg, self.using):
                     if self.using == "artists":
@@ -5321,15 +5354,15 @@ class Drift:
             if self.using != "ai":   # the AI's own picks are never moderated
                 self.moderate(keys, keys[before:], drift_round=True)
             new = keys[before:]
-            self.report(f"  Drift round {n}: {len(new)} added.")
+            self.report("  " + t("Drift round {n}: {new_count} added.", n=n, new_count=len(new)))
             if self.using == "ai" and not new:
-                self.report(f"  Note: Drift stopped, as the AI found nothing new {where_found(True)}.")
+                self.report("  " + t("Note: Drift stopped, as the AI found nothing new {where_found}.", where_found=where_found(True)))
                 break
             added += new
             if new and on_round:
                 on_round(list(new))
         if len(keys) < self.target:
-            self.report(f"  Note: Drift finished short, {len(keys)} of {self.target}.")
+            self.report("  " + t("Note: Drift finished short, {keys_count} of {target}.", keys_count=len(keys), target=self.target))
         return added
 
     def _take(self, keys, artist, title, key, score, parent=None):
@@ -5356,19 +5389,19 @@ class Drift:
                 self.saw_artist(artist)
                 if suggested_by == ["AI"] and not deezer_artist_exists(artist):
                     continue
-                self.report(f"  {artist} ({', '.join(suggested_by)})...")
+                self.report("  " + t("{artist} ({items})...", artist=artist, items=', '.join(suggested_by)))
                 found = []
                 pick_top_tracks_for_artist(artist, self.session_id, suggested_by, report=self.report, found=found)
-                for a, t, k in found:
+                for a, tval, k in found:
                     if len(keys) >= self.target:
                         return
-                    self._take(keys, a, t, k, len(suggested_by), parent=seed_key)
+                    self._take(keys, a, tval, k, len(suggested_by), parent=seed_key)
 
     def _round_ai(self, keys):
         """A vibe round: the same description to the AI, told what's already been found or tried."""
         if not self.vibe:
             return
-        avoid = [f"{a} - {t}" for a, t, _, _ in self.finds] + [f"{a} - {t}" for a, t in self.ai_tried]
+        avoid = [f"{a} - {tval}" for a, tval, _, _ in self.finds] + [f"{a} - {tval}" for a, tval in self.ai_tried]
         want = max(5, self.target - len(keys) + 5)
         pairs = ai_vibe_tracks(self.vibe, want, avoid=avoid,
                                prompt=self.prompt.replace("{count}", str(want)) if self.prompt else None)
@@ -5386,7 +5419,7 @@ class Drift:
                 self.ai_tried.add((artist, track))
                 continue
             if self._take(keys, artist, track, key, 1):
-                self.report(f"    {found_label(True)}: {artist} - {track}  (AI)")
+                self.report("    " + t("{found_label}: {artist} - {track}  (AI)", found_label=found_label(True), artist=artist, track=track))
             else:
                 self.ai_tried.add((artist, track))
 
@@ -5401,17 +5434,17 @@ class Drift:
             need = min(custom[1], len(responding)) if custom else 1
             if need > 1:   # Custom Sources' "must agree" (capped at the sources that answered)
                 candidates = [c for c in candidates if len(c[1]) >= need]
-            for (a, t), sources in candidates:
+            for (a, tval), sources in candidates:
                 if len(keys) >= self.target:
                     return
-                ident = (artist_key(a), clean_name(t))
+                ident = (artist_key(a), clean_name(tval))
                 if ident in self.checked or self._room(a) <= 0:
                     continue
                 self.checked.add(ident)
-                key = find_jriver_key_by_track(a, t) if use_stream else library.find_track_key(a, t)
-                session_log(self.session_id, a, t, sources, found=bool(key))
-                if self._take(keys, a, t, key, len(sources), parent=seed_key):
-                    self.report(f"    {found_label(True)}: {a} - {t}  ({', '.join(sources)})")
+                key = find_jriver_key_by_track(a, tval) if use_stream else library.find_track_key(a, tval)
+                session_log(self.session_id, a, tval, sources, found=bool(key))
+                if self._take(keys, a, tval, key, len(sources), parent=seed_key):
+                    self.report("    " + t("{found_label}: {a} - {t_value}  ({items})", found_label=found_label(True), a=a, t_value=tval, items=', '.join(sources)))
 
 
 def mix_active():
@@ -5426,7 +5459,7 @@ def send_mix_only(fast, seed_info, report=print):
     """
     if not mix_active():
         return 0
-    report("Playing your added playlists on their own.")
+    report(t("Playing your added playlists on their own."))
     final = combine_with_mix([], report)
     rest = fast.rest(final) if fast else final
     if rest:
@@ -5439,7 +5472,7 @@ def mix_skipped(report=print):
     global MIX_NOTED
     if MIX_ROWS and output_streaming() and not MIX_NOTED:
         MIX_NOTED = True
-        report("  Note: your added playlists were left out, as they only join playlists sent to JRiver.")
+        report("  " + t("Note: your added playlists were left out, as they only join playlists sent to JRiver."))
 
 
 def _spread(ours, mixes):
@@ -5472,13 +5505,13 @@ def combine_with_mix(keys, report=print):
     ours = [str(k) for k in keys if str(k) != fast]
     seen = set(ours)
     before, after, mixes, used = [], [], [], []
-    report("Adding your playlists:")
+    report(t("Adding your playlists:"))
     for row in MIX_ROWS or []:
         name, mode = row.get("name") or "A playlist", row.get("mode")
         try:
             found = [str(k) for k in saved_playlists.playlist_keys(row["id"])]
         except Exception as e:
-            report(f"  Problem: {name} couldn't be read from JRiver ({e}), so it was left out.")
+            report("  " + t("Problem: {name} couldn't be read from JRiver ({e}), so it was left out.", name=name, e=e))
             continue
         fresh = []
         for k in found:
@@ -5486,16 +5519,19 @@ def combine_with_mix(keys, report=print):
                 seen.add(k)
                 fresh.append(k)
         if not fresh:
-            report(f"  Note: {name} is " + ("empty, or no longer in JRiver" if not found else
-                                     "already all in the playlist") + ", so nothing was added from it.")
+            report("  " + (t("Note: {name} is empty, or no longer in JRiver, so nothing was added from it.", name=name)
+                           if not found else
+                           t("Note: {name} is already all in the playlist, so nothing was added from it.", name=name)))
             continue
         used.append(row["id"])
         MIX_KEEP.update(fresh)
-        how = {"before": "added before", "mix": "mixed in, " + ("at random" if row.get("spread") == "random"
-                                                                  else "spaced evenly")}.get(mode, "added after")
+        how = {"before": t("added before"), "mix": t("mixed in, at random") if row.get("spread") == "random"
+               else t("mixed in, spaced evenly")}.get(mode, t("added after"))
         left = len(found) - len(fresh)
-        report(f"  {name}: {len(fresh)} track{'' if len(fresh) == 1 else 's'} {how}"
-               + (f" ({left} already in the playlist left out)." if left else "."))
+        tracks = tn("{count} track", "{count} tracks", len(fresh))
+        report("  " + (t("{name}: {tracks} {how} ({left} already in the playlist left out).", name=name, tracks=tracks,
+                         how=how, left=left) if left
+                       else t("{name}: {tracks} {how}.", name=name, tracks=tracks, how=how)))
         if mode == "before":
             before += fresh
         elif mode == "mix":
@@ -5560,10 +5596,10 @@ def add_deep_cuts(keys, seed_info, report=print):
         else:
             picks, note = deepcuts.pick_by_track(genres, want, artists, in_build, played.fresh, group=kind)
     except Exception as e:
-        report(f"  Problem: Deep Cuts didn't run ({e}).")
+        report("  " + t("Problem: Deep Cuts didn't run ({e}).", e=e))
         return keys
     if not picks:
-        report(f"  Deep Cuts: none this time, as {note}.")
+        report("  " + t("Deep Cuts: none this time, as {note}.", note=note))
         return keys
     if moderating and len(picks) > 1:
         seed = (f"vibe: {NONSTOP_CONTEXT.get('vibe')}" if kind == "vibe" else seed_label(seed_info or {}))
@@ -5579,17 +5615,17 @@ def add_deep_cuts(keys, seed_info, report=print):
         if CURRENT_SESSION:
             session_log(CURRENT_SESSION, artist, title, ["Deep Cuts"], found=bool(key))
     if not cut_keys:
-        report(f"  Deep Cuts: none this time, as none of the picks were {where_found(True)}.")
+        report("  " + t("Deep Cuts: none this time, as none of the picks were {where_found}.", where_found=where_found(True)))
         return keys
     how = "artists you haven't played lately" if kind == "artists" else "tracks you rarely play"
-    names = ", ".join(f"{a} - {t}" for (_, a, t) in picks[:len(cut_keys)])
-    report(f"  Deep Cuts ({'; '.join(genres)}, {cfg['mode']}): {len(cut_keys)} from {how}: {names}.")
+    names = ", ".join(f"{a} - {tval}" for (_, a, tval) in picks[:len(cut_keys)])
+    report("  " + t("Deep Cuts ({items}, {mode}): {cut_keys_count} from {how}: {names}.", items='; '.join(genres), mode=cfg['mode'], cut_keys_count=len(cut_keys), how=how, names=names))
     return _spread(keys, [(cut_keys, "random" if cfg["mode"] == "shuffled" else "spaced")])
 
 
 def _deep_cut_top_tracks(artist):
     """A deep cut artist's top tracks, best first, from the ticked Top Tracks sources (cached when known)."""
-    return [t for t, _ in blended_top_tracks(artist, 10)[0]]
+    return [tval for tval, _ in blended_top_tracks(artist, 10)[0]]
 
 
 def finish_playlist(keys, drift, fast, seed_info, report, detail=""):
@@ -5634,7 +5670,7 @@ FALLBACK_BPM_SPREAD = 0.10   # within 10% of the seed's BPM
 FALLBACK_BPM_MIN = 10        # fewer tracks than this (or than the playlist needs) at that tempo: genre only
 FALLBACK_SPEECH_WAIT = 4.0   # seconds between the spoken message starting and the music, when its length is unknown
 NO_MATCH = "I couldn't find a match. Please try another seed."
-APP_NO_MATCH = "Couldn't find a match. Please try another seed, see the console for more information."
+APP_NO_MATCH = N_("Couldn't find a match. Please try another seed, see the console for more information.")
 LAST_NO_MATCH = False        # this build ended with nothing at all and no fallback (the app shows APP_NO_MATCH)
 
 
@@ -5692,7 +5728,7 @@ def seed_genre(seed_info):
         row = library.track_row(key) if key else None
     bpm = (_bpm(row) or None) if row else None
     if row and _genres(row):
-        return _genres(row)[0], bpm, "the seed track's Genre tag"
+        return _genres(row)[0], bpm, N_("the seed track's Genre tag")
     artist = _row_artist(seed_info) or (_row_artist(row) if row else "")
     if not artist:
         return None, None, ""
@@ -5700,7 +5736,7 @@ def seed_genre(seed_info):
     counts = Counter(_genres(r)[0] for r in list(library._by_key.values())
                      if _genres(r) and artist_key(_row_artist(r)) == artist_key(artist))
     if counts:
-        return counts.most_common(1)[0][0], bpm, f"{artist}'s most common genre in your library"
+        return counts.most_common(1)[0][0], bpm, t("{artist}'s most common genre in your library", artist=artist)
     return None, None, ""
 
 
@@ -5765,7 +5801,7 @@ def speak_in_zone(text, zone, report=print):
         r.raise_for_status()
         return seconds or FALLBACK_SPEECH_WAIT
     except Exception as e:
-        report(f"  Note: the message couldn't be spoken in the room ({str(e)[:100]}).")
+        report("  " + t("Note: the message couldn't be spoken in the room ({value}).", value=str(e)[:100]))
         return 0.0
 
 
@@ -5779,7 +5815,7 @@ def _say_first(spoken, seed_info, report):
         time.sleep(0.1)
 
 
-def if_all_else_fails(kind, seed_info, report=print, why="nothing suggested is in your library"):
+def if_all_else_fails(kind, seed_info, report=print, why=N_("nothing suggested is in your library")):
     """
     A build found nothing at all. When If All Else Fails is on for this type, it does what it's set
     to: shuffle songs in the seed's genre (at a similar tempo where BPM tags allow), run a file, or
@@ -5790,26 +5826,26 @@ def if_all_else_fails(kind, seed_info, report=print, why="nothing suggested is i
     check_cancelled()
     FALLBACK_RAN_FILE = FALLBACK_HANDLED = False
     if not fallback_on(kind):
-        report(f"{NO_MATCH} The build was empty because {why}, and If All Else Fails is off for this "
-               f"playlist type (Settings > Playlist).")
+        report(t("I couldn't find a match. Please try another seed. The build was empty because {why}, and If All Else Fails is off for this playlist type (Settings > Playlist).", why=t(why)))
         LAST_NO_MATCH = True
         return 0
     mode, setting = fallback_mode(kind), FALLBACK_SETTINGS.get(kind, "")
     if mode == "file":
         path = os.getenv(f"{setting}_PATH", "").strip().strip('"')
         if REVIEW_MODE and not VOICE_TAKEOVER:
-            report(f"{NO_MATCH} The build was empty because {why}. If All Else Fails is set to run a file, "
-                   f"which doesn't happen in Review Mode.")
+            report(t("I couldn't find a match. Please try another seed. The build was empty because {why}. If All Else Fails is set to run a file, which doesn't happen in Review Mode.", why=t(why)))
             LAST_NO_MATCH = True
             return 0
         if not path or not os.path.isfile(path):
-            report(f"{NO_MATCH} The build was empty because {why}, and If All Else Fails' file "
-                   + (f"{path} wasn't found." if path else "hasn't been chosen (Settings > Playlist)."))
+            report(t("I couldn't find a match. Please try another seed. The build was empty because {why}, and If All "
+                     "Else Fails' file {path} wasn't found.", why=t(why), path=path) if path else
+                   t("I couldn't find a match. Please try another seed. The build was empty because {why}, and If All "
+                     "Else Fails' file hasn't been chosen (Settings > Playlist).", why=t(why)))
             LAST_NO_MATCH = True
             return 0
-        spoken = f"I couldn't find a match, running {os.path.splitext(os.path.basename(path))[0]}"
-        report(spoken + ".")
-        report(f"  Why: {why}. If All Else Fails: {os.path.basename(path)}.")
+        spoken = f"I couldn't find a match, running {os.path.splitext(os.path.basename(path))[0]}"   # said in the room
+        report(t("I couldn't find a match, running {name}.", name=os.path.splitext(os.path.basename(path))[0]))
+        report("  " + t("Why: {why}. If All Else Fails: {basename}.", why=why, basename=os.path.basename(path)))
         _say_first(spoken, seed_info, report)
         if run_file(path, report, "If All Else Fails"):
             FALLBACK_RAN_FILE = FALLBACK_HANDLED = True
@@ -5820,8 +5856,7 @@ def if_all_else_fails(kind, seed_info, report=print, why="nothing suggested is i
         pid = os.getenv(f"{setting}_PLAYLIST", "").strip()
         name = os.getenv(f"{setting}_PLAYLIST_NAME", "").strip() or "the chosen playlist"
         if not pid:
-            report(f"{NO_MATCH} The build was empty because {why}, and no playlist has been chosen for "
-                   f"If All Else Fails (Settings > Playlist).")
+            report(t("I couldn't find a match. Please try another seed. The build was empty because {why}, and no playlist has been chosen for If All Else Fails (Settings > Playlist).", why=t(why)))
             LAST_NO_MATCH = True
             return 0
         try:
@@ -5830,33 +5865,39 @@ def if_all_else_fails(kind, seed_info, report=print, why="nothing suggested is i
         except Exception:
             keys = None
         if not keys:
-            report(f"{NO_MATCH} The build was empty because {why}, and If All Else Fails' playlist {name} "
-                   + ("couldn't be read from JRiver." if keys is None else "is empty or no longer there."))
+            report(t("I couldn't find a match. Please try another seed. The build was empty because {why}, and If All "
+                     "Else Fails' playlist {name} couldn't be read from JRiver.", why=t(why), name=name) if keys is None
+                   else t("I couldn't find a match. Please try another seed. The build was empty because {why}, and If "
+                          "All Else Fails' playlist {name} is empty or no longer there.", why=t(why), name=name))
             LAST_NO_MATCH = True
             return 0
-        spoken = f"I couldn't find a match, playing {name}"
-        report(spoken + ".")
-        report(f"  Why: {why}. If All Else Fails: {len(keys)} tracks from {name}, as JRiver gives them.")
+        spoken = f"I couldn't find a match, playing {name}"   # said in the room
+        report(t("I couldn't find a match, playing {name}.", name=name))
+        report("  " + t("Why: {why}. If All Else Fails: {keys_count} tracks from {name}, as JRiver gives them.", why=why, keys_count=len(keys), name=name))
         _say_first(spoken, seed_info, report)
         send_to_jriver(keys, seed_info=seed_info, report=report)
         FALLBACK_HANDLED = True
         return len(keys)
     genre, bpm, source = seed_genre(seed_info)
     if not genre:
-        report(f"{NO_MATCH} The build was empty because {why}, and there's no genre for the seed in your "
-               f"library to fall back on.")
+        report(t("I couldn't find a match. Please try another seed. The build was empty because {why}, and there's no genre for the seed in your library to fall back on.", why=t(why)))
         LAST_NO_MATCH = True
         return 0
     keys, at_tempo = genre_shuffle(kind, genre, bpm, seed_info, report)
     if not keys:
-        report(f"{NO_MATCH} The build was empty because {why}, and nothing else in {genre} could be used.")
+        report(t("I couldn't find a match. Please try another seed. The build was empty because {why}, and nothing else in {genre} could be used.", why=t(why), genre=genre))
         LAST_NO_MATCH = True
         return 0
     spoken = f"I couldn't find a match, shuffling songs in {genre}" + (" at a similar tempo" if at_tempo else "")
-    report(spoken + ".")
-    report(f"  Why: {why}. Genre from {source}"
-           + (f", {bpm:.0f} BPM give or take {int(FALLBACK_BPM_SPREAD * 100)}%." if at_tempo else ".")
-           + f" If All Else Fails: {len(keys)} tracks.")
+    report(t("I couldn't find a match, shuffling songs in {genre} at a similar tempo.", genre=genre) if at_tempo
+           else t("I couldn't find a match, shuffling songs in {genre}.", genre=genre))
+    if at_tempo:
+        report("  " + t("Why: {why}. Genre from {source}, {bpm} BPM give or take {spread}%. If All Else Fails: {count} "
+                        "tracks.", why=t(why), source=t(source), bpm=f"{bpm:.0f}", spread=int(FALLBACK_BPM_SPREAD * 100),
+                        count=len(keys)))
+    else:
+        report("  " + t("Why: {why}. Genre from {source}. If All Else Fails: {count} tracks.", why=t(why),
+                        source=t(source), count=len(keys)))
     _say_first(spoken, seed_info, report)
     send_to_jriver(keys, seed_info=seed_info, report=report)
     FALLBACK_HANDLED = True
@@ -5965,30 +6006,28 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
         pn_rows = playing_now_rows(seed_info.get("ZoneID") or seed_zone())
         artists = playing_now_artists(pn_rows)
         if len(pn_rows) < 2 or not artists:
-            report(f"Similar Artists: {seed_label(seed_info)}")
-            report("  Note: Seed is Playing Now, but it has fewer than 2 tracks, so the current track seeds "
-                   "this build instead.")
+            report(t("Similar Artists: {seed_label}", seed_label=seed_label(seed_info)))
+            report("  " + t("Note: Seed is Playing Now, but it has fewer than 2 tracks, so the current track seeds this build instead."))
             pn_rows = []
         elif similar_needs_track():
-            report(f"Similar Artists: {seed_label(seed_info)}")
-            report("  Note: Seed is Playing Now, but YouTube is the only Similar Artists source and it works "
-                   "from one track, so the current track seeds this build instead.")
+            report(t("Similar Artists: {seed_label}", seed_label=seed_label(seed_info)))
+            report("  " + t("Note: Seed is Playing Now, but YouTube is the only Similar Artists source and it works from one track, so the current track seeds this build instead."))
             pn_rows = []
         else:
             sample = random.sample(artists, min(figs["PN_SAMPLE_ARTISTS"], len(artists)))
-            report(f"Similar Artists: Playing Now ({len(pn_rows)} tracks, {len(artists)} artists)")
-            report(f"  Artists sampled from Playing Now: {', '.join(sample)}")
+            report(t("Similar Artists: Playing Now ({pn_rows_count} tracks, {artists_count} artists)", pn_rows_count=len(pn_rows), artists_count=len(artists)))
+            report("  " + t("Artists sampled from Playing Now: {items}", items=', '.join(sample)))
     if sample is None:
         figs = None
         seeds = seed_artists(seed_info)
         if not (playing_now and not seed_info.get("Typed")):
-            report(f"Similar Artists: {seed_label(seed_info)}")
+            report(t("Similar Artists: {seed_label}", seed_label=seed_label(seed_info)))
         # YouTube ticked on its own: play its up next queue as is, no artist blend
         if similar_needs_track():
             create_youtube_queue_playlist(seed_info, seeds, report=report)
             return
         if len(seeds) > 1:
-            report(f"  Multi-value artist, treating as any of: {', '.join(seeds)}")
+            report("  " + t("Multi-value artist, treating as any of: {items}", items=', '.join(seeds)))
         pool, pick = TRACKS_PER_ARTIST_POOL, TRACKS_PER_ARTIST_PICK
         limited = SIMILAR_ARTIST_TRACK_LIMIT or topup
         count = SIMILAR_ARTIST_TRACK_COUNT
@@ -6012,8 +6051,10 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
 
     report_missing_keys(report, similar=True, top_tracks=True)
     target = count if limited else 0   # 0: no limit, and nothing for Drift to fill
-    report(f"  Per artist: top {pool} from sources, {pick} picked at random "
-           + (f"(target {target} tracks)." if limited else "(no limit on total tracks)."))
+    report("  " + (t("Per artist: top {pool} from sources, {pick} picked at random (target {target} tracks).", pool=pool,
+                     pick=pick, target=target) if limited else
+                   t("Per artist: top {pool} from sources, {pick} picked at random (no limit on total tracks).",
+                     pool=pool, pick=pick)))
     session_id = session_start("similar", session_seed)
     fast = FastStart(seed_info, report)
     first_key = typed_seed_key(seed_info, seeds, session_id, report)
@@ -6069,7 +6110,7 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
             if suggested_by == ["AI"] and not deezer_artist_exists(artist):
                 debug(f"{artist} (AI): not a verifiable artist name, left out")
                 continue
-            report(f"  {artist} ({', '.join(suggested_by)})...")
+            report("  " + t("{artist} ({items})...", artist=artist, items=', '.join(suggested_by)))
             found = []
             pick_top_tracks_for_artist(artist, session_id, suggested_by, report=report,
                                        consider=pool, pick=pick, defer=deferred, found=found, skip_keys=pn_keys,
@@ -6083,7 +6124,7 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
     # --- Seed artist(s): own top tracks, excluding the playing track and anything in Playing Now ---
     prefetch_top_tracks(seeds, pool + 1)   # quietly; one more than the pool, as the playing track is left out
     for seed in seeds:
-        report(f"  Seed artist: {seed}...")
+        report("  " + t("Seed artist: {seed}...", seed=seed))
         found = []
         pick_top_tracks_for_artist(seed, session_id, ["seed"], report=report,
                                    exclude_track=None if sample else seed_info['Name'],
@@ -6099,11 +6140,11 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
         similar, source_label = blended_similar_artists(seeds, limit=fetch, seed_track=seed_info['Name'],
                                                         report=report)
         labels.append(source_label)
-        report(f"  Similar artists from {source_label.replace(' + ', ', ')}: {len(similar)} suggested, "
-               f"taking {want} with tracks in your library")
+        report("  " + t("Similar artists from {replace}: {similar_count} suggested, taking {want} with tracks in your library", replace=source_label.replace(' + ', ', '), similar_count=len(similar), want=want))
         got, checked = take(similar, want)
-        report(f"  Similar artists in your library: {got} of {want}"
-               + (f" ({checked - got} skipped with no tracks in your library)" if checked > got else "") + ".")
+        report("  " + (t("Similar artists in your library: {got} of {want} ({skipped} skipped with no tracks in your "
+                         "library).", got=got, want=want, skipped=checked - got) if checked > got
+                       else t("Similar artists in your library: {got} of {want}.", got=got, want=want)))
     else:
         per = figs["PN_ARTISTS_PER_SAMPLE"]
         need, total = 0, 0
@@ -6114,18 +6155,18 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
                                                             seed_track=seed_titles.get(artist_key(seed)))
             if source_label not in labels and source_label != "none":
                 labels.append(source_label)
-            report(f"  Similar to {seed}, taking {need}:")
+            report("  " + t("Similar to {seed}, taking {need}:", seed=seed, need=need))
             got, _ = take(similar, need, seed=seed_tracks.get(artist_key(seed)))
             total += got
             if got < need:
-                report(f"    {need - got} short for {seed}, passed on to the next artist.")
+                report("    " + t("{value} short for {seed}, passed on to the next artist.", value=need - got, seed=seed))
             need -= got
-        report(f"  Similar artists in your library: {total} of {per * len(seeds)}.")
+        report("  " + t("Similar artists in your library: {total} of {value}.", total=total, value=per * len(seeds)))
     source_label = " + ".join(labels) if labels else "none"
 
     # --- Update JRiver queue ---
     if deferred:
-        report(f"  Looking up {len(deferred)} tracks on {output_streaming()}, several at a time...")
+        report("  " + t("Looking up {deferred_count} tracks on {output_streaming}, several at a time...", deferred_count=len(deferred), output_streaming=output_streaming()))
         found = []
         resolve_deferred_picks(deferred, report, found=found)
         add(found, 1)
@@ -6138,7 +6179,7 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
         # only the seed track itself was found: If All Else Fails rather than a one-track playlist
         played.done()
         queued = if_all_else_fails("artists", seed_info, report,
-                                   why="nothing was found beyond the seed track itself")
+                                   why=N_("nothing was found beyond the seed track itself"))
         if queued or FALLBACK_HANDLED:
             session_finish(session_id, queued, sources=source_label, report=report)
             return
@@ -6151,7 +6192,7 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
         debug("Queue refreshed")
     else:
         played.done()
-        report(f"Problem: nothing suggested is {where_found(True)}.")
+        report(t("Problem: nothing suggested is {where_found}.", where_found=where_found(True)))
         queued = send_mix_only(fast, seed_info, report)
         if not queued:   # nothing found and no added playlist: If All Else Fails
             queued = if_all_else_fails('artists', seed_info, report)
@@ -6175,9 +6216,9 @@ def lastfm_similar_tracks(artist, track, limit=SIMILAR_TRACK_FETCH):
         r = requests.get("http://ws.audioscrobbler.com/2.0/", timeout=20, params={
             "method": "track.getsimilar", "artist": artist, "track": track, "autocorrect": 1,
             "api_key": LASTFM_KEY, "format": "json", "limit": limit})
-        return [[t["artist"]["name"], t["name"]] for t in r.json().get("similartracks", {}).get("track", [])]
+        return [[tval["artist"]["name"], tval["name"]] for tval in r.json().get("similartracks", {}).get("track", [])]
     except Exception as e:
-        print(f"  Problem: Last.fm didn't answer for similar tracks ({e}).")
+        print("  " + t("Problem: Last.fm didn't answer for similar tracks ({e}).", e=e))
         return []
 
 
@@ -6226,7 +6267,7 @@ def listenbrainz_similar_tracks(artist, track, limit=SIMILAR_TRACK_FETCH):
                  for row in (_labs_rows(r.json()) if r.status_code == 200 else [])}
         return [names[m] for m in mbids if m in names and names[m][1]]
     except Exception as e:
-        print(f"  Problem: ListenBrainz didn't answer for similar tracks ({e}).")
+        print("  " + t("Problem: ListenBrainz didn't answer for similar tracks ({e}).", e=e))
         return []
 
 
@@ -6250,7 +6291,7 @@ def ai_similar_tracks(artist, track, limit=SIMILAR_TRACK_FETCH, missed=None):
     suggestions, none of them in the library, to be left out of a second request."""
     prompt = AI_SIMILAR_TRACKS_PROMPT.format(artist=artist, track=track, limit=min(limit, 40))
     if missed:
-        prompt += AI_ASK_AGAIN.format(missed="\n".join(f"{a} - {t}" for a, t in missed))
+        prompt += AI_ASK_AGAIN.format(missed="\n".join(f"{a} - {tval}" for a, tval in missed))
     data = ai_ask_json(prompt, feature="Similar Tracks (AI source)")
     out = []
     for item in data if isinstance(data, list) else []:
@@ -6287,7 +6328,7 @@ def similar_track_candidates(seeds, track, report=print):
     for code in SIMILAR_TRACK_SOURCES:
         name, fetch = TRACK_PROVIDERS[code]
         if not source_has_key(code):
-            report(f"  Note: {name} is ticked but has no key, so it was skipped. {KEY_HELP_LINE}")
+            report("  " + t("Note: {name} is ticked but has no key, so it was skipped. {key_help_line}", name=name, key_help_line=KEY_HELP_LINE))
             continue
         pairs, from_cache = [], False
         tries = list(seeds)
@@ -6310,7 +6351,7 @@ def similar_track_candidates(seeds, track, report=print):
                 break
         if code == "ai" and pairs and not output_streaming() and not _any_in_library(pairs):
             # none of the AI's tracks are in the library: ask it once more, for different ones
-            report(f"  None of the AI's suggestions for {seed} - {track} are in your library, so asking once more.")
+            report("  " + t("None of the AI's suggestions for {seed} - {track} are in your library, so asking once more.", seed=seed, track=track))
             again = ai_similar_tracks(seed, track, missed=[tuple(p) for p in pairs if len(p) == 2])
             if again:
                 pairs = again
@@ -6323,7 +6364,7 @@ def similar_track_candidates(seeds, track, report=print):
             note = " (from cache)"
         elif code == "ai" and AI_LAST_ERROR:
             note = f" ({AI_LAST_ERROR})"
-        report(f"  {name}: {len(pairs)} similar tracks{note}")
+        report("  " + t("{name}: {pairs_count} similar tracks{note}", name=name, pairs_count=len(pairs), note=note))
         if pairs:
             results.append((name, pairs))
     blended = blend_lists(results, lambda p: (artist_key(p[0]), clean_name(p[1])))
@@ -6415,9 +6456,9 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
     samples = sample_playing_now_tracks(rows, figs["PN_SAMPLE_TRACKS"])
     per_sample, per_artist = figs["PN_TRACKS_PER_SAMPLE"], figs["PN_SIMILAR_TRACK_PER_ARTIST"]
     target = per_sample * len(samples)
-    report(f"Similar Tracks: Playing Now ({len(rows)} tracks)  (target {target}, at most {per_artist} per artist)")
-    report("  Tracks sampled from Playing Now: " + "; ".join(f"{a} - {t}" for a, t in samples))
-    label = "Playing Now: " + "; ".join(f"{a} - {t}" for a, t in samples)
+    report(t("Similar Tracks: Playing Now ({rows_count} tracks)  (target {target}, at most {per_artist} per artist)", rows_count=len(rows), target=target, per_artist=per_artist))
+    report("  Tracks sampled from Playing Now: " + "; ".join(f"{a} - {tval}" for a, tval in samples))
+    label = "Playing Now: " + "; ".join(f"{a} - {title}" for a, title in samples)
     session_id = session_start("similar_tracks", dict(seed_info, Artist=PLAYING_NOW_SESSION, Name="", Album=""))
     fast = FastStart(seed_info, report)
     pn_keys = {str(r.get("Key")) for r in rows if r.get("Key")}
@@ -6432,12 +6473,12 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
     extra_each = -(-extra // len(samples)) if extra else 0
 
     keys, per, groups, labels = [], {}, [], []
-    checked = {(artist_key(a), clean_name(t)) for a, t in samples}
+    checked = {(artist_key(a), clean_name(tval)) for a, tval in samples}
     owed = 0
     for i, (artist, title) in enumerate(samples):
         check_cancelled()
         owed += per_sample + extra_each   # this sample's share, plus any shortfall passed on
-        report(f"  Similar to {artist} - {title}, taking {owed}:")
+        report("  " + t("Similar to {artist} - {title}, taking {owed}:", artist=artist, title=title, owed=owed))
         blended, responding = similar_track_candidates([artist], title, report)
         for name in responding:
             if name not in labels:
@@ -6459,7 +6500,7 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
                        else library.find_track_key(c_artist, c_title))
                 session_log(session_id, c_artist, c_title, sources, found=bool(key), seed=f"{artist} - {title}")
                 if key and str(key) in pn_keys:
-                    report(f"    Already in Playing Now: {c_artist} - {c_title}")
+                    report("    " + t("Already in Playing Now: {c_artist} - {c_title}", c_artist=c_artist, c_title=c_title))
                     continue
                 owner = owner_key(c_artist, key) if key else ident[0]   # counted as tagged in the library
                 if (key and key not in keys and str(key) not in pool_keys and played.fresh(key)
@@ -6468,12 +6509,12 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
                     pool_keys.add(str(key))
                     pool_per[owner] = pool_per.get(owner, 0) + 1
                     fast.play(key)
-                    report(f"    {found_label(True)}: {c_artist} - {c_title}  ({', '.join(sources)})")
+                    report("    " + t("{found_label}: {c_artist} - {c_title}  ({items})", found_label=found_label(True), c_artist=c_artist, c_title=c_title, items=', '.join(sources)))
                 elif not key:
-                    report(f"    {found_label(False)}: {c_artist} - {c_title}")
+                    report("    " + t("{found_label}: {c_artist} - {c_title}", found_label=found_label(False), c_artist=c_artist, c_title=c_title))
             if len(pool) >= owed or need <= 1:
                 break
-            report(f"    {len(pool)} tracks with {need} or more sources agreeing, so relaxed to {need - 1}.")
+            report("    " + t("{pool_count} tracks with {need} or more sources agreeing, so relaxed to {value}.", pool_count=len(pool), need=need, value=need - 1))
             need -= 1
         picks = pick_varied(pool, owed, per, per_artist, keep=fast.key)
         group = []
@@ -6484,11 +6525,11 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
             drift.note(c_artist, c_title, key, len(sources))
         groups.append(group)
         if len(picks) < len(pool):
-            report(f"    Picked {len(picks)} of {len(pool)} at random, the closest the most likely, for variety.")
+            report("    " + t("Picked {picks_count} of {pool_count} at random, the closest the most likely, for variety.", picks_count=len(picks), pool_count=len(pool)))
         owed -= len(picks)
         if owed > 0 and i < len(samples) - 1:
-            report(f"    {owed} short, passed on to the next sampled track.")
-    report(f"  Similar tracks {where_found(True)}: {min(len(keys), target)} of {target}.")
+            report("    " + t("{owed} short, passed on to the next sampled track.", owed=owed))
+    report("  " + t("Similar tracks {where_found}: {min} of {target}.", where_found=where_found(True), min=min(len(keys), target), target=target))
     drift.checked |= checked
     drift.moderate(keys, [k for k in keys if str(k) != fast.key])
 
@@ -6508,12 +6549,12 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
             body = [g[n] for n in range(max((len(g) for g in groups), default=0)) for g in groups if n < len(g)]
         keys = fast.lead(body)[:target]
         queued = finish_playlist(keys, drift, fast, seed_info, report,
-                                 "" if SIMILAR_TRACK_ORDER == "shuffled" else ", most similar first")
+                                 "" if SIMILAR_TRACK_ORDER == "shuffled" else N_(", most similar first"))
         played.done()
         debug("Queue refreshed")
     else:
         played.done()
-        report(f"Problem: nothing suggested is {where_found(True)}.")
+        report(t("Problem: nothing suggested is {where_found}.", where_found=where_found(True)))
         queued = send_mix_only(fast, seed_info, report)
         if not queued:   # nothing found and no added playlist: If All Else Fails
             queued = if_all_else_fails('tracks', seed_info, report)
@@ -6554,14 +6595,13 @@ def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=Fal
         fell_back = True
     track = seed_info.get("Name") or ""
     if not track or track == "Unknown":
-        report("Problem: Similar Tracks needs a track to seed from. Type one on the Search tab.")
+        report(t("Problem: Similar Tracks needs a track to seed from. Type one on the Search tab."))
         return
     seeds = seed_artists(seed_info)
     target, per_artist = SIMILAR_TRACK_COUNT, SIMILAR_TRACK_PER_ARTIST
-    report(f"Similar Tracks: {seed_info['Artist']} - {track}  (target {target}, at most {per_artist} per artist)")
+    report(t("Similar Tracks: {artist} - {track}  (target {target}, at most {per_artist} per artist)", artist=seed_info['Artist'], track=track, target=target, per_artist=per_artist))
     if fell_back:
-        report("  Note: Seed is Playing Now, but it has fewer than 2 tracks, so the current track seeds "
-               "this build instead.")
+        report("  " + t("Note: Seed is Playing Now, but it has fewer than 2 tracks, so the current track seeds this build instead."))
     session_id = session_start("similar_tracks", seed_info)
     fast = FastStart(seed_info, report)
     first_key = typed_seed_key(seed_info, seeds, session_id, report)
@@ -6612,21 +6652,21 @@ def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=Fal
                 pool_keys.add(str(key))
                 pool_per[owner] = pool_per.get(owner, 0) + 1
                 fast.play(key)
-                report(f"    {found_label(True)}: {artist} - {title}  ({', '.join(sources)})")
+                report("    " + t("{found_label}: {artist} - {title}  ({items})", found_label=found_label(True), artist=artist, title=title, items=', '.join(sources)))
             elif not key:
-                report(f"    {found_label(False)}: {artist} - {title}")
+                report("    " + t("{found_label}: {artist} - {title}", found_label=found_label(False), artist=artist, title=title))
         if len(keys) + len(pool) >= wanted or need <= 1:
             break
-        report(f"  {len(keys) + len(pool)} tracks with {need} or more sources agreeing, so relaxed to {need - 1}.")
+        report("  " + t("{value} tracks with {need} or more sources agreeing, so relaxed to {value2}.", value=len(keys) + len(pool), need=need, value2=need - 1))
         need -= 1
     picks = pick_varied(pool, wanted - len(keys), per, per_artist, keep=fast.key)
     for artist, title, key, sources, owner in picks:
         keys.append(key)
         per[owner] = per.get(owner, 0) + 1
         drift.note(artist, title, key, len(sources))
-    report(f"  Suggested {len(candidates)}, checked {len(checked)}, {where_found()} {len(keys) + len(pool) - len(picks)}.")
+    report("  " + t("Suggested {candidates_count}, checked {checked_count}, {where_found} {value}.", candidates_count=len(candidates), checked_count=len(checked), where_found=where_found(), value=len(keys) + len(pool) - len(picks)))
     if len(picks) < len(pool):
-        report(f"  Picked {len(picks)} of those {len(pool)} at random, the closest the most likely, for variety.")
+        report("  " + t("Picked {picks_count} of those {pool_count} at random, the closest the most likely, for variety.", picks_count=len(picks), pool_count=len(pool)))
     drift.checked |= checked
     drift.moderate(keys, [k for k in keys if k != first_key and str(k) != fast.key])
 
@@ -6641,7 +6681,7 @@ def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=Fal
         # only the seed track itself was found: If All Else Fails rather than a one-track playlist
         played.done()
         queued = if_all_else_fails("tracks", seed_info, report,
-                                   why="nothing was found beyond the seed track itself")
+                                   why=N_("nothing was found beyond the seed track itself"))
         if queued or FALLBACK_HANDLED:
             session_finish(session_id, queued, sources=source_label, report=report)
             return
@@ -6651,11 +6691,11 @@ def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=Fal
             random.shuffle(body)
         keys = fast.lead(([first_key] if first_key else []) + body, first_key)[:target]
         queued = finish_playlist(keys, drift, fast, seed_info, report,
-                                 "" if SIMILAR_TRACK_ORDER == "shuffled" else ", most similar first")
+                                 "" if SIMILAR_TRACK_ORDER == "shuffled" else N_(", most similar first"))
         played.done()
         debug("Queue refreshed")
     else:
-        report(f"Problem: nothing suggested is {where_found(True)}.")
+        report(t("Problem: nothing suggested is {where_found}.", where_found=where_found(True)))
         queued = send_mix_only(fast, seed_info, report)
         if not queued:   # nothing found and no added playlist: If All Else Fails
             queued = if_all_else_fails('tracks', seed_info, report)
@@ -6702,7 +6742,7 @@ def steer_seed_pairs(all_tracks=False, zone=None):
 
 
 def _tracks_block(pairs):
-    return "\n".join(f"- {a} - {t}" for a, t in pairs)
+    return "\n".join(f"- {a} - {tval}" for a, tval in pairs)
 
 
 def ai_assess_tone(pairs):
@@ -6724,7 +6764,7 @@ def steer_description(directions, own_words, strength):
     return ", ".join(parts[:-1]) + (" and " if len(parts) > 1 else "") + parts[-1]
 
 
-IF_SHORT_NAMES = {"ask": "Ask Again", "drift": "Drift", "leave": "Leave Short"}
+IF_SHORT_NAMES = {"ask": N_("Ask Again"), "drift": "Drift", "leave": N_("Leave Short")}
 
 
 def library_bpm(key):
@@ -6766,8 +6806,11 @@ class BpmCheck:
             return True
         if (self.faster and bpm < self.seed_bpm) or (self.slower and bpm > self.seed_bpm):
             self.dropped += 1
-            self.report(f"    Left out: {artist} - {track}  ({bpm:.0f} BPM, not "
-                        f"{'faster' if self.faster else 'slower'} than the seed's {self.seed_bpm:.0f})")
+            self.report("    " + (t("Left out: {artist} - {track}  ({bpm} BPM, not faster than the seed's {seed_bpm})",
+                                       artist=artist, track=track, bpm=f"{bpm:.0f}", seed_bpm=f"{self.seed_bpm:.0f}")
+                                     if self.faster else
+                                     t("Left out: {artist} - {track}  ({bpm} BPM, not slower than the seed's {seed_bpm})",
+                                       artist=artist, track=track, bpm=f"{bpm:.0f}", seed_bpm=f"{self.seed_bpm:.0f}")))
             return False
         self.kept += 1
         return True
@@ -6776,12 +6819,11 @@ class BpmCheck:
         if not self.active:
             return
         if self.seed_bpm is None:
-            self.report("  Note: the seed has no BPM tag, so Faster/Slower was left to the AI's judgement.")
+            self.report("  " + t("Note: the seed has no BPM tag, so Faster/Slower was left to the AI's judgement."))
             return
         word = "faster" if self.faster else "slower"
         tail = f"; {self.untagged} untagged, trusted to the AI" if self.untagged else ""
-        self.report(f"  BPM check against the seed's {self.seed_bpm:.0f} BPM: {self.kept} {word}, "
-                    f"{self.dropped} left out{tail}.")
+        self.report("  " + t("BPM check against the seed's {seed_bpm:.0f} BPM: {kept} {word}, {dropped} left out{tail}.", seed_bpm=self.seed_bpm, kept=self.kept, word=word, dropped=self.dropped, tail=tail))
 
 
 def steer_playlist(seed_pairs, directions, own_words="", strength="little", tone="", count=12, report=print,
@@ -6792,7 +6834,7 @@ def steer_playlist(seed_pairs, directions, own_words="", strength="little", tone
     Runs as an AI Playlist build, so Behaviour (Play / Review) and Output apply as usual.
     """
     if not seed_pairs:
-        report("Problem: nothing is playing to steer from. Start a track, or use Create.")
+        report(t("Problem: nothing is playing to steer from. Start a track, or use Create."))
         return
     direction = steer_description(directions, own_words, strength)
     how = "a long way" if strength == "lot" else "a little"
@@ -6802,7 +6844,7 @@ def steer_playlist(seed_pairs, directions, own_words="", strength="little", tone
     label = f"Steer: {direction} ({how})" + (f", from {len(seed_pairs)} tracks" if len(seed_pairs) > 1 else "")
     check = None
     if ("faster" in directions) != ("slower" in directions):
-        seed_keys = [k for k in (find_jriver_key_by_track(a, t) for a, t in seed_pairs) if k]
+        seed_keys = [k for k in (find_jriver_key_by_track(a, tval) for a, tval in seed_pairs) if k]
         check = BpmCheck(seed_keys, directions, report)
     create_vibe_playlist(label, report=report, count=count, prompt=prompt, if_short=if_short, check=check)
 
@@ -6820,14 +6862,15 @@ def create_vibe_playlist(vibe, report=print, count=None, prompt=None, if_short=N
     refresh_settings_if_changed()
     vibe = (vibe or "").strip()
     if not vibe:
-        report("Problem: no description was given.")
+        report(t("Problem: no description was given."))
         return
     if not ai_configured():
-        report(f"Problem: AI Playlist needs {ai_missing_text()}. " + KEY_HELP_LINE)
+        report(t("Problem: AI Playlist needs {what}. Settings > Keys", what=ai_missing_text()))
         return
     target = VIBE_TRACK_COUNT if count is None else min(100, max(5, int(count)))
-    report(f"AI Playlist: {vibe}  (target {target} tracks"
-           + (f", if short: {IF_SHORT_NAMES[if_short]}" if if_short in IF_SHORT_NAMES else "") + ")")
+    report(t("AI Playlist: {vibe}  (target {target} tracks, if short: {if_short})", vibe=vibe, target=target,
+             if_short=t(IF_SHORT_NAMES[if_short])) if if_short in IF_SHORT_NAMES else
+           t("AI Playlist: {vibe}  (target {target} tracks)", vibe=vibe, target=target))
 
     seed_info = {"Artist": "AI Playlist", "Name": vibe, "Album": ""}
     session_id = session_start("vibe", seed_info, "AI")
@@ -6846,10 +6889,10 @@ def create_vibe_playlist(vibe, report=print, count=None, prompt=None, if_short=N
         drift.on = False
     wanted = min(100, target * 2)   # about twice as many as needed: some won't be in the library
 
-    report("  Asking the AI for tracks...")
+    report("  " + t("Asking the AI for tracks..."))
     pairs = ai_vibe_tracks(vibe, count=wanted, prompt=prompt.replace("{count}", str(wanted)) if prompt else None)
     if not pairs:
-        report("  Problem: the AI returned nothing usable.")
+        report("  " + t("Problem: the AI returned nothing usable."))
         session_finish(session_id, send_mix_only(fast, None, report), report=report)
         return
 
@@ -6862,34 +6905,34 @@ def create_vibe_playlist(vibe, report=print, count=None, prompt=None, if_short=N
             session_log(session_id, artist, track, "AI", found=True)
             continue
         if key:
-            report(f"    {found_label(True)}: {artist} - {track}")
+            report("    " + t("{found_label}: {artist} - {track}", found_label=found_label(True), artist=artist, track=track))
             if key not in keys and played.fresh(key):
                 keys.append(key)
                 drift.note(artist, track, key, 1)
                 fast.play(key)
             session_log(session_id, artist, track, "AI", found=True)
         else:
-            report(f"    {found_label(False)}: {artist} - {track}")
+            report("    " + t("{found_label}: {artist} - {track}", found_label=found_label(False), artist=artist, track=track))
             misses += 1
             drift.ai_tried.add((artist, track))   # so Drift using the AI doesn't ask for it again
             session_log(session_id, artist, track, "AI", found=False)
-    report(f"  AI picks: {len(keys)} {where_found()}, {misses} not.")
+    report("  " + t("AI picks: {keys_count} {where_found}, {misses} not.", keys_count=len(keys), where_found=where_found(), misses=misses))
     if check is not None:
         check.summary()
     # the AI's own picks aren't moderated; Drift tracks from the sources can be (Settings > Playlist)
 
     if not keys:
-        report(f"Problem: nothing the AI picked is {where_found(True)}. Try a different description.")
+        report(t("Problem: nothing the AI picked is {where_found}. Try a different description.", where_found=where_found(True)))
         queued = send_mix_only(fast, None, report)
         if not queued:   # If All Else Fails: the playing track's genre, if anything is playing
             queued = if_all_else_fails("vibe", get_playing_info(), report,
-                                       why="nothing the AI picked is in your library")
+                                       why=N_("nothing the AI picked is in your library"))
         session_finish(session_id, queued, report=report)
         return
 
     random.shuffle(keys)
     keys = fast.lead(keys)[:target]
-    sent = finish_playlist(keys, drift, fast, None, report, " (shuffled)")
+    sent = finish_playlist(keys, drift, fast, None, report, N_(" (shuffled)"))
     played.done()
     debug("Queue refreshed")
     session_finish(session_id, sent, report=report)
@@ -6923,9 +6966,9 @@ def play_top_n(report=print, seed_info=None):
     n = TOP_TRACKS_COUNT
     order = TOP_TRACKS_ORDER
 
-    report(f"Artist's Top Tracks: {seed_info['Artist']}  (top {n}, {order} order)")
+    report(t("Artist's Top Tracks: {artist}  (top {n}, {order} order)", artist=seed_info['Artist'], n=n, order=order))
     if len(seeds) > 1:
-        report(f"  Multi-value artist, fetching top {n} for each of: {', '.join(seeds)}")
+        report("  " + t("Multi-value artist, fetching top {n} for each of: {items}", n=n, items=', '.join(seeds)))
 
     session_id = None
     ordered_keys, labels_used = [], []
@@ -6936,15 +6979,15 @@ def play_top_n(report=print, seed_info=None):
     for artist in seeds:
         top_tracks, source_label = blended_top_tracks(artist, limit=n)
         if not top_tracks:
-            report(f"  Problem: no source returned top tracks for {artist}.")
+            report("  " + t("Problem: no source returned top tracks for {artist}.", artist=artist))
             continue
-        report(f"  {artist}: ranked from {source_label.replace(' + ', ', ')}")
+        report("  " + t("{artist}: ranked from {replace}", artist=artist, replace=source_label.replace(' + ', ', ')))
         if source_label not in labels_used:
             labels_used.append(source_label)
         if session_id is None:
             session_id = session_start("top_tracks", seed_info, source_label)
 
-        prefetch_youtube_ids([(artist, t) for t, _ in top_tracks[:n]])
+        prefetch_youtube_ids([(artist, tval) for tval, _ in top_tracks[:n]])
         for track_name, suggested_by in top_tracks[:n]:
             key = find_jriver_key_by_track(artist, track_name)
             is_playing = bool(key) and str(key) == playing_key
@@ -6956,20 +6999,20 @@ def play_top_n(report=print, seed_info=None):
             session_log(session_id, artist, track_name, suggested_by, found=bool(key))
 
     if session_id is None:
-        report("Problem: no source returned any top tracks.")
+        report(t("Problem: no source returned any top tracks."))
         nonstop_begin("top_tracks", seed_info)   # so Run After Building uses this group's file
         if not send_mix_only(fast, seed_info, report):
-            if_all_else_fails("top", seed_info, report, why="no source returned any top tracks")
+            if_all_else_fails("top", seed_info, report, why=N_("no source returned any top tracks"))
         run_after_building(report)
         return
     played.done()
     if not ordered_keys:
-        report(f"Problem: none of the top tracks are {where_found(True)}." if not played.skipped else
-               "Note: every top track in your library was played recently, so there's nothing to play. "
-               "Settings > Playlist > Artist's Top Tracks")
+        report(t("Problem: none of the top tracks are {where}.", where=where_found(True)) if not played.skipped else
+               t("Note: every top track in your library was played recently, so there's nothing to play. "
+                 "Settings > Playlist > Artist's Top Tracks"))
         queued = send_mix_only(fast, seed_info, report)
         if not queued:
-            queued = if_all_else_fails("top", seed_info, report, why="none of the top tracks could be used")
+            queued = if_all_else_fails("top", seed_info, report, why=N_("none of the top tracks could be used"))
         session_finish(session_id, queued, report=report)
         return
 
@@ -6980,7 +7023,7 @@ def play_top_n(report=print, seed_info=None):
         ordered_keys.reverse()
 
     labels = {"popular": "most popular first", "reverse": "least popular first", "random": "random order"}
-    report(f"  Sending {len(ordered_keys)} tracks, {labels[order]}...")
+    report("  " + t("Sending {ordered_keys_count} tracks, {value}...", ordered_keys_count=len(ordered_keys), value=labels[order]))
     mix_skipped(report)
     rest = fast.rest(combine_with_mix(ordered_keys, report) if mix_active() else ordered_keys)
     if rest:
@@ -7140,12 +7183,12 @@ def discogs_get(path, params=None):
                          headers={"User-Agent": USER_AGENT,
                                   "Authorization": f"Discogs token={DISCOGS_TOKEN}"})
         if r.status_code != 200:
-            print(f"  Problem: Discogs answered {r.status_code}.")
+            print("  " + t("Problem: Discogs answered {status_code}.", status_code=r.status_code))
             debug(f"Discogs {path}: {r.text[:200]}")
             return None
         return r.json()
     except Exception as e:
-        print(f"  Problem: Discogs didn't answer ({e}).")
+        print("  " + t("Problem: Discogs didn't answer ({e}).", e=e))
         return None
 
 
@@ -7236,7 +7279,7 @@ def _discogs_tracks(data):
         if kind == "heading":
             continue
         if kind == "index":
-            out.extend(t for t in entry.get("sub_tracks", []) if t.get("type_", "track") == "track")
+            out.extend(tval for tval in entry.get("sub_tracks", []) if tval.get("type_", "track") == "track")
         else:
             out.append(entry)
     return out
@@ -7268,7 +7311,7 @@ def discogs_credit_lists(data, seed_artist):
     ('Drums [Tracks 2 to 4]'); album people are the credits tagged for no track.
     """
     tracks = _discogs_tracks(data)
-    positions = [t.get("position", "") for t in tracks]
+    positions = [tval.get("position", "") for tval in tracks]
     album, tagged = [], []
     for credit in data.get("extraartists", []):
         spec = (credit.get("tracks") or "").strip()
@@ -7277,10 +7320,10 @@ def discogs_credit_lists(data, seed_artist):
         else:
             album.append(credit)
     per_track = []
-    for t in tracks:
-        pos = t.get("position", "")
-        own = list(t.get("extraartists", [])) + [c for covered, c in tagged if pos in covered]
-        per_track.append((pos, t.get("title", ""), _discogs_people(own, seed_artist)))
+    for tval in tracks:
+        pos = tval.get("position", "")
+        own = list(tval.get("extraartists", [])) + [c for covered, c in tagged if pos in covered]
+        per_track.append((pos, tval.get("title", ""), _discogs_people(own, seed_artist)))
     return _discogs_people(album, seed_artist), per_track
 
 
@@ -7297,7 +7340,7 @@ def discogs_release_credits(release_id, seed_artist):
 
 def _report_people(people, report, indent="    "):
     for name, roles in people:
-        report(f"{indent}{name} ({', '.join(sorted(roles))})")
+        report(t("{indent}{name} ({items})", indent=indent, name=name, items=', '.join(sorted(roles))))
 
 
 def explore_credits(report=print):
@@ -7314,17 +7357,17 @@ def explore_credits(report=print):
         return
 
     if not DISCOGS_TOKEN:
-        report("Problem: Show Credits needs a Discogs token. " + KEY_HELP_LINE)
+        report(t("Problem: Show Credits needs a Discogs token. Settings > Keys"))
         return
     artist, album, title = seed_info["Artist"], seed_info["Album"], seed_info.get("Name", "")
-    report(f"Show Credits: {artist} - {album}")
+    report(t("Show Credits: {artist} - {album}", artist=artist, album=album))
 
     found = discogs_find_release(artist, album)
     if not found:
-        report("  Problem: this release isn't on Discogs.")
+        report("  " + t("Problem: this release isn't on Discogs."))
         return
     release_id, release_label = found
-    report(f"  Using release: {release_label}")
+    report("  " + t("Using release: {release_label}", release_label=release_label))
 
     data = discogs_get(f"/releases/{release_id}")
     if not data:
@@ -7333,30 +7376,30 @@ def explore_credits(report=print):
 
     def album_section():
         if album_people:
-            report("  Credited on the album:")
+            report("  " + t("Credited on the album:"))
             _report_people(album_people, report)
         else:
-            report("  Note: no album-wide credits beyond the artist.")
+            report("  " + t("Note: no album-wide credits beyond the artist."))
 
     def track_section():
         if CREDITS_SCOPE == "all":
             credited = [(pos, name, people) for pos, name, people in per_track if people]
             if not credited:
-                report("  Note: no track has credits of its own on this release.")
+                report("  " + t("Note: no track has credits of its own on this release."))
                 return
-            report("  Credited on each track:")
+            report("  " + t("Credited on each track:"))
             for pos, name, people in credited:
                 report(f"    {pos} {name}".rstrip())
                 _report_people(people, report, indent="      ")
             return
         want = clean_name(title or "")
-        match = next((t for t in per_track if want and clean_name(t[1]) == want), None)
+        match = next((tval for tval in per_track if want and clean_name(tval[1]) == want), None)
         if not match:
-            report(f"  Note: \"{title}\" isn't on this Discogs release, so there are no track credits.")
+            report("  " + t('Note: "{title}" isn\'t on this Discogs release, so there are no track credits.', title=title))
         elif not match[2]:
-            report(f"  Note: \"{match[1]}\" has no credits of its own beyond the artist.")
+            report("  " + t('Note: "{value}" has no credits of its own beyond the artist.', value=match[1]))
         else:
-            report(f"  Credited on this track ({match[1]}):")
+            report("  " + t("Credited on this track ({value}):", value=match[1]))
             _report_people(match[2], report)
 
     sections = (track_section, album_section) if CREDITS_FIRST == "track" else (album_section, track_section)

@@ -22,6 +22,7 @@ import xml.etree.ElementTree as ET
 import requests
 
 import engine
+from i18n import t, tn
 
 DEFAULT_ROW = {"shuffle": "0", "blend": "no", "nonstop": "no", "reseed": "last", "skip": "0"}   # new playlists: as saved
 SEND_CHUNK = 400   # keys per JRiver call, so a long playlist doesn't make an over-long address
@@ -253,7 +254,7 @@ def play(found, zone, device_id=None, report=print):
     try:
         keys = playlist_keys(pid)
     except Exception as e:
-        report(f"  Problem: couldn't read {name} from JRiver ({e}), so it plays as saved.")
+        report("  " + t("Problem: couldn't read {name} from JRiver ({e}), so it plays as saved.", name=name, e=e))
         keys = []
     if not keys:
         r = requests.get(f"{engine.JRIVER_BASE}/Playback/PlayPlaylist",
@@ -267,8 +268,9 @@ def play(found, zone, device_id=None, report=print):
         if fresh:
             keys = fresh
         else:   # the safety net: a voice command should never end in silence
-            report(f"  Note: everything in {name} was played in the last {days} "
-                   f"day{'' if days == 1 else 's'}, so it plays in full.")
+            report("  " + tn("Note: everything in {name} was played in the last {count} day, so it plays in full.",
+                             "Note: everything in {name} was played in the last {count} days, so it plays in full.",
+                             days, name=name))
     if shuffle:
         random.shuffle(keys)
     if not _send(keys, zone):
@@ -282,7 +284,7 @@ def play(found, zone, device_id=None, report=print):
                               f"Blend: {name} on {engine.zone_label(zone)}",
                               {"from": "voice", "device": device_id} if device_id else None)
         except Exception as e:
-            report(f"  Problem: the blend didn't start ({e}), so {name} plays as saved.")
+            report("  " + t("Problem: the blend didn't start ({e}), so {name} plays as saved.", e=e, name=name))
     if nonstop == "no":
         engine.nonstop_forget(zone)
     else:

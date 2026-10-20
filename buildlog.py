@@ -17,19 +17,22 @@ import threading
 from datetime import datetime
 
 import engine
+import i18n
+from i18n import N_, t
 
 KEEP = 50
 MAIN = "main"   # the Main Window's tab key; a device's is its device ID
 _lock = threading.Lock()
 
-KINDS = {"similar": "Similar Artists", "youtube_queue": "Similar Artists", "similar_tracks": "Similar Tracks",
-         "top_tracks": "Artist's Top Tracks", "vibe": "AI Playlist"}
-HEADINGS = ("Similar Artists", "Similar Tracks", "Artist's Top Tracks", "AI Playlist", "Show Credits", "Blend")
-INSTANT = {"songs_by": "Artist's Top Tracks", "music_like": "Similar Artists", "tracks_like": "Similar Tracks",
-           "genre": "AI Playlist", "album": "Album", "song": "Song", "playlist": "Playlist",
-           "shuffle": "Shuffle Songs by Artist", "skip": "Skip", "who_is_this": "Who Is This",
-           "more_like": "More Like This", "switch_zones": "Switch", "stop": "Stop", "pause": "Pause",
-           "resume": "Resume", "keep_going": "Keep It Going"}
+KINDS = {"similar": N_("Similar Artists"), "youtube_queue": N_("Similar Artists"), "similar_tracks": N_("Similar Tracks"),
+         "top_tracks": N_("Artist's Top Tracks"), "vibe": N_("AI Playlist")}
+HEADINGS = (N_("Similar Artists"), N_("Similar Tracks"), N_("Artist's Top Tracks"), N_("AI Playlist"), N_("Show Credits"),
+            N_("Blend"))
+INSTANT = {"songs_by": N_("Artist's Top Tracks"), "music_like": N_("Similar Artists"), "tracks_like": N_("Similar Tracks"),
+           "genre": N_("AI Playlist"), "album": N_("Album"), "song": N_("Song"), "playlist": N_("Playlist"),
+           "shuffle": N_("Shuffle Songs by Artist"), "skip": N_("Skip"), "who_is_this": N_("Who Is This"),
+           "more_like": N_("More Like This"), "switch_zones": N_("Switch"), "stop": N_("Stop"), "pause": N_("Pause"),
+           "resume": N_("Resume"), "keep_going": N_("Keep It Going")}
 _TIME = re.compile(r"^\d\d:\d\d  ")
 
 
@@ -47,7 +50,7 @@ def _bodies(text):
 def _kind_from_text(text):
     for body in _bodies(text):
         for heading in HEADINGS:
-            if body.startswith(heading + ":"):
+            if body.startswith(tuple(h + ":" for h in i18n.either(heading))):
                 return heading
     return ""
 
@@ -62,17 +65,19 @@ def _moderator(text):
 
 
 def _count(text, word):
-    return sum(1 for body in _bodies(text) if body.startswith(word))
+    """Lines starting with word, in English (older builds) or the chosen language."""
+    words = i18n.either(word)
+    return sum(1 for body in _bodies(text) if body.startswith(words))
 
 
 def device_name(device_id):
     if device_id == "24bit7-settings-test":
-        return "Voice Test"
+        return N_("Voice Test")
     try:
         row = engine.db().execute("SELECT name FROM voice_devices WHERE device_id=?", (device_id,)).fetchone()
-        return row[0] if row and row[0] else "Unknown Device"
+        return row[0] if row and row[0] else N_("Unknown Device")
     except Exception:
-        return "Unknown Device"
+        return N_("Unknown Device")
 
 
 def _insert(con, row):
@@ -102,10 +107,11 @@ def record_job(origin, text):
     row = {"at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "tab": MAIN, "from_label": "Main Window",
            "zone": engine.LAST_OUTPUT or "", "zone_id": zone_id,
            "kind": (KINDS.get(built.get("mode")) or _kind_from_text(text))
-                   + (" (Cancelled)" if _count(text, "Cancelled:") else ""),
+                   + (" (Cancelled)" if _count(text, N_("Cancelled:")) else ""),
            "sources": (built.get("sources") or "").replace(" + ", ", "),
            "queued": built.get("queued"), "misses": built.get("misses"),
-           "moderator": _moderator(text), "problems": _count(text, "Problem:"), "notes": _count(text, "Note:"),
+           "moderator": built.get("moderator") or _moderator(text), "problems": _count(text, N_("Problem:")),
+           "notes": _count(text, N_("Note:")),
            "chain_id": None, "chain_pos": None, "text": text}
     if row["zone"] in ("YouTube", "Tidal"):
         row["misses"] = None   # nothing is checked against the library
@@ -117,7 +123,7 @@ def record_job(origin, text):
             row["tab"] = origin.get("device") or "unknown device"
             row["from_label"] = device_name(row["tab"])
         elif kind == "shortcut":
-            row["from_label"] = "Shortcut"
+            row["from_label"] = N_("Shortcut")
         elif kind == "nonstop":
             row["from_label"] = "Non-stop"
             prev = con.execute("SELECT id, tab, chain_id, chain_pos FROM builds WHERE zone_id=? "
@@ -185,8 +191,16 @@ def tab_for_zone(zone_id):
 
 
 def playlist_type(row):
-    """'Similar Tracks', or 'Similar Tracks · Non-stop 003' for a build in a chain."""
+    """'Similar Tracks', or 'Similar Tracks · Non-stop 003' for a build in a chain. Kept in English; shown translated."""
     kind = row.get("kind") or ""
+    cancelled = kind.endswith(" (Cancelled)")
+    kind = t(kind[:-len(" (Cancelled)")] if cancelled else kind) + (" (" + t("Cancelled") + ")" if cancelled else "")
     if row.get("chain_pos"):
         return f"{kind} · Non-stop {row['chain_pos']:03d}"
     return kind
+
+
+def moderator_shown(text):
+    """The Log's Moderator column: 'Balanced, 3 removed' is kept in English and shown translated."""
+    m = re.fullmatch(r"(\w+), (\d+) removed", text or "")
+    return t("{level}, {count} removed", level=t(m.group(1)), count=m.group(2)) if m else (text or "")

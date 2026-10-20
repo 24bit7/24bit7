@@ -24,6 +24,7 @@ import time
 import requests
 
 import engine
+from i18n import t, tn
 
 CAP = 50              # the most new tracks one blend adds
 SEEDS_PER_ROUND = 3
@@ -69,7 +70,7 @@ def _candidates(mode, artist, title, say):
         out = []
         for a, sources in similar:
             top, _ = engine.blended_top_tracks(a, limit=engine.TRACKS_PER_ARTIST_POOL)
-            out += [((a, t), len(sources)) for t, _ in top]
+            out += [((a, tval), len(sources)) for tval, _ in top]
         return out
     candidates, _ = engine.similar_track_candidates(artists, title, report=say)
     return [(pair, len(sources)) for pair, sources in candidates]
@@ -91,15 +92,15 @@ def find(keys, report, quiet=None, mode="tracks"):
         votes = {}
         for artist, title, key in seeds:
             used.add(key)
-            for (a, t), weight in _candidates(mode, artist, title, say):
-                ident = (engine.artist_key(a), engine.clean_name(t))
-                score, pair = votes.get(ident, (0, (a, t)))
+            for (a, tval), weight in _candidates(mode, artist, title, say):
+                ident = (engine.artist_key(a), engine.clean_name(tval))
+                score, pair = votes.get(ident, (0, (a, tval)))
                 votes[ident] = (score + 10 + weight, pair)   # agreement across seeds counts most
         added = 0
-        for ident, (_, (a, t)) in sorted(votes.items(), key=lambda x: -x[1][0]):
+        for ident, (_, (a, tval)) in sorted(votes.items(), key=lambda x: -x[1][0]):
             if len(found) >= target:
                 break
-            key = library.find_track_key(a, t)
+            key = library.find_track_key(a, tval)
             if not key or str(key) in exclude or str(key) in found:
                 continue
             owner = engine.owner_key(a, key)
@@ -108,7 +109,9 @@ def find(keys, report, quiet=None, mode="tracks"):
             per[owner] = per.get(owner, 0) + 1
             found.append(str(key))
             added += 1
-        report(f"  Round {rounds}: {added} new track{'' if added == 1 else 's'} found ({len(found)} of {target}).")
+        report("  " + tn("Round {round}: {count} new track found ({found} of {target}).",
+                         "Round {round}: {count} new tracks found ({found} of {target}).", added, round=rounds,
+                         found=len(found), target=target))
         if not added:
             break   # nothing new to find: stop rather than loop
         seeds = []
@@ -119,8 +122,7 @@ def find(keys, report, quiet=None, mode="tracks"):
                     seeds.append((row.get("Artist") or "", row.get("Name") or "", k))
     played.done()
     if len(found) < target:
-        report(f"  Note: found {len(found)} new tracks of the {target} wanted, so the blend ends early "
-               f"and the rest of the playlist plays as normal.")
+        report("  " + t("Note: found {found_count} new tracks of the {target} wanted, so the blend ends early and the rest of the playlist plays as normal.", found_count=len(found), target=target))
     return found
 
 
@@ -137,16 +139,17 @@ def job(zone, keys, name, device_id=None, mode="tracks"):
             engine.use_profile(profile)
             engine.FILTER_DEVICE = filters.device_for_zone(zone_name)
             engine.LAST_OUTPUT, engine.LAST_OUTPUT_ID = zone_name, zone
-            report(f"  Blending in {'similar artists' if mode == 'artists' else 'similar tracks'}, "
-                   f"one new track for each of yours, up to {CAP}.")
+            report("  " + (t("Blending in similar artists, one new track for each of yours, up to {cap}.", cap=CAP)
+                           if mode == "artists" else
+                           t("Blending in similar tracks, one new track for each of yours, up to {cap}.", cap=CAP)))
             new = find(keys, report, quiet=report, mode=mode)
             if not new:
-                report("Problem: nothing new was found to blend in, so the playlist plays as saved.")
+                report(t("Problem: nothing new was found to blend in, so the playlist plays as saved."))
                 return
             info = engine.get_playing_info(zone) or {}
             current = str(info.get("FileKey") or "")
             if current not in {str(k) for k in keys}:
-                report("Note: the music on this zone changed while the blend was found, so it was left alone.")
+                report(t("Note: the music on this zone changed while the blend was found, so it was left alone."))
                 return
             pos, count = int(info.get("PlayingNowPosition", -1)), int(info.get("PlayingNowTracks", 0))
             rest = [r["Key"] for r in engine.playing_now_rows(zone)[pos + 1:] if r.get("Key")]
@@ -156,8 +159,9 @@ def job(zone, keys, name, device_id=None, mode="tracks"):
                 entry = engine.NONSTOP_ZONES.get(zone)
                 if entry is not None:
                     entry["keys"] |= set(new)
-            report(f"Done: {len(new)} new track{'' if len(new) == 1 else 's'} blended into {name} "
-                   f"in {zone_name}, {max(0, round(time.time() - started))} s.")
+            report(tn("Done: {count} new track blended into {name} in {zone}, {seconds} s.",
+                      "Done: {count} new tracks blended into {name} in {zone}, {seconds} s.", len(new), name=name,
+                      zone=zone_name, seconds=max(0, round(time.time() - started))))
         finally:
             engine.use_profile(None)
             engine.FILTER_DEVICE = None

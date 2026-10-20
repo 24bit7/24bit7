@@ -68,6 +68,17 @@ def test_one_and_many(app):
         "3 tracks, 2 ticked")
 
 
+def test_the_ai_answers_in_the_chosen_language(app):
+    import i18n
+    i18n.set_language("en")
+    assert i18n.reply_line() == "", "English prompts are sent exactly as before"
+    i18n.set_language("de")
+    try:
+        assert "German" in i18n.reply_line()
+    finally:
+        i18n.set_language("en")
+
+
 def test_an_unknown_language_means_english(app):
     import i18n
     i18n.set_language("xx")

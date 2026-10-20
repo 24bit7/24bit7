@@ -56,6 +56,23 @@ def N_(text):
     return text
 
 
+# What the AI is told so its answers (Console Query, the AI Usage question, AI Playlist ideas) come back in the
+# chosen language. The instructions themselves stay English: the models follow them best.
+REPLY_IN = {"de": "Write your answer in German, addressing the person informally (du). Keep song, artist and album "
+                  "names exactly as they are."}
+
+
+def reply_line():
+    """'' in English; otherwise a line for the end of an AI prompt asking for the answer in the chosen language."""
+    line = REPLY_IN.get(LANGUAGE)
+    return "\n\n" + line if line else ""
+
+
+def either(text):
+    """The text in English and in the chosen language: what code checks when it recognises a line it wrote."""
+    return tuple(dict.fromkeys((text, t(text))))
+
+
 def tn(one, many, count, **blanks):
     """A sentence that changes with a number: one for exactly one, many for any other. {count} is the number."""
     return t(one if count == 1 else many, count=count, **blanks)

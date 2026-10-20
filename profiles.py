@@ -22,6 +22,7 @@ import os
 import re
 
 import engine
+from i18n import t, tn
 
 PROFILE_DIR = os.path.join(engine.APP_DIR, "profiles")
 PENDING = os.path.join(PROFILE_DIR, "_pending.json")
@@ -252,7 +253,7 @@ def apply_pending():
         apply(data)
         return data.get("name") or ""
     except Exception as e:
-        print(f"Problem: the profile couldn't be loaded ({e}).")
+        print(t("Problem: the profile couldn't be loaded ({e}).", e=e))
         return ""
     finally:
         try:

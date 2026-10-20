@@ -22,7 +22,7 @@ import json
 import time
 import uuid
 
-from i18n import N_
+from i18n import N_, t, tn
 
 import engine
 
@@ -225,21 +225,21 @@ def describe_rule(rule):
     op = dict(ops).get(rule.get("op"), "")
     value = rule.get("value", "")
     if kind == "stars":
-        value = ", ".join(x for x in str(value).split(",") if x) or "none"
+        value = ", ".join(x for x in str(value).split(",") if x) or t("none")
     elif rule.get("op") == "between":
-        value = f"{value} and {rule.get('value2', '')}"
-    unit = {"days": " days", "minutes": " min", "khz": " kHz"}.get(kind, "")
-    return f"{label} {op} {value}{unit}"
+        value = f"{value} {t('and')} {rule.get('value2', '')}"
+    unit = {"days": " " + t("days"), "minutes": " min", "khz": " kHz"}.get(kind, "")
+    return f"{t(label)} {t(op)} {value}{unit}"
 
 
 def describe(item):
     """A short line for the Active filters list and the log."""
     bits = []
     if item.get("pick_from"):
-        bits.append(f"only from {item.get('pick_name') or 'a playlist'}")
+        bits.append(t("only from {name}", name=item.get("pick_name") or t("a playlist")))
     rules = [describe_rule(r) for r in item.get("rules") or []]
     if rules:
-        bits.append((" and " if item.get("match", "all") == "all" else " or ").join(rules))
+        bits.append((" " + t("and") + " " if item.get("match", "all") == "all" else " " + t("or") + " ").join(rules))
     return item["name"] + (f" ({'; '.join(bits)})" if bits else "")
 
 
@@ -264,12 +264,11 @@ class Active:
                 import saved_playlists
                 keys = {str(k) for k in saved_playlists.playlist_keys(item["pick_from"])}
             except Exception as e:
-                report(f"  Problem: the filter {item['name']} couldn't read {item.get('pick_name') or 'its playlist'} "
-                       f"from JRiver ({e}), so it was skipped this time.")
+                report("  " + t("Problem: the filter {name} couldn't read {value} from JRiver ({e}), so it was skipped this time.", name=item['name'], value=item.get('pick_name') or 'its playlist', e=e))
                 continue
             self.pools.append(keys)
         if self:
-            report("  Filters: " + "; ".join(describe(x) for x in self.items))
+            report("  " + t("Filters: {filters}", filters="; ".join(describe(x) for x in self.items)))
 
     def __bool__(self):
         return bool(self.pools or self.rule_sets)
@@ -297,7 +296,8 @@ class Active:
 
     def done(self):
         if self.left_out:
-            self.report(f"  Filters left out {self.left_out} track{'' if self.left_out == 1 else 's'}.")
+            self.report("  " + tn("Filters left out {count} track.", "Filters left out {count} tracks.", self.left_out))
         if self.missing:
-            self.report(f"  {self.missing} track{'' if self.missing == 1 else 's'} passed a rule only because "
-                        f"{'it has' if self.missing == 1 else 'they have'} no value for its field.")
+            self.report("  " + tn("{count} track passed a rule only because it has no value for its field.",
+                                  "{count} tracks passed a rule only because they have no value for its field.",
+                                  self.missing))

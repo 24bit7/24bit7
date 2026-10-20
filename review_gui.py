@@ -456,7 +456,7 @@ class ReviewPanel:
                           "Review: {count} tracks sent to Tidal, {missed} not found there.", sent, missed=missed)
             else:
                 line = tn("Review: {count} track sent to Tidal.", "Review: {count} tracks sent to Tidal.", sent)
-            if any("Tidal app isn't installed" in p for p in problems):   # engine's English line, until stage 3
+            if engine.TIDAL_OPENED == "web" and engine.TIDAL_OPEN == "app":   # the app wasn't there
                 line += " " + t("The Tidal app isn't installed, so it opened on Tidal's website.")
             return line
         self._run(work)

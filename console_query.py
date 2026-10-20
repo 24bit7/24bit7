@@ -21,6 +21,7 @@ import threading
 import requests
 
 import engine
+import i18n
 from i18n import N_
 
 QUERY_MODEL = "claude-haiku-4-5-20251001"   # the same model as Moderator
@@ -160,14 +161,14 @@ def ask(question, console_text, playing, on_done):
                 client = anthropic.Anthropic(api_key=engine.ANTHROPIC_API_KEY)
                 message = client.messages.create(
                     model=QUERY_MODEL, max_tokens=1200,
-                    system=[{"type": "text", "text": SYSTEM},
+                    system=[{"type": "text", "text": SYSTEM + i18n.reply_line()},
                             {"type": "text", "text": code, "cache_control": {"type": "ephemeral"}}],
                     messages=[{"role": "user", "content": user}])
                 engine.record_ai("Console Query", QUERY_MODEL, message)
                 answer = "".join(b.text for b in message.content if getattr(b, "type", "") == "text").strip()
             else:   # OpenAI and Gemini cache a repeated start of a request by themselves
                 answer = engine.ai_request(user, 1200, "Console Query", tier="quick",
-                                           system=f"{SYSTEM}\n\n{code}", announce=False).text.strip()
+                                           system=f"{SYSTEM}{i18n.reply_line()}\n\n{code}", announce=False).text.strip()
             answer = plain(answer)
             on_done(answer or "(no answer came back)", None)
         except Exception as e:

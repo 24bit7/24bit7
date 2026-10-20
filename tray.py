@@ -14,6 +14,7 @@ import os
 import sys
 
 import engine
+from i18n import t, tn
 
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_VALUE = "24bit7"
@@ -92,8 +93,7 @@ def start(root, show, quit):
     if _icon is not None:
         return True
     if not available():
-        print("[Tray] pystray and Pillow aren't installed, so there's no tray icon. "
-              "Run: pip install pystray Pillow")
+        print(t("[Tray] pystray and Pillow aren't installed, so there's no tray icon. Run: pip install pystray Pillow"))
         return False
     import pystray
     menu = pystray.Menu(

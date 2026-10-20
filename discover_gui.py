@@ -508,7 +508,7 @@ class DiscoverTab(tk.Frame):
         else:
             text = t('{sent} of {total} in your Tidal playlist "{name}".',
                      sent=sent, total=len(pairs), name=engine.TIDAL_PLAYLIST_NAME)
-        if any("Tidal app isn't installed" in line for line in said):   # engine's English line, until stage 3
+        if engine.TIDAL_OPENED == "web" and engine.TIDAL_OPEN == "app":   # the app wasn't there
             text += " " + t("The Tidal app isn't installed, so it opened on Tidal's website.")
         self._set_yt_status(text)
         self._show_tidal_open(engine.TIDAL_PLAYLIST_ID)

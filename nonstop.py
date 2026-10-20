@@ -29,6 +29,7 @@ import threading
 from dotenv import dotenv_values
 
 import engine
+from i18n import t, tn
 import filters
 
 POLL_SECONDS = 15   # a top-up only has to land while the last track plays
@@ -78,7 +79,7 @@ def _watch():
         try:
             _check_zones()
         except Exception as e:
-            engine.print(f"Problem: Non-stop couldn't check the zones ({e}).")
+            engine.print(t("Problem: Non-stop couldn't check the zones ({e}).", e=e))
 
 
 def _check_zones():
@@ -141,12 +142,13 @@ def _rest_of_artist(zone, entry, info, report):
     keys = [k for k in keys if played.fresh(k)]
     played.done()
     if not keys:
-        report(f"  No more songs by {entry.get('top_artist')} in your library, so moving on.")
+        report("  " + t("No more songs by {get} in your library, so moving on.", get=entry.get('top_artist')))
         return False
     random.shuffle(keys)
     if engine.NONSTOP_TOP_REST_COUNT:
         keys = keys[:engine.NONSTOP_TOP_REST_COUNT]
-    report(f"  Adding {len(keys)} more song{'' if len(keys) == 1 else 's'} by {library.spoken(artist)}, shuffled.")
+    report("  " + tn("Adding {count} more song by {artist}, shuffled.", "Adding {count} more songs by {artist}, shuffled.",
+                     len(keys), artist=library.spoken(artist)))
     engine.send_to_jriver(keys, report=report, append=True, closer_group="top")
     return True
 
@@ -179,12 +181,11 @@ def _tight_seed(zone, entry, report):
         with library._lock:
             row = library._by_key.get(str(key))
         if row:
-            report("  Keep It Tight: reseeding from a track of the original playlist.")
+            report("  " + t("Keep It Tight: reseeding from a track of the original playlist."))
             return engine.seed_from_row(row, zone)
     if not entry.get("tight_done"):
         entry["tight_done"] = True
-        report("  Keep It Tight has used every track of the original playlist as a seed, "
-               "so carrying on as Wander.")
+        report("  " + t("Keep It Tight has used every track of the original playlist as a seed, so carrying on as Wander."))
     return None
 
 
@@ -208,8 +209,8 @@ def _job(zone, zone_name, profile, info):
             else:
                 cfg = engine.NONSTOP_BY.get(origin) or engine.NONSTOP_BY["artists"]
             tight = (cfg.get("reseed") == "whole") if origin == "saved" else cfg.get("mode") == "tight"
-            report(f"  {zone_name} is on its last track, so adding more."
-                   + (" (with its device's own settings)" if profile else ""))
+            report("  " + (t("{zone} is on its last track, so adding more. (with its device's own settings)", zone=zone_name)
+                           if profile else t("{zone} is on its last track, so adding more.", zone=zone_name)))
             if kind == "top" and entry.get("stage") == "first":
                 entry["stage"] = "rest"
                 if engine.NONSTOP_TOP_REST and _rest_of_artist(zone, entry, info, report):
@@ -217,12 +218,12 @@ def _job(zone, zone_name, profile, info):
             if kind == "top":
                 entry["stage"] = "after"
                 seed = (_tight_seed(zone, entry, report) if tight else None) or _top_seed(zone, entry, info)
-                report(f"  Carrying on from {seed['Artist']}, {seed['Name']}.")
+                report("  " + t("Carrying on from {artist}, {name}.", artist=seed['Artist'], name=seed['Name']))
                 _build(cfg["using"], seed, report)
                 return
             if origin == "vibe":
                 if cfg.get("with") == "vibe" and entry.get("vibe"):
-                    report(f"  More of the same vibe: {entry['vibe']}")
+                    report("  " + t("More of the same vibe: {vibe}", vibe=entry['vibe']))
                     engine.create_vibe_playlist(entry["vibe"], report=report)
                     return
                 mode = cfg.get("with") if cfg.get("with") in ("artists", "tracks") else "artists"
@@ -231,7 +232,7 @@ def _job(zone, zone_name, profile, info):
             seed = _tight_seed(zone, entry, report) if tight else None
             if seed is None:
                 seed = _second_track_seed(zone, info) if cfg.get("reseed") == "second" else dict(info, ZoneID=zone)
-            report(f"  Reseeding from {seed['Artist']}, {seed['Name']}.")
+            report("  " + t("Reseeding from {artist}, {name}.", artist=seed['Artist'], name=seed['Name']))
             _build(mode, seed, report)
         finally:
             engine.OUTPUT_OVERRIDE = None

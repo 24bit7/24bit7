@@ -18,6 +18,7 @@ import time
 from datetime import datetime
 
 import engine
+import i18n
 from i18n import N_, t, tn
 
 # Each provider's standard API rates in US dollars per million tokens (input, output), by
@@ -330,7 +331,7 @@ def ask(on_done):
             return
         user = f"{_usage_text(totals())}\n\nCurrent settings:\n{console_query.settings_text()}"
         try:
-            answer = engine.ai_request(user, 700, "Usage Query", tier="quick", system=SYSTEM,
+            answer = engine.ai_request(user, 700, "Usage Query", tier="quick", system=SYSTEM + i18n.reply_line(),
                                        announce=False).text.strip()
             on_done(console_query.plain(answer) or "(no answer came back)", None)
         except ImportError:
