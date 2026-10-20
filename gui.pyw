@@ -144,7 +144,7 @@ class PlayTab(tk.Frame):
         # The tagline sits beside the logo after a "/", both at their usual sizes
         tk.Label(title, text="/", font=("Segoe UI", 10),
                  fg=PALETTE["text_muted"]).pack(side="left", anchor="s", padx=(12, 8), pady=(0, 5))
-        tk.Label(title, text="Perfect Playlists and Music Discovery",
+        tk.Label(title, text=t("Perfect Playlists and Music Discovery"),
                  font=("Segoe UI", 10), fg=PALETTE["text_muted"]).pack(side="left", anchor="s", pady=(0, 5))
 
         # The seed area: two small tabs. Whichever is showing when a button is
@@ -1176,14 +1176,17 @@ class PlayTab(tk.Frame):
         font, bold = ("Consolas", 9), ("Consolas", 9, "bold")
         cols = len(self.LOG_COLUMNS)
         grid.grid_columnconfigure(self.SOURCES_COLUMN, weight=1)
-        for c, (title, width) in enumerate(self.LOG_COLUMNS):
-            tk.Label(grid, text=t(title), font=bold, bg=black, fg=white, anchor="w", width=width).grid(
-                row=0, column=c, sticky="ew", padx=(0, 6), pady=(0, 4))
-        tk.Frame(grid, bg=green, height=1).grid(row=1, column=0, columnspan=cols, sticky="ew")
         try:
             rows = buildlog.recent()
         except Exception:
             rows = []
+        # each column at least as wide as its title in the chosen language, and the Moderator's as its longest entry
+        widths = [w if c == self.SOURCES_COLUMN else max(w, len(t(title))) for c, (title, w) in enumerate(self.LOG_COLUMNS)]
+        widths[6] = min(26, max([widths[6]] + [len(buildlog.moderator_shown(row["moderator"])) for row in rows]))
+        for c, (title, _) in enumerate(self.LOG_COLUMNS):
+            tk.Label(grid, text=t(title), font=bold, bg=black, fg=white, anchor="w", width=widths[c]).grid(
+                row=0, column=c, sticky="ew", padx=(0, 6), pady=(0, 4))
+        tk.Frame(grid, bg=green, height=1).grid(row=1, column=0, columnspan=cols, sticky="ew")
         r = 2
         for row in rows:
             when = row["at"]
@@ -1207,16 +1210,15 @@ class PlayTab(tk.Frame):
                       (trouble, "#ff6b6b" if row["problems"] else "#ffb000")]
             cells = []
             for c, (value, colour) in enumerate(values):
-                width = self.LOG_COLUMNS[c][1]
+                width = widths[c]
                 if c != self.SOURCES_COLUMN and len(value) > width:   # too long for its column: cut short
                     value = value[:width - 3] + "..."
-                cell = tk.Label(grid, text=value, font=font, bg=black, fg=colour, anchor="w",
-                                width=self.LOG_COLUMNS[c][1])
+                cell = tk.Label(grid, text=value, font=font, bg=black, fg=colour, anchor="w", width=width)
                 cell.grid(row=r, column=c, sticky="ew", padx=(0, 6), pady=3)
                 if c == self.SOURCES_COLUMN and value:   # the column narrows with the window: full list on hover
                     Tooltip(cell, value)
                 cells.append(cell)
-            link = tk.Label(grid, text="Load to Console", font=("Consolas", 9, "underline"), bg=black, fg=green,
+            link = tk.Label(grid, text=t("Load to Console"), font=("Consolas", 9, "underline"), bg=black, fg=green,
                             cursor="hand2", anchor="w")
             link.grid(row=r, column=cols - 1, sticky="w", pady=3)
             link.bind("<Button-1>", lambda e, b=row: self._load_build(b))
@@ -1225,11 +1227,11 @@ class PlayTab(tk.Frame):
             tk.Frame(grid, bg=dim, height=1).grid(row=r + 1, column=0, columnspan=cols, sticky="ew")
             r += 2
         if not rows:
-            tk.Label(grid, text="No builds kept yet. Each build appears here once it finishes.", font=font,
+            tk.Label(grid, text=t("No builds kept yet. Each build appears here once it finishes."), font=font,
                      bg=black, fg="#5f7a66", anchor="w").grid(row=r, column=0, columnspan=cols, sticky="w", pady=6)
         else:
-            tk.Label(grid, text="The last 50 builds from each source, newest first. Double-click a row, "
-                                "or use Load to Console.", font=font, bg=black, fg="#5f7a66", anchor="w").grid(
+            tk.Label(grid, text=t("The last 50 builds from each source, newest first. Double-click a row, "
+                                  "or use Load to Console."), font=font, bg=black, fg="#5f7a66", anchor="w").grid(
                 row=r, column=0, columnspan=cols, sticky="w", pady=(8, 0))
         self.log_canvas.yview_moveto(0)
 
@@ -1283,7 +1285,7 @@ class PlayTab(tk.Frame):
             devices = buildlog.tabs()
         except Exception:
             devices = []
-        for key, label in [("all", "All"), ("main", "Main Window")] + devices + [("log", "Log")]:
+        for key, label in [("all", t("All")), ("main", t("Main Window"))] + devices + [("log", t("Log"))]:
             b = self._head_box(self.head_tabs, label, lambda k=key: self._select_view(k))
             if key == self.view:   # the tab on screen: inverted, green with black text
                 b.config(bg="#00ff41", fg="#000000", font=("Consolas", 9, "bold"), highlightbackground="#00ff41")

@@ -18,8 +18,8 @@ import os
 import sys
 
 LANGUAGES = [("en", "English"), ("de", "Deutsch")]
-# What Settings > Other offers. German joins once its screens and console are translated.
-OFFERED = ["en"]
+# What Settings > Other offers: a language joins once its screens, console and manual are translated.
+OFFERED = ["en", "de"]
 
 LANGUAGE = "en"
 _table = {}

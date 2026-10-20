@@ -94,3 +94,19 @@ def test_pressed_during_a_build_says_it_will_wait(app):
 def test_the_shortcut_is_not_part_of_the_profile(app):
     p, _ = setup(app, "DJ")
     assert not any(k.startswith("HOTKEY_PROFILE_") for k in p.env_keys())
+
+
+def test_the_console_heading_is_german_in_german(app):
+    """20 Oct 2026: a shortcut's console heading and its wait note stayed English."""
+    import i18n
+    p, hotkeys = setup(app, "DJ")
+    notes, queued = [], []
+    hotkeys.attach(lambda job, heading, origin=None: queued.append(heading), busy=lambda: True, note=notes.append)
+    i18n.set_language("de")
+    try:
+        hotkeys._pressed("PROFILE_DJ")
+    finally:
+        i18n.set_language("en")
+        hotkeys.attach(None)
+    assert queued == ["Tastenkürzel: DJ laden"]
+    assert notes[0].startswith("DJ laden angefordert")

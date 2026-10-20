@@ -1781,3 +1781,49 @@ def test_picker_most_used_rows_have_a_remove_mark(app, ui):
     assert rows._popup is pop, "the picker stays open"
     rows._close_picker()
     assert not ui.errors, ui.errors
+
+
+# --- German ---
+
+@pytest.fixture
+def german():
+    import i18n
+    i18n.set_language("de")
+    yield i18n
+    i18n.set_language("en")
+
+
+def _texts(widget):
+    out = []
+    for child in widget.winfo_children():
+        try:
+            out.append((child.cget("text"), child))
+        except tk.TclError:
+            pass
+        out += _texts(child)
+    return out
+
+
+def test_the_console_tabs_and_log_are_german(app, german, ui):
+    """20 Oct 2026: the console's All and Main Window tabs, the Log's link and footer stayed English, and its
+    German titles were cut short."""
+    import buildlog
+    buildlog._table(app.engine.db())
+    buildlog._insert(app.engine.db(), {"at": "2026-10-04 21:14:22", "tab": "main", "from_label": "Main Window",
+                                       "zone": "Speakers", "zone_id": "10001", "kind": "Similar Tracks",
+                                       "sources": "Last.fm", "queued": 30, "misses": 62,
+                                       "moderator": "Balanced, 1 removed", "problems": 0, "notes": 0,
+                                       "chain_id": None, "chain_pos": None, "text": "Fertig: 30 Titel"})
+    play = ui.play
+    play._set_tabs_open(True, save=False)
+    play._select_view("log")
+    ui.pump(0.3)
+    tabs = [text for text, _ in _texts(play.head_tabs)]
+    assert tabs[:2] == ["Alle", "Hauptfenster"] and tabs[-1] == "Log", tabs
+    shown = dict(_texts(play.log_grid))
+    assert "In Konsole laden" in shown and "Load to Console" not in shown
+    assert any(text.startswith("Die letzten fünfzig Playlists") for text in shown)
+    for title in ("Zeitpunkt", "Treffer/Fehlt"):
+        assert int(shown[title].cget("width")) >= len(title), f"{title} is cut short"
+    assert "Ausgewogen, 1 entfernt" in shown, "the Moderator column fits its German"
+    play._set_tabs_open(False, save=False)

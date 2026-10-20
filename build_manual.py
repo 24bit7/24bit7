@@ -9,6 +9,8 @@ chapters stay clickable.
 Use:
   py build_manual.py                       writes 24bit7_Manual.pdf in this folder
   py build_manual.py path\\to\\file.pdf      writes it there (build.bat uses this)
+  py build_manual.py --lang de [path]      the German manual (docs/MANUAL.de.md), 24bit7_Handbuch.pdf;
+                                           a screenshot not yet taken in German uses the English one
 
 Exits with an error code if the PDF couldn't be made, so build.bat can ask what to do.
 """
@@ -26,6 +28,17 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 SOURCE = HERE / "docs" / "MANUAL.md"
 DEFAULT_OUT = HERE / "24bit7_Manual.pdf"
+# Each language's manual: its source, its PDF, and the words on its cover
+LANGS = {
+    "en": {"source": "MANUAL.md", "out": "24bit7_Manual.pdf", "html": "en-GB",
+           "tagline": "Perfect Playlists and Music Discovery", "title": "User Manual",
+           "months": ["January", "February", "March", "April", "May", "June", "July", "August", "September",
+                      "October", "November", "December"]},
+    "de": {"source": "MANUAL.de.md", "out": "24bit7_Handbuch.pdf", "html": "de-DE",
+           "tagline": "Perfekte Playlists und Musik entdecken", "title": "Handbuch",
+           "months": ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September",
+                      "Oktober", "November", "Dezember"]},
+}
 
 CSS = """
 @page { size: A4; margin: 18mm 16mm 20mm 16mm;
@@ -87,21 +100,27 @@ def slug(value, separator="-"):
     return value.replace(" ", separator)
 
 
-def build_html(ver):
-    md = SOURCE.read_text(encoding="utf-8")
+def build_html(ver, lang="en"):
+    words = LANGS[lang]
+    source = HERE / "docs" / words["source"]
+    md = source.read_text(encoding="utf-8")
     md = re.sub(r"\A# .*\n", "", md)   # the cover carries the title
+    # a screenshot not yet taken in this language: the English one stands in
+    md = re.sub(r"\(images/(\w+)/([\w.-]+\.png)\)",
+                lambda m: m.group(0) if (source.parent / "images" / m.group(1) / m.group(2)).exists()
+                else f"(images/{m.group(2)})", md)
     body = markdown_module().markdown(md, extensions=["tables", "fenced_code", "toc"],
                                       extension_configs={"toc": {"slugify": slug}})
     today = date.today()
     cover = (f'<div class="cover"><div class="logo"><span class="blue">24</span><span class="orange">bit'
              f'</span><span class="blue">7</span></div>'
-             f'<div class="tagline">Perfect Playlists and Music Discovery</div>'
-             f'<div class="title">User Manual</div>'
+             f'<div class="tagline">{words["tagline"]}</div>'
+             f'<div class="title">{words["title"]}</div>'
              f'<div class="meta">Version {html.escape(ver)} &nbsp;&middot;&nbsp; '
-             f'{today.strftime("%B")} {today.year}</div></div>')
-    base = (SOURCE.parent.as_uri() + "/")   # so images/... resolves to docs/images
-    return (f'<!doctype html><html lang="en-GB"><head><meta charset="utf-8"><base href="{base}">'
-            f'<title>24bit7 User Manual {html.escape(ver)}</title><style>{CSS}</style></head>'
+             f'{words["months"][today.month - 1]} {today.year}</div></div>')
+    base = (source.parent.as_uri() + "/")   # so images/... resolves to docs/images
+    return (f'<!doctype html><html lang="{words["html"]}"><head><meta charset="utf-8"><base href="{base}">'
+            f'<title>24bit7 {words["title"]} {html.escape(ver)}</title><style>{CSS}</style></head>'
             f'<body>{cover}{body}</body></html>')
 
 
@@ -120,9 +139,18 @@ def find_browser():
 
 
 def main():
-    out = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else DEFAULT_OUT
-    if not SOURCE.exists():
-        fail(f"{SOURCE} not found.")
+    args = sys.argv[1:]
+    lang = "en"
+    if "--lang" in args:
+        i = args.index("--lang")
+        lang = args[i + 1] if i + 1 < len(args) else ""
+        del args[i:i + 2]
+    if lang not in LANGS:
+        fail(f"no manual for the language '{lang}'.")
+    out = Path(args[0]).resolve() if args else HERE / LANGS[lang]["out"]
+    source = HERE / "docs" / LANGS[lang]["source"]
+    if not source.exists():
+        fail(f"{source} not found.")
     browser = find_browser()
     if not browser:
         fail("neither Microsoft Edge nor Chrome was found to print the PDF.")
@@ -130,7 +158,7 @@ def main():
     work = Path(tempfile.mkdtemp(prefix="24bit7_manual_"))
     try:
         page = work / "manual.html"
-        page.write_text(build_html(ver), encoding="utf-8")
+        page.write_text(build_html(ver, lang), encoding="utf-8")
         if out.exists():
             out.unlink()
         out.parent.mkdir(parents=True, exist_ok=True)

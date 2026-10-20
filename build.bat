@@ -58,8 +58,8 @@ for /f %%v in ('powershell -NoProfile -Command "(Select-String -Path engine.py -
 set ZIP=releases\24bit7-v%VER%-windows.zip
 mkdir releases 2>nul
 
-rem --- 3a. User manual PDF, beside 24bit7.exe so it goes out in the zip ---
-python build_manual.py "dist\24bit7\24bit7_Manual.pdf"
+rem --- 3a. User manual PDFs, English and German, beside 24bit7.exe so they go out in the zip ---
+python build_manual.py "dist\24bit7\24bit7_Manual.pdf" && python build_manual.py --lang de "dist\24bit7\24bit7_Handbuch.pdf"
 if errorlevel 1 (
     echo.
     echo The user manual PDF couldn't be made, so this release would go out without it.

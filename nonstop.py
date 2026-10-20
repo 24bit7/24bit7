@@ -113,7 +113,7 @@ def _check_zones():
         entry["fired"] = marker
         entry["ends_at"] = engine.nonstop_track_ends(info)
         if _submit is not None:
-            _submit(_job(zone, zone_name, profile, info), f"Non-stop: {zone_name} reached its last track",
+            _submit(_job(zone, zone_name, profile, info), t("Non-stop: {zone} reached its last track", zone=zone_name),
                     {"from": "nonstop", "zone": zone})
 
 

@@ -111,6 +111,23 @@ def test_nothing_hides_t():
     assert not hidden, f"These hide t() with a variable of the same name: {hidden}"
 
 
+def test_every_tab_title_goes_through_t():
+    """A tab added with a bare title stays English (20 Oct 2026: Settings' Similar Artists, Similar Tracks... tabs)."""
+    bare = []
+    for name in sorted(os.listdir(REPO)):
+        if not name.endswith((".py", ".pyw")) or name.startswith(("apply_", "builtin_keys", "screenshots")):
+            continue
+        with open(os.path.join(REPO, name), encoding="utf-8") as f:
+            tree = ast.parse(f.read(), name)
+        for n in ast.walk(tree):
+            if not (isinstance(n, ast.Call) and getattr(n.func, "attr", None) == "add"):
+                continue
+            for k in n.keywords:
+                if k.arg == "text" and not (isinstance(k.value, ast.Call) and getattr(k.value.func, "id", None) == "t"):
+                    bare.append(f"{name}:{n.lineno}")
+    assert not bare, f"These tabs' titles don't go through t(): {bare}"
+
+
 def test_german_keeps_the_same_blanks():
     wrong = [en for en, de in _de().items() if _blanks(en) != _blanks(de)]
     assert not wrong, f"These lose or gain a {{blank}} in German: {wrong}"

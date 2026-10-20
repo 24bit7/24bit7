@@ -94,3 +94,17 @@ def test_play_again_lets_non_stop_try_again(app, last_track):
     z.state = 2                 # play pressed on the last track again
     nonstop._check_zones()
     assert len(jobs) == 2, "a held top-up doesn't use up the last track"
+
+
+def test_the_console_heading_is_german_in_german(app, last_track):
+    """20 Oct 2026: Non-stop's console heading stayed English."""
+    import i18n
+    import nonstop
+    headings = []
+    nonstop.attach(lambda job, heading, origin=None: headings.append(heading))
+    i18n.set_language("de")
+    try:
+        nonstop._check_zones()
+    finally:
+        i18n.set_language("en")
+    assert headings == ["Non-stop: Speakers hat den letzten Titel erreicht"], headings

@@ -677,3 +677,16 @@ def test_keep_going_off_means_lets_see_where_this_goes(app, alexa):
     j.play("Kitchen", j.playlists[0]["keys"])
     alexa.say("KeepGoingIntent")
     assert app.engine.NONSTOP_ZONES["10002"]["saved_cfg"]["reseed"] == "last"
+
+
+def test_the_console_heading_is_german_in_german(app, alexa):
+    """20 Oct 2026: a voice request's console heading stayed English (what Alexa says stays English)."""
+    import i18n
+    i18n.set_language("de")
+    try:
+        alexa.say("TracksLikeIntent", "here comes the sun")
+    finally:
+        i18n.set_language("en")
+    heading = alexa.jobs[-1][1]
+    assert heading.startswith("Sprache, Kitchen Echo: Titel wie Here Comes The Sun von The Beatles") \
+        and heading.endswith("in Kitchen"), heading

@@ -48,6 +48,12 @@ def test_quick_build_skips_only_the_window_tests():
     assert first(lambda line: "pytest" in line) < first(lambda line: "PyInstaller" in line), "tests before the build"
 
 
+def test_both_manuals_go_in_the_release():
+    text = open(BAT, encoding="utf-8").read()
+    assert r'build_manual.py "dist\24bit7\24bit7_Manual.pdf"' in text
+    assert r'build_manual.py --lang de "dist\24bit7\24bit7_Handbuch.pdf"' in text, "the German manual is in the zip too"
+
+
 def test_window_tests_are_labelled():
     """What build.bat quick leaves out: every test that opens windows, and nothing else."""
     import subprocess

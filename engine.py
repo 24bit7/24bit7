@@ -5617,9 +5617,9 @@ def add_deep_cuts(keys, seed_info, report=print):
     if not cut_keys:
         report("  " + t("Deep Cuts: none this time, as none of the picks were {where_found}.", where_found=where_found(True)))
         return keys
-    how = "artists you haven't played lately" if kind == "artists" else "tracks you rarely play"
+    how = t("artists you haven't played lately") if kind == "artists" else t("tracks you rarely play")
     names = ", ".join(f"{a} - {tval}" for (_, a, tval) in picks[:len(cut_keys)])
-    report("  " + t("Deep Cuts ({items}, {mode}): {cut_keys_count} from {how}: {names}.", items='; '.join(genres), mode=cfg['mode'], cut_keys_count=len(cut_keys), how=how, names=names))
+    report("  " + t("Deep Cuts ({items}, {mode}): {cut_keys_count} from {how}: {names}.", items='; '.join(genres), mode=t("shuffled") if cfg["mode"] == "shuffled" else t("spaced"), cut_keys_count=len(cut_keys), how=how, names=names))
     return _spread(keys, [(cut_keys, "random" if cfg["mode"] == "shuffled" else "spaced")])
 
 
@@ -6361,7 +6361,7 @@ def similar_track_candidates(seeds, track, report=print):
                  and p[0].strip().lower() not in YOUTUBE_SKIP_ARTISTS]
         note = ""
         if pairs and from_cache:
-            note = " (from cache)"
+            note = " (" + t("from cache") + ")"
         elif code == "ai" and AI_LAST_ERROR:
             note = f" ({AI_LAST_ERROR})"
         report("  " + t("{name}: {pairs_count} similar tracks{note}", name=name, pairs_count=len(pairs), note=note))

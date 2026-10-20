@@ -13,6 +13,7 @@ Use:
   py screenshots.py --changed           only shots whose code has changed since
                                         their image was last committed (or is uncommitted)
   py screenshots.py --list              the names, and the files each depends on
+  py screenshots.py --lang de           in German, into docs/images/de (with any of the above)
 
 An image is only rewritten when the picture has actually changed, so git only
 shows real changes. Long Settings pages are scrolled and stitched into one image.
@@ -30,8 +31,11 @@ import sys
 import tempfile
 import time
 
+import i18n
+
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT_DIR = os.path.join(HERE, "docs", "images")
+OUT_DIR = os.path.join(HERE, "docs", "images")   # docs/images/de for the German shots (--lang de)
+IMAGES = "images"   # the same, relative to docs
 COMMON = ["tabs.py"]
 SCALE = 1.0   # Windows' display scaling while the shots are taken (set by build_window)   # every shot changes when the tab and button drawing changes
 
@@ -166,6 +170,79 @@ Similar Tracks: The Beatles - Here Comes The Sun  (target 30, at most 2 per arti
   Sending 30 tracks...
   Queued in Kitchen after the current track.
 Done: 30 tracks queued in Kitchen, 62 not in library, 14 s."""
+# The demo console's lines in German (--lang de), as 24bit7 writes them; a line not here stays as it is
+DEMO_GERMAN = {
+    "Similar Tracks: The Beatles - Here Comes The Sun  (target 30, at most 2 per artist)":
+        "Ähnliche Titel: The Beatles - Here Comes The Sun  (Ziel 30, höchstens 2 pro Künstler)",
+    "Last.fm: 50 similar tracks": "Last.fm: 50 ähnliche Titel",
+    "ListenBrainz: 40 similar tracks (from cache)": "ListenBrainz: 40 ähnliche Titel (aus dem Cache)",
+    "YouTube: 25 similar tracks": "YouTube: 25 ähnliche Titel",
+    "Problem: Deezer didn't answer for similar tracks (timed out).":
+        "Problem: Deezer hat bei ähnlichen Titeln nicht geantwortet (Zeitüberschreitung).",
+    "In library: The Kinks - Waterloo Sunset  (Last.fm, ListenBrainz)":
+        "In Bibliothek: The Kinks - Waterloo Sunset  (Last.fm, ListenBrainz)",
+    "In library: The Hollies - Bus Stop  (Last.fm, YouTube)": "In Bibliothek: The Hollies - Bus Stop  (Last.fm, YouTube)",
+    "Not in library: The Zombies - Time Of The Season": "Nicht in Bibliothek: The Zombies - Time Of The Season",
+    "In library: George Harrison - What Is Life  (Last.fm, ListenBrainz, YouTube)":
+        "In Bibliothek: George Harrison - What Is Life  (Last.fm, ListenBrainz, YouTube)",
+    "In library: The Byrds - Mr. Tambourine Man  (ListenBrainz)":
+        "In Bibliothek: The Byrds - Mr. Tambourine Man  (ListenBrainz)",
+    "Not in library: Harry Nilsson - Everybody's Talkin'": "Nicht in Bibliothek: Harry Nilsson - Everybody's Talkin'",
+    "Suggested 96, checked 96, in library 34.": "Vorgeschlagen 96, geprüft 96, in der Bibliothek 34.",
+    "Moderator (Balanced): checking 34 tracks against the seed...":
+        "Moderator (Ausgewogen): prüfe 34 Titel gegen den Seed...",
+    "Removed The Who - Won't Get Fooled Again: louder and harder than the seed.":
+        "Entfernt The Who - Won't Get Fooled Again: lauter und härter als der Seed.",
+    "Removed Queen - We Will Rock You: stadium energy, breaks the mood.":
+        "Entfernt Queen - We Will Rock You: Stadion-Energie, bricht die Stimmung.",
+    "Moderator: 1 removed.": "Moderator: 1 entfernt.",
+    "Moderator: 2 removed.": "Moderator: 2 entfernt.",
+    "Note: Drift is off, so the playlist stops at 30 tracks. Settings > Playlist > Drift":
+        "Hinweis: Drift ist aus, daher endet die Playlist bei 30 Titeln. Einstellungen > Playlist > Drift",
+    "Deep Cuts (Rock, spaced): 3 from tracks you rarely play: The Move - Flowers In The Rain, "
+    "Badfinger - Take It All, The Zombies - Beechwood Park.":
+        "Deep Cuts (Rock, verteilt): 3 aus Titeln, die du selten spielst: The Move - Flowers In The Rain, "
+        "Badfinger - Take It All, The Zombies - Beechwood Park.",
+    "Sending 33 tracks...": "Sende 33 Titel...",
+    "Sending 30 tracks...": "Sende 30 Titel...",
+    "Queued in Speakers after the current track.": "In Speakers nach dem aktuellen Titel eingereiht.",
+    "Queued in Kitchen after the current track.": "In Kitchen nach dem aktuellen Titel eingereiht.",
+    "Done: 33 tracks queued in Speakers, 62 not in library, 14 s.":
+        "Fertig: 33 Titel in Speakers eingereiht, 62 nicht in der Bibliothek, 14 s.",
+    "Done: 30 tracks queued in Kitchen, 62 not in library, 14 s.":
+        "Fertig: 30 Titel in Kitchen eingereiht, 62 nicht in der Bibliothek, 14 s.",
+    "Voice, Kitchen Echo: tracks like Here Comes The Sun by The Beatles, to Kitchen":
+        "Sprache, Kitchen Echo: Titel wie Here Comes The Sun von The Beatles, in Kitchen",
+    "AI Playlist: rainy Sunday morning  (target 25 tracks)": "KI-Playlist: rainy Sunday morning  (Ziel 25 Titel)",
+    "Done: 22 tracks queued in Speakers, 0 not in library, 11 s.":
+        "Fertig: 22 Titel in Speakers eingereiht, 0 nicht in der Bibliothek, 11 s.",
+    "Shortcut: Similar Tracks": "Tastenkürzel: Ähnliche Titel",
+    "Done: 30 tracks queued in Speakers, 47 not in library, 12 s.":
+        "Fertig: 30 Titel in Speakers eingereiht, 47 nicht in der Bibliothek, 12 s.",
+    "Voice, Lounge Dot: album Abbey Raod": "Sprache, Lounge Dot: album Abbey Raod",
+    "Problem: Alexa said \"I couldn't find an album called Abbey Raod.\"":
+        "Problem: Alexa sagte \"I couldn't find an album called Abbey Raod.\"",
+    "Non-stop: Kitchen reached its last track": "Non-stop: Kitchen hat den letzten Titel erreicht",
+    "Done: 30 tracks queued in Kitchen, 55 not in library, 12 s.":
+        "Fertig: 30 Titel in Kitchen eingereiht, 55 nicht in der Bibliothek, 12 s.",
+    "Done: 28 tracks queued in Kitchen, 41 not in library, 13 s.":
+        "Fertig: 28 Titel in Kitchen eingereiht, 41 nicht in der Bibliothek, 13 s.",
+}
+
+
+def in_language(text):
+    """The demo console's text in the shots' language: each line looked up without its time and indent."""
+    if i18n.LANGUAGE != "de":
+        return text
+    out = []
+    for line in text.split("\n"):
+        body = line.lstrip()
+        stamp = body[:7] if len(body) > 7 and body[2] == ":" and body[5:7] == "  " else ""
+        body = body[len(stamp):]
+        out.append(line[:len(line) - len(line.lstrip())] + stamp + DEMO_GERMAN.get(body, body))
+    return "\n".join(out)
+
+
 DEMO_BUILDS = [
     ("2026-10-04 19:12:40", "main", "Main Window", "Speakers", "10001", "AI Playlist", "AI", 22, 0, "", 0, 1,
      None, None, "19:12  AI Playlist: rainy Sunday morning  (target 25 tracks)\nDone: 22 tracks queued in Speakers, "
@@ -198,7 +275,7 @@ def git(*args):
 
 def needs_retake(name, deps):
     """True if the image is missing, uncommitted, or its code has changed since it was committed."""
-    image = os.path.join("docs", "images", name + ".png")
+    image = os.path.join("docs", IMAGES, name + ".png")
     if not os.path.exists(os.path.join(HERE, image)):
         return True
     image_time = git("log", "-1", "--format=%ct", "--", image)
@@ -309,7 +386,9 @@ def start_demo(gui, temp):
         cols = ["at", "tab", "from_label", "zone", "zone_id", "kind", "sources", "queued", "misses", "moderator",
                 "problems", "notes", "chain_id", "chain_pos", "text"]
         for values in DEMO_BUILDS:
-            buildlog._insert(con, dict(zip(cols, values)))
+            row = dict(zip(cols, values))
+            row["text"] = in_language(row["text"])
+            buildlog._insert(con, row)
     except ImportError:
         pass
 
@@ -365,9 +444,9 @@ def build_window(gui):
     # folder), not something a reader of the manual should see
     settings._show_startup_note = lambda: getattr(settings, "startup_note", None) and settings.startup_note.grid_remove()
     settings._show_startup_note()
-    nb.add(play, text="Play")
-    nb.add(discover, text="Discover")
-    nb.add(settings, text="Settings")
+    nb.add(play, text=i18n.t("Play"))
+    nb.add(discover, text=i18n.t("Discover"))
+    nb.add(settings, text=i18n.t("Settings"))
 
     donate = tk.Label(root, text="Support", font=("Segoe UI", 9, "underline"),
                       fg=PALETTE.get("strip_fg") or PALETTE["link"], bg=PALETTE.get("strip_bg") or root.cget("bg"))
@@ -390,7 +469,7 @@ def build_window(gui):
     play._greeting_active = False
     play._stamp_next = False
     play._clear_log()
-    for line in DEMO_CONSOLE:
+    for line in in_language("\n".join(DEMO_CONSOLE)).split("\n"):
         play._append_log(line)
     return root, nb, play
 
@@ -421,6 +500,7 @@ def go_to(root, path, TabbedPane):
     for text in path:
         for pane in panes_in(where, TabbedPane):
             texts = [t.cget("text") for t in pane._tabs]
+            text = i18n.t(text)   # the tab's name in the shots' language
             if text in texts:
                 page = pane._pages[texts.index(text)]
                 pane.select(page)
@@ -550,7 +630,15 @@ def main():
     parser.add_argument("names", nargs="*", help="shot names to take (default: all)")
     parser.add_argument("--changed", action="store_true", help="only shots whose code has changed")
     parser.add_argument("--list", action="store_true", help="list the shot names and stop")
+    parser.add_argument("--lang", default="en", help="the language to take them in (de: into docs/images/de)")
     args = parser.parse_args()
+    global OUT_DIR, IMAGES
+    if args.lang not in dict(i18n.LANGUAGES):
+        print(f"No language called {args.lang!r}.")
+        sys.exit(1)
+    if args.lang != "en":
+        IMAGES = "images/" + args.lang
+        OUT_DIR = os.path.join(HERE, "docs", "images", args.lang)
     if sys.platform != "win32":
         print("Screenshots are taken on Windows only.")
         sys.exit(1)
@@ -569,6 +657,7 @@ def main():
 
     temp = tempfile.mkdtemp(prefix="24bit7_demo_")
     gui = load_gui()
+    i18n.set_language(args.lang)   # as gui.main() does, before any screen is built
     start_demo(gui, temp)
     root, nb, play = build_window(gui)
     written, same = [], []
@@ -610,9 +699,9 @@ def main():
             gui.engine._db.close()
         shutil.rmtree(temp, ignore_errors=True)
 
-    print(f"\nDone. {len(written)} saved, {len(same)} unchanged, in docs\\images.")
+    print(f"\nDone. {len(written)} saved, {len(same)} unchanged, in docs/{IMAGES}.")
     if written:
-        print("Commit them with:  git add docs/images; git commit -m \"Manual screenshots\"")
+        print(f"Commit them with:  git add docs/{IMAGES}; git commit -m \"Manual screenshots\"")
 
 
 if __name__ == "__main__":

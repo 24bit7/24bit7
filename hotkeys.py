@@ -43,6 +43,13 @@ def profile_actions():
     return [(profiles.shortcut_code(n), f"Load {n}", n) for n in profiles.names()]
 
 
+def shown(code):
+    """label() in the chosen language, for the console."""
+    if code in LABELS:
+        return t(LABELS[code])
+    return next((t("Load {name}", name=n) for c, _, n in profile_actions() if c == code), code)
+
+
 def is_profile(code):
     import profiles
     return code.startswith(profiles.SHORTCUT_PREFIX)
@@ -263,8 +270,8 @@ def _pressed(code):
     if _submit is None:
         return
     if (code == "SWITCH_PROFILES" or is_profile(code)) and _busy is not None and _note is not None and _busy():
-        _note(f"{label(code)} requested: it will switch once the current build has finished.")
-    _submit(_job(code), f"Shortcut: {label(code)}", {"from": "shortcut"})
+        _note(t("{name} requested: it will switch once the current build has finished.", name=shown(code)))
+    _submit(_job(code), t("Shortcut: {name}", name=shown(code)), {"from": "shortcut"})
 
 
 def _device_for_zone(zone_name):

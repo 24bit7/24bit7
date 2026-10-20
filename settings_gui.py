@@ -45,6 +45,7 @@ VOICE_DOCS = [(N_("How Voice Commands work"), DOCS_URL + "MANUAL.md#voice-comman
 REPO_URL = "https://github.com/24bit7/24bit7"
 FORUM_URL = "https://yabb.jriver.com/interact/index.php/topic,144381.0.html"   # the JRiver forum thread; empty hides the link
 MANUAL_PDF = "24bit7_Manual.pdf"   # shipped next to 24bit7.exe in the release zip
+MANUAL_PDFS = {"de": ("24bit7_Handbuch.pdf", "MANUAL.de.md")}   # other languages' manuals, and their source
 # The About tab's opening lines: they name every music source and every AI provider
 ABOUT_INTRO = (N_("Builds playlists from your own JRiver library around whatever is playing, using "
                "Last.fm, ListenBrainz, Deezer, Tidal and YouTube Music. It runs without AI; the AI "
@@ -1781,7 +1782,7 @@ class SettingsTab(tk.Frame):
         pages = {}
         for group, title in options:
             page = tk.Frame(pane, padx=10, pady=12)
-            pane.add(page, text=title)
+            pane.add(page, text=t(title))
             pages[group] = page
         chosen = self._option_tab_choice.get(kind)
         if chosen in pages:   # reopen on the option last looked at
@@ -3796,15 +3797,16 @@ class SettingsTab(tk.Frame):
         return link
 
     def _open_manual(self):
-        """The PDF beside the app if it's there, otherwise the manual on GitHub."""
-        path = os.path.join(engine.APP_DIR, MANUAL_PDF)
+        """The PDF beside the app if it's there, otherwise the manual on GitHub. In the chosen language's when there is one."""
+        pdf, source = MANUAL_PDFS.get(i18n.LANGUAGE, (MANUAL_PDF, "MANUAL.md"))
+        path = os.path.join(engine.APP_DIR, pdf)
         if os.path.exists(path):
             try:
                 os.startfile(path)
                 return
             except Exception:
                 pass
-        webbrowser.open_new_tab(REPO_URL + "/blob/main/docs/MANUAL.md")
+        webbrowser.open_new_tab(REPO_URL + "/blob/main/docs/" + source)
 
     def _build_about(self, nb):
         """About: version, links, voice commands, credits and licence. Nothing here is saved."""

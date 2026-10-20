@@ -146,3 +146,17 @@ def test_a_device_with_its_own_settings_gets_deep_cuts(app):
     finally:
         e.use_profile({})
     assert e.DEEP_CUTS["tracks"]["mode"] == "off", "Windows (Main)'s own setting again"
+
+
+def test_the_line_is_all_german_in_german(app):
+    """20 Oct 2026: the mode and 'tracks you rarely play' went into the German line in English."""
+    import i18n
+    app.set_env(DEEP_CUTS_TRACKS="spaced", DEEP_CUTS_TRACKS_SHARE="20", SIMILAR_TRACK_COUNT="10")
+    i18n.set_language("de")
+    try:
+        r = app.Lines()
+        app.engine.create_similar_tracks_playlist(report=r, seed_info=seed(app))
+    finally:
+        i18n.set_language("en")
+    line = deep_line(r)
+    assert "Deep Cuts (Rock, verteilt)" in line and "aus Titeln, die du selten spielst" in line, r.text()
