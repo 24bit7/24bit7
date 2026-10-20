@@ -23,15 +23,16 @@ import sys
 import threading
 
 import engine
+from i18n import N_
 
 ACTIONS = [   # (code, label): the order they appear in Settings
-    ("SIMILAR_TRACKS", "Similar Tracks"),
-    ("SIMILAR_ARTISTS", "Similar Artists"),
-    ("TOP_TRACKS", "Artist's Top Tracks"),
-    ("SHUFFLE_ARTIST", "Shuffle Songs by Artist"),
-    ("SWITCH_ZONES", "Switch Zones"),
-    ("SWITCH_PROFILES", "Switch Profiles"),
-    ("KEEP_GOING", "Keep It Going"),
+    ("SIMILAR_TRACKS", N_("Similar Tracks")),
+    ("SIMILAR_ARTISTS", N_("Similar Artists")),
+    ("TOP_TRACKS", N_("Artist's Top Tracks")),
+    ("SHUFFLE_ARTIST", N_("Shuffle Songs by Artist")),
+    ("SWITCH_ZONES", N_("Switch Zones")),
+    ("SWITCH_PROFILES", N_("Switch Profiles")),
+    ("KEEP_GOING", N_("Keep It Going")),
 ]
 LABELS = dict(ACTIONS)
 
@@ -52,7 +53,7 @@ def label(code):
     if code in LABELS:
         return LABELS[code]
     return next((text for c, text, _ in profile_actions() if c == code), code)
-NOW_PLAYING_ZONE = "Zone shown in Now Playing"
+NOW_PLAYING_ZONE = N_("Zone shown in Now Playing")
 
 AVAILABLE = sys.platform.startswith("win")
 

@@ -911,6 +911,82 @@ class ClickThrough(FlatButton):
         return super().event_generate(sequence, **kw)
 
 
+class TCombobox(ttk.Combobox):
+    """
+    A dropdown of fixed choices that stay English in code and show in the chosen language.
+    Its textvariable, get(), set(), values and cget("values") all speak English, so code that
+    saves or compares a choice ("Off", "Light") works unchanged; only what's on screen goes
+    through t(). For lists of the user's own names (zones, playlists, profiles), use a plain
+    ttk.Combobox: those are never translated.
+    """
+
+    def __init__(self, master, textvariable=None, values=(), **kw):
+        self._en = textvariable if textvariable is not None else tk.StringVar(master)
+        self._shown = tk.StringVar(master)
+        self._choices = [str(v) for v in values]
+        self._syncing = False
+        super().__init__(master, textvariable=self._shown, values=[t(v) for v in self._choices], **kw)
+        self._en.trace_add("write", lambda *a: self._from_english())
+        self._shown.trace_add("write", lambda *a: self._from_shown())
+        self._from_english()
+
+    def _from_english(self):
+        if self._syncing:
+            return
+        self._syncing = True
+        try:
+            self._shown.set(t(self._en.get()))
+        finally:
+            self._syncing = False
+
+    def _from_shown(self):
+        if self._syncing:
+            return
+        shown = self._shown.get()
+        english = next((v for v in self._choices if t(v) == shown), shown)
+        self._syncing = True
+        try:
+            self._en.set(english)
+        finally:
+            self._syncing = False
+
+    def configure(self, cnf=None, **kw):
+        if isinstance(cnf, dict) and "values" in cnf:
+            kw.update(cnf)
+            cnf = None
+        if "values" in kw:
+            self._choices = [str(v) for v in kw["values"]]
+            kw["values"] = [t(v) for v in self._choices]
+        if cnf is None and not kw:
+            return super().configure()
+        out = super().configure(cnf, **kw)
+        if "values" in kw:
+            self._from_english()
+        return out
+
+    config = configure
+
+    def __setitem__(self, key, value):
+        if key == "values":
+            self.configure(values=value)
+        else:
+            super().__setitem__(key, value)
+
+    def cget(self, key):
+        if key == "values":
+            return tuple(self._choices)
+        return super().cget(key)
+
+    def __getitem__(self, key):
+        return self.cget(key)
+
+    def get(self):
+        return self._en.get()
+
+    def set(self, value):
+        self._en.set(value)
+
+
 class RoundedEntry(tk.Frame):
     """
     A text box with fully rounded ends, drawn like the buttons so it looks the same on any PC.

@@ -18,6 +18,7 @@ import time
 from datetime import datetime
 
 import engine
+from i18n import N_, t, tn
 
 # Each provider's standard API rates in US dollars per million tokens (input, output), by
 # model name prefix. Check every provider's pricing page (PRICING_PAGES) before each release.
@@ -46,16 +47,16 @@ MAIN, QUICK = "main", "quick"   # the guide names a tier; the chosen provider's 
 # What each feature typically uses per run, until there are enough of your own runs to
 # average: (model, input, cache writes, cache reads, output, note)
 GUIDE = [
-    ("Similar Tracks (AI source)", MAIN, 400, 0, 0, 1000, ""),
-    ("Similar Artists (AI source)", MAIN, 150, 0, 0, 250, ""),
-    ("Top Tracks (AI source)", MAIN, 100, 0, 0, 150,
-     "per artist: a Similar Artists build asks for around 20"),
-    ("AI Playlist", MAIN, 300, 0, 0, 1000, ""),
-    ("AI Playlist ideas", MAIN, 100, 0, 0, 50, ""),
-    ("Moderator", QUICK, 1000, 0, 0, 300, ""),
-    ("Console Query", QUICK, 5000, 65000, 0, 400,
-     "first question; follow-ups within 5 minutes cost about a tenth"),
-    ("Usage Query", QUICK, 1500, 0, 0, 400, ""),
+    (N_("Similar Tracks (AI source)"), MAIN, 400, 0, 0, 1000, ""),
+    (N_("Similar Artists (AI source)"), MAIN, 150, 0, 0, 250, ""),
+    (N_("Top Tracks (AI source)"), MAIN, 100, 0, 0, 150,
+     N_("per artist: a Similar Artists build asks for around 20")),
+    (N_("AI Playlist"), MAIN, 300, 0, 0, 1000, ""),
+    (N_("AI Playlist ideas"), MAIN, 100, 0, 0, 50, ""),
+    (N_("Moderator"), QUICK, 1000, 0, 0, 300, ""),
+    (N_("Console Query"), QUICK, 5000, 65000, 0, 400,
+     N_("first question; follow-ups within 5 minutes cost about a tenth")),
+    (N_("Usage Query"), QUICK, 1500, 0, 0, 400, ""),
 ]
 # Features since renamed: usage saved under the old name counts under the new one
 RENAMED = {"AI Moderator": "Moderator"}
@@ -132,20 +133,20 @@ def money(dollars):
         return f"${dollars:,.2f}"
     cents = dollars * 100
     if cents >= 10:
-        return f"{cents:.0f} cents"
+        return t("{cents} cents", cents=f"{cents:.0f}")
     if cents >= 1:
-        return f"{cents:.1f} cents"
+        return t("{cents} cents", cents=f"{cents:.1f}")
     if cents >= 0.01:
-        return f"{cents:.2f} cents"
-    return "under 0.01 cents"
+        return t("{cents} cents", cents=f"{cents:.2f}")
+    return t("under 0.01 cents")
 
 
 def rates_line(provider=None):
     """Says what the estimates are based on for the chosen provider, and that they may be out of date."""
     provider = provider or engine.AI_PROVIDER
     if provider == "ollama":
-        return ("Ollama runs on your own PC, so it costs nothing to use. Its tokens are still counted, "
-                "and any costs above are from requests made through a cloud provider.")
+        return t("Ollama runs on your own PC, so it costs nothing to use. Its tokens are still counted, "
+                 "and any costs above are from requests made through a cloud provider.")
     name = engine.ai_provider_name(provider)
     parts = []
     for model in engine.AI_MODELS.get(provider, ()):
@@ -153,10 +154,11 @@ def rates_line(provider=None):
         if price:
             label = next((MODEL_NAMES[p] for p in sorted(MODEL_NAMES, key=len, reverse=True)
                           if model.startswith(p)), model)
-            parts.append(f"{label} ${price[0]:g} in and ${price[1]:g} out")
-    return (f"Costs are estimates. They use {name}'s standard API rates as checked on {PRICES_CHECKED} "
-            f"({'; '.join(parts)}, per million tokens), and rates may have changed since. "
-            f"{name}'s pricing page has the current rates.")
+            parts.append(t("{model} ${rate_in} in and ${rate_out} out", model=label, rate_in=f"{price[0]:g}",
+                           rate_out=f"{price[1]:g}"))
+    return t("Costs are estimates. They use {name}'s standard API rates as checked on {date} ({rates}, per million "
+             "tokens), and rates may have changed since. {name}'s pricing page has the current rates.",
+             name=name, date=PRICES_CHECKED, rates="; ".join(parts))
 
 
 def pricing_page(provider=None):
@@ -207,31 +209,42 @@ def clear():
 
 def day(when):
     d = datetime.fromtimestamp(when)
-    return f"{d.day} {d:%b %Y}"
+    return f"{d.day} {t(MONTHS[d.month - 1])} {d.year}"
+
+
+MONTHS = [N_("Jan"), N_("Feb"), N_("Mar"), N_("Apr"), N_("May"), N_("Jun"), N_("Jul"), N_("Aug"), N_("Sep"),
+          N_("Oct"), N_("Nov"), N_("Dec")]   # short month names, in the chosen language
 
 
 def cost_phrase(dollars):
     """'about 1.1 cents', or 'under 0.01 cents' when it rounds to nothing."""
     text = money(dollars)
-    return text if text.startswith("under") else f"about {text}"
+    return text if dollars * 100 < 0.01 else t("about {amount}", amount=text)
 
 
-def headline(t=None):
+def headline(tot=None):
     """One line for Settings: since when, requests, tokens in and out, and the estimated cost."""
-    t = t or totals()
-    start = f"Since {day(t['since'])}" if t["since"] else "So far"
-    if not t["requests"]:
-        return f"{start}: no AI requests."
-    return (f"{start}: {t['requests']:,} request{'' if t['requests'] == 1 else 's'}, "
-            f"{t['input']:,} input and {t['output']:,} output tokens, {cost_phrase(t['cost'])}.")
+    tot = tot or totals()
+    if not tot["requests"]:
+        return (t("Since {date}: no AI requests.", date=day(tot["since"])) if tot["since"]
+                else t("So far: no AI requests."))
+    figures = dict(requests=f"{tot['requests']:,}", input=f"{tot['input']:,}", output=f"{tot['output']:,}",
+                   cost=cost_phrase(tot["cost"]))
+    if tot["since"]:
+        return tn("Since {date}: {requests} request, {input} input and {output} output tokens, {cost}.",
+                  "Since {date}: {requests} requests, {input} input and {output} output tokens, {cost}.",
+                  tot["requests"], date=day(tot["since"]), **figures)
+    return tn("So far: {requests} request, {input} input and {output} output tokens, {cost}.",
+              "So far: {requests} requests, {input} input and {output} output tokens, {cost}.",
+              tot["requests"], **figures)
 
 
-def short(t=None, unit="dollars"):
+def short(tot=None, unit="dollars"):
     """The Now Playing version, in dollars or tokens."""
-    t = t or totals()
+    tot = tot or totals()
     if unit == "tokens":
-        return f"AI: {t['input'] + t['output']:,} tokens"
-    return f"AI: {cost_phrase(t['cost'])}"
+        return t("AI: {tokens} tokens", tokens=f"{tot['input'] + tot['output']:,}")
+    return t("AI: {cost}", cost=cost_phrase(tot["cost"]))
 
 
 # --- the guide -------------------------------------------------------------------------
@@ -271,8 +284,8 @@ def dollar_line(rows=None):
 
     def roughly(n):
         return int(round(n, -1)) if n >= 20 else int(round(n))
-    return (f"As a rough guide, $1 buys about {roughly(1 / builds):,} Similar Tracks builds with the AI "
-            f"as a source, or about {roughly(1 / checks):,} Moderator checks.")
+    return t("As a rough guide, $1 buys about {builds} Similar Tracks builds with the AI as a source, or about "
+             "{checks} Moderator checks.", builds=f"{roughly(1 / builds):,}", checks=f"{roughly(1 / checks):,}")
 
 
 # --- Query -----------------------------------------------------------------------------
@@ -295,9 +308,9 @@ menu paths, which you can't see. Be careful not to invent settings. Keep it shor
 no bold, no headings, no asterisks; use "- " for a list. Plain British English. No em dashes."""
 
 
-def _usage_text(t):
-    lines = [headline(t), "", "By feature (requests, input tokens, output tokens, estimated cost):"]
-    lines += [f"- {f}: {n:,}, {i:,}, {o:,}, {cost_phrase(c)}" for f, n, i, o, c in t["by_feature"]] or ["- none yet"]
+def _usage_text(tot):
+    lines = [headline(tot), "", "By feature (requests, input tokens, output tokens, estimated cost):"]
+    lines += [f"- {f}: {n:,}, {i:,}, {o:,}, {cost_phrase(c)}" for f, n, i, o, c in tot["by_feature"]] or ["- none yet"]
     week = _table().execute("SELECT date(at, 'unixepoch', 'localtime'), SUM(input + cache_write + cache_read), "
                             "SUM(output) FROM ai_usage WHERE at >= ? GROUP BY 1 ORDER BY 1",
                             (time.time() - 7 * 86400,)).fetchall()

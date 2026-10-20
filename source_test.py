@@ -37,6 +37,7 @@ import time
 from datetime import datetime
 
 import engine
+from i18n import N_, t
 
 
 
@@ -65,9 +66,9 @@ _lock = threading.Lock()
 _stop = threading.Event()                  # set by cancel(): the running test stops before the next seed
 progress_state = {"n": 0, "of": 0}       # for the screens: which seed a running test is on
 
-SAMPLE_NOTICE = ("Sample results from a {tracks:,}-track library. Scores vary between libraries, "
+SAMPLE_NOTICE = N_("Sample results from a {tracks:,}-track library. Scores vary between libraries, "
                  "so run the test on yours for figures that fit your collection.")
-PERFORMANCE_HELP = ("Score: how many of this source's suggestions are in your library, compared with "
+PERFORMANCE_HELP = N_("Score: how many of this source's suggestions are in your library, compared with "
                     "the best source in each genre, averaged across all 17 genres. 100% means it found "
                     "as much as the best source in every genre. It measures reach, not taste: a source "
                     "that suggests well-known artists can score well on a big library even when its "
@@ -76,7 +77,7 @@ PERFORMANCE_HELP = ("Score: how many of this source's suggestions are in your li
 
 
 def sample_notice(result):
-    return SAMPLE_NOTICE.format(tracks=int((result or {}).get("library_tracks") or 0))
+    return t(SAMPLE_NOTICE, tracks=int((result or {}).get("library_tracks") or 0))
 
 
 # --- seeds ----------------------------------------------------------------------------
@@ -197,8 +198,8 @@ def library_hits(section, answer, seed):
                 hits.append(k)
         return hits
     seed_key = library.find_track_key(seed["artist"], seed["track"])
-    for a, t in answer:
-        key = library.find_track_key(a, t)
+    for a, title in answer:
+        key = library.find_track_key(a, title)
         if key and str(key) != str(seed_key) and str(key) not in hits:
             hits.append(str(key))
     return hits
@@ -416,15 +417,17 @@ def cell_detail(result, section, genre, code):
     """The hover text for one cell of Full Results."""
     v = result["scores"][section]["genres"][genre]["by"].get(code)
     if not v:
-        return "Not tested."
+        return t("Not tested.")
     depth = (result.get("depth") or {}).get(section)
-    returned = f"{v['returned']}" + (f" (top {depth} of {v['returned_all']} each seed)"
-                                       if depth and v.get("returned_all", 0) > v["returned"] else "")
-    return (f"Seeds answered: {v['answered']} of {v['asked']}\n"
-            f"Results used: {returned}\n"
-            f"In your library: {v['useful']}\n"
-            f"Found by no other source: {v['unique']}\n"
-            f"Time: {v['seconds']} s")
+    if depth and v.get("returned_all", 0) > v["returned"]:
+        returned = t("{used} (top {depth} of {all} each seed)", used=v["returned"], depth=depth, all=v["returned_all"])
+    else:
+        returned = str(v["returned"])
+    return "\n".join([t("Seeds answered: {answered} of {asked}", answered=v["answered"], asked=v["asked"]),
+                      t("Results used: {used}", used=returned),
+                      t("In your library: {useful}", useful=v["useful"]),
+                      t("Found by no other source: {unique}", unique=v["unique"]),
+                      t("Time: {seconds} s", seconds=v["seconds"])])
 
 
 def export_csv(result, path):
@@ -469,11 +472,11 @@ def report_lines(result, is_sample=False):
     else:
         lines.append(f"Your results, tested {result['finished']} ({result['mode']}, {len(result['seeds'])} seeds, "
                      f"{result['seconds'] // 60} min {result['seconds'] % 60} s).")
-        t = result.get("timing")
-        if t:
-            lines.append(f"Time: asking the sources {t['asking'] // 60} min {t['asking'] % 60} s, matching your "
-                         f"library {t['matching'] // 60} min {t['matching'] % 60} s"
-                         + (f", waiting for builds {t['waiting'] // 60} min" if t.get("waiting") else "") + ".")
+        timing = result.get("timing")
+        if timing:
+            lines.append(f"Time: asking the sources {timing['asking'] // 60} min {timing['asking'] % 60} s, matching your "
+                         f"library {timing['matching'] // 60} min {timing['matching'] % 60} s"
+                         + (f", waiting for builds {timing['waiting'] // 60} min" if timing.get("waiting") else "") + ".")
     for section in SECTIONS:
         sc = result["scores"][section]
         lines += ["", "Similar Artists" if section == "artists" else "Similar Tracks"]

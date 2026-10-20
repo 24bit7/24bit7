@@ -28,45 +28,45 @@ import filters
 import ai_usage
 import i18n
 import tabs
-from tabs import TabbedPane, PALETTE, FlatButton
+from tabs import TabbedPane, PALETTE, FlatButton, TCombobox
 from datetime import datetime
-from i18n import N_, t
+from i18n import N_, t, tn
 
 ENV_FILE = engine.ENV_FILE   # single source of truth for where .env lives
 
 # The Voice Commands guides, on GitHub (linked from the bottom of Settings > Voice Commands)
 DOCS_URL = "https://github.com/24bit7/24bit7/blob/main/docs/"
-VOICE_DOCS = [("How Voice Commands work", DOCS_URL + "MANUAL.md#voice-commands",
-               "What it does, what you can say, and settings per device."),
-              ("Setting up the Alexa skill", DOCS_URL + "MANUAL.md#setting-up-the-alexa-skill",
-               "Step by step, from an Amazon developer account to your first command.")]
+VOICE_DOCS = [(N_("How Voice Commands work"), DOCS_URL + "MANUAL.md#voice-commands",
+               N_("What it does, what you can say, and settings per device.")),
+              (N_("Setting up the Alexa skill"), DOCS_URL + "MANUAL.md#setting-up-the-alexa-skill",
+               N_("Step by step, from an Amazon developer account to your first command."))]
 
 # --- About tab -------------------------------------------------------------
 REPO_URL = "https://github.com/24bit7/24bit7"
 FORUM_URL = "https://yabb.jriver.com/interact/index.php/topic,144381.0.html"   # the JRiver forum thread; empty hides the link
 MANUAL_PDF = "24bit7_Manual.pdf"   # shipped next to 24bit7.exe in the release zip
 # The About tab's opening lines: they name every music source and every AI provider
-ABOUT_INTRO = ("Builds playlists from your own JRiver library around whatever is playing, using "
+ABOUT_INTRO = (N_("Builds playlists from your own JRiver library around whatever is playing, using "
                "Last.fm, ListenBrainz, Deezer, Tidal and YouTube Music. It runs without AI; the AI "
                "features are optional and need your own key for Anthropic, OpenAI or Google Gemini, "
-               "or a local model through Ollama.")
+               "or a local model through Ollama."))
 # The voice commands, as in the manual's Voice Commands chapter
 VOICE_COMMAND_LIST = [
-    ("songs by <artist>", "Artist's Top Tracks"),
-    ("music like <artist>", "Similar Artists, seeded from the artist's most popular track"),
-    ("tracks like <song>  (by <artist>)", "Similar Tracks"),
-    ("genre <anything>", "AI Playlist, e.g. \"genre nu metal with grunge\" (needs the AI set up)"),
-    ("album <name>", "Plays the album now, in track order"),
-    ("song <title>  (by <artist>)", "Plays the song now, then stops"),
-    ("playlist <name>", "Plays one of your JRiver playlists or smartlists now"),
-    ("shuffle songs by <artist>", "Every track by the artist in your library, shuffled"),
-    ("skip / next / next song", "The next track in that device's zone"),
-    ("who is this / what's playing", "Alexa says the track, artist and album"),
-    ("more like this / more of this", "Similar Tracks seeded from what's playing"),
-    ("switch / switch to <zone>", "Moves what's playing to another zone (Enable Switch To)"),
-    ("stop / pause / resume the music", "On that device's zone"),
-    ("keep it going / non stop / go continuous", "Non-stop, once, for whatever is playing"),
-    ("list commands / help", "Alexa reads the commands once"),
+    ("songs by <artist>", N_("Artist's Top Tracks")),
+    ("music like <artist>", N_("Similar Artists, seeded from the artist's most popular track")),
+    ("tracks like <song>  (by <artist>)", N_("Similar Tracks")),
+    ("genre <anything>", N_("AI Playlist, e.g. \"genre nu metal with grunge\" (needs the AI set up)")),
+    ("album <name>", N_("Plays the album now, in track order")),
+    ("song <title>  (by <artist>)", N_("Plays the song now, then stops")),
+    ("playlist <name>", N_("Plays one of your JRiver playlists or smartlists now")),
+    ("shuffle songs by <artist>", N_("Every track by the artist in your library, shuffled")),
+    ("skip / next / next song", N_("The next track in that device's zone")),
+    ("who is this / what's playing", N_("Alexa says the track, artist and album")),
+    ("more like this / more of this", N_("Similar Tracks seeded from what's playing")),
+    ("switch / switch to <zone>", N_("Moves what's playing to another zone (Enable Switch To)")),
+    ("stop / pause / resume the music", N_("On that device's zone")),
+    ("keep it going / non stop / go continuous", N_("Non-stop, once, for whatever is playing")),
+    ("list commands / help", N_("Alexa reads the commands once")),
 ]
 CREDITS = [
     ("Last.fm", "https://www.last.fm"),
@@ -84,9 +84,9 @@ CREDITS = [
 ]
 
 THANKS = [   # Settings > About > Thanks, and the README's Thanks section
-    ("datdude", "Early testing and ideas, including Switch Profiles."),
-    ("Helmut", "Shaping Review."),
-    ("Denis", "The local AI work, testing it with Ollama and Gemma 3 4B, and testing 24bit7 against a 187,000-track library."),
+    ("datdude", N_("Early testing and ideas, including Switch Profiles.")),
+    ("Helmut", N_("Shaping Review.")),
+    ("Denis", N_("The local AI work, testing it with Ollama and Gemma 3 4B, and testing 24bit7 against a 187,000-track library.")),
 ]
 
 
@@ -102,46 +102,46 @@ TRACK_SOURCE_NAMES = [("ai", "AI"), ("lastfm", "Last.fm"), ("listenbrainz", "Lis
 
 
 KEY_HELP = {
-    "LASTFM_API_KEY": ("Last.fm API key",
-        "Create an API account at last.fm/api (Get an API account).\n"
+    "LASTFM_API_KEY": (N_("Last.fm API key"),
+        N_("Create an API account at last.fm/api (Get an API account).\n"
         "Your key is shown on your account's API page. It's free.\n"
         "24bit7 comes with a key built in, so this is optional.\n"
-        "A key of your own is used instead when you fill it in."),
-    "LISTENBRAINZ_TOKEN": ("ListenBrainz token",
-        "Sign in at listenbrainz.org (uses a MusicBrainz account),\n"
-        "then copy your User Token from listenbrainz.org/settings."),
-    "TIDAL_CLIENT_ID": ("Tidal Client ID",
-        "At developer.tidal.com, sign in with a TIDAL account, open Dashboard\n"
+        "A key of your own is used instead when you fill it in.")),
+    "LISTENBRAINZ_TOKEN": (N_("ListenBrainz token"),
+        N_("Sign in at listenbrainz.org (uses a MusicBrainz account),\n"
+        "then copy your User Token from listenbrainz.org/settings.")),
+    "TIDAL_CLIENT_ID": (N_("Tidal Client ID"),
+        N_("At developer.tidal.com, sign in with a TIDAL account, open Dashboard\n"
         "and choose Create App. Copy the Client ID and Client Secret from the\n"
-        "app's overview page into the two Tidal fields. It's free."),
-    "TIDAL_CLIENT_SECRET": ("Tidal Client Secret",
-        "At developer.tidal.com, sign in with a TIDAL account, open Dashboard\n"
+        "app's overview page into the two Tidal fields. It's free.")),
+    "TIDAL_CLIENT_SECRET": (N_("Tidal Client Secret"),
+        N_("At developer.tidal.com, sign in with a TIDAL account, open Dashboard\n"
         "and choose Create App. Copy the Client ID and Client Secret from the\n"
-        "app's overview page into the two Tidal fields. It's free."),
-    "TIDAL_ACCOUNT": ("Sign In to Tidal",
-        "Only needed to send playlists to Tidal. At developer.tidal.com, open Dashboard\n"
+        "app's overview page into the two Tidal fields. It's free.")),
+    "TIDAL_ACCOUNT": (N_("Sign In to Tidal"),
+        N_("Only needed to send playlists to Tidal. At developer.tidal.com, open Dashboard\n"
         "and the app you made for the Client ID. Under Redirect URIs add\n"
         "http://localhost:47807/tidal and under Scopes tick playlists.read\n"
-        "and playlists.write. Save, then press Sign In to Tidal here."),
-    "DISCOGS_TOKEN": ("Discogs token",
-        "Go to discogs.com/settings/developers and click\n"
-        "'Generate new token' under Personal access token."),
-    "ANTHROPIC_API_KEY": ("Anthropic API key",
-        "At platform.claude.com, add billing credit under Settings,\n"
-        "then create a key under API keys. Copy it once at creation."),
-    "OPENAI_API_KEY": ("OpenAI API key",
-        "At platform.openai.com, add billing credit under Settings,\n"
-        "then create a key under API keys. Copy it once at creation."),
-    "GEMINI_API_KEY": ("Google Gemini API key",
-        "At aistudio.google.com, choose Get API key and create one.\n"
-        "There's a free tier with lower limits; add billing for more."),
-    "OLLAMA_URL": ("Ollama",
-        "Install Ollama from ollama.com, then pull a model, for example\n"
+        "and playlists.write. Save, then press Sign In to Tidal here.")),
+    "DISCOGS_TOKEN": (N_("Discogs token"),
+        N_("Go to discogs.com/settings/developers and click\n"
+        "'Generate new token' under Personal access token.")),
+    "ANTHROPIC_API_KEY": (N_("Anthropic API key"),
+        N_("At platform.claude.com, add billing credit under Settings,\n"
+        "then create a key under API keys. Copy it once at creation.")),
+    "OPENAI_API_KEY": (N_("OpenAI API key"),
+        N_("At platform.openai.com, add billing credit under Settings,\n"
+        "then create a key under API keys. Copy it once at creation.")),
+    "GEMINI_API_KEY": (N_("Google Gemini API key"),
+        N_("At aistudio.google.com, choose Get API key and create one.\n"
+        "There's a free tier with lower limits; add billing for more.")),
+    "OLLAMA_URL": (N_("Ollama"),
+        N_("Install Ollama from ollama.com, then pull a model, for example\n"
         "ollama pull gemma3:4b. Ollama's address is usually the one filled\n"
-        "in here; change it only if Ollama runs on another computer."),
-    "JRIVER_PASS": ("JRiver Media Network",
-        "Set the username and password in JRiver under\n"
-        "Tools > Options > Media Network > Authentication."),
+        "in here; change it only if Ollama runs on another computer.")),
+    "JRIVER_PASS": (N_("JRiver Media Network"),
+        N_("Set the username and password in JRiver under\n"
+        "Tools > Options > Media Network > Authentication.")),
 }
 
 KEY_FIELDS = ["LASTFM_API_KEY", "LISTENBRAINZ_TOKEN", "DISCOGS_TOKEN", "TIDAL_CLIENT_ID", "TIDAL_CLIENT_SECRET",
@@ -150,27 +150,25 @@ KEY_FIELDS = ["LASTFM_API_KEY", "LISTENBRAINZ_TOKEN", "DISCOGS_TOKEN", "TIDAL_CL
 AI_FIELDS = {"anthropic": ["ANTHROPIC_API_KEY"], "openai": ["OPENAI_API_KEY"], "gemini": ["GEMINI_API_KEY"],
              "ollama": ["OLLAMA_URL", "OLLAMA_MODEL"]}   # Settings > Keys > AI shows the chosen provider's
 AI_KEY_FIELDS = {k for fields in AI_FIELDS.values() for k in fields}
-UNTESTED_NOTE = "Untested so far: please report how it goes on the JRiver forum or GitHub."
+UNTESTED_NOTE = N_("Untested so far: please report how it goes on the JRiver forum or GitHub.")
 
 NO_KEY_TEXT = N_("You need to set up the AI under Settings > Keys to use this function")
-CONSOLE_QUERY_WARNING = ("Console Query sends the console, your settings (without keys) and 24bit7's "
+CONSOLE_QUERY_WARNING = (N_("Console Query sends the console, your settings (without keys) and 24bit7's "
                          "code to your AI provider each time you ask a question. The first question costs a few "
-                         "pence, more than the Moderator.\n\nTurn it on?")
+                         "pence, more than the Moderator.\n\nTurn it on?"))
 MODERATOR_CHOICES = [N_("Off"), N_("Relaxed"), N_("Balanced"), N_("Strict")]   # English: shown through t()
 MODERATOR_LEVELS_HELP = (
-    "Relaxed: removes only clear clashes, at most a fifth of the tracks.\n"
+    N_("Relaxed: removes only clear clashes, at most a fifth of the tracks.\n"
     "Balanced: removes anything that noticeably shifts the tone, energy or mood, at most two fifths.\n"
     "Strict: keeps only tracks close to the seed, however many that leaves. Drift can top a short "
     "playlist up.\n"
-    "Tracks it doesn't know well enough to judge are always kept, and genre is never a reason on its own.")
+    "Tracks it doesn't know well enough to judge are always kept, and genre is never a reason on its own."))
 def moderator_warning():
     """The one-off note when Moderator is first switched on, naming the chosen provider."""
     if engine.AI_PROVIDER == "ollama":
-        return ("Moderator checks each playlist with your own AI model (Ollama), on your PC. "
-                "It costs nothing.")
-    name = engine.ai_provider_name()
-    return (f"Moderator checks each playlist using your chosen AI ({name}), which uses a little "
-            f"credit from your {name} account. Each playlist costs a fraction of a penny.")
+        return t("Moderator checks each playlist with your own AI model (Ollama), on your PC. It costs nothing.")
+    return t("Moderator checks each playlist using your chosen AI ({name}), which uses a little credit from your "
+             "{name} account. Each playlist costs a fraction of a penny.", name=engine.ai_provider_name())
 
 
 NOTE_DELAY_MS = 500   # a note waits this long, so passing the pointer over a title doesn't flash one up
@@ -269,7 +267,7 @@ def warn_moderator_once(parent):
     """The one-off credits warning, the first time Moderator is switched on anywhere."""
     if engine.MODERATOR_WARNED:
         return
-    messagebox.showinfo("Moderator", moderator_warning(), parent=parent)
+    messagebox.showinfo(t("Moderator"), moderator_warning(), parent=parent)
     write_env({"MODERATOR_WARNED": "1"})
     engine.MODERATOR_WARNED = True
 
@@ -542,23 +540,23 @@ PLAYLIST_TEXT_KEYS = ["SIMILAR_ARTIST_TRACK_COUNT", "SIMILAR_ARTIST_LIMIT", "TRA
                       "SKIP_PLAYED_TOP_DAYS", "SKIP_PLAYED_VIBE_DAYS"]
 
 # Drift using: (saved value, label shown). AI is for vibe playlists only, and never the default.
-DRIFT_USING_OPTIONS = [("artists", "Similar artists"), ("tracks", "Similar tracks"), ("ai", "AI")]
+DRIFT_USING_OPTIONS = [("artists", N_("Similar artists")), ("tracks", N_("Similar tracks")), ("ai", "AI")]
 # AI Playlist's Drift choices say plainly which ones use the AI
-VIBE_DRIFT_USING_OPTIONS = [("artists", "Similar artists (no AI)"), ("tracks", "Similar tracks (no AI)"),
-                            ("ai", "AI (uses credits)")]
-DRIFT_SOURCE_MODES = [("same", "Same as Settings > Sources"), ("custom", "Custom Sources")]
+VIBE_DRIFT_USING_OPTIONS = [("artists", N_("Similar artists (no AI)")), ("tracks", N_("Similar tracks (no AI)")),
+                            ("ai", N_("AI (uses credits)"))]
+DRIFT_SOURCE_MODES = [("same", N_("Same as Settings > Sources")), ("custom", N_("Custom Sources"))]
 # If All Else Fails: what happens when a build finds nothing at all
-FALLBACK_MODE_OPTIONS = [("shuffle", "Shuffle Genre"), ("file", "Run File"), ("playlist", "Play Playlist")]
-FALLBACK_HELP = ("When a build finds nothing at all. Shuffle Genre plays songs from your library in the seed "
+FALLBACK_MODE_OPTIONS = [("shuffle", N_("Shuffle Genre")), ("file", N_("Run File")), ("playlist", N_("Play Playlist"))]
+FALLBACK_HELP = (N_("When a build finds nothing at all. Shuffle Genre plays songs from your library in the seed "
                  "track's genre (or the artist's most common genre), at a similar tempo when the seed has a BPM "
                  "tag, leaving out the seed artist and anything played recently. Run File starts a file of your "
                  "own, such as a .bat, and Run After Building is skipped for that build. Play Playlist plays one "
                  "of your JRiver playlists or smartlists, as JRiver gives it. Unticked, the build ends with a "
-                 "message.")
-SPOKEN_HELP = ("For voice commands and keyboard shortcuts that play in a zone: before the music starts, "
+                 "message."))
+SPOKEN_HELP = (N_("For voice commands and keyboard shortcuts that play in a zone: before the music starts, "
                "Windows' own voice says why in that zone. The message is a short WAV file played in JRiver, so "
-               "it shows in Playing Now. One setting for every playlist type. Off to start.")
-NO_PLAYLIST = "No playlist chosen"
+               "it shows in Playing Now. One setting for every playlist type. Off to start."))
+NO_PLAYLIST = N_("No playlist chosen")
 
 
 def choose_playlist(parent, on_pick):
@@ -569,7 +567,7 @@ def choose_playlist(parent, on_pick):
     except Exception:
         playlists = None
     win = tk.Toplevel(parent)
-    win.title("Choose a Playlist")
+    win.title(t("Choose a Playlist"))
     win.transient(parent.winfo_toplevel())
     win.resizable(False, False)
     search = ttk.Entry(win, width=48)
@@ -582,7 +580,7 @@ def choose_playlist(parent, on_pick):
         lb.delete(0, "end")
         items.clear()
         if playlists is None:
-            lb.insert("end", "JRiver isn't answering, so there are no playlists to show.")
+            lb.insert("end", t("JRiver isn't answering, so there are no playlists to show."))
             items.append(None)
             return
         used, rest = playmix.picker_order(playlists, search.get())
@@ -597,7 +595,7 @@ def choose_playlist(parent, on_pick):
                                           else ""))
             items.append(p)
         if not items:
-            lb.insert("end", "No playlists match")
+            lb.insert("end", t("No playlists match"))
             items.append(None)
 
     def pick(_e=None):
@@ -610,8 +608,8 @@ def choose_playlist(parent, on_pick):
 
     buttons = tk.Frame(win)
     buttons.pack(fill="x", padx=10, pady=10)
-    ttk.Button(buttons, text="Cancel", command=win.destroy).pack(side="right")
-    ttk.Button(buttons, text="Choose", command=pick).pack(side="right", padx=(0, 6))
+    ttk.Button(buttons, text=t("Cancel"), command=win.destroy).pack(side="right")
+    ttk.Button(buttons, text=t("Choose"), command=pick).pack(side="right", padx=(0, 6))
     search.bind("<KeyRelease>", lambda e: fill() if e.keysym != "Return" else None)
     search.bind("<Return>", pick)
     lb.bind("<Double-Button-1>", pick)
@@ -620,23 +618,23 @@ def choose_playlist(parent, on_pick):
     search.focus_set()
     return win
 # Drift: Off, or how each round picks its seeds
-DRIFT_MODE_OPTIONS = [("off", "Off"), ("close", "Keep It Tight"), ("spread", "Spread")]
-DRIFT_MODE_HELP = ("When a playlist comes up short, Drift searches again using what's already been found.\n"
+DRIFT_MODE_OPTIONS = [("off", N_("Off")), ("close", N_("Keep It Tight")), ("spread", N_("Spread"))]
+DRIFT_MODE_HELP = (N_("When a playlist comes up short, Drift searches again using what's already been found.\n"
                    "Keep It Tight: seeds only from the first round's tracks, so nothing strays far from your "
                    "seed. If the first round was short, Drift may run out of seeds and finish short; the "
                    "console says when.\n"
                    "Spread: seeds from across the whole playlist, including what Drift has added, so it "
-                   "can travel further while branching in several directions.")
+                   "can travel further while branching in several directions."))
 # Moderator on Drift tracks, for Similar Artists and Similar Tracks
-DRIFT_MODERATOR_OPTIONS = [("same", "Same as build"), ("off", "Off"), ("relaxed", "Relaxed"),
-                           ("balanced", "Balanced"), ("strict", "Strict")]
+DRIFT_MODERATOR_OPTIONS = [("same", N_("Same as build")), ("off", N_("Off")), ("relaxed", N_("Relaxed")),
+                           ("balanced", N_("Balanced")), ("strict", N_("Strict"))]
 DRIFT_ARTIST_SOURCE_NAMES = [s for s in SOURCE_NAMES if s[0] != "ai"]   # Drift from the sources never uses the AI
-DRIFT_SOURCES_HELP = ("Same as Settings > Sources uses the sources you picked for this Play option. Custom "
+DRIFT_SOURCES_HELP = (N_("Same as Settings > Sources uses the sources you picked for this Play option. Custom "
                       "Sources lets the top-up rounds use different ones, for example steadier sources first "
-                      "and more adventurous ones to fill the gaps.")
-DRIFT_SAME_WARNING = ("Same sources keep Drift's picks closest to the seed. Custom Sources give Drift a "
+                      "and more adventurous ones to fill the gaps."))
+DRIFT_SAME_WARNING = (N_("Same sources keep Drift's picks closest to the seed. Custom Sources give Drift a "
                       "different route if the playlist finds nothing and provide a back-up route to build "
-                      "out the playlist.")
+                      "out the playlist."))
 
 
 def drift_using_options(group):
@@ -644,33 +642,33 @@ def drift_using_options(group):
     return VIBE_DRIFT_USING_OPTIONS if group == "vibe" else DRIFT_USING_OPTIONS[:2]
 
 # The Play options, as the tabs inside Sources and Playlist
-PLAY_OPTIONS = [("artists", "Similar Artists"), ("tracks", "Similar Tracks"),
-                ("top", "Artist's Top Tracks"), ("vibe", "AI Playlist")]
+PLAY_OPTIONS = [("artists", N_("Similar Artists")), ("tracks", N_("Similar Tracks")),
+                ("top", N_("Artist's Top Tracks")), ("vibe", N_("AI Playlist"))]
 
 # Deep Cuts on a device's own Playlist tab (Windows (Main)'s switch is the Play tab's button)
-DEVICE_DEEP_CUTS = [("off", "Off"), ("spaced", "Spaced"), ("shuffled", "Shuffled")]
+DEVICE_DEEP_CUTS = [("off", N_("Off")), ("spaced", N_("Spaced")), ("shuffled", N_("Shuffled"))]
 
 # Non-stop dropdowns: (saved value, label shown)
-NONSTOP_USING_OPTIONS = [("artists", "Similar artists"), ("tracks", "Similar tracks")]
-NONSTOP_RESEED_OPTIONS = [("last", "Last track"), ("second", "2nd track")]
+NONSTOP_USING_OPTIONS = [("artists", N_("Similar artists")), ("tracks", N_("Similar tracks"))]
+NONSTOP_RESEED_OPTIONS = [("last", N_("Last track")), ("second", N_("2nd track"))]
 SAVED_RESEED_OPTIONS = NONSTOP_RESEED_OPTIONS + [("whole", "Whole playlist")]   # JRiver Playlists rows only
-NONSTOP_MODE_OPTIONS = [("off", "Off"), ("tight", "Keep It Tight"), ("journey", "Wander")]
-NONSTOP_MODE_HELP = ("When the last track of a playlist 24bit7 built starts, more are added so the music keeps going.\n"
+NONSTOP_MODE_OPTIONS = [("off", N_("Off")), ("tight", N_("Keep It Tight")), ("journey", N_("Wander"))]
+NONSTOP_MODE_HELP = (N_("When the last track of a playlist 24bit7 built starts, more are added so the music keeps going.\n"
                      "Keep It Tight: each top-up reseeds from a track of the original playlist, a different one "
                      "each time, so the evening stays close to where it started. When every track has been used "
                      "as a seed, it carries on as Wander, and the console says so.\n"
                      "Wander: each top-up reseeds from where the music has got to (Reseed "
-                     "from), so the evening travels.")
-NONSTOP_WITH_OPTIONS = [("vibe", "More from the AI"), ("artists", "Similar artists"), ("tracks", "Similar tracks")]
+                     "from), so the evening travels."))
+NONSTOP_WITH_OPTIONS = [("vibe", N_("More from the AI")), ("artists", N_("Similar artists")), ("tracks", N_("Similar tracks"))]
 # Saved Playlists dropdowns
-SAVED_NONSTOP_OPTIONS = [("no", "No"), ("artists", "Similar artists"), ("tracks", "Similar tracks")]
-SAVED_SKIP_OPTIONS = [("0", "Off"), ("1", "1 day"), ("2", "2 days"), ("3", "3 days"), ("7", "7 days"),
-                      ("14", "14 days"), ("30", "30 days")]
-CACHE_KEEP_OPTIONS = [("month", "1 Month"), ("year", "1 Year"), ("permanent", "Permanent")]
-CREDITS_SCOPE_OPTIONS = [("current", "Album/Current Track"), ("all", "Album/All Tracks")]
-CREDITS_FIRST_OPTIONS = [("track", "Tracks"), ("album", "Album")]
-CLEAR_CACHE_OPTIONS = [("month", "Older Than 1 Month"), ("year", "Older Than 1 Year"), ("all", "Clear All")]
-ALL_FOLDERS = "All folders"   # the JRiver Playlists folder filter's first choice
+SAVED_NONSTOP_OPTIONS = [("no", N_("No")), ("artists", N_("Similar artists")), ("tracks", N_("Similar tracks"))]
+SAVED_SKIP_OPTIONS = [("0", N_("Off")), ("1", N_("1 day")), ("2", N_("2 days")), ("3", N_("3 days")), ("7", N_("7 days")),
+                      ("14", N_("14 days")), ("30", N_("30 days"))]
+CACHE_KEEP_OPTIONS = [("month", N_("1 Month")), ("year", N_("1 Year")), ("permanent", N_("Permanent"))]
+CREDITS_SCOPE_OPTIONS = [("current", N_("Album/Current Track")), ("all", N_("Album/All Tracks"))]
+CREDITS_FIRST_OPTIONS = [("track", N_("Tracks")), ("album", N_("Album"))]
+CLEAR_CACHE_OPTIONS = [("month", N_("Older Than 1 Month")), ("year", N_("Older Than 1 Year")), ("all", N_("Clear All"))]
+ALL_FOLDERS = N_("All folders")   # the JRiver Playlists folder filter's first choice
 
 
 def table_colours():
@@ -682,9 +680,9 @@ def table_colours():
 
 
 # The ? beside each Number of tracks
-LIMIT_HELP = "Ticked, the playlist stops at this many tracks, picked at random from everything found. Unticked, every track found goes in: Number of artists times Tracks per artist selection, plus the seed artist's, so the playlist can run long, and Drift doesn't run as there's no target to fall short of. Non-stop top-ups always keep to this number.\nTo switch the random pick off altogether, set Tracks per artist selection to the same as Number of artist's top tracks (say 5 of 5) and untick this."
-TARGET_HELP = 'This is the target number of tracks. The playlist may come out shorter, depending on how many matches are in your library. If your playlists are often too short, tick Drift to fill them out.'
-TOP_TARGET_HELP = "This is the target number of tracks. The playlist may come out shorter, depending on how many of the artist's top tracks are in your library."
+LIMIT_HELP = N_("Ticked, the playlist stops at this many tracks, picked at random from everything found. Unticked, every track found goes in: Number of artists times Tracks per artist selection, plus the seed artist's, so the playlist can run long, and Drift doesn't run as there's no target to fall short of. Non-stop top-ups always keep to this number.\nTo switch the random pick off altogether, set Tracks per artist selection to the same as Number of artist's top tracks (say 5 of 5) and untick this.")
+TARGET_HELP = N_('This is the target number of tracks. The playlist may come out shorter, depending on how many matches are in your library. If your playlists are often too short, tick Drift to fill them out.')
+TOP_TARGET_HELP = N_("This is the target number of tracks. The playlist may come out shorter, depending on how many of the artist's top tracks are in your library.")
 
 
 def option_code(options, label):
@@ -732,7 +730,7 @@ def sync_agreement(p, sources_key, agree_key, box_name, most):
     if ticked < 2:
         box.config(state="disabled")
         return
-    options = ["Off"] + [str(n) for n in range(2, min(ticked, most) + 1)]
+    options = [N_("Off")] + [str(n) for n in range(2, min(ticked, most) + 1)]
     box.config(values=options, state="readonly")
     if p.vars[agree_key].get() not in options:
         p.vars[agree_key].set(options[-1])
@@ -895,16 +893,17 @@ class SettingsTab(tk.Frame):
     def _on_title_bar_toggled(self):
         """Saves the title bar choice, then offers to restart so it takes effect."""
         self._save()
-        which = "Windows'" if self.vars["WINDOWS_TITLE_BAR"].get() else "24bit7's own"
-        if messagebox.askyesno("Title bar", f"Restart 24bit7 now to use {which} title bar?", parent=self):
+        ask = (t("Restart 24bit7 now to use Windows' title bar?") if self.vars["WINDOWS_TITLE_BAR"].get()
+               else t("Restart 24bit7 now to use 24bit7's own title bar?"))
+        if messagebox.askyesno(t("Title bar"), ask, parent=self):
             self.winfo_toplevel().event_generate("<<Restart24bit7>>")
 
     def _on_theme_changed(self, *_):
         """Saves the theme, then offers to restart so it takes effect."""
         self._save()
-        choice = self.vars["THEME"].get().lower()
-        if messagebox.askyesno("Theme", f"Restart 24bit7 now to switch to the {choice} theme?",
-                               parent=self):
+        ask = (t("Restart 24bit7 now to switch to the dark theme?") if self.vars["THEME"].get() == "Dark"
+               else t("Restart 24bit7 now to switch to the light theme?"))
+        if messagebox.askyesno(t("Theme"), ask, parent=self):
             self.winfo_toplevel().event_generate("<<Restart24bit7>>")
 
     def _on_language_changed(self, *_):
@@ -929,7 +928,7 @@ class SettingsTab(tk.Frame):
                 missing = any(k in self.vars and not self.vars[k].get().strip()
                               for k in ("TIDAL_CLIENT_ID", "TIDAL_CLIENT_SECRET"))
             try:
-                box.config(text=label + ("  (no key yet)" if missing else ""))
+                box.config(text=label + ("  " + t("(no key yet)") if missing else ""))
             except tk.TclError:
                 pass
 
@@ -946,7 +945,7 @@ class SettingsTab(tk.Frame):
         try:
             write_env(updates)
         except Exception as e:
-            messagebox.showerror("Save failed", str(e), parent=self)
+            messagebox.showerror(t("Save failed"), str(e), parent=self)
 
     # --- tabs --------------------------------------------------------------
 
@@ -957,7 +956,7 @@ class SettingsTab(tk.Frame):
         gets <<Shown>> each time the page is opened, in place of <Map>.
         """
         outer = tk.Frame(nb)
-        nb.add(outer, text=text)
+        nb.add(outer, text=t(text))
         return self._scroll_page(outer, fill_outer=False)
 
     def _scroll_page(self, outer, fill_outer=True):
@@ -1002,7 +1001,7 @@ class SettingsTab(tk.Frame):
         ticked device. Checked each time the page is opened.
         """
         outer = tk.Frame(nb)
-        nb.add(outer, text=text)
+        nb.add(outer, text=t(text))
         self._panes[kind] = {"outer": outer, "pane": None, "devices": {}, "main": None}
         self._layout_device_pane(kind, first=True)
         outer.bind("<Map>", lambda e: self._layout_device_pane(kind))
@@ -1029,7 +1028,7 @@ class SettingsTab(tk.Frame):
         if wanted:
             info["pane"] = TabbedPane(info["outer"], font=("Segoe UI", 9, "bold"), pad=(12, 4))
             info["pane"].pack(fill="both", expand=True, pady=(6, 0))
-            fill(self._scroll_tab(info["pane"], "Windows (Main)"), main)
+            fill(self._scroll_tab(info["pane"], N_("Windows (Main)")), main)
         else:
             info["pane"] = None
             fill(self._scroll_page(info["outer"]), main)
@@ -1090,11 +1089,11 @@ class SettingsTab(tk.Frame):
         copy_var = tk.BooleanVar(value=copying)
         head = tk.Frame(inner)
         head.grid(row=0, column=0, sticky="w", pady=(0, 10))
-        ttk.Checkbutton(head, text="Copy Windows (Main)", variable=copy_var, style="Big.TCheckbutton",
+        ttk.Checkbutton(head, text=t("Copy Windows (Main)"), variable=copy_var, style="Big.TCheckbutton",
                         command=lambda: self._copy_toggled(kind, device_id, p, copy_var.get())).pack(side="left")
-        help_mark(head, "Ticked, this device uses the same settings as the Windows app, and follows any "
+        help_mark(head, t("Ticked, this device uses the same settings as the Windows app, and follows any "
                         "change made there. Untick it to give this device settings of its own, starting "
-                        "from a copy of the Windows ones.").pack(side="left", padx=(8, 0))
+                        "from a copy of the Windows ones.")).pack(side="left", padx=(8, 0))
         body = tk.Frame(inner)
         body.grid(row=1, column=0, sticky="ew")
         inner.grid_columnconfigure(0, weight=1)
@@ -1125,15 +1124,15 @@ class SettingsTab(tk.Frame):
     def _build_sources(self, nb):
         ttk.Style(self).configure("Big.TCheckbutton", font=("Segoe UI", 11))
         self._panes = getattr(self, "_panes", {})
-        self._main_sources = self._device_pane(nb, "Sources", "sources")
+        self._main_sources = self._device_pane(nb, N_("Sources"), "sources")
 
     def _build_playlist(self, nb):
         self._panes = getattr(self, "_panes", {})
-        self._main_playlist = self._device_pane(nb, "Playlist", "playlist")
+        self._main_playlist = self._device_pane(nb, N_("Playlist"), "playlist")
 
     def _build_saved(self, nb):
         self._panes = getattr(self, "_panes", {})
-        self._main_saved = self._device_pane(nb, "JRiver Playlists", "saved")
+        self._main_saved = self._device_pane(nb, N_("JRiver Playlists"), "saved")
 
     def _filler(self, kind):
         return {"sources": self._fill_sources, "playlist": self._fill_playlist, "saved": self._fill_saved}[kind]
@@ -1142,7 +1141,7 @@ class SettingsTab(tk.Frame):
 
     def _build_filters(self, nb):
         """A library of named filters on the left; the chosen one on the right."""
-        tab = self._scroll_tab(nb, "Filters")
+        tab = self._scroll_tab(nb, N_("Filters"))
         self._filters = filters.load()
         self._filter_i = 0 if self._filters else None
         left = tk.Frame(tab)
@@ -1151,21 +1150,21 @@ class SettingsTab(tk.Frame):
         self._filter_right.grid(row=0, column=1, sticky="nwe")
         tab.grid_columnconfigure(1, weight=1)
 
-        box = section(left, "Your filters",
-                      "Filters narrow the playlists 24bit7 builds (Similar Artists, Similar Tracks, Artist's Top "
+        box = section(left, t("Your filters"),
+                      t("Filters narrow the playlists 24bit7 builds (Similar Artists, Similar Tracks, Artist's Top "
                       "Tracks and AI Playlist), including Drift and non-stop top-ups. Each one applies to every Play "
                       "option on the devices it's ticked for. Where several apply, a track must pass them all. "
-                      "Albums, songs, shuffles and JRiver playlists asked for by voice play as asked.")
+                      "Albums, songs, shuffles and JRiver playlists asked for by voice play as asked."))
         self._filter_list = tk.Listbox(box, height=8, width=26, activestyle="none", exportselection=False,
                                        font=("Segoe UI", 10))
         self._filter_list.grid(row=0, column=0, sticky="w")
         self._filter_list.bind("<<ListboxSelect>>", self._filter_picked)
         buttons = tk.Frame(box)
         buttons.grid(row=1, column=0, sticky="w", pady=(8, 0))
-        for text, command in (("New", self._filter_new), ("Rename", self._filter_rename),
-                              ("Duplicate", self._filter_duplicate), ("Delete", self._filter_delete)):
-            tk.Button(buttons, text=text, width=7, command=command).pack(side="left", padx=(0, 3))
-        box = section(left, "Active filters", "What applies where, from the filters that are on.")
+        for text, command in ((t("New"), self._filter_new), (t("Rename"), self._filter_rename),
+                              (t("Duplicate"), self._filter_duplicate), (t("Delete"), self._filter_delete)):
+            tk.Button(buttons, text=text, width=9, command=command).pack(side="left", padx=(0, 3))
+        box = section(left, t("Active filters"), t("What applies where, from the filters that are on."))
         self._filter_summary = tk.Frame(box)
         self._filter_summary.grid(row=0, column=0, sticky="w")
         tab.bind("<<Shown>>", lambda e: self._filter_refresh(), add="+")
@@ -1174,7 +1173,7 @@ class SettingsTab(tk.Frame):
     def _filter_devices(self):
         """[(value, label)] for Applies on: all, the Windows app, then each Alexa device."""
         # only speakers with their own settings: any other follows Windows (Main), as everywhere else
-        return [(filters.ALL, "All devices"), (filters.MAIN, "Windows (Main)")] + filters.own_devices()
+        return [(filters.ALL, t("All devices")), (filters.MAIN, t("Windows (Main)"))] + filters.own_devices()
 
     def _filter_playlists(self):
         """[(id, label)] for Only pick from, from the JRiver Playlists table (read from JRiver if it's empty)."""
@@ -1186,13 +1185,13 @@ class SettingsTab(tk.Frame):
                 rows = {}
         items = [(pid, f"{r.get('name') or pid}  ({r.get('folder') or saved_playlists.ROOT}, {r.get('type') or 'Playlist'})")
                  for pid, r in rows.items()]
-        return [("", "None")] + sorted(items, key=lambda x: x[1].lower())
+        return [("", t("None"))] + sorted(items, key=lambda x: x[1].lower())
 
     def _filter_save(self):
         try:
             filters.save(self._filters)
         except Exception as e:
-            messagebox.showerror("Save failed", str(e), parent=self)
+            messagebox.showerror(t("Save failed"), str(e), parent=self)
         self._filter_fill_list()
         self._filter_fill_summary()
 
@@ -1205,7 +1204,7 @@ class SettingsTab(tk.Frame):
         lb = self._filter_list
         lb.delete(0, "end")
         for item in self._filters:
-            lb.insert("end", item["name"] + ("" if item.get("on") else "   (off)"))
+            lb.insert("end", item["name"] + ("" if item.get("on") else "   " + t("(off)")))
         if self._filter_i is not None and self._filter_i < len(self._filters):
             lb.selection_set(self._filter_i)
 
@@ -1218,7 +1217,7 @@ class SettingsTab(tk.Frame):
             names = [x["name"] for x in self._filters if filters.applies(x, None if value == filters.MAIN else value)]
             tk.Label(frame, text=label, font=LABEL_FONT, anchor="w").grid(row=r, column=0, sticky="w",
                                                                            pady=(4 if r else 0, 0))
-            tk.Label(frame, text=", ".join(names) or "No filters", anchor="w", fg=PALETTE["help_fg"],
+            tk.Label(frame, text=", ".join(names) or t("No filters"), anchor="w", fg=PALETTE["help_fg"],
                      font=HELP_FONT, wraplength=scaled(frame, 230), justify="left").grid(row=r + 1, column=0, sticky="w")
             r += 2
 
@@ -1233,8 +1232,8 @@ class SettingsTab(tk.Frame):
         for child in right.winfo_children():
             child.destroy()
         if self._filter_i is None or self._filter_i >= len(self._filters):
-            box = section(right, "No filter chosen")
-            tk.Label(box, text="Click New to make your first filter.", fg=PALETTE["help_fg"],
+            box = section(right, t("No filter chosen"))
+            tk.Label(box, text=t("Click New to make your first filter."), fg=PALETTE["help_fg"],
                      font=HELP_FONT).grid(row=0, column=0, sticky="w")
             return
         item = self._filters[self._filter_i]
@@ -1249,15 +1248,15 @@ class SettingsTab(tk.Frame):
         def on_toggled():
             item["on"] = on.get()
             self._filter_save()
-        ttk.Checkbutton(row, text="On", variable=on, command=on_toggled).pack(side="left")
-        help_mark(row, "Off keeps the filter for later without it applying anywhere.").pack(side="left", padx=(8, 0))
+        ttk.Checkbutton(row, text=t("On"), variable=on, command=on_toggled).pack(side="left")
+        help_mark(row, t("Off keeps the filter for later without it applying anywhere.")).pack(side="left", padx=(8, 0))
         head = tk.Frame(box)
         head.grid(row=1, column=0, sticky="w", pady=(10, 2))
-        tk.Label(head, text="Applies on", font=LABEL_FONT).pack(side="left")
-        help_mark(head, "All devices covers the Play tab and every Alexa device. Windows (Main) is the Play tab, "
+        tk.Label(head, text=t("Applies on"), font=LABEL_FONT).pack(side="left")
+        help_mark(head, t("All devices covers the Play tab and every Alexa device. Windows (Main) is the Play tab, "
                         "plus any speaker without its own settings (Settings > Voice Commands > Own "
                         "settings), and shortcuts and non-stop on its zone. Speakers with their own settings "
-                        "are listed by name.").pack(
+                        "are listed by name.")).pack(
             side="left", padx=(8, 0))
         devs = tk.Frame(box)
         devs.grid(row=2, column=0, sticky="w")
@@ -1283,15 +1282,15 @@ class SettingsTab(tk.Frame):
             boxes[value] = (var, tick)
         sync_devices()
 
-        box = section(right, "Only pick from",
-                      "Every playlist this filter applies to only uses tracks on this JRiver playlist or "
+        box = section(right, t("Only pick from"),
+                      t("Every playlist this filter applies to only uses tracks on this JRiver playlist or "
                       "smartlist. Set up any filtering you like in JRiver's smartlist editor, and 24bit7 "
-                      "respects it. The list comes from Settings > JRiver Playlists.")
+                      "respects it. The list comes from Settings > JRiver Playlists."))
         options = self._filter_playlists()
         labels = dict(options)
         pick = tk.StringVar(value=labels.get(item.get("pick_from", ""), "None"))
         keep.append(pick)
-        cb = ttk.Combobox(box, textvariable=pick, values=[l for _, l in options], state="readonly", width=44)
+        cb = TCombobox(box, textvariable=pick, values=[l for _, l in options], state="readonly", width=44)
         cb.grid(row=0, column=0, sticky="w")
 
         def picked(_e=None):
@@ -1303,19 +1302,19 @@ class SettingsTab(tk.Frame):
         cb.bind("<<ComboboxSelected>>", picked)
 
         # --- Rules ---
-        box = section(right, "Rules",
-                      "Tracks must match all (or any) of the rules. A track with no value for a field passes that "
+        box = section(right, t("Rules"),
+                      t("Tracks must match all (or any) of the rules. A track with no value for a field passes that "
                       "rule, and the log counts them; an unrated track counts as rating 0, and an unplayed one "
                       "as played 0 times and never played. Rating 0 means unrated. Sample rate at most 48 kHz "
-                      "saves JRiver converting on the fly for a Sonos.")
+                      "saves JRiver converting on the fly for a Sonos."))
         top = tk.Frame(box)
         top.grid(row=0, column=0, sticky="w", pady=(0, 8))
-        tk.Label(top, text="Tracks must match").pack(side="left")
+        tk.Label(top, text=t("Tracks must match")).pack(side="left")
         match = tk.StringVar(value=item.get("match", "all"))
         keep.append(match)
-        match_cb = ttk.Combobox(top, textvariable=match, values=["all", "any"], state="readonly", width=5)
+        match_cb = TCombobox(top, textvariable=match, values=[N_("all"), N_("any")], state="readonly", width=7)
         match_cb.pack(side="left", padx=6)
-        tk.Label(top, text="of these rules").pack(side="left")
+        tk.Label(top, text=t("of these rules")).pack(side="left")
 
         def match_changed(_e=None):
             item["match"] = match.get()
@@ -1325,16 +1324,16 @@ class SettingsTab(tk.Frame):
         rows = tk.Frame(box)
         rows.grid(row=1, column=0, sticky="w")
         field_labels = [label for _, label, _, _ in filters.FIELDS]
-        units = {"days": "days", "minutes": "minutes", "khz": "kHz"}
+        units = {"days": t("days"), "minutes": t("minutes"), "khz": "kHz"}
 
         def rule_row(r, rule):
             label, ops, kind = filters.FIELD_INFO[rule["field"]]
             field = tk.StringVar(value=label)
             op = tk.StringVar(value=dict(ops).get(rule.get("op"), ops[0][1]))
             keep.extend([field, op])
-            field_cb = ttk.Combobox(rows, textvariable=field, values=field_labels, state="readonly", width=13)
+            field_cb = TCombobox(rows, textvariable=field, values=field_labels, state="readonly", width=13)
             field_cb.grid(row=r, column=0, sticky="w", pady=3)
-            op_cb = ttk.Combobox(rows, textvariable=op, values=[l for _, l in ops], state="readonly", width=17)
+            op_cb = TCombobox(rows, textvariable=op, values=[l for _, l in ops], state="readonly", width=17)
             op_cb.grid(row=r, column=1, sticky="w", padx=6)
             cell = tk.Frame(rows)
             cell.grid(row=r, column=2, sticky="w")
@@ -1393,7 +1392,7 @@ class SettingsTab(tk.Frame):
                 else:
                     entry("value", 18 if kind == "text" else 8)
                 if kind == "year" and rule.get("op") == "between":
-                    tk.Label(cell, text="and").pack(side="left", padx=6)
+                    tk.Label(cell, text=t("and")).pack(side="left", padx=6)
                     entry("value2", 8)
                 if kind in units:
                     tk.Label(cell, text=units[kind]).pack(side="left", padx=(6, 0))
@@ -1410,11 +1409,11 @@ class SettingsTab(tk.Frame):
             item.setdefault("rules", []).append(filters.blank_rule())
             self._filter_save()
             self._filter_fill_editor()
-        tk.Button(box, text="Add rule", width=10, command=add_rule).grid(row=2, column=0, sticky="w", pady=(8, 0))
+        tk.Button(box, text=t("Add rule"), width=10, command=add_rule).grid(row=2, column=0, sticky="w", pady=(8, 0))
         right.keep = keep   # hold the variables while the page shows
 
     def _filter_new(self):
-        name = tabs.ask_name(self, "New Filter", "Name for the new filter:")
+        name = tabs.ask_name(self, t("New Filter"), t("Name for the new filter:"))
         if not name or not name.strip():
             return
         self._filters.append(filters.blank(name.strip()))
@@ -1426,7 +1425,7 @@ class SettingsTab(tk.Frame):
         if self._filter_i is None:
             return
         item = self._filters[self._filter_i]
-        name = tabs.ask_name(self, "Rename Filter", "New name for the filter:", item["name"])
+        name = tabs.ask_name(self, t("Rename Filter"), t("New name for the filter:"), item["name"])
         if name and name.strip():
             item["name"] = name.strip()
             self._filter_save()
@@ -1436,7 +1435,7 @@ class SettingsTab(tk.Frame):
         if self._filter_i is None:
             return
         copy = filters.tidy(dict(self._filters[self._filter_i]))
-        copy.update(id=filters.blank()["id"], name=copy["name"] + " copy")
+        copy.update(id=filters.blank()["id"], name=t("{name} copy", name=copy["name"]))
         copy["devices"] = list(copy["devices"])
         copy["rules"] = [dict(r) for r in copy["rules"]]
         self._filters.insert(self._filter_i + 1, copy)
@@ -1448,7 +1447,7 @@ class SettingsTab(tk.Frame):
         if self._filter_i is None:
             return
         item = self._filters[self._filter_i]
-        if not messagebox.askyesno("Delete filter", f"Delete the filter {item['name']}?", parent=self):
+        if not messagebox.askyesno(t("Delete filter"), t("Delete the filter {name}?", name=item["name"]), parent=self):
             return
         del self._filters[self._filter_i]
         self._filter_i = min(self._filter_i, len(self._filters) - 1) if self._filters else None
@@ -1484,21 +1483,21 @@ class SettingsTab(tk.Frame):
             ttk.Checkbutton(cell, variable=sh).pack(padx=20, pady=2)
             cell = tk.Frame(parent, bg=bg)
             cell.grid(row=r, column=col + 1, sticky="nsew")
-            ttk.Combobox(cell, textvariable=bl, values=[s for _, s in SAVED_NONSTOP_OPTIONS],
+            TCombobox(cell, textvariable=bl, values=[s for _, s in SAVED_NONSTOP_OPTIONS],
                          state="readonly", width=15).pack(anchor="w", padx=6, pady=2)
             cell = tk.Frame(parent, bg=bg)
             cell.grid(row=r, column=col + 2, sticky="nsew")
-            ns_cb = ttk.Combobox(cell, textvariable=ns, values=[s for _, s in SAVED_NONSTOP_OPTIONS],
+            ns_cb = TCombobox(cell, textvariable=ns, values=[s for _, s in SAVED_NONSTOP_OPTIONS],
                                  state="readonly", width=15)
             ns_cb.pack(anchor="w", padx=6, pady=2)
             cell = tk.Frame(parent, bg=bg)
             cell.grid(row=r, column=col + 3, sticky="nsew")
-            rs_cb = ttk.Combobox(cell, textvariable=rs, values=[s for _, s in SAVED_RESEED_OPTIONS],
+            rs_cb = TCombobox(cell, textvariable=rs, values=[s for _, s in SAVED_RESEED_OPTIONS],
                                  state="readonly", width=14)
             rs_cb.pack(anchor="w", padx=6, pady=2)
             cell = tk.Frame(parent, bg=bg)
             cell.grid(row=r, column=col + 4, sticky="nsew")
-            sk_cb = ttk.Combobox(cell, textvariable=sk, values=[s for _, s in SAVED_SKIP_OPTIONS],
+            sk_cb = TCombobox(cell, textvariable=sk, values=[s for _, s in SAVED_SKIP_OPTIONS],
                                  state="readonly", width=9)
             sk_cb.pack(anchor="w", padx=6, pady=2)
 
@@ -1525,12 +1524,12 @@ class SettingsTab(tk.Frame):
                 if text in HEAD_HELP:   # a heading with a ? beside it
                     holder = tk.Frame(parent, bg=table_colours()[0])
                     holder.grid(row=0, column=c, sticky="we", ipadx=8, ipady=4)
-                lab = tk.Label(holder, text=text, font=LABEL_FONT, anchor="w", bg=table_colours()[0],
+                lab = tk.Label(holder, text=t(text), font=LABEL_FONT, anchor="w", bg=table_colours()[0],
                                fg=PALETTE.get("head_fg") or PALETTE["section_fg"],
                                width=WIDTHS[c] if c < 3 else 0)
                 if text in HEAD_HELP:
                     lab.pack(side="left")
-                    help_mark(holder, HEAD_HELP[text]).pack(side="left", padx=(4, 0))
+                    help_mark(holder, t(HEAD_HELP[text])).pack(side="left", padx=(4, 0))
                 else:
                     lab.grid(row=0, column=c, sticky="we", ipadx=8, ipady=4)
                 if clicks and c in clicks:
@@ -1544,98 +1543,112 @@ class SettingsTab(tk.Frame):
 
         p.keep, p.reseed_syncs = [], []
         HEAD_HELP = {
-            "Blend": ("Weaves new music into a playlist asked for by voice: one of yours, then one new, until "
+            "Blend": N_("Weaves new music into a playlist asked for by voice: one of yours, then one new, until "
                       "the new tracks run out, up to 50. Similar artists adds top tracks by artists like the "
                       "ones in the playlist; Similar tracks adds songs like its tracks. The playlist starts "
                       "straight away and the new tracks join a few seconds later, after the song that's "
                       "playing. It uses the Sources and Playlist settings of the option you pick, and never "
                       "adds a song already in the playlist."),
-            "Non-stop": ("Keeps the music going after a playlist asked for by voice: when its last song "
+            "Non-stop": N_("Keeps the music going after a playlist asked for by voice: when its last song "
                          "starts, more are added, Similar artists or Similar tracks, seeded from the song "
                          "chosen under Reseed from. It carries on until something else is played on that "
                          "zone."),
-            "Reseed from": ("Where each Non-stop top-up seeds from. Last track and 2nd track follow on from the "
+            "Reseed from": N_("Where each Non-stop top-up seeds from. Last track and 2nd track follow on from the "
                             "music, so the evening travels. Whole playlist is Keep It Tight: each top-up seeds "
                             "from one of the playlist's own tracks, a different one each time, and carries on "
                             "from the last track once they've all been used."),
         }
-        CONTROLS = ["Shuffle", "Blend", "Non-stop", "Reseed from", "Skip recent"]   # short, so headings fit their dropdowns
+        CONTROLS = [N_("Shuffle"), N_("Blend"), "Non-stop", N_("Reseed from"), N_("Skip recent")]   # short, so headings fit their dropdowns
 
         # --- All playlists ---
-        box = section(tab, "All playlists",
-                      "Ticked, the two rows below apply, one to every playlist and one to every "
+        box = section(tab, t("All playlists"),
+                      t("Ticked, the two rows below apply, one to every playlist and one to every "
                       "smartlist, and the table is greyed out. Unticked, each playlist follows its own "
                       "row in the table.\n"
                       "JRiver can randomise a smartlist itself, for example with a random album sort, "
                       "and shuffling it here would break those albums up, so you may want Shuffle off "
                       "on the smartlist row.\n"
                       "Set as Default copies a row into the table rows of its type that are shown "
-                      "below, replacing their own settings. New playlists start with their type's row.")
+                      "below, replacing their own settings. New playlists start with their type's row."))
         p.all_var = tk.BooleanVar(value=p.data["all"] == "1")
 
         def all_toggled():
             p.data["all"] = "1" if p.all_var.get() else "0"
             p.resync()
             changed()
-        ttk.Checkbutton(box, text="Use global playlist settings", variable=p.all_var,
+        ttk.Checkbutton(box, text=t("Use global playlist settings"), variable=p.all_var,
                         command=all_toggled).grid(row=0, column=0, sticky="w", pady=(0, 6))
-        p.all_row = header(tk.Frame(box, bd=1, relief="solid"), ["Folder", "Playlist", "Type"] + CONTROLS
-                           + ["Defaults"])
+        p.all_row = header(tk.Frame(box, bd=1, relief="solid"), [N_("Folder"), "Playlist", N_("Type")] + CONTROLS
+                           + [N_("Defaults")])
         p.all_row.grid(row=1, column=0, sticky="w")
         bg = p.all_row.cget("bg")
         def set_default(kind):
             """Set as Default: the type's global row into the table rows of that type now shown."""
-            word = kind.lower()
+            smart = kind != "Playlist"
             shown = [pid for pid, row in getattr(p, "shown", []) if (row.get("type") or "Playlist") == kind]
             if not shown:
-                messagebox.showinfo("Set as Default", f"No {word}s are shown in the table below.", parent=self)
+                messagebox.showinfo(t("Set as Default"), t("No smartlists are shown in the table below.") if smart
+                                    else t("No playlists are shown in the table below."), parent=self)
                 return
             total = sum(1 for row in p.data["rows"].values() if (row.get("type") or "Playlist") == kind)
             n = len(shown)
-            if n == 1:
-                target, own = (f"your one {word}" if total == 1 else f"the 1 {word} shown"), "Its own settings"
+            # whole sentences, so each language can word them its own way
+            if n == 1 and total == 1:
+                ask = (t("Copy the smartlist defaults to your one smartlist? Its own settings will be replaced.")
+                       if smart else
+                       t("Copy the playlist defaults to your one playlist? Its own settings will be replaced."))
+            elif n == 1:
+                ask = (t("Copy the smartlist defaults to the 1 smartlist shown? Its own settings will be replaced.")
+                       if smart else
+                       t("Copy the playlist defaults to the 1 playlist shown? Its own settings will be replaced."))
+            elif n == total:
+                ask = (t("Copy the smartlist defaults to all {n} smartlists? Their own settings will be replaced.", n=n)
+                       if smart else
+                       t("Copy the playlist defaults to all {n} playlists? Their own settings will be replaced.", n=n))
             else:
-                target, own = (f"all {n} {word}s" if n == total else f"the {n} {word}s shown"), "Their own settings"
-            if not messagebox.askyesno("Set as Default", f"Copy the {word} defaults to {target}? "
-                                                         f"{own} will be replaced.", parent=self):
+                ask = (t("Copy the smartlist defaults to the {n} smartlists shown? Their own settings will be "
+                         "replaced.", n=n) if smart else
+                       t("Copy the playlist defaults to the {n} playlists shown? Their own settings will be "
+                         "replaced.", n=n))
+            if not messagebox.askyesno(t("Set as Default"), ask, parent=self):
                 return
             saved_playlists.copy_defaults(p.data, shown, kind)
             build_table()
             changed()
 
-        for r, (name, kind, key) in enumerate((("All playlists", "Playlist", "all_row"),
-                                               ("All smartlists", "Smartlist", "all_row_smart")), start=1):
-            for c, text in enumerate(("All folders", name, kind)):
+        for r, (name, kind, key) in enumerate(((t("All playlists"), "Playlist", "all_row"),
+                                               (t("All smartlists"), "Smartlist", "all_row_smart")), start=1):
+            for c, text in enumerate((t(ALL_FOLDERS), name, kind)):
                 cell(p.all_row, r, c, text, bg)
             row_controls(p.all_row, r, bg, p.data[key], changed)
             holder = tk.Frame(p.all_row, bg=bg)
             holder.grid(row=r, column=3 + len(CONTROLS), sticky="nsew")
-            tk.Button(holder, text="Set as Default", command=lambda k=kind: set_default(k)).pack(
+            tk.Button(holder, text=t("Set as Default"), command=lambda k=kind: set_default(k)).pack(
                 anchor="w", padx=8, pady=2)
 
         # --- Playlists ---
-        box = section(tab, "Playlists",
-                      "Your JRiver playlists and smartlists. These settings apply when you ask for a playlist by "
+        box = section(tab, t("Playlists"),
+                      t("Your JRiver playlists and smartlists. These settings apply when you ask for a playlist by "
                       "voice. Playlists you start in JRiver itself aren't changed. Click Folder or Playlist to "
                       "sort by it; click again for Z-A. Root (the top level) always comes first.\n"
                       "Skip recent leaves out tracks played in the last few days, but never empties a playlist.\n"
-                      "Blend and Non-stop are explained by the ? beside each heading.")
+                      "Blend and Non-stop are explained by the ? beside each heading."))
         bar = tk.Frame(box)
         bar.grid(row=0, column=0, sticky="we", pady=(0, 8))
-        tk.Label(bar, text="Folder").pack(side="left")
-        p.folder_var = tk.StringVar(value=ALL_FOLDERS)
+        tk.Label(bar, text=t("Folder")).pack(side="left")
+        p.folder_var = tk.StringVar(value=t(ALL_FOLDERS))
         p.folder_cb = ttk.Combobox(bar, textvariable=p.folder_var, state="readonly", width=20)
         p.folder_cb.pack(side="left", padx=(8, 18))
-        tk.Label(bar, text="Search").pack(side="left")
+        tk.Label(bar, text=t("Search")).pack(side="left")
         p.search_var = tk.StringVar()
         tk.Entry(bar, textvariable=p.search_var, width=24).pack(side="left", padx=(8, 0))
         p.count_label = tk.Label(bar, text="", fg=PALETTE["help_fg"], font=HELP_FONT)
         p.count_label.pack(side="left", padx=(14, 0))
-        p.rescan_btn = tk.Button(bar, text="Rescan", width=10, command=lambda: rescan(loud=True))
+        p.rescan_btn = tk.Button(bar, text=t("Rescan"), width=10, command=lambda: rescan(loud=True))
         p.rescan_btn.pack(side="right", padx=(24, 0))
         p.table_holder = tk.Frame(box)
         p.table_holder.grid(row=1, column=0, sticky="w")
-        tk.Label(box, text="New playlists arrive with the settings of their type's row under All playlists.",
+        tk.Label(box, text=t("New playlists arrive with the settings of their type's row under All playlists."),
                  fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=2, column=0, sticky="w", pady=(6, 0))
 
         def text_key(text):
@@ -1665,10 +1678,10 @@ class SettingsTab(tk.Frame):
         def fill_folders():
             folders = {row.get("folder") or saved_playlists.ROOT for row in p.data["rows"].values()}
             others = sorted((f for f in folders if f != saved_playlists.ROOT), key=text_key)
-            p.folder_cb.config(values=[ALL_FOLDERS] + ([saved_playlists.ROOT] if saved_playlists.ROOT in folders
+            p.folder_cb.config(values=[t(ALL_FOLDERS)] + ([saved_playlists.ROOT] if saved_playlists.ROOT in folders
                                                        else []) + others)
             if p.folder_var.get() not in p.folder_cb.cget("values"):
-                p.folder_var.set(ALL_FOLDERS)
+                p.folder_var.set(t(ALL_FOLDERS))
 
         def build_table(*_):
             for child in p.table_holder.winfo_children():
@@ -1679,20 +1692,23 @@ class SettingsTab(tk.Frame):
             folder = p.folder_var.get()
             wanted = p.search_var.get().strip().lower()
             shown = [(pid, row) for pid, row in rows
-                     if (folder == ALL_FOLDERS or (row.get("folder") or saved_playlists.ROOT) == folder)
+                     if (folder == t(ALL_FOLDERS) or (row.get("folder") or saved_playlists.ROOT) == folder)
                      and (wanted in (row.get("name") or "").lower() or wanted in (row.get("folder") or "").lower())]
             p.shown = shown
             total = len(rows)
-            p.count_label.config(text=f"{total} playlist{'' if total == 1 else 's'}"
-                                 + (f", {len(shown)} shown" if len(shown) != total else ""))
+            if len(shown) != total:
+                p.count_label.config(text=tn("{count} playlist, {shown} shown", "{count} playlists, {shown} shown",
+                                             total, shown=len(shown)))
+            else:
+                p.count_label.config(text=tn("{count} playlist", "{count} playlists", total))
             if not rows:
-                tk.Label(p.table_holder, text="No playlists yet. Make sure JRiver is running, then click Rescan.",
+                tk.Label(p.table_holder, text=t("No playlists yet. Make sure JRiver is running, then click Rescan."),
                          fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=0, column=0, sticky="w")
                 return
             arrow = " \u25b2" if p.data.get("sort") == "az" else " \u25bc"
             by = p.data.get("sort_by")
-            labels = ["Folder" + (arrow if by != "name" else ""), "Playlist" + (arrow if by == "name" else ""),
-                      "Type"] + CONTROLS
+            labels = [t("Folder") + (arrow if by != "name" else ""), "Playlist" + (arrow if by == "name" else ""),
+                      t("Type")] + CONTROLS
             p.table = header(tk.Frame(p.table_holder, bd=1, relief="solid"), labels,
                              {0: lambda: sort_by("folder"), 1: lambda: sort_by("name")})
             p.table.grid(row=0, column=0, sticky="w")
@@ -1709,7 +1725,7 @@ class SettingsTab(tk.Frame):
                 found = saved_playlists.scan()
             except Exception as e:
                 if loud:
-                    messagebox.showerror("Rescan", f"Couldn't read your playlists from JRiver.\n\n{e}", parent=self)
+                    messagebox.showerror(t("Rescan"), t("Couldn't read your playlists from JRiver.\n\n{error}", error=e), parent=self)
                 return
             # refresh the playlist list only: the global rows' controls write into p.data's own
             # all_row and all_row_smart, so p.data must stay the same object
@@ -1742,19 +1758,19 @@ class SettingsTab(tk.Frame):
         try:
             saved_playlists.set_main_settings(p.values())
         except Exception as e:
-            messagebox.showerror("Save failed", str(e), parent=self)
+            messagebox.showerror(t("Save failed"), str(e), parent=self)
 
     # --- the Sources sections ---
 
     def _listenbrainz_row(self, p, box, r, key, notes):
         """The ListenBrainz algorithm dropdown for one section, with its notes behind a ?."""
-        row = self._line(box, r, "ListenBrainz algorithm", pady=(10, 0))
+        row = self._line(box, r, t("ListenBrainz algorithm"), pady=(10, 0))
         p.vars[key] = tk.StringVar(value=p.env.get(key, "alltime"))
-        cb = ttk.Combobox(row, textvariable=p.vars[key], values=["alltime", "recent"],
+        cb = TCombobox(row, textvariable=p.vars[key], values=[N_("alltime"), N_("recent")],
                           state="readonly", width=10)
         cb.pack(side="left")
         cb.bind("<<ComboboxSelected>>", p.save)
-        help_mark(row, notes).pack(side="left", padx=(8, 0))
+        help_mark(row, t(notes)).pack(side="left", padx=(8, 0))
         return r + 1
 
     def _option_tabs(self, tab, kind, options=PLAY_OPTIONS):
@@ -1820,11 +1836,11 @@ class SettingsTab(tk.Frame):
                 help_mark(line, help_text).pack(side="left", padx=(10, 0))
             if code == "listenbrainz" and lb_key:
                 p.vars[lb_key] = tk.StringVar(value=p.env.get(lb_key, "alltime"))
-                cb = ttk.Combobox(line, textvariable=p.vars[lb_key], values=["alltime", "recent"],
+                cb = TCombobox(line, textvariable=p.vars[lb_key], values=[N_("alltime"), N_("recent")],
                                   state="readonly", width=9)
                 cb.pack(side="left", padx=(14, 0))
                 cb.bind("<<ComboboxSelected>>", p.save)
-                help_mark(line, lb_notes).pack(side="left", padx=(8, 0))
+                help_mark(line, t(lb_notes)).pack(side="left", padx=(8, 0))
                 p.lb_cbs.append((v, cb))
         return r + 1
 
@@ -1856,7 +1872,7 @@ class SettingsTab(tk.Frame):
             lab = tk.Label(frame, text=title, font=LABEL_FONT, fg=PALETTE["text_secondary"], anchor="w")
             lab.grid(row=row + 1, column=c, sticky="w", padx=(0 if c == 0 else 18, 0))
             if title == "Score":
-                Tooltip(lab, source_test.PERFORMANCE_HELP, click=False)
+                Tooltip(lab, t(source_test.PERFORMANCE_HELP), click=False)
                 lab.config(cursor="question_arrow")
         tk.Frame(frame, bg=PALETTE["line"], height=1).grid(row=row + 2, column=0, columnspan=4, sticky="ew",
                                                            pady=(2, 4))
@@ -1874,9 +1890,9 @@ class SettingsTab(tk.Frame):
         """Test My Sources (Re-run Test, Cancel Test) and Full Results, on the right of the Sources bar."""
         head = box.master.winfo_children()[0]
         ui = p.__dict__.setdefault("score_ui", {}).setdefault(section, {"cells": {}})
-        ui["results"] = FlatButton(head, text="Full Results", command=self._open_test_results, quiet=True)
+        ui["results"] = FlatButton(head, text=t("Full Results"), command=self._open_test_results, quiet=True)
         ui["results"].pack(side="right", padx=(6, 8), pady=3)
-        ui["test"] = FlatButton(head, text="Test My Sources", command=self._test_button)
+        ui["test"] = FlatButton(head, text=t("Test My Sources"), command=self._test_button)
         ui["test"].pack(side="right", pady=3)
         ui["progress"] = tk.Label(head, text="", font=HELP_FONT, bg=head.cget("bg"),
                                   fg=PALETTE.get("head_fg") or PALETTE["section_fg"])
@@ -1902,11 +1918,12 @@ class SettingsTab(tk.Frame):
                                   fg=PALETTE["button_fg"])
                 elif result:
                     when = datetime.strptime(result["finished"], "%Y-%m-%d %H:%M").strftime("%d %b %Y")
-                    notice.config(text=f"Your results, tested {when.lstrip('0')} ({result['mode'].title()}).",
+                    notice.config(text=t("Your results, tested {when} ({mode}).", when=when.lstrip("0"),
+                                       mode=t(result["mode"].title())),
                                   bg=notice.master.cget("bg"), fg=PALETTE["help_fg"])
                 else:
-                    notice.config(text="No results yet. Test My Sources shows how each source does with your "
-                                       "library.", bg=notice.master.cget("bg"), fg=PALETTE["help_fg"])
+                    notice.config(text=t("No results yet. Test My Sources shows how each source does with your "
+                                       "library."), bg=notice.master.cget("bg"), fg=PALETTE["help_fg"])
                 scores = (result or {}).get("scores", {}).get(section, {}).get("sources", {})
                 for code, cells in ui["cells"].items():
                     s = scores.get(code)
@@ -1918,10 +1935,10 @@ class SettingsTab(tk.Frame):
                     for lab, text in zip(cells, texts):
                         lab.config(text=text, fg=fg)
                 if ui.get("test"):
-                    ui["test"].config(text="Cancel Test" if running else
-                                      ("Re-run Test" if result and not is_sample else "Test My Sources"))
+                    ui["test"].config(text=t("Cancel Test") if running else
+                                      (t("Re-run Test") if result and not is_sample else t("Test My Sources")))
                     ui["results"].config(state="normal" if result else "disabled")
-                    ui["progress"].config(text=f"Testing {state['n']} of {state['of']}" if running else "")
+                    ui["progress"].config(text=t("Testing {n} of {total}", n=state["n"], total=state["of"]) if running else "")
         return result, is_sample
 
     def _watch_source_test(self):
@@ -1943,26 +1960,28 @@ class SettingsTab(tk.Frame):
         """The start window: Full or Quick, Include AI, Start."""
         import source_test
         win = tk.Toplevel(self)
-        win.title("Test My Sources")
+        win.title(t("Test My Sources"))
         win.transient(self.winfo_toplevel())
         win.resizable(False, False)
         self.test_window = win
         body = tk.Frame(win, padx=16, pady=12)
         body.pack(fill="both", expand=True)
-        tk.Label(body, text="Asks every source what's similar to a fixed set of seed tracks across 17 genres, "
+        tk.Label(body, text=t("Asks every source what's similar to a fixed set of seed tracks across 17 genres, "
                             "and counts how many answers are in your library. It runs in the background, so "
-                            "you can keep using 24bit7.", wraplength=scaled(body, 420), justify="left").pack(anchor="w")
+                            "you can keep using 24bit7."), wraplength=scaled(body, 420), justify="left").pack(anchor="w")
         mode = tk.StringVar(value="full")
         full, quick = len(source_test.load_seeds()), len(source_test.load_seeds(quick=True))
-        for value, text in (("full", f"Full: {full} seeds, about {source_test.minutes_for(full)} minutes"),
-                            ("quick", f"Quick: {quick} seeds, about {source_test.minutes_for(quick)} minutes")):
+        for value, text in (("full", t("Full: {seeds} seeds, about {minutes} minutes", seeds=full,
+                                       minutes=source_test.minutes_for(full))),
+                            ("quick", t("Quick: {seeds} seeds, about {minutes} minutes", seeds=quick,
+                                        minutes=source_test.minutes_for(quick)))):
             ttk.Radiobutton(body, text=text, variable=mode, value=value).pack(anchor="w", pady=(8 if value == "full" else 2, 0))
         ai = tk.BooleanVar(value=False)
-        tick = ttk.Checkbutton(body, text="Include AI (costs a few pence)", variable=ai)
+        tick = ttk.Checkbutton(body, text=t("Include AI (costs a few pence)"), variable=ai)
         tick.pack(anchor="w", pady=(10, 0))
         if not engine.ai_enabled():
             tick.state(["disabled"])
-            Tooltip(tick, NO_KEY_TEXT)
+            Tooltip(tick, t(NO_KEY_TEXT))
         buttons = tk.Frame(body)
         buttons.pack(fill="x", pady=(14, 0))
 
@@ -1970,8 +1989,8 @@ class SettingsTab(tk.Frame):
             source_test.start_background(quick=mode.get() == "quick", include_ai=ai.get())
             win.destroy()
             self._watch_source_test()
-        ttk.Button(buttons, text="Cancel", command=win.destroy).pack(side="right")
-        ttk.Button(buttons, text="Start", command=start).pack(side="right", padx=(0, 6))
+        ttk.Button(buttons, text=t("Cancel"), command=win.destroy).pack(side="right")
+        ttk.Button(buttons, text=t("Start"), command=start).pack(side="right", padx=(0, 6))
         win.start = start   # for the tests
         win.mode, win.ai = mode, ai
         return win
@@ -1985,7 +2004,7 @@ class SettingsTab(tk.Frame):
         if not is_sample:
             source_test.mark_seen()   # the console stops repeating "ready"
         win = tk.Toplevel(self)
-        win.title("Source Test Results")
+        win.title(t("Source Test Results"))
         win.transient(self.winfo_toplevel())
         self.results_window = win
         top = tk.Frame(win, padx=14, pady=10)
@@ -1995,22 +2014,22 @@ class SettingsTab(tk.Frame):
                      wraplength=scaled(top, 760),
                      justify="left", anchor="w", padx=8, pady=4).pack(fill="x")
         else:
-            tk.Label(top, text=f"Your results, tested {result['finished']} ({result['mode'].title()}, "
-                               f"{len(result['seeds'])} seeds).", fg=PALETTE["help_fg"], anchor="w").pack(fill="x")
-        tk.Label(top, text="Score against the best source in each genre; the best in each row is shaded. "
-                           "Hover a cell for its detail.", font=HELP_FONT, fg=PALETTE["help_fg"],
+            tk.Label(top, text=t("Your results, tested {when} ({mode}, {seeds} seeds).", when=result["finished"],
+                                 mode=t(result["mode"].title()), seeds=len(result["seeds"])), fg=PALETTE["help_fg"], anchor="w").pack(fill="x")
+        tk.Label(top, text=t("Score against the best source in each genre; the best in each row is shaded. "
+                           "Hover a cell for its detail."), font=HELP_FONT, fg=PALETTE["help_fg"],
                  anchor="w").pack(fill="x", pady=(4, 0))
         nb = TabbedPane(win, font=("Segoe UI", 10, "bold"), pad=(16, 6))
         nb.pack(fill="both", expand=True, padx=14)
         names = {c: n for sec in source_test.SECTIONS for c, n in result["sources"][sec]}
         win.grids = {}
-        for section, title in (("artists", "Similar Artists"), ("tracks", "Similar Tracks")):
+        for section, title in (("artists", N_("Similar Artists")), ("tracks", N_("Similar Tracks"))):
             page = tk.Frame(nb, padx=4, pady=8)
-            nb.add(page, text=title)
+            nb.add(page, text=t(title))
             codes = [c for c, _ in result["sources"][section]]
             sc = result["scores"][section]
             stripe = PALETTE.get("field_bg") or PALETTE.get("window_bg")
-            tk.Label(page, text="Genre", font=LABEL_FONT, fg=PALETTE["help_fg"], anchor="w",
+            tk.Label(page, text=t("Genre"), font=LABEL_FONT, fg=PALETTE["help_fg"], anchor="w",
                      padx=8, pady=4).grid(row=0, column=0, sticky="ew")
             for c, code in enumerate(codes, start=1):
                 tk.Label(page, text=names.get(code, code), font=LABEL_FONT, fg=PALETTE["help_fg"],
@@ -2019,7 +2038,7 @@ class SettingsTab(tk.Frame):
             for r, genre in enumerate(result["genres"], start=1):
                 gs = sc["genres"][genre]
                 bg = stripe if r % 2 else page.cget("bg")
-                tk.Label(page, text=genre + ("  (you own little here)" if gs["thin"] else ""), anchor="w",
+                tk.Label(page, text=genre + ("  " + t("(you own little here)") if gs["thin"] else ""), anchor="w",
                          fg=PALETTE["help_fg"] if gs["thin"] else PALETTE["text_secondary"], bg=bg,
                          padx=8, pady=3).grid(row=r, column=0, sticky="nsew")
                 for c, code in enumerate(codes, start=1):
@@ -2034,10 +2053,10 @@ class SettingsTab(tk.Frame):
             foot = len(result["genres"]) + 1
             tk.Frame(page, bg=PALETTE["line"], height=1).grid(row=foot, column=0, columnspan=len(codes) + 1,
                                                               sticky="ew", pady=(2, 0))
-            score = tk.Label(page, text="Score", font=LABEL_FONT, anchor="w", padx=8, pady=4,
+            score = tk.Label(page, text=t("Score"), font=LABEL_FONT, anchor="w", padx=8, pady=4,
                              cursor="question_arrow")
             score.grid(row=foot + 1, column=0, sticky="ew")
-            Tooltip(score, source_test.PERFORMANCE_HELP, click=False)
+            Tooltip(score, t(source_test.PERFORMANCE_HELP), click=False)
             for c, code in enumerate(codes, start=1):
                 s = sc["sources"].get(code)
                 tk.Label(page, text=f"{s['performance']}%" if s else "-", font=LABEL_FONT,
@@ -2055,9 +2074,9 @@ class SettingsTab(tk.Frame):
         def rerun():
             win.destroy()
             self._open_test_window()
-        ttk.Button(buttons, text="Close", command=win.destroy).pack(side="right")
-        ttk.Button(buttons, text="Export CSV", command=export).pack(side="right", padx=(0, 6))
-        ttk.Button(buttons, text="Re-run Test", command=rerun).pack(side="right", padx=(0, 6))
+        ttk.Button(buttons, text=t("Close"), command=win.destroy).pack(side="right")
+        ttk.Button(buttons, text=t("Export CSV"), command=export).pack(side="right", padx=(0, 6))
+        ttk.Button(buttons, text=t("Re-run Test"), command=rerun).pack(side="right", padx=(0, 6))
         win.export = export   # for the tests
         self.after(10, self._refresh_scores)
         return win
@@ -2069,11 +2088,11 @@ class SettingsTab(tk.Frame):
 
     def _moderator_section(self, p, page, group):
         """A Moderator tick for one Play option, greyed out until the AI is set up."""
-        box = section(page, "Moderator",
-                      "Checks each playlist (and each Drift round) once with your AI's quick model, and "
+        box = section(page, t("Moderator"),
+                      t("Checks each playlist (and each Drift round) once with your AI's quick model, and "
                       "removes tracks that clash with the seed's tone, energy and mood. "
                       "Logs each removal with its reason. Uses a little AI credit each time, a fraction of a "
-                      "penny per playlist (nothing with Ollama).",
+                      "penny per playlist (nothing with Ollama)."),
                       title_fg=PALETTE["ai_purple"])
         key = f"AI_MODERATOR_{group.upper()}"
         p.vars[key] = tk.StringVar(value=engine.moderator_settings(p.env.get)[group].title())
@@ -2083,12 +2102,12 @@ class SettingsTab(tk.Frame):
                 warn_moderator_once(self)
             cb.selection_clear()
             p.save()
-        row = self._line(box, 0, "Level", pady=(0, 0))
-        cb = ttk.Combobox(row, textvariable=p.vars[key], values=MODERATOR_CHOICES, state="readonly", width=9)
+        row = self._line(box, 0, t("Level"), pady=(0, 0))
+        cb = TCombobox(row, textvariable=p.vars[key], values=MODERATOR_CHOICES, state="readonly", width=9)
         cb.pack(side="left")
         cb.bind("<<ComboboxSelected>>", chosen)
-        help_mark(row, MODERATOR_LEVELS_HELP).pack(side="left", padx=(8, 0))
-        Tooltip(cb, NO_KEY_TEXT, when=lambda: not self._ai_set_up())
+        help_mark(row, t(MODERATOR_LEVELS_HELP)).pack(side="left", padx=(8, 0))
+        Tooltip(cb, t(NO_KEY_TEXT), when=lambda: not self._ai_set_up())
         p.moderator_boxes.append(cb)
 
     def _fill_sources(self, tab, p):
@@ -2106,58 +2125,58 @@ class SettingsTab(tk.Frame):
             p.save()
 
         # --- Similar Artists ---
-        box = section(pages["artists"], "Sources",
-                               "YouTube suggests from the playing track, using YouTube Music's up next queue. "
+        box = section(pages["artists"], t("Sources"),
+                               t("YouTube suggests from the playing track, using YouTube Music's up next queue. "
                                "No key needed. Ticked on its own, it plays YouTube's queue as is, matched against "
                                "your library. Ticked with other sources, its artists join the blend. It's an "
-                               "unofficial route, so it may break now and then.")
+                               "unofficial route, so it may break now and then."))
         self._score_buttons(p, box, "artists")
         r = self._source_ticks(p, box, 0, "SIMILAR_SOURCES", SOURCE_NAMES, "lastfm", similar_changed, "similar",
                                scores="artists", lb_key="LISTENBRAINZ_ALGORITHM",
-                               lb_notes="alltime: from all listening history; leans toward well-known artists.\n"
-                                        "recent: what people are playing alongside this artist right now.")
+                               lb_notes=N_("alltime: from all listening history; leans toward well-known artists.\n"
+                                        "recent: what people are playing alongside this artist right now."))
         # How many sources must agree. Replaced the old on/off tick box; an old
         # on/off setting carries over (on -> 2, off -> Off).
         legacy_on = p.env.get("SIMILAR_REQUIRE_AGREEMENT", "1") in ("1", "true", "yes")
         start = p.env.get("SIMILAR_MIN_AGREEMENT", "").strip() or ("2" if legacy_on else "1")
         p.vars["SIMILAR_MIN_AGREEMENT"] = tk.StringVar(value="Off" if start in ("0", "1") else start)
-        row = self._line(box, r, "Sources that must agree", pady=(10, 0))
-        p.agree_cb = ttk.Combobox(row, textvariable=p.vars["SIMILAR_MIN_AGREEMENT"], state="readonly", width=6)
+        row = self._line(box, r, t("Sources that must agree"), pady=(10, 0))
+        p.agree_cb = TCombobox(row, textvariable=p.vars["SIMILAR_MIN_AGREEMENT"], state="readonly", width=6)
         p.agree_cb.pack(side="left")
         p.agree_cb.bind("<<ComboboxSelected>>", p.save)
-        help_mark(row, "How many sources must agree before an artist is picked. Higher means a smoother "
+        help_mark(row, t("How many sources must agree before an artist is picked. Higher means a smoother "
                        "playlist with fewer wildcards, but less chance of discovering something new. "
-                       "Tip: try single sources on their own before blending.").pack(side="left", padx=(8, 0))
+                       "Tip: try single sources on their own before blending.")).pack(side="left", padx=(8, 0))
         if p.device_id is not None:   # Windows (Main) chooses on the Play tab
             self._moderator_section(p, pages["artists"], "artists")
 
         # --- Similar Tracks: its own sources and agreement ---
-        box = section(pages["tracks"], "Sources",
-                      "Tracks like the seed track, for the Similar Tracks button. No key needed for "
-                      "ListenBrainz or YouTube.")
+        box = section(pages["tracks"], t("Sources"),
+                      t("Tracks like the seed track, for the Similar Tracks button. No key needed for "
+                      "ListenBrainz or YouTube."))
         self._score_buttons(p, box, "tracks")
         r = self._source_ticks(p, box, 0, "SIMILAR_TRACK_SOURCES", TRACK_SOURCE_NAMES, "lastfm,listenbrainz,youtube",
                                tracks_changed, "similar", scores="tracks", lb_key="LISTENBRAINZ_TRACK_ALGORITHM",
-                               lb_notes="alltime: from all listening history.\n"
-                                        "recent: roughly the last six months; older songs may find fewer matches.")
+                               lb_notes=N_("alltime: from all listening history.\n"
+                                        "recent: roughly the last six months; older songs may find fewer matches."))
         start = p.env.get("SIMILAR_TRACK_MIN_AGREEMENT", "2").strip() or "2"
         p.vars["SIMILAR_TRACK_MIN_AGREEMENT"] = tk.StringVar(value="Off" if start in ("0", "1") else start)
-        row = self._line(box, r, "Sources that must agree", pady=(10, 0))
-        p.track_agree_cb = ttk.Combobox(row, textvariable=p.vars["SIMILAR_TRACK_MIN_AGREEMENT"],
+        row = self._line(box, r, t("Sources that must agree"), pady=(10, 0))
+        p.track_agree_cb = TCombobox(row, textvariable=p.vars["SIMILAR_TRACK_MIN_AGREEMENT"],
                                         state="readonly", width=6)
         p.track_agree_cb.pack(side="left")
         p.track_agree_cb.bind("<<ComboboxSelected>>", p.save)
-        help_mark(row, "How many sources must agree on a track before it's used. If too few agreed tracks "
-                       "are in your library, the agreement is relaxed a step at a time, and the log says so."
+        help_mark(row, t("How many sources must agree on a track before it's used. If too few agreed tracks "
+                       "are in your library, the agreement is relaxed a step at a time, and the log says so.")
                   ).pack(side="left", padx=(8, 0))
         if p.device_id is not None:   # Windows (Main) chooses on the Play tab
             self._moderator_section(p, pages["tracks"], "tracks")
 
         # --- Artist's Top Tracks ---
-        box = section(pages["top"], "Sources",
-                      "More services means richer, more varied playlists, but slower; fewer is quicker. "
+        box = section(pages["top"], t("Sources"),
+                      t("More services means richer, more varied playlists, but slower; fewer is quicker. "
                            "ListenBrainz is the slowest source on a first run, because its lookups are limited "
-                      "to one a second. Repeat runs are quick.")
+                      "to one a second. Repeat runs are quick."))
         self._source_ticks(p, box, 0, "TOP_TRACK_SOURCES", TOP_SOURCE_NAMES, "lastfm", p.save, "top")
 
         p.resync = lambda: (sync_agreement(p, "SIMILAR_SOURCES", "SIMILAR_MIN_AGREEMENT", "agree_cb", 5),
@@ -2173,13 +2192,13 @@ class SettingsTab(tk.Frame):
         var = self.vars["CONSOLE_QUERY"]
         if var.get():
             if not self._ai_set_up():
-                messagebox.showinfo("Console Query", NO_KEY_TEXT, parent=self)
+                messagebox.showinfo(t("Console Query"), t(NO_KEY_TEXT), parent=self)
                 var.set(False)
             elif self._ai_provider() == "ollama":
-                messagebox.showinfo("Console Query", "Console Query isn't available with Ollama: it sends the "
-                                    "console and 24bit7's code, far more than a local model can hold.", parent=self)
+                messagebox.showinfo(t("Console Query"), t("Console Query isn't available with Ollama: it sends the "
+                                    "console and 24bit7's code, far more than a local model can hold."), parent=self)
                 var.set(False)
-            elif not messagebox.askyesno("Console Query", CONSOLE_QUERY_WARNING, parent=self):
+            elif not messagebox.askyesno(t("Console Query"), t(CONSOLE_QUERY_WARNING), parent=self):
                 var.set(False)
         self._save()
 
@@ -2236,21 +2255,21 @@ class SettingsTab(tk.Frame):
             if p.device_id is not None:
                 return
             box, r = where["box"], where["r"]
-            tk.Label(box, text="Current Track", font=LABEL_FONT, fg=PALETTE["help_fg"]).grid(
+            tk.Label(box, text=t("Current Track"), font=LABEL_FONT, fg=PALETTE["help_fg"]).grid(
                 row=r, column=1, sticky="w", padx=(12, 0))
             cell = tk.Frame(box)
             cell.grid(row=r, column=2, sticky="w", padx=(24, 0))
             var = tk.BooleanVar(value=read_env().get(f"REVIEW_SAME_{group.upper()}", "1").strip().lower()
                                 not in ("0", "false", "no"))
             review["same"][group] = var
-            title = tk.Label(cell, text="Review Mode", font=LABEL_FONT, fg=review_fg)
+            title = tk.Label(cell, text=t("Review Mode"), font=LABEL_FONT, fg=review_fg)
             title.pack(side="left", padx=(0, 10))
-            ttk.Checkbutton(cell, text="Mirror Current Track", variable=var).pack(side="left")
+            ttk.Checkbutton(cell, text=t("Mirror Current Track"), variable=var).pack(side="left")
             var.trace_add("write", lambda *a, g=group: review_same_changed(g))   # saves however it's changed
-            help_mark(cell, "In Review Mode you're choosing from a list, so a shortlist is often better than a "
+            help_mark(cell, t("In Review Mode you're choosing from a list, so a shortlist is often better than a "
                             "full playlist. Untick Mirror Current Track to give Review Mode its own figures "
                             "for this section; everything else here (sources, Drift, hidden tracks) is shared. "
-                            "Windows (Main) only, as voice builds never review.", on=title)
+                            "Windows (Main) only, as voice builds never review."), on=title)
             where["r"] += 1
 
         def seed_header(group):
@@ -2262,36 +2281,36 @@ class SettingsTab(tk.Frame):
             if p.device_id is not None:
                 return
             box, r = where["box"], where["r"]
-            for text, col, colour in (("SEED", 1, PALETTE["help_fg"]), ("REVIEW MODE", 3, review_fg)):
+            for text, col, colour in ((t("SEED"), 1, PALETTE["help_fg"]), (t("REVIEW MODE"), 3, review_fg)):
                 cell = tk.Frame(box)
                 cell.grid(row=r, column=col, columnspan=2, sticky="ew", padx=(12 if col == 1 else 24, 0),
                           pady=(0, 6))
                 tk.Label(cell, text=text, font=("Segoe UI", 8, "bold"), fg=colour).pack(anchor="w")
                 tk.Frame(cell, height=1, bg=colour).pack(fill="x")
-            for col, key, text in ((3, f"REVIEW_SAME_{group.upper()}", "Mirror Current Track"),
-                                   (4, f"REVIEW_SAME_{group.upper()}_PN", "Mirror Playing Now")):
+            for col, key, text in ((3, f"REVIEW_SAME_{group.upper()}", t("Mirror Current Track")),
+                                   (4, f"REVIEW_SAME_{group.upper()}_PN", t("Mirror Playing Now"))):
                 var = tk.BooleanVar(value=read_env().get(key, "1").strip().lower() not in ("0", "false", "no"))
                 name = group if col == 3 else f"{group}_pn"
                 review["same"][name] = var
                 ttk.Checkbutton(box, text=text, variable=var).grid(row=r + 1, column=col, sticky="w",
                                                                    padx=(24, 0))
                 var.trace_add("write", lambda *a, g=name, k=key: review_same_changed(g, k))
-            heads = ((1, "Current Track", PALETTE["help_fg"]), (2, "Playing Now", PALETTE["help_fg"]),
-                     (3, "Current Track", review_fg), (4, "Playing Now", review_fg))
+            heads = ((1, t("Current Track"), PALETTE["help_fg"]), (2, t("Playing Now"), PALETTE["help_fg"]),
+                     (3, t("Current Track"), review_fg), (4, t("Playing Now"), review_fg))
             for col, text, colour in heads:
                 label = tk.Label(box, text=text, font=LABEL_FONT, fg=colour)
                 label.grid(row=r + 2, column=col, sticky="w", padx=(12 if col == 1 else 24, 0), pady=(10, 4))
                 if col == 2:
-                    help_mark(box, "Playing Now: the Play tab's Seed set to Playing Now. A few artists or tracks "
+                    help_mark(box, t("Playing Now: the Play tab's Seed set to Playing Now. A few artists or tracks "
                                    "are picked at random from the whole list, and each in turn brings its own "
                                    "share of similar ones, so the results are usually broader than Current "
-                                   "Track. Tracks already in Playing Now are left out. Windows (Main) only.",
+                                   "Track. Tracks already in Playing Now are left out. Windows (Main) only."),
                               on=label)
                 if col == 3:
-                    help_mark(box, "In Review Mode you're choosing from a list, so a shortlist is often better "
+                    help_mark(box, t("In Review Mode you're choosing from a list, so a shortlist is often better "
                                    "than a full playlist. Untick a Mirror tick to give Review Mode its own "
                                    "figures for that seed; everything else here (sources, Drift, hidden "
-                                   "tracks) is shared. Windows (Main) only, as voice builds never review.",
+                                   "tracks) is shared. Windows (Main) only, as voice builds never review."),
                               on=label)
             where["r"] += 3
 
@@ -2340,7 +2359,7 @@ class SettingsTab(tk.Frame):
         def limit_tick(cell, key, group=None):
             """A Limit tick after a column's number, saved as key ("1" or "0"), ticked to start."""
             var = tk.BooleanVar(value=read_env().get(key, "1").strip().lower() in ("1", "true", "yes"))
-            tick = ttk.Checkbutton(cell, text="Limit", variable=var)
+            tick = ttk.Checkbutton(cell, text=t("Limit"), variable=var)
             var.trace_add("write", lambda *a: write_env({key: "1" if var.get() else "0"}))
             tick.pack(side="left", padx=(8, 0))
             if group is not None:
@@ -2380,7 +2399,7 @@ class SettingsTab(tk.Frame):
             p.vars[key] = tk.StringVar(value=p.env.get(key, default))
             cell = tk.Frame(box)
             cell.grid(row=r, column=1, columnspan=4, sticky="w", padx=(12, 0))
-            cb = ttk.Combobox(cell, textvariable=p.vars[key], values=values, state="readonly", width=12)
+            cb = TCombobox(cell, textvariable=p.vars[key], values=values, state="readonly", width=12)
             cb.pack(side="left")
             cb.bind("<<ComboboxSelected>>", p.save)
             if help_text:
@@ -2400,30 +2419,30 @@ class SettingsTab(tk.Frame):
             def toggled():
                 sync_played(p)
                 p.save()
-            ttk.Checkbutton(row, text="Skip tracks played in the last", variable=p.vars[name],
+            ttk.Checkbutton(row, text=t("Skip tracks played in the last"), variable=p.vars[name],
                             command=toggled).pack(side="left")
             days = tk.Spinbox(row, from_=1, to=365, textvariable=p.vars[f"{name}_DAYS"], width=4, command=p.save)
             days.pack(side="left", padx=(6, 6))
-            tk.Label(row, text="days").pack(side="left")
-            help_mark(row, "Leaves out anything JRiver has played within that many days, using its Last "
+            tk.Label(row, text=t("days")).pack(side="left")
+            help_mark(row, t("Leaves out anything JRiver has played within that many days, using its Last "
                            "Played date. The seed track is never left out. JRiver's library is re-read every "
                            "half hour, so a track played in the last few minutes may still get in. Drift, if "
-                           "it's on, fills any gaps this leaves.").pack(side="left", padx=(8, 0))
+                           "it's on, fills any gaps this leaves.")).pack(side="left", padx=(8, 0))
             p.vars[f"{name}_DAYS"].trace_add("write", p.save)
             p.played_boxes[group] = days
             place(row, pady=(8, 4))
 
         def drift(group):
             """The Drift section: its tick box, then Drift using and Rounds."""
-            note = ("If a playlist comes up short, search again using what's already been found, "
+            note = t("If a playlist comes up short, search again using what's already been found, "
                     "until the playlist reaches its length. More rounds fill more gaps but can "
                     "wander further from where you started.")
             if group == "vibe":
-                note = ("Tops the playlist up from your music sources (Last.fm and the others you've ticked), "
+                note = t("Tops the playlist up from your music sources (Last.fm and the others you've ticked), "
                         "not the AI, unless Drift using is set to AI. AI asks again with your description, "
                         "leaving out what's already been found or tried, and uses a little AI credit "
                         "each round (none with Ollama).")
-            begin(group, "Drift", note)
+            begin(group, t("Drift"), note)
             box = where["box"]
             cfg = drift_values(p.env, group)
             on = tk.BooleanVar(value=cfg["on"])
@@ -2439,8 +2458,8 @@ class SettingsTab(tk.Frame):
             p.vars[f"{name}_FROM"] = tk.StringVar(value=frm)
             drift_mode_var = tk.StringVar(value=option_label(DRIFT_MODE_OPTIONS, frm if cfg["on"] else "off"))
             top = tk.Frame(box)
-            tk.Label(top, text="Drift").pack(side="left")
-            drift_mode_cb = ttk.Combobox(top, textvariable=drift_mode_var, state="readonly", width=14,
+            tk.Label(top, text=t("Drift")).pack(side="left")
+            drift_mode_cb = TCombobox(top, textvariable=drift_mode_var, state="readonly", width=14,
                                          values=[s for _, s in DRIFT_MODE_OPTIONS])
             drift_mode_cb.pack(side="left", padx=(6, 0))
 
@@ -2452,19 +2471,19 @@ class SettingsTab(tk.Frame):
                     p.vars[key].set(code)
                 toggled()
             drift_mode_cb.bind("<<ComboboxSelected>>", mode_chosen)
-            help_mark(top, DRIFT_MODE_HELP).pack(side="left", padx=(8, 0))
+            help_mark(top, t(DRIFT_MODE_HELP)).pack(side="left", padx=(8, 0))
             place(top, pady=(0, 4))
             if not hasattr(p, "drift_modes"):
                 p.drift_modes = {}
             p.drift_modes[group] = drift_mode_var
             row = tk.Frame(box)
-            tk.Label(row, text="Drift using").pack(side="left")
+            tk.Label(row, text=t("Drift using")).pack(side="left")
             choices = drift_using_options(group)
-            using_cb = ttk.Combobox(row, textvariable=using, values=[shown for _, shown in choices],
+            using_cb = TCombobox(row, textvariable=using, values=[shown for _, shown in choices],
                                     state="readonly", width=22 if group == "vibe" else 14)
             using_cb.pack(side="left", padx=(6, 18))
-            tk.Label(row, text="Rounds").pack(side="left")
-            rounds_cb = ttk.Combobox(row, textvariable=rounds, values=[str(n) for n in range(1, 7)],
+            tk.Label(row, text=t("Rounds")).pack(side="left")
+            rounds_cb = TCombobox(row, textvariable=rounds, values=[str(n) for n in range(1, 7)],
                                      state="readonly", width=3)
             rounds_cb.pack(side="left", padx=(6, 0))
             for cb in (using_cb, rounds_cb):
@@ -2473,10 +2492,10 @@ class SettingsTab(tk.Frame):
             drift_mod_cb = None
             if group != "vibe":   # AI Playlist has its own, below
                 dm_row = tk.Frame(box)
-                tk.Label(dm_row, text="Moderator on Drift tracks", fg=PALETTE["ai_purple"]).pack(side="left")
+                tk.Label(dm_row, text=t("Moderator on Drift tracks"), fg=PALETTE["ai_purple"]).pack(side="left")
                 p.vars[f"{name}_MODERATOR"] = tk.StringVar(value=option_label(
                     DRIFT_MODERATOR_OPTIONS, p.env.get(f"{name}_MODERATOR", "same").strip().lower()))
-                drift_mod_cb = ttk.Combobox(dm_row, textvariable=p.vars[f"{name}_MODERATOR"],
+                drift_mod_cb = TCombobox(dm_row, textvariable=p.vars[f"{name}_MODERATOR"],
                                             values=[s for _, s in DRIFT_MODERATOR_OPTIONS], state="readonly",
                                             width=14)
                 drift_mod_cb.pack(side="left", padx=(6, 0))
@@ -2487,12 +2506,8 @@ class SettingsTab(tk.Frame):
                         warn_moderator_once(self)
                     p.save()
                 drift_mod_cb.bind("<<ComboboxSelected>>", dm_chosen)
-                help_mark(dm_row, "Checks the tracks each Drift round adds. Same as build uses the Moderator "
-                                  "level of the build itself; a stronger level here checks Drift harder than the "
-                                  "first round. When most of what one seed brought in is off course, the rest of "
-                                  "it goes too and Drift doesn't seed from that chain again.\n"
-                                  + MODERATOR_LEVELS_HELP).pack(side="left", padx=(8, 0))
-                Tooltip(drift_mod_cb, NO_KEY_TEXT, when=lambda: not self._ai_set_up())
+                help_mark(dm_row, t("Checks the tracks each Drift round adds. Same as build uses the Moderator level of the build itself; a stronger level here checks Drift harder than the first round. When most of what one seed brought in is off course, the rest of it goes too and Drift doesn't seed from that chain again.") + "\n" + t(MODERATOR_LEVELS_HELP)).pack(side="left", padx=(8, 0))
+                Tooltip(drift_mod_cb, t(NO_KEY_TEXT), when=lambda: not self._ai_set_up())
                 place(dm_row, pady=(0, 4))
             # Drift sources: the same as Settings > Sources, or Custom Sources of its own
             name = f"DRIFT_{group.upper()}"
@@ -2500,14 +2515,14 @@ class SettingsTab(tk.Frame):
                 DRIFT_SOURCE_MODES, p.env.get(f"{name}_SOURCES_MODE", "same").strip().lower()))
             p.vars[f"{name}_SOURCES_MODE"] = mode
             mode_row = tk.Frame(box)
-            tk.Label(mode_row, text="Drift sources").pack(side="left")
-            mode_cb = ttk.Combobox(mode_row, textvariable=mode, values=[s for _, s in DRIFT_SOURCE_MODES],
+            tk.Label(mode_row, text=t("Drift sources")).pack(side="left")
+            mode_cb = TCombobox(mode_row, textvariable=mode, values=[s for _, s in DRIFT_SOURCE_MODES],
                                    state="readonly", width=26)
             mode_cb.pack(side="left", padx=(6, 0))
-            help_mark(mode_row, DRIFT_SOURCES_HELP).pack(side="left", padx=(8, 0))
+            help_mark(mode_row, t(DRIFT_SOURCES_HELP)).pack(side="left", padx=(8, 0))
             place(mode_row, pady=(0, 4))
             if group in ("artists", "tracks"):   # an empty build is only picked up with Custom Sources
-                warn = tk.Label(box, text=DRIFT_SAME_WARNING, fg=PALETTE["text_secondary"], font=HELP_FONT,
+                warn = tk.Label(box, text=t(DRIFT_SAME_WARNING), fg=PALETTE["text_secondary"], font=HELP_FONT,
                                 wraplength=scaled(box, 440), justify="left")
                 place(warn, pady=(0, 4))
                 warn.grid_configure(padx=(16, 0))
@@ -2516,12 +2531,12 @@ class SettingsTab(tk.Frame):
             panel = tk.Frame(box)
             frames = {}
             for kind, names, agree_values, main in (
-                    ("ARTIST", DRIFT_ARTIST_SOURCE_NAMES, ["Off", "2", "3", "4"],
+                    ("ARTIST", DRIFT_ARTIST_SOURCE_NAMES, [N_("Off"), "2", "3", "4"],
                      [c for c in engine.SIMILAR_SOURCES if c != "ai"]),
-                    ("TRACK", [s for s in TRACK_SOURCE_NAMES if s[0] != "ai"], ["Off", "2", "3"],
+                    ("TRACK", [s for s in TRACK_SOURCE_NAMES if s[0] != "ai"], [N_("Off"), "2", "3"],
                      [c for c in engine.SIMILAR_TRACK_SOURCES if c != "ai"])):
                 frame = tk.Frame(panel)
-                tk.Label(frame, text="Similar artists from" if kind == "ARTIST" else "Similar tracks from",
+                tk.Label(frame, text=t("Similar artists from") if kind == "ARTIST" else t("Similar tracks from"),
                          fg=PALETTE["text_secondary"]).pack(anchor="w")
                 ticks = tk.Frame(frame)
                 ticks.pack(anchor="w", pady=(2, 2))
@@ -2535,16 +2550,16 @@ class SettingsTab(tk.Frame):
                     ttk.Checkbutton(ticks, text=label, variable=var, command=p.save).pack(side="left", padx=(0, 12))
                 agree_row = tk.Frame(frame)
                 agree_row.pack(anchor="w", pady=(2, 0))
-                tk.Label(agree_row, text="Sources that must agree").pack(side="left")
+                tk.Label(agree_row, text=t("Sources that must agree")).pack(side="left")
                 start = p.env.get(f"{name}_{kind}_AGREE", "1").strip() or "1"
                 agree = tk.StringVar(value="Off" if start in ("0", "1") else start)
                 p.vars[f"{name}_{kind}_AGREE"] = agree
-                agree_cb = ttk.Combobox(agree_row, textvariable=agree, values=agree_values, state="readonly",
+                agree_cb = TCombobox(agree_row, textvariable=agree, values=agree_values, state="readonly",
                                         width=6)
                 agree_cb.pack(side="left", padx=(6, 0))
                 agree_cb.bind("<<ComboboxSelected>>", p.save)
-                help_mark(agree_row, "How many of the ticked sources must agree before Drift uses a suggestion. "
-                                     "It can't be more than the sources that answer.").pack(side="left", padx=(8, 0))
+                help_mark(agree_row, t("How many of the ticked sources must agree before Drift uses a suggestion. "
+                                     "It can't be more than the sources that answer.")).pack(side="left", padx=(8, 0))
                 frames[kind] = frame
             place(panel, pady=(0, 4))
             panel.grid_configure(padx=(16, 0))
@@ -2560,10 +2575,10 @@ class SettingsTab(tk.Frame):
             using_cb.bind("<<ComboboxSelected>>", lambda e: sync_drift(p), add="+")
             if group == "vibe":   # AI Playlist: a Moderator for what Drift adds from the sources
                 mod_row = tk.Frame(box)
-                tk.Label(mod_row, text="Moderator on Drift tracks", fg=PALETTE["ai_purple"]).pack(side="left")
+                tk.Label(mod_row, text=t("Moderator on Drift tracks"), fg=PALETTE["ai_purple"]).pack(side="left")
                 p.vars["AI_MODERATOR_VIBE"] = tk.StringVar(
                     value=engine.moderator_settings(p.env.get)["vibe"].title())
-                mod_cb = ttk.Combobox(mod_row, textvariable=p.vars["AI_MODERATOR_VIBE"], values=MODERATOR_CHOICES,
+                mod_cb = TCombobox(mod_row, textvariable=p.vars["AI_MODERATOR_VIBE"], values=MODERATOR_CHOICES,
                                       state="readonly", width=9)
                 mod_cb.pack(side="left", padx=(6, 0))
 
@@ -2574,11 +2589,8 @@ class SettingsTab(tk.Frame):
                     p.save()
                 mod_cb.bind("<<ComboboxSelected>>", mod_chosen)
                 using_cb.bind("<<ComboboxSelected>>", lambda e: sync_drift(p), add="+")
-                help_mark(mod_row, "Checks the tracks Drift adds from similar artists or similar tracks against "
-                                   "your description, and removes any that clash. The AI's own picks are never "
-                                   "checked. Only works when Drift is on and not using the AI.\n"
-                                   + MODERATOR_LEVELS_HELP).pack(side="left", padx=(8, 0))
-                Tooltip(mod_cb, NO_KEY_TEXT, when=lambda: not self._ai_set_up())
+                help_mark(mod_row, t("Checks the tracks Drift adds from similar artists or similar tracks against your description, and removes any that clash. The AI's own picks are never checked. Only works when Drift is on and not using the AI.") + "\n" + t(MODERATOR_LEVELS_HELP)).pack(side="left", padx=(8, 0))
+                Tooltip(mod_cb, t(NO_KEY_TEXT), when=lambda: not self._ai_set_up())
                 place(mod_row, pady=(0, 4))
                 p.vibe_mod_cb = mod_cb
 
@@ -2593,30 +2605,36 @@ class SettingsTab(tk.Frame):
                 share = min(100, max(10, int(p.env.get(f"DEEP_CUTS_{g}_SHARE") or 10) // 10 * 10))
             except ValueError:
                 share = 10
-            how = ("the artists in the seed's genre you've played least lately, then their top tracks"
-                   if group == "artists" else "the tracks in the seed's genre you've played least")
-            if group == "vibe":
-                how += " (the genre most of the AI's picks share, as there's no seed track)"
-            switch = ("Switch it on, Spaced or Shuffled, here: this device's playlists follow this page, not the "
-                      "Play tab." if device else
-                      "Switch it on, Spaced or Shuffled, with Deep Cuts in the Play tab's More Options.")
-            begin(group, "Deep Cuts",
-                  f"Tops the playlist up with {how}, so the corners of your collection get a turn. {switch} The "
-                  "genre comes from your own Genre tags, so this works best when they're well organised.")
+            if group == "artists":
+                what = t("Tops the playlist up with the artists in the seed's genre you've played least lately, "
+                         "then their top tracks, so the corners of your collection get a turn.")
+            elif group == "vibe":
+                what = t("Tops the playlist up with the tracks in the seed's genre you've played least (the genre "
+                         "most of the AI's picks share, as there's no seed track), so the corners of your "
+                         "collection get a turn.")
+            else:
+                what = t("Tops the playlist up with the tracks in the seed's genre you've played least, so the "
+                         "corners of your collection get a turn.")
+            switch = (t("Switch it on, Spaced or Shuffled, here: this device's playlists follow this page, not the "
+                        "Play tab.") if device else
+                      t("Switch it on, Spaced or Shuffled, with Deep Cuts in the Play tab's More Options."))
+            begin(group, t("Deep Cuts"),
+                  what + " " + switch + " " + t("The genre comes from your own Genre tags, so this works best when "
+                                                "they're well organised."))
             row = tk.Frame(where["box"])
             mode_cb = None
             if device:
                 mode = (p.env.get(f"DEEP_CUTS_{g}") or "off").strip().lower()
-                tk.Label(row, text="Deep Cuts").pack(side="left")
+                tk.Label(row, text=t("Deep Cuts")).pack(side="left")
                 p.vars[f"DEEP_CUTS_{g}"] = tk.StringVar(
                     value=option_label(DEVICE_DEEP_CUTS, mode if mode in engine.DEEP_CUT_MODES else "off"))
-                mode_cb = ttk.Combobox(row, textvariable=p.vars[f"DEEP_CUTS_{g}"],
+                mode_cb = TCombobox(row, textvariable=p.vars[f"DEEP_CUTS_{g}"],
                                        values=[shown for _, shown in DEVICE_DEEP_CUTS], state="readonly", width=12)
                 mode_cb.pack(side="left", padx=(6, 24))
-            title = tk.Label(row, text="Top Up with Deep Cuts by")
+            title = tk.Label(row, text=t("Top Up with Deep Cuts by"))
             title.pack(side="left")
-            Tooltip(title, "How many deep cuts, as a share of the playlist, added on top of it: 10% of "
-                           "30 tracks adds 3; 100% adds as many again, an even mix.")
+            Tooltip(title, t("How many deep cuts, as a share of the playlist, added on top of it: 10% of "
+                           "30 tracks adds 3; 100% adds as many again, an even mix."))
             p.vars[f"DEEP_CUTS_{g}_SHARE"] = tk.StringVar(value=str(share))
             share_sb = tk.Spinbox(row, from_=10, to=100, increment=10, width=5, state="readonly",
                                   textvariable=p.vars[f"DEEP_CUTS_{g}_SHARE"], command=p.save)
@@ -2634,11 +2652,11 @@ class SettingsTab(tk.Frame):
         def nonstop(group):
             """The Non-stop section: its tick box, then how this option's playlists carry on."""
             g, cfg = group.upper(), nonstop_cfg[group]
-            begin(group, "Non-stop",
-                  "When the last track of a playlist 24bit7 built starts playing, more are added to the end, "
+            begin(group, t("Non-stop"),
+                  t("When the last track of a playlist 24bit7 built starts playing, more are added to the end, "
                   "so the music doesn't stop. A playlist keeps following these settings all evening, even "
                   "after it carries on as Similar Tracks or Similar Artists. Only playlists 24bit7 sent are "
-                  "topped up: an album or playlist you start in JRiver yourself ends as normal.")
+                  "topped up: an album or playlist you start in JRiver yourself ends as normal."))
             box = where["box"]
             p.vars[f"NONSTOP_{g}"] = tk.BooleanVar(value=cfg["on"])
             p.vars[f"NONSTOP_{g}_MODE"] = tk.StringVar(value=cfg.get("mode", "journey"))
@@ -2650,8 +2668,8 @@ class SettingsTab(tk.Frame):
             ns_var = tk.StringVar(value=option_label(NONSTOP_MODE_OPTIONS,
                                                      cfg.get("mode", "journey") if cfg["on"] else "off"))
             top_row = tk.Frame(box)
-            tk.Label(top_row, text="Non-stop").pack(side="left")
-            ns_cb = ttk.Combobox(top_row, textvariable=ns_var, values=[s for _, s in NONSTOP_MODE_OPTIONS],
+            tk.Label(top_row, text=t("Non-stop")).pack(side="left")
+            ns_cb = TCombobox(top_row, textvariable=ns_var, values=[s for _, s in NONSTOP_MODE_OPTIONS],
                                  state="readonly", width=24)
             ns_cb.pack(side="left", padx=(6, 0))
 
@@ -2663,7 +2681,7 @@ class SettingsTab(tk.Frame):
                     p.vars[f"NONSTOP_{g}_MODE"].set(code)
                 toggled()
             ns_cb.bind("<<ComboboxSelected>>", ns_chosen)
-            help_mark(top_row, NONSTOP_MODE_HELP).pack(side="left", padx=(8, 0))
+            help_mark(top_row, t(NONSTOP_MODE_HELP)).pack(side="left", padx=(8, 0))
             place(top_row, pady=(0, 2))
             if not hasattr(p, "nonstop_modes"):
                 p.nonstop_modes = {}
@@ -2678,7 +2696,7 @@ class SettingsTab(tk.Frame):
                 p.vars[key] = tk.StringVar(value=option_label(options, current))
                 cell = tk.Frame(body)
                 cell.grid(row=r, column=1, sticky="w", padx=(12, 0))
-                cb = ttk.Combobox(cell, textvariable=p.vars[key], values=[shown for _, shown in options],
+                cb = TCombobox(cell, textvariable=p.vars[key], values=[shown for _, shown in options],
                                   state="readonly", width=22)
                 cb.pack(side="left")
                 cb.bind("<<ComboboxSelected>>", p.save)
@@ -2700,31 +2718,31 @@ class SettingsTab(tk.Frame):
                 def rest_toggled():
                     sync_nonstop(p)
                     p.save()
-                ttk.Checkbutton(row, text="First, the rest of the artist, up to",
+                ttk.Checkbutton(row, text=t("First, the rest of the artist, up to"),
                                 variable=p.vars["NONSTOP_TOP_REST"], command=rest_toggled).pack(side="left")
-                rest_cb = ttk.Combobox(row, textvariable=p.vars["NONSTOP_TOP_REST_COUNT"],
-                                       values=["10", "20", "30", "50", "100", "Unlimited"],
+                rest_cb = TCombobox(row, textvariable=p.vars["NONSTOP_TOP_REST_COUNT"],
+                                       values=["10", "20", "30", "50", "100", N_("Unlimited")],
                                        state="readonly", width=10)
                 rest_cb.pack(side="left", padx=(6, 6))
                 rest_cb.bind("<<ComboboxSelected>>", p.save)
-                tk.Label(row, text="songs").pack(side="left")
-                help_mark(row, "When the top tracks finish, the artist's other songs in your library play "
+                tk.Label(row, text=t("songs")).pack(side="left")
+                help_mark(row, t("When the top tracks finish, the artist's other songs in your library play "
                                "next, shuffled. After that, their most popular track seeds a new playlist. "
-                               "Unticked, it goes straight to the new playlist.").pack(side="left", padx=(8, 0))
+                               "Unticked, it goes straight to the new playlist.")).pack(side="left", padx=(8, 0))
             if group == "vibe":
-                option("Continues with", "NONSTOP_VIBE_WITH", NONSTOP_WITH_OPTIONS, cfg["with"],
-                       "More from the AI asks the AI again with the original description (a little "
+                option(t("Continues with"), "NONSTOP_VIBE_WITH", NONSTOP_WITH_OPTIONS, cfg["with"],
+                       t("More from the AI asks the AI again with the original description (a little "
                        "AI credit each time, none with Ollama). Similar artists or Similar tracks carry on "
                        "from the "
-                       "music, with no credit used.")
+                       "music, with no credit used."))
             else:
-                option("Then play using" if group == "top" else "Play using", f"NONSTOP_{g}_USING",
-                       NONSTOP_USING_OPTIONS, cfg["using"], "What each top-up is built with.")
-            reseed_cb = option("Reseed from", f"NONSTOP_{g}_RESEED", NONSTOP_RESEED_OPTIONS, cfg["reseed"],
-                               "For Wander. Last track: each top-up follows on from where "
+                option(t("Then play using") if group == "top" else t("Play using"), f"NONSTOP_{g}_USING",
+                       NONSTOP_USING_OPTIONS, cfg["using"], t("What each top-up is built with."))
+            reseed_cb = option(t("Reseed from"), f"NONSTOP_{g}_RESEED", NONSTOP_RESEED_OPTIONS, cfg["reseed"],
+                               t("For Wander. Last track: each top-up follows on from where "
                                "the music has got to, so it wanders as the evening goes on.\nSecond track: each "
                                "top-up seeds from the first pick after the original seed, so it stays closer to "
-                               "how it started. Keep It Tight doesn't use this.")
+                               "how it started. Keep It Tight doesn't use this."))
             p.nonstop_parts[g] = (body, rest_cb)
             if not hasattr(p, "nonstop_reseed"):
                 p.nonstop_reseed = {}
@@ -2734,7 +2752,7 @@ class SettingsTab(tk.Frame):
             """The Hidden Tracks section for one Play option."""
             g = group.upper()
             on, minutes = closer_cfg[group]
-            begin(group, "Hidden Tracks")
+            begin(group, t("Hidden Tracks"))
             row = tk.Frame(where["box"])
             p.vars[f"SKIP_LONG_CLOSERS_{g}"] = tk.BooleanVar(value=on)
             p.vars[f"LONG_CLOSER_MINUTES_{g}"] = tk.StringVar(value=str(minutes))
@@ -2744,12 +2762,12 @@ class SettingsTab(tk.Frame):
             def toggled():
                 sync_long_closers(p)
                 p.save()
-            ttk.Checkbutton(row, text="Skip the last track on an album if it's longer than",
+            ttk.Checkbutton(row, text=t("Skip the last track on an album if it's longer than"),
                             variable=p.vars[f"SKIP_LONG_CLOSERS_{g}"], command=toggled).pack(side="left")
             sb.pack(side="left", padx=(6, 6))
-            tk.Label(row, text="minutes").pack(side="left")
-            help_mark(row, "Long album closers often hide a bonus track after a long silence. Albums, songs "
-                           "and playlists you ask for by name always play in full.").pack(side="left", padx=(8, 0))
+            tk.Label(row, text=t("minutes")).pack(side="left")
+            help_mark(row, t("Long album closers often hide a bonus track after a long silence. Albums, songs "
+                           "and playlists you ask for by name always play in full.")).pack(side="left", padx=(8, 0))
             p.vars[f"LONG_CLOSER_MINUTES_{g}"].trace_add("write", p.save)
             p.closer_sbs[g] = sb
             place(row)
@@ -2757,21 +2775,21 @@ class SettingsTab(tk.Frame):
         def fallback(group):
             """The If All Else Fails section: when a build finds nothing, shuffle, run a file or play a playlist."""
             key = f"IF_ALL_ELSE_FAILS_{group.upper()}"
-            begin(group, "If All Else Fails")
+            begin(group, t("If All Else Fails"))
             p.vars[key] = tk.BooleanVar(value=str(p.env.get(key, "0")).strip().lower() in ("1", "true", "yes"))
             mode = tk.StringVar(value=option_label(FALLBACK_MODE_OPTIONS,
                                                    p.env.get(f"{key}_MODE", "shuffle").strip().lower()))
             p.vars[f"{key}_MODE"] = mode
             for part in ("PATH", "PLAYLIST", "PLAYLIST_NAME"):
                 p.vars[f"{key}_{part}"] = tk.StringVar(value=p.env.get(f"{key}_{part}", ""))
-            shown = tk.StringVar(value=p.vars[f"{key}_PLAYLIST_NAME"].get() or NO_PLAYLIST)
+            shown = tk.StringVar(value=p.vars[f"{key}_PLAYLIST_NAME"].get() or t(NO_PLAYLIST))
             row = tk.Frame(where["box"])
-            ttk.Checkbutton(row, text="If nothing is found", variable=p.vars[key],
+            ttk.Checkbutton(row, text=t("If nothing is found"), variable=p.vars[key],
                             command=lambda: changed()).pack(side="left")
-            mode_cb = ttk.Combobox(row, textvariable=mode, values=[s for _, s in FALLBACK_MODE_OPTIONS],
+            mode_cb = TCombobox(row, textvariable=mode, values=[s for _, s in FALLBACK_MODE_OPTIONS],
                                    state="readonly", width=14)
             mode_cb.pack(side="left", padx=(8, 0))
-            help_mark(row, FALLBACK_HELP).pack(side="left", padx=(8, 0))
+            help_mark(row, t(FALLBACK_HELP)).pack(side="left", padx=(8, 0))
             place(row)
             file_row = tk.Frame(where["box"])
             entry = tk.Entry(file_row, textvariable=p.vars[f"{key}_PATH"], width=48)
@@ -2780,12 +2798,12 @@ class SettingsTab(tk.Frame):
 
             def browse():
                 path = filedialog.askopenfilename(
-                    parent=self, title="If All Else Fails",
-                    filetypes=[("Programs and scripts", "*.bat *.cmd *.exe *.ps1 *.py *.pyw"), ("All files", "*.*")])
+                    parent=self, title=t("If All Else Fails"),
+                    filetypes=[(t("Programs and scripts"), "*.bat *.cmd *.exe *.ps1 *.py *.pyw"), (t("All files"), "*.*")])
                 if path:
                     p.vars[f"{key}_PATH"].set(os.path.normpath(path))
                     p.save()
-            ttk.Button(file_row, text="Browse...", command=browse).pack(side="left")
+            ttk.Button(file_row, text=t("Browse..."), command=browse).pack(side="left")
             place(file_row, pady=(0, 4))
             file_row.grid_configure(padx=(16, 0))
             list_row = tk.Frame(where["box"])
@@ -2796,17 +2814,17 @@ class SettingsTab(tk.Frame):
                 p.vars[f"{key}_PLAYLIST_NAME"].set(item["Name"])
                 shown.set(item["Name"])
                 p.save()
-            ttk.Button(list_row, text="Choose...", command=lambda: choose_playlist(self, picked)).pack(side="left")
+            ttk.Button(list_row, text=t("Choose..."), command=lambda: choose_playlist(self, picked)).pack(side="left")
             place(list_row, pady=(0, 4))
             list_row.grid_configure(padx=(16, 0))
             if "FALLBACK_SPOKEN" not in p.vars:   # one setting, shown in each playlist type's section
                 p.vars["FALLBACK_SPOKEN"] = tk.BooleanVar(
                     value=str(p.env.get("FALLBACK_SPOKEN", "0")).strip().lower() in ("1", "true", "yes"))
             spoken_row = tk.Frame(where["box"])
-            spoken_tick = ttk.Checkbutton(spoken_row, text="Say why in the room first",
+            spoken_tick = ttk.Checkbutton(spoken_row, text=t("Say why in the room first"),
                                           variable=p.vars["FALLBACK_SPOKEN"], command=lambda: p.save())
             spoken_tick.pack(side="left")
-            help_mark(spoken_row, SPOKEN_HELP).pack(side="left", padx=(8, 0))
+            help_mark(spoken_row, t(SPOKEN_HELP)).pack(side="left", padx=(8, 0))
             place(spoken_row, pady=(0, 4))
             spoken_row.grid_configure(padx=(16, 0))
 
@@ -2827,11 +2845,11 @@ class SettingsTab(tk.Frame):
         def run_after(group):
             """The Run After Building section: a file to run once the playlist is in JRiver."""
             key = f"RUN_AFTER_{group.upper()}"
-            begin(group, "Run After Building")
+            begin(group, t("Run After Building"))
             p.vars[key] = tk.BooleanVar(value=p.env.get(key, "0") in ("1", "true", "yes"))
             p.vars[f"{key}_PATH"] = tk.StringVar(value=p.env.get(f"{key}_PATH", ""))
             row = tk.Frame(where["box"])
-            ttk.Checkbutton(row, text="Run this file after building", variable=p.vars[key],
+            ttk.Checkbutton(row, text=t("Run this file after building"), variable=p.vars[key],
                             command=p.save).pack(side="left")
             entry = tk.Entry(row, textvariable=p.vars[f"{key}_PATH"], width=48)
             entry.pack(side="left", padx=(8, 4))
@@ -2839,21 +2857,21 @@ class SettingsTab(tk.Frame):
 
             def browse():
                 path = filedialog.askopenfilename(
-                    parent=self, title="Run after building",
-                    filetypes=[("Programs and scripts", "*.bat *.cmd *.exe *.ps1 *.py *.pyw"), ("All files", "*.*")])
+                    parent=self, title=t("Run after building"),
+                    filetypes=[(t("Programs and scripts"), "*.bat *.cmd *.exe *.ps1 *.py *.pyw"), (t("All files"), "*.*")])
                 if path:
                     p.vars[f"{key}_PATH"].set(os.path.normpath(path))
                     p.vars[key].set(True)
                     p.save()
-            ttk.Button(row, text="Browse...", command=browse).pack(side="left")
-            help_mark(row, "Runs the file once the playlist is in JRiver, added playlists included, and only "
+            ttk.Button(row, text=t("Browse..."), command=browse).pack(side="left")
+            help_mark(row, t("Runs the file once the playlist is in JRiver, added playlists included, and only "
                            "if the build worked. It runs in the background and isn't told anything about the "
                            "playlist. A .bat, .exe, PowerShell or Python script all work. Non-stop top-ups "
-                           "don't run it.").pack(side="left", padx=(8, 0))
+                           "don't run it.")).pack(side="left", padx=(8, 0))
             place(row)
 
         # --- Similar Artists ---
-        begin("artists", "Playlist")
+        begin("artists", t("Playlist"))
         seed_header("artists")
         # Limit total tracks to: a tick box in the label column, the number beside it
         box, r = where["box"], where["r"]
@@ -2865,13 +2883,13 @@ class SettingsTab(tk.Frame):
         limit_sb = tk.Spinbox(cell, from_=5, to=100, textvariable=p.vars["SIMILAR_ARTIST_TRACK_COUNT"],
                               width=6, command=p.save)
         limit_sb.pack(side="left")
-        help_mark(cell, LIMIT_HELP).pack(side="left", padx=(8, 0))
+        help_mark(cell, t(LIMIT_HELP)).pack(side="left", padx=(8, 0))
 
         def limit_toggled(save=True):
             limit_sb.config(state="normal" if limit_var.get() else "disabled")
             if save:
                 p.save()
-        ttk.Checkbutton(box, text="Limit total tracks to", variable=limit_var,
+        ttk.Checkbutton(box, text=t("Limit total tracks to"), variable=limit_var,
                         command=limit_toggled).grid(row=r, column=0, sticky="w", pady=ROW_PAD)
         limit_toggled(save=False)
         p.vars["SIMILAR_ARTIST_TRACK_COUNT"].trace_add("write", p.save)
@@ -2886,29 +2904,29 @@ class SettingsTab(tk.Frame):
             limit_tick(rpcell, "REVIEW_PN_SIMILAR_ARTIST_TRACK_LIMIT", "artists_pn")
         where["r"] += 1
         if p.device_id is None:
-            r = label_row("Artists sampled from Playing Now",
-                          "How many artists are picked at random from Playing Now. Each one in turn finds its "
+            r = label_row(t("Artists sampled from Playing Now"),
+                          t("How many artists are picked at random from Playing Now. Each one in turn finds its "
                           "share of similar artists, so no artist is used twice. With fewer artists in "
-                          "Playing Now than this, every one of them is used.")
+                          "Playing Now than this, every one of them is used."))
             pn_cell("PN_SAMPLE_ARTISTS", "5", 1, 20, row=r)
             review_twin("artists_pn", "PN_SAMPLE_ARTISTS", "5", 1, 20, row=r, col=4)
-        spin("Number of artists", "SIMILAR_ARTIST_LIMIT", "20", 1, 50,
-             "Similar artists to take, read from the top of the sources' lists. An artist only counts once it "
+        spin(t("Number of artists"), "SIMILAR_ARTIST_LIMIT", "20", 1, 50,
+             t("Similar artists to take, read from the top of the sources' lists. An artist only counts once it "
              "gives a track from your library; one that doesn't is skipped and the next one down is read "
-             "instead. Under Playing Now, this many for each sampled artist.")
-        pn_cell("PN_ARTISTS_PER_SAMPLE", "4", 1, 20, note="per sampled artist")
+             "instead. Under Playing Now, this many for each sampled artist."))
+        pn_cell("PN_ARTISTS_PER_SAMPLE", "4", 1, 20, note=t("per sampled artist"))
         review_twin("artists", "SIMILAR_ARTIST_LIMIT", "20", 1, 50, col=3)
         review_twin("artists_pn", "PN_ARTISTS_PER_SAMPLE", "4", 1, 20, col=4)
-        pool_var, _ = spin("Number of artist's top tracks", "TRACKS_PER_ARTIST_POOL", "5", 1, 20)
+        pool_var, _ = spin(t("Number of artist's top tracks"), "TRACKS_PER_ARTIST_POOL", "5", 1, 20)
         pn_cell("PN_TRACKS_PER_ARTIST_POOL", "5", 1, 20)
         review_twin("artists", "TRACKS_PER_ARTIST_POOL", "5", 1, 20, col=3)
         review_twin("artists_pn", "PN_TRACKS_PER_ARTIST_POOL", "5", 1, 20, col=4)
-        _, p.pick_sb = spin("Tracks per artist selection", "TRACKS_PER_ARTIST_PICK", "3", 1, 20,
-                            "Top tracks come from your Top-track sources (Last.fm, Deezer and so on), for "
+        _, p.pick_sb = spin(t("Tracks per artist selection"), "TRACKS_PER_ARTIST_PICK", "3", 1, 20,
+                            t("Top tracks come from your Top-track sources (Last.fm, Deezer and so on), for "
                             "the seed artist and each similar artist. Selecting fewer than the top tracks "
                             "(say 3 of 5) means the same seed gives a different playlist each run, as the "
                             "selection is random. For no random pick at all, set both numbers the "
-                            "same and untick Limit total tracks to.")
+                            "same and untick Limit total tracks to."))
         pn_cell("PN_TRACKS_PER_ARTIST_PICK", "3", 1, 20)
         review_twin("artists", "TRACKS_PER_ARTIST_PICK", "3", 1, 20, col=3)
         review_twin("artists_pn", "PN_TRACKS_PER_ARTIST_PICK", "3", 1, 20, col=4)
@@ -2922,20 +2940,20 @@ class SettingsTab(tk.Frame):
         run_after("artists")
 
         # --- Similar Tracks ---
-        begin("tracks", "Playlist")
+        begin("tracks", t("Playlist"))
         seed_header("tracks")
         if p.device_id is None:
-            r = label_row("Tracks sampled from Playing Now",
-                          "How many tracks are picked at random from Playing Now, each from a different artist "
-                          "while there are artists left. Each one in turn finds its share of similar tracks.")
+            r = label_row(t("Tracks sampled from Playing Now"),
+                          t("How many tracks are picked at random from Playing Now, each from a different artist "
+                          "while there are artists left. Each one in turn finds its share of similar tracks."))
             pn_cell("PN_SAMPLE_TRACKS", "5", 1, 20, row=r)
             review_twin("tracks_pn", "PN_SAMPLE_TRACKS", "5", 1, 20, row=r, col=4)
-        spin("Number of tracks", "SIMILAR_TRACK_COUNT", "30", 5, 100, TARGET_HELP)
-        pn_cell("PN_TRACKS_PER_SAMPLE", "6", 1, 50, note="per sampled track")
+        spin(t("Number of tracks"), "SIMILAR_TRACK_COUNT", "30", 5, 100, t(TARGET_HELP))
+        pn_cell("PN_TRACKS_PER_SAMPLE", "6", 1, 50, note=t("per sampled track"))
         review_twin("tracks", "SIMILAR_TRACK_COUNT", "30", 5, 100, col=3)
         review_twin("tracks_pn", "PN_TRACKS_PER_SAMPLE", "6", 1, 50, col=4)
-        spin("Most tracks per artist", "SIMILAR_TRACK_PER_ARTIST", "3", 1, 20,
-             "Includes the seed artist. Under Playing Now it counts across the whole new list.")
+        spin(t("Most tracks per artist"), "SIMILAR_TRACK_PER_ARTIST", "3", 1, 20,
+             t("Includes the seed artist. Under Playing Now it counts across the whole new list."))
         pn_cell("PN_SIMILAR_TRACK_PER_ARTIST", "3", 1, 20)
         review_twin("tracks", "SIMILAR_TRACK_PER_ARTIST", "3", 1, 20, col=3)
         review_twin("tracks_pn", "PN_SIMILAR_TRACK_PER_ARTIST", "3", 1, 20, col=4)
@@ -2943,15 +2961,15 @@ class SettingsTab(tk.Frame):
             tk.Frame(where["box"], height=1, bg=PALETTE["section_edge"]).grid(
                 row=where["r"], column=0, columnspan=5, sticky="ew", pady=(8, 4))
             where["r"] += 1
-        choice("Variety", "SIMILAR_TRACK_VARIETY", "no", ["yes", "no"],
-               "Yes: gathers up to twice the matches it needs and picks from them at random, the closest "
+        choice(t("Variety"), "SIMILAR_TRACK_VARIETY", "no", [N_("yes"), N_("no")],
+               t("Yes: gathers up to twice the matches it needs and picks from them at random, the closest "
                "the most likely, so the same seed gives a different playlist each run.\n"
                "No: takes the closest matches in order and stops at the number of tracks, so the same "
-               "seed gives the same playlist.", note="Every column")
-        choice("Order", "SIMILAR_TRACK_ORDER", "shuffled", ["shuffled", "similar first"],
-               "Similar first keeps the order the sources agreed on, strongest matches first. Under Playing "
+               "seed gives the same playlist."), note=t("Every column"))
+        choice(t("Order"), "SIMILAR_TRACK_ORDER", "shuffled", [N_("shuffled"), N_("similar first")],
+               t("Similar first keeps the order the sources agreed on, strongest matches first. Under Playing "
                "Now, each sampled track's best match comes first, then each one's second best, and so on. "
-               "Shuffled mixes them up.", note="Every column")
+               "Shuffled mixes them up."), note=t("Every column"))
         recent("tracks")
         drift("tracks")
         deep_cuts("tracks")
@@ -2961,12 +2979,12 @@ class SettingsTab(tk.Frame):
         run_after("tracks")
 
         # --- Artist's Top Tracks ---
-        begin("top", "Playlist")
+        begin("top", t("Playlist"))
         review_header("top")
-        spin("Number of tracks (1-20)", "TOP_TRACKS_COUNT", "10", 1, 20, TOP_TARGET_HELP)
+        spin(t("Number of tracks (1-20)"), "TOP_TRACKS_COUNT", "10", 1, 20, t(TOP_TARGET_HELP))
         review_twin("top", "TOP_TRACKS_COUNT", "10", 1, 20)
-        choice("Order", "TOP_TRACKS_ORDER", "popular", ["popular", "reverse", "random"],
-               "popular: most played first\nreverse: least played first\nrandom: shuffled")
+        choice(t("Order"), "TOP_TRACKS_ORDER", "popular", [N_("popular"), N_("reverse"), N_("random")],
+               t("popular: most played first\nreverse: least played first\nrandom: shuffled"))
         recent("top")
         nonstop("top")
         hidden("top")
@@ -2974,8 +2992,8 @@ class SettingsTab(tk.Frame):
         run_after("top")
 
         # --- Vibe Playlist ---
-        begin("vibe", "Playlist")
-        spin("Number of tracks", "VIBE_TRACK_COUNT", "20", 5, 100, TARGET_HELP)
+        begin("vibe", t("Playlist"))
+        spin(t("Number of tracks"), "VIBE_TRACK_COUNT", "20", 5, 100, t(TARGET_HELP))
         recent("vibe")
         drift("vibe")
         deep_cuts("vibe")
@@ -2990,8 +3008,8 @@ class SettingsTab(tk.Frame):
         p.loading = False
 
     def _build_keys(self, nb):
-        tab = self._scroll_tab(nb, "Keys")
-        box = section(tab, "Keys and passwords")
+        tab = self._scroll_tab(nb, N_("Keys"))
+        box = section(tab, t("Keys and passwords"))
         r = 0
         for key in (k for k in KEY_FIELDS if k not in AI_KEY_FIELDS):
             self._key_row(box, r, key)
@@ -3002,31 +3020,31 @@ class SettingsTab(tk.Frame):
 
         # --- AI: the provider and what it needs, in its own box, with what the AI has used under it ---
         box = section(tab, "AI",
-                      "Which AI 24bit7's AI features use, and the tokens they have used since you last "
+                      t("Which AI 24bit7's AI features use, and the tokens they have used since you last "
                       "cleared the count, with an estimated cost. Providers bill by tokens, and output tokens "
                       "cost several times more than input. Answers reused from the cache cost nothing and "
                       "aren't counted. Your provider's own console has your actual bill. Anthropic is the "
                       "one fully tested; OpenAI, Google Gemini and Ollama should work, and reports on how "
-                      "they do are welcome.",
+                      "they do are welcome."),
                       title_fg=PALETTE["ai_purple"])
         self._build_ai_provider(box)
         use = tk.Frame(box)
         use.grid(row=2, column=0, columnspan=4, sticky="w", pady=(10, 0))
-        use_title = tk.Label(use, text="Use AI", font=LABEL_FONT, fg=PALETTE["ai_purple"])
+        use_title = tk.Label(use, text=t("Use AI"), font=LABEL_FONT, fg=PALETTE["ai_purple"])
         use_title.pack(side="left", padx=(0, 12))
-        help_mark(use, "Off pauses everything that spends AI credits, without removing your key: AI Playlist, "
+        help_mark(use, t("Off pauses everything that spends AI credits, without removing your key: AI Playlist, "
                        "the Moderator, the AI as a source, Drift using the AI, Console Query and Assess Tone "
                        "all stand down, and the console says so once per build. Switch back On and every "
-                       "setting is as you left it. Part of Profiles, so a No AI profile is one Load away.",
+                       "setting is as you left it. Part of Profiles, so a No AI profile is one Load away."),
                   on=use_title)
         self.use_ai_var = tk.StringVar(value="Off" if self.env.get("USE_AI", "1").strip().lower()
                                        in ("0", "false", "no", "off") else "On")
-        for choice in ("On", "Off"):
-            ttk.Radiobutton(use, text=choice, value=choice, variable=self.use_ai_var,
+        for choice in (N_("On"), N_("Off")):
+            ttk.Radiobutton(use, text=t(choice), value=choice, variable=self.use_ai_var,
                             command=self._use_ai_changed).pack(side="left", padx=(0, 10))
         usage = tk.Frame(box)
         usage.grid(row=3, column=0, columnspan=4, sticky="w", pady=(14, 0))
-        tk.Label(usage, text="AI Usage", font=LABEL_FONT, fg=PALETTE["ai_purple"]).grid(row=0, column=0, sticky="w")
+        tk.Label(usage, text=t("AI Usage"), font=LABEL_FONT, fg=PALETTE["ai_purple"]).grid(row=0, column=0, sticky="w")
         self.usage_total = tk.Label(usage, text="", anchor="w", justify="left")
         self.usage_total.grid(row=1, column=0, sticky="w", pady=(4, 8))
         self._wrap_to_width(usage, [self.usage_total])
@@ -3034,26 +3052,26 @@ class SettingsTab(tk.Frame):
         self.usage_table.grid(row=2, column=0, sticky="w")
         buttons = tk.Frame(usage)
         buttons.grid(row=3, column=0, sticky="w", pady=(10, 0))
-        tk.Button(buttons, text="Clear", width=8, command=self._usage_clear).pack(side="left")
-        tk.Button(buttons, text="Query", width=8, command=self._usage_query).pack(side="left", padx=(8, 0))
+        tk.Button(buttons, text=t("Clear"), width=8, command=self._usage_clear).pack(side="left")
+        tk.Button(buttons, text=t("Query"), width=8, command=self._usage_query).pack(side="left", padx=(8, 0))
         self.usage_note = tk.Label(buttons, text="", fg=PALETTE["help_fg"], font=HELP_FONT)
         self.usage_note.pack(side="left", padx=(12, 0))
         show = tk.Frame(usage)
         show.grid(row=4, column=0, sticky="w", pady=(10, 0))
         self.usage_np_var = tk.BooleanVar(value=self.env.get("AI_USAGE_NOW_PLAYING", "0") == "1")
-        ttk.Checkbutton(show, text="Show in Now Playing", variable=self.usage_np_var,
+        ttk.Checkbutton(show, text=t("Show in Now Playing"), variable=self.usage_np_var,
                         command=self._usage_np_toggled).pack(side="left")
-        tk.Label(show, text="as").pack(side="left", padx=(12, 6))
+        tk.Label(show, text=t("as")).pack(side="left", padx=(12, 6))
         unit = self.env.get("AI_USAGE_NP_UNIT", "dollars").strip().lower()
         self.usage_unit_var = tk.StringVar(value="Tokens" if unit == "tokens" else "Dollars")
-        unit_cb = ttk.Combobox(show, textvariable=self.usage_unit_var, values=["Dollars", "Tokens"],
+        unit_cb = TCombobox(show, textvariable=self.usage_unit_var, values=[N_("Dollars"), N_("Tokens")],
                                state="readonly", width=9)
         unit_cb.pack(side="left")
         unit_cb.bind("<<ComboboxSelected>>", lambda e: (unit_cb.selection_clear(), self._usage_unit_chosen()))
-        help_mark(show, "Clicking the total in Now Playing also switches between dollars and tokens.").pack(
+        help_mark(show, t("Clicking the total in Now Playing also switches between dollars and tokens.")).pack(
             side="left", padx=(8, 0))
 
-        tk.Label(usage, text="Guide", font=LABEL_FONT, fg=PALETTE["ai_purple"]).grid(
+        tk.Label(usage, text=t("Guide"), font=LABEL_FONT, fg=PALETTE["ai_purple"]).grid(
             row=5, column=0, sticky="w", pady=(18, 0))
         self.usage_dollar = tk.Label(usage, text="", anchor="w", justify="left")
         self.usage_dollar.grid(row=6, column=0, sticky="w", pady=(4, 8))
@@ -3079,20 +3097,20 @@ class SettingsTab(tk.Frame):
         purple = PALETTE["ai_purple"]
         row = tk.Frame(box)
         row.grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 4))
-        title = tk.Label(row, text="Provider", font=LABEL_FONT, fg=purple)
+        title = tk.Label(row, text=t("Provider"), font=LABEL_FONT, fg=purple)
         title.pack(side="left", padx=(0, 12))
         self.ai_provider_var = tk.StringVar(value=option_label(engine.AI_PROVIDERS, engine.AI_PROVIDER))
-        cb = ttk.Combobox(row, textvariable=self.ai_provider_var, state="readonly", width=18,
+        cb = TCombobox(row, textvariable=self.ai_provider_var, state="readonly", width=18,
                           values=[name for _, name in engine.AI_PROVIDERS])
         cb.pack(side="left")
         cb.bind("<<ComboboxSelected>>", lambda e: (cb.selection_clear(), self._ai_provider_chosen()))
-        help_mark(row, "The AI that AI Playlist, the Moderator, the AI as a source, Steer, Assess Tone and "
+        help_mark(row, t("The AI that AI Playlist, the Moderator, the AI as a source, Steer, Assess Tone and "
                        "the Queries use. Anthropic (Claude) is the one fully tested. OpenAI and Google Gemini "
                        "need their own key and should work the same way. Ollama runs a model on your own PC "
                        "for free; smaller models give rougher results, and Console Query isn't available with "
-                       "it. Keys for every provider stay saved, so switching back loses nothing.",
+                       "it. Keys for every provider stay saved, so switching back loses nothing."),
                   on=title).pack(side="left", padx=(8, 0))
-        self.ai_untested = tk.Label(row, text=UNTESTED_NOTE, fg=PALETTE["help_fg"], font=HELP_FONT)
+        self.ai_untested = tk.Label(row, text=t(UNTESTED_NOTE), fg=PALETTE["help_fg"], font=HELP_FONT)
         self.ai_untested.pack(side="left", padx=(12, 0))
         self.ai_field_frames = {}
         for provider, fields in AI_FIELDS.items():
@@ -3116,7 +3134,7 @@ class SettingsTab(tk.Frame):
         entry.bind("<FocusOut>", self._save)
         button = tk.Button(frame, text="?", width=2, command=lambda: self._show_help("OLLAMA_URL"))
         button.grid(row=0, column=3, padx=(4, 0))
-        Tooltip(button, KEY_HELP["OLLAMA_URL"][1].replace("\n", " ") + "\nClick for these steps in a window.")
+        Tooltip(button, t(KEY_HELP["OLLAMA_URL"][1]).replace("\n", " ") + "\n" + t("Click for these steps in a window."))
         tk.Label(frame, text="OLLAMA_MODEL", anchor="w", fg=purple).grid(row=1, column=0, sticky="w", pady=4)
         model = tk.StringVar(value=self.env.get("OLLAMA_MODEL", ""))
         self.vars["OLLAMA_MODEL"] = model
@@ -3125,8 +3143,8 @@ class SettingsTab(tk.Frame):
         self.ollama_cb.bind("<<ComboboxSelected>>", lambda e: (self.ollama_cb.selection_clear(), self._save(),
                                                                 self._sync_play_ai()))
         self.ollama_cb.bind("<FocusOut>", lambda e: (self._save(), self._sync_play_ai()))
-        tk.Button(frame, text="Refresh", width=8, command=self._ollama_refresh).grid(row=1, column=2, padx=(4, 0))
-        self.ollama_note = tk.Label(frame, text="Refresh lists the models Ollama has installed.",
+        tk.Button(frame, text=t("Refresh"), width=8, command=self._ollama_refresh).grid(row=1, column=2, padx=(4, 0))
+        self.ollama_note = tk.Label(frame, text=t("Refresh lists the models Ollama has installed."),
                                     fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w")
         self.ollama_note.grid(row=2, column=1, columnspan=3, sticky="w")
 
@@ -3135,13 +3153,14 @@ class SettingsTab(tk.Frame):
         url = self.vars["OLLAMA_URL"].get().strip() or engine.OLLAMA_DEFAULT_URL
         names = engine.ollama_models(url)
         if names is None:
-            self.ollama_note.config(text=f"Ollama isn't answering at {url}. Is it running?")
+            self.ollama_note.config(text=t("Ollama isn't answering at {url}. Is it running?", url=url))
             return
         self.ollama_cb.config(values=names)
         if not names:
-            self.ollama_note.config(text="Ollama is running but has no models yet. Try: ollama pull gemma3:4b")
+            self.ollama_note.config(text=t("Ollama is running but has no models yet. Try: ollama pull gemma3:4b"))
             return
-        self.ollama_note.config(text=f"{len(names)} model{'' if len(names) == 1 else 's'} installed in Ollama.")
+        self.ollama_note.config(text=tn("{count} model installed in Ollama.", "{count} models installed in Ollama.",
+                                          len(names)))
         if not self.vars["OLLAMA_MODEL"].get().strip():
             self.vars["OLLAMA_MODEL"].set(names[0])
             self._save()
@@ -3167,7 +3186,7 @@ class SettingsTab(tk.Frame):
         link = getattr(self, "usage_link", None)
         if link is not None:
             if ai_usage.pricing_page(provider):
-                link.config(text=f"{engine.ai_provider_name(provider)}'s pricing page")
+                link.config(text=t("{provider}'s pricing page", provider=engine.ai_provider_name(provider)))
                 link.grid()
             else:
                 link.grid_remove()
@@ -3221,33 +3240,33 @@ class SettingsTab(tk.Frame):
         if key in KEY_HELP:
             button = tk.Button(box, text="?", width=2, command=lambda k=key: self._show_help(k))
             button.grid(row=r, column=3, padx=(4, 0))
-            Tooltip(button, KEY_HELP[key][1].replace("\n", " ") + "\nClick for these steps in a window.")
+            Tooltip(button, t(KEY_HELP[key][1]).replace("\n", " ") + "\n" + t("Click for these steps in a window."))
 
     def _tidal_account_row(self, box, r):
         """Tidal account: signed in or not, and Sign In to Tidal / Sign Out (for Output to Tidal)."""
-        tk.Label(box, text="Tidal account", anchor="w").grid(row=r, column=0, sticky="w", pady=4)
+        tk.Label(box, text=t("Tidal account"), anchor="w").grid(row=r, column=0, sticky="w", pady=4)
         cell = tk.Frame(box)
         cell.grid(row=r, column=1, columnspan=2, sticky="w", padx=(8, 4))
-        self._tidal_button = FlatButton(cell, text="Sign In to Tidal", command=self._tidal_account_pressed, quiet=True)
+        self._tidal_button = FlatButton(cell, text=t("Sign In to Tidal"), command=self._tidal_account_pressed, quiet=True)
         self._tidal_button.pack(side="left")
         self._tidal_status = tk.Label(cell, fg=PALETTE["help_fg"], font=HELP_FONT)
         self._tidal_status.pack(side="left", padx=(8, 0))
         button = tk.Button(box, text="?", width=2, command=lambda: self._show_help("TIDAL_ACCOUNT"))
         button.grid(row=r, column=3, padx=(4, 0))
-        Tooltip(button, KEY_HELP["TIDAL_ACCOUNT"][1].replace("\n", " ") + "\nClick for these steps in a window.")
+        Tooltip(button, t(KEY_HELP["TIDAL_ACCOUNT"][1]).replace("\n", " ") + "\n" + t("Click for these steps in a window."))
         self._tidal_waiting = None   # a threading.Event while a sign-in is waiting on the browser
         self._show_tidal_account()
 
     def _show_tidal_account(self):
         if self._tidal_waiting is not None:
-            self._tidal_button.config(text="Cancel")
-            self._tidal_status.config(text="Waiting for Tidal in your browser...")
+            self._tidal_button.config(text=t("Cancel"))
+            self._tidal_status.config(text=t("Waiting for Tidal in your browser..."))
         elif engine.tidal_signed_in():
-            self._tidal_button.config(text="Sign Out")
-            self._tidal_status.config(text="Signed in")
+            self._tidal_button.config(text=t("Sign Out"))
+            self._tidal_status.config(text=t("Signed in"))
         else:
-            self._tidal_button.config(text="Sign In to Tidal")
-            self._tidal_status.config(text="Not signed in. Only needed to send playlists to Tidal.")
+            self._tidal_button.config(text=t("Sign In to Tidal"))
+            self._tidal_status.config(text=t("Not signed in. Only needed to send playlists to Tidal."))
         self._sync_output_parts()   # Settings > Other > Additional Outputs says it too
 
     def _tidal_account_pressed(self):
@@ -3255,8 +3274,8 @@ class SettingsTab(tk.Frame):
             self._tidal_waiting.set()
             return
         if engine.tidal_signed_in():
-            if messagebox.askyesno("Tidal", "Sign out of Tidal? Output to Tidal won't work until you sign in "
-                                            "again.", parent=self):
+            if messagebox.askyesno("Tidal", t("Sign out of Tidal? Output to Tidal won't work until you sign in "
+                                            "again."), parent=self):
                 write_env({"TIDAL_REFRESH_TOKEN": None, "TIDAL_USER_ID": None})
                 engine.tidal_sign_out()
                 engine.refresh_settings_if_changed()
@@ -3286,7 +3305,7 @@ class SettingsTab(tk.Frame):
                 write_env({"TIDAL_REFRESH_TOKEN": login["refresh_token"], "TIDAL_USER_ID": login["user_id"] or None})
                 engine.refresh_settings_if_changed()
             elif not cancelled.is_set():
-                messagebox.showwarning("Tidal", outcome.get("error") or "Tidal didn't sign you in.", parent=self)
+                messagebox.showwarning("Tidal", outcome.get("error") or t("Tidal didn't sign you in."), parent=self)
             self._show_tidal_account()
 
         threading.Thread(target=run, daemon=True).start()
@@ -3323,7 +3342,7 @@ class SettingsTab(tk.Frame):
         stripe = PALETTE.get("field_bg") or PALETTE.get("window_bg")
         pad = dict(padx=10, pady=4)   # inside each cell, so a shaded row is one unbroken band
         for c, heading in enumerate(headings):
-            tk.Label(frame, text=heading, fg=PALETTE["help_fg"], font=("Segoe UI", 9, "bold"), anchor="w" if
+            tk.Label(frame, text=t(heading), fg=PALETTE["help_fg"], font=("Segoe UI", 9, "bold"), anchor="w" if
                      (c in left or heading == "Note") else "e", **pad).grid(row=0, column=c, sticky="ew")
         tk.Frame(frame, bg=PALETTE["line"], height=1).grid(row=1, column=0, columnspan=len(headings), sticky="ew")
         for r, row in enumerate(rows, start=2):
@@ -3342,10 +3361,11 @@ class SettingsTab(tk.Frame):
         """The AI Usage total and breakdown (heaviest first), then the per-run guide."""
         totals = ai_usage.totals()
         self.usage_total.config(text=ai_usage.headline(totals))
-        rows = [((f, ""), (f"{n:,}", ""), (f"{i:,}", ""), (f"{o:,}", ""), (self._cost(c), ""))
+        rows = [((t(f), ""), (f"{n:,}", ""), (f"{i:,}", ""), (f"{o:,}", ""), (self._cost(c), ""))
                 for f, n, i, o, c in totals["by_feature"]]
         if rows:
-            self._usage_grid(self.usage_table, ("Feature", "Requests", "Input tokens", "Output tokens", "Est. cost"),
+            self._usage_grid(self.usage_table, (N_("Feature"), N_("Requests"), N_("Input tokens"), N_("Output tokens"),
+                                                N_("Est. cost")),
                              rows)
         else:
             for child in self.usage_table.winfo_children():
@@ -3362,12 +3382,12 @@ class SettingsTab(tk.Frame):
         def note_for(feature, note):   # Console Query's caching note is Anthropic's; Ollama can't run it
             if feature != "Console Query" or provider == "anthropic":
                 return note or ""
-            return "not available with Ollama" if provider == "ollama" else "per question"
-        self._usage_grid(self.usage_guide, ("Feature", "Tokens per run", "", "Cost per run", "Note"),
-                         [((f, ""), (f"about {tokens:,}", ""), ("\u25cf" if yours else "", "dot"),
-                           ("Free" if provider == "ollama" else self._cost(c), ""), (note_for(f, note), "note"))
+            return t("not available with Ollama") if provider == "ollama" else t("per question")
+        self._usage_grid(self.usage_guide, (N_("Feature"), N_("Tokens per run"), "", N_("Cost per run"), N_("Note")),
+                         [((t(f), ""), (t("about {tokens}", tokens=f"{tokens:,}"), ""), ("\u25cf" if yours else "", "dot"),
+                           (t("Free") if provider == "ollama" else self._cost(c), ""), (t(note_for(f, note)), "note"))
                           for f, tokens, c, note, yours in guide])
-        self.usage_legend.config(text="\u25cf  your own average, from your recorded runs"
+        self.usage_legend.config(text=t("\u25cf  your own average, from your recorded runs")
                                  if any(yours for *_, yours in guide) else "")
 
     @staticmethod
@@ -3375,7 +3395,7 @@ class SettingsTab(tk.Frame):
         return ai_usage.cost_phrase(dollars)
 
     def _usage_clear(self):
-        if messagebox.askyesno("Clear AI Usage", "Clear the token count? It starts again from now.", parent=self):
+        if messagebox.askyesno(t("Clear AI Usage"), t("Clear the token count? It starts again from now."), parent=self):
             ai_usage.clear()
             self._fill_usage()
             self.usage_note.config(text="")
@@ -3385,33 +3405,33 @@ class SettingsTab(tk.Frame):
         self._save()   # a key just typed counts
         engine.refresh_settings_if_changed()
         if not engine.ai_configured():
-            messagebox.showinfo("AI Usage", NO_KEY_TEXT, parent=self)
+            messagebox.showinfo(t("AI Usage"), t(NO_KEY_TEXT), parent=self)
             return
         if ai_usage.query():
-            self.usage_note.config(text="The answer is in the console on the Play tab.")
+            self.usage_note.config(text=t("The answer is in the console on the Play tab."))
         else:
             ai_usage.ask(lambda answer, error: self.after(0, lambda: messagebox.showinfo(
-                "AI Usage", answer or f"Query didn't come back: {error}", parent=self)))
+                t("AI Usage"), answer or t("Query didn't come back: {error}", error=error), parent=self)))
 
     def _usage_np_toggled(self):
         try:
             write_env({"AI_USAGE_NOW_PLAYING": "1" if self.usage_np_var.get() else "0"})
             ai_usage.refresh_panel()
         except Exception as e:
-            messagebox.showerror("Save failed", str(e), parent=self)
+            messagebox.showerror(t("Save failed"), str(e), parent=self)
 
     def _usage_unit_chosen(self):
         try:
             write_env({"AI_USAGE_NP_UNIT": self.usage_unit_var.get().lower()})
             ai_usage.refresh_panel()
         except Exception as e:
-            messagebox.showerror("Save failed", str(e), parent=self)
+            messagebox.showerror(t("Save failed"), str(e), parent=self)
 
     def _add_show_toggle(self, parent, entry, row):
         show = tk.BooleanVar(value=False)
         def toggle():
             entry.config(show="" if show.get() else "\u2022")
-        ttk.Checkbutton(parent, text="Show", variable=show, command=toggle).grid(
+        ttk.Checkbutton(parent, text=t("Show"), variable=show, command=toggle).grid(
             row=row, column=2, sticky="w")
 
     def _clear_cache(self):
@@ -3419,19 +3439,19 @@ class SettingsTab(tk.Frame):
         counts = engine.cache_counts()
         win = tk.Toplevel(self)
         win.withdraw()
-        win.title("Clear Cache")
+        win.title(t("Clear Cache"))
         win.transient(self.winfo_toplevel())
         win.resizable(False, False)
         body = tk.Frame(win, padx=20, pady=16)
         body.pack(fill="both", expand=True)
-        tk.Label(body, text="Clear saved answers from the music sources and the AI:", anchor="w").pack(
+        tk.Label(body, text=t("Clear saved answers from the music sources and the AI:"), anchor="w").pack(
             anchor="w", pady=(0, 8))
         choice = tk.StringVar(value="month")
         for code, label in CLEAR_CACHE_OPTIONS:
-            ttk.Radiobutton(body, text=f"{label} ({counts[code]:,})", variable=choice, value=code).pack(
+            ttk.Radiobutton(body, text=f"{t(label)} ({counts[code]:,})", variable=choice, value=code).pack(
                 anchor="w", pady=2)
-        tk.Label(body, text="Anything cleared is fetched again next time it's needed, and AI answers use "
-                            "credits again.", fg=PALETTE["help_fg"], font=HELP_FONT, justify="left",
+        tk.Label(body, text=t("Anything cleared is fetched again next time it's needed, and AI answers use "
+                            "credits again."), fg=PALETTE["help_fg"], font=HELP_FONT, justify="left",
                  wraplength=scaled(body, 380)).pack(anchor="w", pady=(10, 12))
         buttons = tk.Frame(body)
         buttons.pack(anchor="e")
@@ -3439,11 +3459,11 @@ class SettingsTab(tk.Frame):
         def clear():
             n = engine.cache_clear(choice.get())
             win.destroy()
-            line = f"Cleared {n:,} cached answer{'' if n == 1 else 's'}."
+            line = tn("Cleared {count} cached answer.", "Cleared {count} cached answers.", n).replace(str(n), f"{n:,}", 1)
             self.cache_note.config(text=line)
             print(line)
-        tk.Button(buttons, text="Clear", width=10, command=clear).pack(side="left")
-        tk.Button(buttons, text="Cancel", width=10, command=win.destroy).pack(side="left", padx=(8, 0))
+        tk.Button(buttons, text=t("Clear"), width=10, command=clear).pack(side="left")
+        tk.Button(buttons, text=t("Cancel"), width=10, command=win.destroy).pack(side="left", padx=(8, 0))
         win.bind("<Escape>", lambda e: win.destroy())
         win.update_idletasks()
         top = self.winfo_toplevel()
@@ -3459,23 +3479,23 @@ class SettingsTab(tk.Frame):
 
     def _build_profiles(self, tab):
         import profiles
-        box = section(tab, "Profiles",
-                      "Save your settings as a profile, such as DJ, Explore or No AI, and switch between them. "
+        box = section(tab, t("Profiles"),
+                      t("Save your settings as a profile, such as DJ, Explore or No AI, and switch between them. "
                       "A profile holds the Play tab options, Sources, Playlist settings, Filters, JRiver "
                       "Playlists, Add Playlist rows, the Preview zone, the Default zone and the shortcut zone, "
                       "cache and console settings for Windows (Main). Keys, the JRiver connection, which zones "
                       "are shown, Alexa devices with their own settings, keyboard shortcuts and appearance stay "
                       "as they are. Loading restarts 24bit7; JRiver keeps playing. Each profile can have a "
-                      "shortcut of its own under Keyboard Shortcuts.")
+                      "shortcut of its own under Keyboard Shortcuts."))
         row = tk.Frame(box)
         row.grid(row=0, column=0, sticky="w", pady=4)
-        tk.Label(row, text="Profile", anchor="w").pack(side="left", padx=(0, 12))
+        tk.Label(row, text=t("Profile"), anchor="w").pack(side="left", padx=(0, 12))
         self.profile_var = tk.StringVar()
         self.profile_cb = ttk.Combobox(row, textvariable=self.profile_var, state="readonly", width=24)
         self.profile_cb.pack(side="left")
         self.profile_cb.bind("<<ComboboxSelected>>", lambda e: self.profile_cb.selection_clear())
-        for text, command, width in (("Load", self._profile_load, 8), ("Save As...", self._profile_save_as, 11),
-                                     ("Delete", self._profile_delete, 8)):
+        for text, command, width in ((t("Load"), self._profile_load, 9), (t("Save As..."), self._profile_save_as, 14),
+                                     (t("Delete"), self._profile_delete, 9)):
             tk.Button(row, text=text, width=width, command=command).pack(side="left", padx=(10, 0))
         self.profile_status = tk.Label(box, text="", anchor="w", fg=PALETTE["help_fg"], font=HELP_FONT)
         self.profile_status.grid(row=1, column=0, sticky="w", pady=(2, 0))
@@ -3507,23 +3527,28 @@ class SettingsTab(tk.Frame):
             child.destroy()
         if not names:
             return
-        tk.Label(row, text="Enable Switch To", anchor="w").pack(side="left", padx=(0, 12))
+        tk.Label(row, text=t("Enable Switch To"), anchor="w").pack(side="left", padx=(0, 12))
         for name in names:
             var = tk.BooleanVar(value=profiles.in_switch(name))
             ttk.Checkbutton(row, text=name, variable=var,
                             command=lambda n=name, v=var: profiles.set_in_switch(n, v.get())).pack(
                 side="left", padx=(0, 12))
-        help_mark(row, "The profiles the Switch Profiles keyboard shortcut steps through, A to Z "
+        help_mark(row, t("The profiles the Switch Profiles keyboard shortcut steps through, A to Z "
                        "(Settings > Other > Keyboard Shortcuts). With two ticked it flips between them. "
-                       "A switch during a build waits for the build to finish.").pack(side="left")
+                       "A switch during a build waits for the build to finish.")).pack(side="left")
 
     def _show_profile_status(self):
         import profiles
         try:
             cur = profiles.current()
-            text = "Current: None" if not cur else f"Current: {cur}" + (" (changed)" if profiles.changed(cur) else "")
+            if not cur:
+                text = t("Current: None")
+            elif profiles.changed(cur):
+                text = t("Current: {name} (changed)", name=cur)
+            else:
+                text = t("Current: {name}", name=cur)
         except Exception as e:
-            text = f"Problem: couldn't read the profiles ({e})."
+            text = t("Problem: couldn't read the profiles ({error}).", error=e)
         self.profile_status.config(text=text)
 
     def _poll_profile_status(self):
@@ -3537,13 +3562,13 @@ class SettingsTab(tk.Frame):
 
     def _profile_save_as(self):
         import profiles
-        name = tabs.ask_name(self, "Save Profile", "Name for this profile:",
+        name = tabs.ask_name(self, t("Save Profile"), t("Name for this profile:"),
                              profiles.current() or self.profile_var.get())
         name = re.sub(r"[^\w\- ]+", "", name or "").strip()
         if not name:
             return
         if profiles.exists(name) and not messagebox.askyesno(
-                "Save Profile", f'There\'s already a profile called "{name}". Replace it with your current settings?',
+                t("Save Profile"), t('There\'s already a profile called "{name}". Replace it with your current settings?', name=name),
                 parent=self):
             return
         profiles.save(name)
@@ -3556,21 +3581,21 @@ class SettingsTab(tk.Frame):
             return
         cur = profiles.current()
         if cur == name and not profiles.changed(name):
-            self.profile_status.config(text=f"Current: {name} (already loaded)")
+            self.profile_status.config(text=t("Current: {name} (already loaded)", name=name))
             return
         if cur and profiles.changed(cur):
-            warn = f'You\'ve changed settings since "{cur}" was loaded or saved. Those changes will be lost.\n\n'
+            warn = t('You\'ve changed settings since "{name}" was loaded or saved. Those changes will be lost.',
+                     name=cur) + "\n\n"
         elif not cur:
-            warn = "Your current settings aren't saved as a profile, so they'll be replaced.\n\n"
+            warn = t("Your current settings aren't saved as a profile, so they'll be replaced.") + "\n\n"
         else:
             warn = ""
-        if not messagebox.askyesno("Load Profile", f'{warn}Load "{name}"? 24bit7 restarts to apply it; '
-                                   "JRiver keeps playing.", parent=self):
+        if not messagebox.askyesno(t("Load Profile"), warn + t('Load "{name}"? 24bit7 restarts to apply it; JRiver keeps playing.', name=name), parent=self):
             return
         try:
             profiles.queue_load(name)
         except Exception as e:
-            messagebox.showerror("Load Profile", f"Couldn't load it: {e}", parent=self)
+            messagebox.showerror(t("Load Profile"), t("Couldn't load it: {error}", error=e), parent=self)
             return
         self._loading = True   # nothing saves over it on the way out
         self.winfo_toplevel().event_generate("<<Restart24bit7>>")
@@ -3578,8 +3603,7 @@ class SettingsTab(tk.Frame):
     def _profile_delete(self):
         import profiles
         name = self.profile_var.get()
-        if not name or not messagebox.askyesno("Delete Profile", f'Delete the profile "{name}"? '
-                                               "Your current settings aren't changed.", parent=self):
+        if not name or not messagebox.askyesno(t("Delete Profile"), t('Delete the profile "{name}"? Your current settings aren\'t changed.', name=name), parent=self):
             return
         profiles.delete(name)
         self.profile_var.set("")
@@ -3587,29 +3611,29 @@ class SettingsTab(tk.Frame):
         self._hotkey_restart()   # the deleted profile's shortcut is released
 
     def _build_other(self, nb):
-        tab = self._scroll_tab(nb, "Other")
+        tab = self._scroll_tab(nb, N_("Other"))
         self._build_profiles(tab)
 
         # --- General ---
-        box = section(tab, "General")
-        tk.Label(box, text="Keep Cache For", anchor="w").grid(row=0, column=0, sticky="w", pady=4)
+        box = section(tab, t("General"))
+        tk.Label(box, text=t("Keep Cache For"), anchor="w").grid(row=0, column=0, sticky="w", pady=4)
         self.vars["CACHE_KEEP"] = tk.StringVar(value=option_label(CACHE_KEEP_OPTIONS, engine.CACHE_KEEP))
         cache_row = tk.Frame(box)
         cache_row.grid(row=0, column=1, sticky="w", padx=(12, 0))
-        keep_cb = ttk.Combobox(cache_row, textvariable=self.vars["CACHE_KEEP"], state="readonly", width=10,
+        keep_cb = TCombobox(cache_row, textvariable=self.vars["CACHE_KEEP"], state="readonly", width=10,
                                values=[s for _, s in CACHE_KEEP_OPTIONS])
         keep_cb.pack(side="left")
         keep_cb.bind("<<ComboboxSelected>>", lambda e: (keep_cb.selection_clear(), self._save()))
-        tk.Button(cache_row, text="Clear Cache...", width=13, command=self._clear_cache).pack(
+        tk.Button(cache_row, text=t("Clear Cache..."), width=13, command=self._clear_cache).pack(
             side="left", padx=(12, 0))
-        help_mark(cache_row, "How long answers from the music sources and the AI are reused before they're "
+        help_mark(cache_row, t("How long answers from the music sources and the AI are reused before they're "
                              "asked for again. Longer is quicker and saves AI credits; Permanent keeps them until "
                              "you clear them. Answers that MusicBrainz doesn't know an artist are always "
-                             "rechecked after a month.").pack(side="left", padx=(8, 0))
+                             "rechecked after a month.")).pack(side="left", padx=(8, 0))
         self.cache_note = tk.Label(cache_row, text="", fg=PALETTE["help_fg"], font=HELP_FONT)
         self.cache_note.pack(side="left", padx=(12, 0))
 
-        tk.Label(box, text="JRiver host", anchor="w").grid(row=1, column=0, sticky="w", pady=4)
+        tk.Label(box, text=t("JRiver host"), anchor="w").grid(row=1, column=0, sticky="w", pady=4)
         self.vars["JRIVER_HOST"] = tk.StringVar(value=self.env.get("JRIVER_HOST", "127.0.0.1:52199"))
         e = tk.Entry(box, textvariable=self.vars["JRIVER_HOST"], width=22)
         e.grid(row=1, column=1, sticky="w", padx=(12, 0))
@@ -3640,24 +3664,24 @@ class SettingsTab(tk.Frame):
             link.pack(side="left")
             link.bind("<Button-1>", lambda e, u=url: webbrowser.open_new_tab(u))
 
-        tk.Label(box, text="Theme", anchor="w").grid(row=4, column=0, sticky="w", pady=4)
+        tk.Label(box, text=t("Theme"), anchor="w").grid(row=4, column=0, sticky="w", pady=4)
         self.vars["THEME"] = tk.StringVar(
             value="Dark" if self.env.get("THEME", "light").strip().lower() == "dark" else "Light")
         cell = tk.Frame(box)
         cell.grid(row=4, column=1, sticky="w", padx=(12, 0))
-        theme_cb = ttk.Combobox(cell, textvariable=self.vars["THEME"], values=["Light", "Dark"],
+        theme_cb = TCombobox(cell, textvariable=self.vars["THEME"], values=[N_("Light"), N_("Dark")],
                                 state="readonly", width=8)
         theme_cb.pack(side="left")
-        help_mark(cell, 'Light or dark colours for the whole app. The theme is applied when 24bit7 starts, so changing it offers a restart straight away.').pack(side="left", padx=(8, 0))
+        help_mark(cell, t('Light or dark colours for the whole app. The theme is applied when 24bit7 starts, so changing it offers a restart straight away.')).pack(side="left", padx=(8, 0))
         theme_cb.bind("<<ComboboxSelected>>", self._on_theme_changed)
         self.vars["WINDOWS_TITLE_BAR"] = tk.BooleanVar(
             value=self.env.get("WINDOWS_TITLE_BAR", "0").strip().lower() in ("1", "true", "yes"))
-        ttk.Checkbutton(cell, text="Use the Windows title bar", variable=self.vars["WINDOWS_TITLE_BAR"],
+        ttk.Checkbutton(cell, text=t("Use the Windows title bar"), variable=self.vars["WINDOWS_TITLE_BAR"],
                         command=self._on_title_bar_toggled).pack(side="left", padx=(24, 0))
-        help_mark(cell, "Unticked, 24bit7 draws its own title bar: the Play, Discover and Settings strip runs to "
+        help_mark(cell, t("Unticked, 24bit7 draws its own title bar: the Play, Discover and Settings strip runs to "
                         "the top of the window, with minimise, maximise and close at the right. Drag the strip to "
                         "move the window, double-click it to maximise. Tick this for Windows' usual title bar "
-                        "instead. Either way takes effect when 24bit7 restarts.").pack(side="left", padx=(8, 0))
+                        "instead. Either way takes effect when 24bit7 restarts.")).pack(side="left", padx=(8, 0))
 
         row = tk.Frame(box)
         row.grid(row=5, column=0, columnspan=3, sticky="w", pady=(8, 0))
@@ -3666,57 +3690,57 @@ class SettingsTab(tk.Frame):
             value=self.env.get("CONSOLE_QUERY", "0").strip().lower() in ("1", "true", "yes"))
         ttk.Checkbutton(row, variable=self.vars["CONSOLE_QUERY"],
                         command=self._on_console_query_toggled).pack(side="left")
-        cq_label = tk.Label(row, text="Enable Console Query", fg=PALETTE["ai_purple"], cursor="hand2")
+        cq_label = tk.Label(row, text=t("Enable Console Query"), fg=PALETTE["ai_purple"], cursor="hand2")
         cq_label.pack(side="left")
 
         def label_clicked(_e):
             self.vars["CONSOLE_QUERY"].set(not self.vars["CONSOLE_QUERY"].get())
             self._on_console_query_toggled()
         cq_label.bind("<Button-1>", label_clicked)
-        help_mark(row, "Adds Query to the console's Copy and Clear strip. Ask the AI why a playlist came "
+        help_mark(row, t("Adds Query to the console's Copy and Clear strip. Ask the AI why a playlist came "
                        "out the way it did, and get suggested setting changes. Each question sends the "
                        "console, your settings (without keys) and 24bit7's code, so it uses more AI "
-                       "credit tha Moderator. Not available with Ollama."
+                       "credit than the Moderator. Not available with Ollama.")
                   ).pack(side="left", padx=(8, 0))
 
         # Show Credits: the playing track's credits or every track's, and which list comes first
-        tk.Label(box, text="Show Credits", anchor="w").grid(row=6, column=0, sticky="w", pady=(8, 4))
+        tk.Label(box, text=t("Show Credits"), anchor="w").grid(row=6, column=0, sticky="w", pady=(8, 4))
         cell = tk.Frame(box)
         cell.grid(row=6, column=1, columnspan=2, sticky="w", padx=(12, 0), pady=(8, 4))
         self.vars["CREDITS_SCOPE"] = tk.StringVar(value=option_label(CREDITS_SCOPE_OPTIONS, engine.CREDITS_SCOPE))
-        scope_cb = ttk.Combobox(cell, textvariable=self.vars["CREDITS_SCOPE"], state="readonly", width=20,
+        scope_cb = TCombobox(cell, textvariable=self.vars["CREDITS_SCOPE"], state="readonly", width=20,
                                 values=[s for _, s in CREDITS_SCOPE_OPTIONS])
         scope_cb.pack(side="left")
         scope_cb.bind("<<ComboboxSelected>>", lambda e: (scope_cb.selection_clear(), self._save()))
-        tk.Label(cell, text="Show First").pack(side="left", padx=(16, 6))
+        tk.Label(cell, text=t("Show First")).pack(side="left", padx=(16, 6))
         self.vars["CREDITS_FIRST"] = tk.StringVar(value=option_label(CREDITS_FIRST_OPTIONS, engine.CREDITS_FIRST))
-        first_cb = ttk.Combobox(cell, textvariable=self.vars["CREDITS_FIRST"], state="readonly", width=8,
+        first_cb = TCombobox(cell, textvariable=self.vars["CREDITS_FIRST"], state="readonly", width=8,
                                 values=[s for _, s in CREDITS_FIRST_OPTIONS])
         first_cb.pack(side="left")
         first_cb.bind("<<ComboboxSelected>>", lambda e: (first_cb.selection_clear(), self._save()))
-        help_mark(cell, "What the Show Credits button lists from Discogs. Album/Current Track shows the "
+        help_mark(cell, t("What the Show Credits button lists from Discogs. Album/Current Track shows the "
                         "playing track's credits and the album's. Album/All Tracks lists every track that has "
                         "credits of its own, under its number and title, then the album's. Track credits "
                         "include album credits marked for that track, such as a drummer on tracks 2 to 4. "
-                        "Show First picks which list comes first.").pack(side="left", padx=(8, 0))
+                        "Show First picks which list comes first.")).pack(side="left", padx=(8, 0))
 
         self._build_additional_outputs(tab)
 
         # --- Zones: which JRiver zones appear in the Play tab's Zone and Output lists ---
         # Filled when the tab is first shown, so a slow JRiver never delays startup.
-        box = section(tab, "Zones",
-                      "Show: untick a zone to hide it from the Zone and Output lists on the Play tab.\n"
+        box = section(tab, t("Zones"),
+                      t("Show: untick a zone to hide it from the Zone and Output lists on the Play tab.\n"
                       "Default: the zone Now Playing opens on when 24bit7 starts. Picking a zone by hand "
                       "always wins.\n"
                       "Follow: Now Playing tracks whichever zone JRiver has active, so Default is greyed out.\n"
                       "A DLNA speaker such as a Sonos only appears once DLNA Controller is ticked in JRiver "
-                      "(Tools > Options > Media Network > Advanced). Press Rescan after ticking it.")
+                      "(Tools > Options > Media Network > Advanced). Press Rescan after ticking it."))
         self.zone_frame = tk.Frame(box)
         self.zone_frame.grid(row=0, column=0, sticky="w")
-        tk.Button(box, text="Rescan", width=10, command=self._fill_zone_boxes).grid(
+        tk.Button(box, text=t("Rescan"), width=10, command=self._fill_zone_boxes).grid(
             row=0, column=1, sticky="nw", padx=(24, 0))
         self.follow_var = tk.BooleanVar(value=engine.FOLLOW_ACTIVE_ZONE)
-        ttk.Checkbutton(box, text="Follow JRiver's active zone", variable=self.follow_var,
+        ttk.Checkbutton(box, text=t("Follow JRiver's active zone"), variable=self.follow_var,
                         command=self._save_zone_settings).grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
         self.zone_vars, self.zone_radios = {}, {}
         self.default_zone_var = tk.StringVar(value=engine.DEFAULT_ZONE)
@@ -3724,18 +3748,18 @@ class SettingsTab(tk.Frame):
         tab.bind("<<Shown>>", lambda e: None if self._zones_filled else self._fill_zone_boxes())
 
         # --- Windows: start with Windows, start hidden in the tray, and close to the tray ---
-        box = section(tab, "Windows",
-                      "Voice Commands need 24bit7 running, so for voice after a restart, tick Start with "
-                      "Windows and set JRiver Media Center or Media Server to start with Windows as well.")
+        box = section(tab, t("Windows"),
+                      t("Voice Commands need 24bit7 running, so for voice after a restart, tick Start with "
+                      "Windows and set JRiver Media Center or Media Server to start with Windows as well."))
         self.startup_var = tk.BooleanVar(value=tray.startup_command() is not None)
-        startup_box = ttk.Checkbutton(box, text="Start with Windows", variable=self.startup_var,
+        startup_box = ttk.Checkbutton(box, text=t("Start with Windows"), variable=self.startup_var,
                                       command=self._startup_toggled)
         startup_box.grid(row=0, column=0, sticky="w")
         self.vars["START_IN_TRAY"] = tk.BooleanVar(value=self.env.get("START_IN_TRAY", "1") in ("1", "true", "yes"))
-        ttk.Checkbutton(box, text="Start in the tray (hidden, when Windows starts it)",
+        ttk.Checkbutton(box, text=t("Start in the tray (hidden, when Windows starts it)"),
                         variable=self.vars["START_IN_TRAY"], command=self._save).grid(row=1, column=0, sticky="w")
         self.vars["CLOSE_TO_TRAY"] = tk.BooleanVar(value=self.env.get("CLOSE_TO_TRAY", "0") in ("1", "true", "yes"))
-        ttk.Checkbutton(box, text="Close to tray (the X hides 24bit7; Quit from the tray icon)",
+        ttk.Checkbutton(box, text=t("Close to tray (the X hides 24bit7; Quit from the tray icon)"),
                         variable=self.vars["CLOSE_TO_TRAY"], command=self._save).grid(row=2, column=0, sticky="w")
         # Only shown when something needs doing: another copy starts with Windows, or the tray can't load
         self.startup_note = tk.Label(box, text="", fg="#a33", font=HELP_FONT, justify="left")
@@ -3745,14 +3769,14 @@ class SettingsTab(tk.Frame):
             startup_box.state(["disabled"])
 
         # --- Keyboard Shortcuts: global keys a remote can send, even with 24bit7 in the tray ---
-        box = section(tab, "Keyboard Shortcuts",
-                      "Shortcuts work anywhere in Windows, even while 24bit7 is minimised or in the tray, so a "
+        box = section(tab, t("Keyboard Shortcuts"),
+                      t("Shortcuts work anywhere in Windows, even while 24bit7 is minimised or in the tray, so a "
                       "remote that sends key presses (a Flirc, a Harmony, a phone app) can start a playlist.\n"
                       "Click a box and press the keys you want; Esc cancels. Letters and numbers need Ctrl, Alt, "
                       "Shift or Win with them; F-keys and media keys can be used on their own.\n"
                       "Each shortcut seeds from the zone's current track (paused or stopped counts), or from the "
                       "last track played when its Playing Now is empty, and plays to that zone. A zone with an "
-                      "Alexa device that has Own settings uses that device's settings.")
+                      "Alexa device that has Own settings uses that device's settings."))
         self._build_shortcuts(box)
 
     # --- About -------------------------------------------------------------------
@@ -3784,7 +3808,7 @@ class SettingsTab(tk.Frame):
 
     def _build_about(self, nb):
         """About: version, links, voice commands, credits and licence. Nothing here is saved."""
-        tab = self._scroll_tab(nb, "About")
+        tab = self._scroll_tab(nb, N_("About"))
         packaged = getattr(sys, "frozen", False)
         version = engine.VERSION
         # The packaged app points at its own release; the dev copy at main, as it may be ahead
@@ -3798,46 +3822,46 @@ class SettingsTab(tk.Frame):
             tk.Label(head, text=part, font=("Segoe UI", 18, "bold"), fg=colour).pack(side="left")
         tk.Label(head, text="/", font=("Segoe UI", 10), fg=PALETTE["text_muted"]).pack(
             side="left", anchor="s", padx=(12, 8), pady=(0, 5))
-        tk.Label(head, text="Perfect Playlists and Music Discovery", font=("Segoe UI", 10),
+        tk.Label(head, text=t("Perfect Playlists and Music Discovery"), font=("Segoe UI", 10),
                  fg=PALETTE["text_muted"]).pack(side="left", anchor="s", pady=(0, 5))
-        tk.Label(tab, text=f"Version {version}", font=LABEL_FONT).grid(row=1, column=0, sticky="w")
+        tk.Label(tab, text=t("Version {version}", version=version), font=LABEL_FONT).grid(row=1, column=0, sticky="w")
         tk.Label(tab, justify="left", wraplength=640, anchor="w",
-                 text=ABOUT_INTRO).grid(
+                 text=t(ABOUT_INTRO)).grid(
             row=2, column=0, sticky="w", pady=(6, 14))
 
         # --- Links ---
-        box = section(tab, "Links")
+        box = section(tab, t("Links"))
         links = [
-            ("User manual (PDF)", self._open_manual, "How everything in 24bit7 works."),
-            ("GitHub", REPO_URL, "The code, issues and every release."),
-            ("README", f"{REPO_URL}/blob/{ref}/README.md", "Overview, setup and what's new."),
-            ("Release notes" if packaged else "Releases",
+            (t("User manual (PDF)"), self._open_manual, t("How everything in 24bit7 works.")),
+            ("GitHub", REPO_URL, t("The code, issues and every release.")),
+            ("README", f"{REPO_URL}/blob/{ref}/README.md", t("Overview, setup and what's new.")),
+            (t("Release notes") if packaged else t("Releases"),
              f"{REPO_URL}/releases/tag/v{version}" if packaged else f"{REPO_URL}/releases",
-             f"What changed in {version}." if packaged else "Every published version."),
-            ("Reporting a problem", f"{REPO_URL}/blob/{ref}/README.md#reporting-a-problem",
-             "What to send when something goes wrong."),
+             t("What changed in {version}.", version=version) if packaged else t("Every published version.")),
+            (t("Reporting a problem"), f"{REPO_URL}/blob/{ref}/README.md#reporting-a-problem",
+             t("What to send when something goes wrong.")),
         ]
         if FORUM_URL:
-            links.append(("JRiver forum thread", FORUM_URL, "Questions, ideas and feedback."))
+            links.append((t("JRiver forum thread"), FORUM_URL, t("Questions, ideas and feedback.")))
         for r, (text, target, blurb) in enumerate(links):
             self._about_link(box, text, target, r, blurb)
 
         # --- Voice Commands ---
-        box = section(tab, "Voice Commands")
+        box = section(tab, t("Voice Commands"))
         note = tk.Frame(box)
         note.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
         tk.Label(note, justify="left", wraplength=640, anchor="w",
-                 text=("Voice commands only work with the needle drop Alexa skill, which you set up "
-                       "yourself under a free Amazon developer account.")).pack(anchor="w")
+                 text=(t("Voice commands only work with the needle drop Alexa skill, which you set up "
+                       "yourself under a free Amazon developer account."))).pack(anchor="w")
         guide = tk.Frame(note)
         guide.pack(anchor="w", pady=(2, 0))
-        tk.Label(guide, text="Full instructions:").pack(side="left")
-        g = tk.Label(guide, text="Setting up the Alexa skill", fg=PALETTE["section_fg"], cursor="hand2",
+        tk.Label(guide, text=t("Full instructions:")).pack(side="left")
+        g = tk.Label(guide, text=t("Setting up the Alexa skill"), fg=PALETTE["section_fg"], cursor="hand2",
                      font=("Segoe UI", 9, "underline"))
         g.pack(side="left", padx=(6, 0))
         g.bind("<Button-1>", lambda e: webbrowser.open_new_tab(f"{REPO_URL}/blob/{ref}/docs/MANUAL.md#setting-up-the-alexa-skill"))
-        tk.Label(box, text='Say "Alexa, open needle drop", then a command, or all in one breath: '
-                           '"Alexa, ask needle drop for music like Agnes Obel".',
+        tk.Label(box, text=t('Say "Alexa, open needle drop", then a command, or all in one breath: '
+                           '"Alexa, ask needle drop for music like Agnes Obel".'),
                  justify="left", wraplength=640, fg=PALETTE["help_fg"], font=HELP_FONT).grid(
             row=1, column=0, columnspan=2, sticky="w", pady=(0, 6))
         for r, (say, get) in enumerate(VOICE_COMMAND_LIST, start=2):
@@ -3845,30 +3869,30 @@ class SettingsTab(tk.Frame):
             tk.Label(box, text=get, anchor="w", justify="left", wraplength=420).grid(
                 row=r, column=1, sticky="w", padx=(16, 0), pady=1)
         r = len(VOICE_COMMAND_LIST) + 2
-        tk.Label(box, text="No command starts with \"play\": Alexa hands those to a music service instead.",
+        tk.Label(box, text=t("No command starts with \"play\": Alexa hands those to a music service instead."),
                  fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=r, column=0, columnspan=2, sticky="w", pady=(6, 2))
-        self._about_link(box, "How Voice Commands work", f"{REPO_URL}/blob/{ref}/docs/MANUAL.md#voice-commands",
+        self._about_link(box, t("How Voice Commands work"), f"{REPO_URL}/blob/{ref}/docs/MANUAL.md#voice-commands",
                          r + 1, "Every command, what you hear back, and settings per device.")
 
         # --- Credits ---
-        box = section(tab, "Credits")
-        tk.Label(box, text="Recommendation data and playback come from:", anchor="w").grid(
+        box = section(tab, t("Credits"))
+        tk.Label(box, text=t("Recommendation data and playback come from:"), anchor="w").grid(
             row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
         for r, (name, url) in enumerate(CREDITS, start=1):
             self._about_link(box, name, url, r)
 
         # --- Thanks ---
-        box = section(tab, "Thanks")
+        box = section(tab, t("Thanks"))
         for r, (name, why) in enumerate(THANKS):
             tk.Label(box, text=name, font=LABEL_FONT, anchor="w").grid(row=r, column=0, sticky="nw", pady=1)
             tk.Label(box, text=why, anchor="w", justify="left", wraplength=420).grid(
                 row=r, column=1, sticky="w", padx=(16, 0), pady=1)
 
         # --- Licence ---
-        box = section(tab, "Licence")
-        tk.Label(box, text="MIT Licence. Copyright (c) 2026 Ben Walker-Williams.", anchor="w").grid(
+        box = section(tab, t("Licence"))
+        tk.Label(box, text=t("MIT Licence. Copyright (c) 2026 Ben Walker-Williams."), anchor="w").grid(
             row=0, column=0, sticky="w")
-        self._about_link(box, "Read the licence", f"{REPO_URL}/blob/main/LICENSE", 1)
+        self._about_link(box, t("Read the licence"), f"{REPO_URL}/blob/main/LICENSE", 1)
 
         # Wrapped text follows the window's width rather than a fixed number of pixels
         wrapped, todo = [], [tab]
@@ -3892,13 +3916,13 @@ class SettingsTab(tk.Frame):
         self.hotkey_vars, self.hotkey_notes = {}, {}
         self._hotkey_capturing, self._hotkey_held = None, set()
         if not hotkeys.AVAILABLE:
-            tk.Label(box, text="Keyboard shortcuts need Windows.", fg=PALETTE["help_fg"],
+            tk.Label(box, text=t("Keyboard shortcuts need Windows."), fg=PALETTE["help_fg"],
                      font=HELP_FONT).grid(row=0, column=0, sticky="w")
             return
-        tk.Label(box, text="Shortcuts apply to which zone:", anchor="w").grid(row=0, column=0, sticky="w", pady=4)
+        tk.Label(box, text=t("Shortcuts apply to which zone:"), anchor="w").grid(row=0, column=0, sticky="w", pady=4)
         self.hotkey_zone_var = tk.StringVar(value=self.env.get("HOTKEY_ZONE", "") or hotkeys.NOW_PLAYING_ZONE)
-        zone_cb = ttk.Combobox(box, textvariable=self.hotkey_zone_var, state="readonly", width=28,
-                               values=[hotkeys.NOW_PLAYING_ZONE])
+        zone_cb = TCombobox(box, textvariable=self.hotkey_zone_var, state="readonly", width=28,
+                            values=[hotkeys.NOW_PLAYING_ZONE])
         zone_cb.config(postcommand=lambda: zone_cb.config(
             values=[hotkeys.NOW_PLAYING_ZONE] + engine.zone_names(include_hidden=True)))
         zone_cb.grid(row=0, column=1, columnspan=3, sticky="w", padx=(12, 0))
@@ -3910,7 +3934,7 @@ class SettingsTab(tk.Frame):
 
     def _shortcut_row(self, box, r, code, label, value):
         """One shortcut: its title, the box that takes the keys, Clear, and a note for problems."""
-        title = tk.Label(box, text=label, anchor="w")
+        title = tk.Label(box, text=t(label), anchor="w")
         title.grid(row=r, column=0, sticky="w", pady=3)
         var = tk.StringVar(value=value)
         entry = tk.Entry(box, textvariable=var, width=24, state="readonly", cursor="hand2")
@@ -3920,7 +3944,7 @@ class SettingsTab(tk.Frame):
         entry.bind("<FocusOut>", lambda e, c=code: self._hotkey_capture_end(c))
         entry.bind("<KeyPress>", lambda e, c=code: self._hotkey_key(c, e, True))
         entry.bind("<KeyRelease>", lambda e, c=code: self._hotkey_key(c, e, False))
-        clear = tk.Button(box, text="Clear", width=7, command=lambda c=code: self._hotkey_clear(c))
+        clear = tk.Button(box, text=t("Clear"), width=7, command=lambda c=code: self._hotkey_clear(c))
         clear.grid(row=r, column=2, sticky="w", padx=(8, 0))
         note = tk.Label(box, text="", fg="#a33", font=HELP_FONT, anchor="w", justify="left")
         note.grid(row=r, column=3, sticky="w", padx=(10, 0))
@@ -3938,13 +3962,14 @@ class SettingsTab(tk.Frame):
         for code in [c for c in self.hotkey_vars if hotkeys.is_profile(c)]:
             del self.hotkey_vars[code], self.hotkey_notes[code]
         env = read_env()
-        for i, (code, label, _) in enumerate(hotkeys.profile_actions()):
-            widgets = self._shortcut_row(box, len(hotkeys.ACTIONS) + 1 + i, code, label, env.get(f"HOTKEY_{code}", ""))
+        for i, (code, _, name) in enumerate(hotkeys.profile_actions()):
+            widgets = self._shortcut_row(box, len(hotkeys.ACTIONS) + 1 + i, code, t("Load {name}", name=name),
+                                         env.get(f"HOTKEY_{code}", ""))
             if i == 0:
-                widgets.append(help_mark(box, "Each saved profile has a shortcut of its own that loads it, restarting "
+                widgets.append(help_mark(box, t("Each saved profile has a shortcut of its own that loads it, restarting "
                                               "24bit7 while JRiver keeps playing. A key that always lands on one profile "
                                               "suits a remote or an automation, where Switch Profiles' A to Z order can't "
-                                              "be relied on. Pressed with that profile already loaded, it does nothing.",
+                                              "be relied on. Pressed with that profile already loaded, it does nothing."),
                                          on=widgets[0]))
             self.profile_shortcut_widgets.extend(widgets)
 
@@ -3962,7 +3987,7 @@ class SettingsTab(tk.Frame):
         try:
             write_env({"HOTKEY_ZONE": "" if value == hotkeys.NOW_PLAYING_ZONE else value})
         except Exception as e:
-            messagebox.showerror("Save failed", str(e), parent=self)
+            messagebox.showerror(t("Save failed"), str(e), parent=self)
         combo.selection_clear()
 
     def _hotkey_save(self, code, combo):
@@ -3970,7 +3995,7 @@ class SettingsTab(tk.Frame):
         try:
             write_env({f"HOTKEY_{code}": combo})   # blank, not removed, so the change is picked up at once
         except Exception as e:
-            messagebox.showerror("Save failed", str(e), parent=self)
+            messagebox.showerror(t("Save failed"), str(e), parent=self)
 
     def _hotkey_clear(self, code):
         self._hotkey_save(code, "")
@@ -3981,7 +4006,7 @@ class SettingsTab(tk.Frame):
         """While a box is being set, every shortcut is released, so pressing one doesn't start a playlist."""
         self._hotkey_capturing, self._hotkey_held = code, set()
         hotkeys.stop()
-        self.hotkey_notes[code].config(text="Press the keys you want (Esc to cancel)", fg=PALETTE["help_fg"])
+        self.hotkey_notes[code].config(text=t("Press the keys you want (Esc to cancel)"), fg=PALETTE["help_fg"])
 
     def _hotkey_capture_end(self, code):
         if self._hotkey_capturing != code:
@@ -4011,15 +4036,15 @@ class SettingsTab(tk.Frame):
         if event.keysym in ("Tab", "ISO_Left_Tab") and not mods:
             return None        # Tab still moves to the next control
         if hotkeys.key_name(vk) is None:
-            note.config(text="That key can't be used for a shortcut.", fg="#a33")
+            note.config(text=t("That key can't be used for a shortcut."), fg="#a33")
             return "break"
         if not mods and hotkeys.needs_modifier(vk):
-            note.config(text="Add Ctrl, Alt, Shift or Win to that key.", fg="#a33")
+            note.config(text=t("Add Ctrl, Alt, Shift or Win to that key."), fg="#a33")
             return "break"
         combo = hotkeys.combo_text(mods, vk)
         for other, var in self.hotkey_vars.items():
             if other != code and var.get() == combo:
-                note.config(text=f"Already used for {hotkeys.label(other)}.", fg="#a33")
+                note.config(text=t("Already used for {shortcut}.", shortcut=t(hotkeys.label(other))), fg="#a33")
                 return "break"
         self._hotkey_save(code, combo)
         self.focus_set()   # done: leaving the box registers the shortcuts again
@@ -4030,16 +4055,16 @@ class SettingsTab(tk.Frame):
             tray.set_startup(self.startup_var.get())
         except Exception as e:
             self.startup_var.set(tray.startup_command() is not None)
-            messagebox.showerror("Start with Windows", f"Couldn't change the startup setting: {e}", parent=self)
+            messagebox.showerror(t("Start with Windows"), t("Couldn't change the startup setting: {error}", error=e), parent=self)
         self._show_startup_note()
 
     def _show_startup_note(self):
         lines = []
         current = tray.startup_command()
         if current and current != tray.launch_command():
-            lines.append("Windows starts a different copy of 24bit7. Untick and tick again to start this one.")
+            lines.append(t("Windows starts a different copy of 24bit7. Untick and tick again to start this one."))
         if not tray.available():
-            lines.append("The tray needs pystray and Pillow: run  pip install pystray Pillow  and restart.")
+            lines.append(t("The tray needs pystray and Pillow: run  pip install pystray Pillow  and restart."))
         self.startup_note.config(text="\n".join(lines))
         if lines:
             self.startup_note.grid()
@@ -4055,13 +4080,13 @@ class SettingsTab(tk.Frame):
         names = engine.zone_names(include_hidden=True)
         self.zone_vars, self.zone_radios = {}, {}
         if not names:
-            tk.Label(self.zone_frame, text="No zones found. Is JRiver running, with Media Network on?",
+            tk.Label(self.zone_frame, text=t("No zones found. Is JRiver running, with Media Network on?"),
                      fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=0, column=0, sticky="w")
             return
-        tk.Label(self.zone_frame, text="Show", fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=0, column=0, sticky="w")
-        tk.Label(self.zone_frame, text="Default", fg=PALETTE["help_fg"], font=HELP_FONT).grid(
+        tk.Label(self.zone_frame, text=t("Show"), fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=0, column=0, sticky="w")
+        tk.Label(self.zone_frame, text=t("Default"), fg=PALETTE["help_fg"], font=HELP_FONT).grid(
             row=0, column=1, sticky="w", padx=(24, 0))
-        rb = ttk.Radiobutton(self.zone_frame, text="JRiver's active zone", value="",
+        rb = ttk.Radiobutton(self.zone_frame, text=t("JRiver's active zone"), value="",
                              variable=self.default_zone_var, command=self._save_zone_settings)
         rb.grid(row=1, column=1, sticky="w", padx=(24, 0))
         self.zone_radios[""] = rb
@@ -4074,7 +4099,7 @@ class SettingsTab(tk.Frame):
                                 command=self._save_zone_settings).grid(row=r, column=0, sticky="w")
                 self.zone_vars[name] = v
             else:
-                tk.Label(self.zone_frame, text=f"{name} (not found)", fg=PALETTE["help_fg"]).grid(row=r, column=0, sticky="w")
+                tk.Label(self.zone_frame, text=t("{name} (not found)", name=name), fg=PALETTE["help_fg"]).grid(row=r, column=0, sticky="w")
             rb = ttk.Radiobutton(self.zone_frame, value=name, variable=self.default_zone_var,
                                  command=self._save_zone_settings)
             rb.grid(row=r, column=1, sticky="w", padx=(24, 0))
@@ -4102,22 +4127,22 @@ class SettingsTab(tk.Frame):
                        "DEFAULT_ZONE": self.default_zone_var.get(),
                        "FOLLOW_ACTIVE_ZONE": "1" if self.follow_var.get() else "0"})
         except Exception as e:
-            messagebox.showerror("Save failed", str(e), parent=self)
+            messagebox.showerror(t("Save failed"), str(e), parent=self)
 
     def _build_voice(self, nb):
         """Voice Commands: the listener switch, its key, the devices heard, and a test."""
-        tab = self._scroll_tab(nb, "Voice Commands")
+        tab = self._scroll_tab(nb, N_("Voice Commands"))
 
         # --- Voice Commands: the switch and the key ---
-        box = section(tab, "Voice Commands")
+        box = section(tab, t("Voice Commands"))
         self.voice_on = tk.BooleanVar(value=engine.VOICE_ENABLED)
-        ttk.Checkbutton(box, text="Voice Commands (listen for commands from the Alexa skill)",
+        ttk.Checkbutton(box, text=t("Voice Commands (listen for commands from the Alexa skill)"),
                         variable=self.voice_on, command=self._voice_toggled).grid(
             row=0, column=0, columnspan=5, sticky="w")
         self.voice_status = tk.Label(box, text=voice.status(), fg=PALETTE["help_fg"], font=HELP_FONT)
         self.voice_status.grid(row=1, column=0, columnspan=5, sticky="w")
 
-        tk.Label(box, text="Key", anchor="w").grid(row=2, column=0, sticky="w", pady=(12, 2))
+        tk.Label(box, text=t("Key"), anchor="w").grid(row=2, column=0, sticky="w", pady=(12, 2))
         self.voice_key_var = tk.StringVar(value=engine.VOICE_KEY)
         key_box = tk.Frame(box)   # hidden like the other keys; Show is unticked every time Settings opens
         key_box.grid(row=2, column=1, sticky="w", padx=(12, 8), pady=(12, 2))
@@ -4125,27 +4150,27 @@ class SettingsTab(tk.Frame):
                              show="\u2022")
         key_entry.pack(side="left")
         show_key = tk.BooleanVar(value=False)
-        ttk.Checkbutton(key_box, text="Show", variable=show_key,
+        ttk.Checkbutton(key_box, text=t("Show"), variable=show_key,
                        command=lambda: key_entry.config(show="" if show_key.get() else "\u2022")).pack(
             side="left", padx=(6, 0))
-        tk.Button(box, text="Copy", width=8, command=self._voice_copy_key).grid(row=2, column=2, sticky="w", pady=(12, 2))
-        tk.Button(box, text="New key", width=8, command=self._voice_new_key).grid(
+        tk.Button(box, text=t("Copy"), width=8, command=self._voice_copy_key).grid(row=2, column=2, sticky="w", pady=(12, 2))
+        tk.Button(box, text=t("New key"), width=8, command=self._voice_new_key).grid(
             row=2, column=3, sticky="w", padx=(8, 0), pady=(12, 2))
-        help_mark(box, "The Alexa skill sends this key with every command; anything without it is refused. "
-                       "24bit7 only listens on this PC. The tunnel set up for the skill connects it to Amazon."
+        help_mark(box, t("The Alexa skill sends this key with every command; anything without it is refused. "
+                       "24bit7 only listens on this PC. The tunnel set up for the skill connects it to Amazon.")
                   ).grid(row=2, column=4, sticky="w", padx=(8, 0), pady=(12, 2))
 
         # --- Devices ---
-        box = section(tab, "Devices",
-                      "Say a command on a device that isn't set up and it appears here. Pick the zone it "
-                      "plays to.")
+        box = section(tab, t("Devices"),
+                      t("Say a command on a device that isn't set up and it appears here. Pick the zone it "
+                      "plays to."))
         self.voice_dev_frame = tk.Frame(box)
         self.voice_dev_frame.grid(row=0, column=0, sticky="w")
-        tk.Button(box, text="Refresh", width=10, command=self._fill_voice_devices).grid(
+        tk.Button(box, text=t("Refresh"), width=10, command=self._fill_voice_devices).grid(
             row=1, column=0, sticky="w", pady=(8, 0))
         timing = tk.Frame(box)
         timing.grid(row=2, column=0, sticky="w", pady=(12, 0))
-        tk.Label(timing, text="Switch Timing Adjustment").pack(side="left")
+        tk.Label(timing, text=t("Switch Timing Adjustment")).pack(side="left")
         self.switch_timing_var = tk.StringVar()
         spin = tk.Spinbox(timing, from_=-3.0, to=3.0, increment=0.25, format="%.2f", width=6,
                           textvariable=self.switch_timing_var, command=self._save_switch_timing)
@@ -4153,36 +4178,36 @@ class SettingsTab(tk.Frame):
         self.switch_timing_var.set(f"{voice.switch_adjust_ms() / 1000:.2f}")
         spin.bind("<FocusOut>", self._save_switch_timing)
         spin.bind("<Return>", self._save_switch_timing)
-        tk.Label(timing, text="seconds").pack(side="left")
-        help_mark(timing, "Fine-tunes switching to a networked (DLNA) speaker such as a Sonos, which holds a "
+        tk.Label(timing, text=t("seconds")).pack(side="left")
+        help_mark(timing, t("Fine-tunes switching to a networked (DLNA) speaker such as a Sonos, which holds a "
                           "second or so of music before you hear it. If it repeats the last moment you heard in "
                           "the other room, move this towards minus; if it skips a little, towards plus. Switching "
-                          "to a zone on this PC ignores it.").pack(side="left", padx=(8, 0))
+                          "to a zone on this PC ignores it.")).pack(side="left", padx=(8, 0))
 
         # --- Test ---
-        box = section(tab, "Test", "Sends a pretend command, as if a device had heard it. "
-                                   "The build itself shows in the Play tab log.")
+        box = section(tab, t("Test"), t("Sends a pretend command, as if a device had heard it. "
+                                   "The build itself shows in the Play tab log."))
         test = tk.Frame(box)
         test.grid(row=0, column=0, sticky="w")
-        tk.Label(test, text="Music like").pack(side="left")
+        tk.Label(test, text=t("Music like")).pack(side="left")
         self.voice_test_artist = tk.Entry(test, width=24)
         self.voice_test_artist.insert(0, "Agnes Obel")
         self.voice_test_artist.pack(side="left", padx=(6, 12))
-        tk.Label(test, text="on").pack(side="left")
+        tk.Label(test, text=t("on")).pack(side="left")
         self.voice_test_zone = ttk.Combobox(test, state="readonly", width=22,
                                             postcommand=lambda: self.voice_test_zone.config(values=engine.zone_names()))
         self.voice_test_zone.pack(side="left", padx=(6, 12))
-        tk.Button(test, text="Send test", width=10, command=self._voice_test).pack(side="left")
+        tk.Button(test, text=t("Send test"), width=10, command=self._voice_test).pack(side="left")
         self.voice_test_result = tk.Label(box, text="", fg=PALETTE["help_fg"], font=HELP_FONT, justify="left")
         self.voice_test_result.grid(row=1, column=0, sticky="w", pady=(6, 0))
 
         # --- Guides: links to the two Voice Commands documents on GitHub ---
-        box = section(tab, "Guides")
+        box = section(tab, t("Guides"))
         for r, (title, url, blurb) in enumerate(VOICE_DOCS):
-            link = tk.Label(box, text=title, fg=PALETTE["section_fg"], cursor="hand2", font=("Segoe UI", 10, "underline"))
+            link = tk.Label(box, text=t(title), fg=PALETTE["section_fg"], cursor="hand2", font=("Segoe UI", 10, "underline"))
             link.grid(row=r, column=0, sticky="w", pady=2)
             link.bind("<Button-1>", lambda e, u=url: webbrowser.open_new_tab(u))
-            tk.Label(box, text=blurb, fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=r, column=1, sticky="w", padx=(12, 0))
+            tk.Label(box, text=t(blurb), fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=r, column=1, sticky="w", padx=(12, 0))
 
         tab.bind("<<Shown>>", lambda e: (self.voice_status.config(text=voice.status()), self._fill_voice_devices()))
 
@@ -4193,7 +4218,7 @@ class SettingsTab(tk.Frame):
         try:
             write_env(updates)
         except Exception as e:
-            messagebox.showerror("Save failed", str(e), parent=self)
+            messagebox.showerror(t("Save failed"), str(e), parent=self)
         self._voice_restart()
 
     def _voice_restart(self):
@@ -4206,12 +4231,12 @@ class SettingsTab(tk.Frame):
 
     def _voice_new_key(self):
         if engine.VOICE_KEY and not messagebox.askyesno(
-                "New key", "The Alexa skill will need the new key as well. Make a new one?", parent=self):
+                t("New key"), t("The Alexa skill will need the new key as well. Make a new one?"), parent=self):
             return
         try:
             write_env({"VOICE_KEY": voice.new_key()})
         except Exception as e:
-            messagebox.showerror("Save failed", str(e), parent=self)
+            messagebox.showerror(t("Save failed"), str(e), parent=self)
         self._voice_restart()
 
     def _save_switch_timing(self, *_):
@@ -4225,7 +4250,7 @@ class SettingsTab(tk.Frame):
         try:
             write_env({"SWITCH_TIMING": f"{value:.2f}"})
         except Exception as e:
-            messagebox.showerror("Save failed", str(e), parent=self)
+            messagebox.showerror(t("Save failed"), str(e), parent=self)
 
     def _fill_voice_devices(self):
         """One row per Alexa device heard: its name, the zone it plays to, when it was last heard."""
@@ -4233,32 +4258,32 @@ class SettingsTab(tk.Frame):
             child.destroy()
         rows = voice.devices()
         if not rows:
-            tk.Label(self.voice_dev_frame, text="No devices heard yet.", fg=PALETTE["help_fg"], font=HELP_FONT).grid(
+            tk.Label(self.voice_dev_frame, text=t("No devices heard yet."), fg=PALETTE["help_fg"], font=HELP_FONT).grid(
                 row=0, column=0, sticky="w")
             return
         zones = engine.zone_names()
-        for c, heading in enumerate(("Name", "Zone", "Last heard", "")):
+        for c, heading in enumerate((t("Name"), t("Zone"), t("Last heard"), "")):
             tk.Label(self.voice_dev_frame, text=heading, fg=PALETTE["help_fg"], font=HELP_FONT).grid(
                 row=0, column=c, sticky="w", padx=(0, 12))
         own_head = tk.Frame(self.voice_dev_frame)
         own_head.grid(row=0, column=4, sticky="w", padx=(12, 0))
         switch_head = tk.Frame(self.voice_dev_frame)
         switch_head.grid(row=0, column=5, sticky="w", padx=(12, 0))
-        tk.Label(switch_head, text="Enable Switch To", fg=PALETTE["help_fg"], font=HELP_FONT).pack(side="left")
-        help_mark(switch_head, "Ticked, this device's zone is one you can switch the music to, with \"Alexa, ask "
+        tk.Label(switch_head, text=t("Enable Switch To"), fg=PALETTE["help_fg"], font=HELP_FONT).pack(side="left")
+        help_mark(switch_head, t("Ticked, this device's zone is one you can switch the music to, with \"Alexa, ask "
                                "needle drop to switch\" or the Switch Zones keyboard shortcut. With two zones "
                                "ticked, switching moves the music straight to the other one. With three or more, "
                                "Alexa asks which zone, or you can say \"switch to\" and the zone name; the "
                                "shortcut steps through them in turn. The music carries on from the same track, "
-                               "and the zone it left stops. Two devices on the same zone share one tick.").pack(
+                               "and the zone it left stops. Two devices on the same zone share one tick.")).pack(
             side="left", padx=(6, 0))
         switch_off = voice.switch_unticked()
-        tk.Label(own_head, text="Own settings", fg=PALETTE["help_fg"], font=HELP_FONT).pack(side="left")
-        help_mark(own_head, "Tick a device to give it its own tab under Settings > Sources and Settings > "
+        tk.Label(own_head, text=t("Own settings"), fg=PALETTE["help_fg"], font=HELP_FONT).pack(side="left")
+        help_mark(own_head, t("Tick a device to give it its own tab under Settings > Sources and Settings > "
                             "Playlist. Each tab starts with Copy Windows (Main) ticked, following the Windows "
                             "app's settings; untick Copy there to change that device's settings, for example "
                             "to try different settings on two speakers. Unticked here, the device uses Windows "
-                            "(Main), and anything it had is kept for next time.").pack(side="left", padx=(6, 0))
+                            "(Main), and anything it had is kept for next time.")).pack(side="left", padx=(6, 0))
         for r, (device_id, name, zone, heard, own) in enumerate(rows, start=1):
             name_var = tk.StringVar(value=name)
             entry = tk.Entry(self.voice_dev_frame, textvariable=name_var, width=22)
@@ -4267,13 +4292,13 @@ class SettingsTab(tk.Frame):
             entry.bind("<FocusOut>", save_name)
             entry.bind("<Return>", save_name)
             zone_var = tk.StringVar(value=zone or "Not set")
-            cb = ttk.Combobox(self.voice_dev_frame, textvariable=zone_var, state="readonly", width=22,
-                              values=["Not set"] + zones + ([zone] if zone and zone not in zones else []))
+            cb = TCombobox(self.voice_dev_frame, textvariable=zone_var, state="readonly", width=22,
+                              values=[N_("Not set")] + zones + ([zone] if zone and zone not in zones else []))
             cb.grid(row=r, column=1, sticky="w", padx=(0, 12), pady=2)
             cb.bind("<<ComboboxSelected>>", lambda e, d=device_id, v=zone_var: voice.update_device(
                 d, zone="" if v.get() == "Not set" else v.get()))
             tk.Label(self.voice_dev_frame, text=heard or "").grid(row=r, column=2, sticky="w", padx=(0, 12))
-            tk.Button(self.voice_dev_frame, text="Remove", width=8,
+            tk.Button(self.voice_dev_frame, text=t("Remove"), width=8,
                       command=lambda d=device_id: (voice.remove_device(d), self._fill_voice_devices())).grid(
                 row=r, column=3, sticky="w", pady=2)
             own_var = tk.BooleanVar(value=bool(own))
@@ -4290,28 +4315,28 @@ class SettingsTab(tk.Frame):
 
     def _voice_test(self):
         if not voice.status().startswith("Listening"):
-            self.voice_test_result.config(text="Switch Voice Commands on first.")
+            self.voice_test_result.config(text=t("Switch Voice Commands on first."))
             return
         zone = self.voice_test_zone.get()
         artist = self.voice_test_artist.get().strip()
         if not zone or not artist:
-            self.voice_test_result.config(text="Type an artist and pick a zone to test with.")
+            self.voice_test_result.config(text=t("Type an artist and pick a zone to test with."))
             return
-        self.voice_test_result.config(text="Sending...")
+        self.voice_test_result.config(text=t("Sending..."))
         result = []
         # sent from a background thread, so the window never waits on the listener
         threading.Thread(target=lambda: result.append(voice.send_test(artist, zone)), daemon=True).start()
 
         def show():
             if result:
-                self.voice_test_result.config(text="Alexa would " + result[0])
+                self.voice_test_result.config(text=t("Alexa would {what}", what=result[0]))
             else:
                 self.after(200, show)
         self.after(200, show)
 
     def _build_search_sites(self, nb):
         """Discover search sites: which stores and reference sites to open per row."""
-        tab = self._scroll_tab(nb, "Discover")
+        tab = self._scroll_tab(nb, N_("Discover"))
         ttk.Style(self).configure("Big.TCheckbutton", font=("Segoe UI", 11))
         cols = 4
 
@@ -4328,41 +4353,41 @@ class SettingsTab(tk.Frame):
 
         # Carry over a pre-1.1.0 single DIGITAL_STORE if the new key isn't there yet.
         stores_raw = self.env.get("DIGITAL_STORES", self.env.get("DIGITAL_STORE", "bandcamp"))
-        box = section(tab, "Stores",
-                      "Search by artist and track. Each ticked site gets its own button on the Discover tab. "
-                      "At least one store must stay ticked.")
+        box = section(tab, t("Stores"),
+                      t("Search by artist and track. Each ticked site gets its own button on the Discover tab. "
+                      "At least one store must stay ticked."))
         ticks(box, "DIGITAL_STORES", engine.STORE_OPTIONS,
               [x.strip().lower() for x in stores_raw.split(",") if x.strip()])
-        box = section(tab, "Reference", "Search the artist, for a discography. Each ticked site gets its own "
-                                        "button on the Discover tab.")
+        box = section(tab, t("Reference"), t("Search the artist, for a discography. Each ticked site gets its own "
+                                        "button on the Discover tab."))
         ticks(box, "REFERENCE_SITES", engine.REFERENCE_OPTIONS, self._csv_list("REFERENCE_SITES", ""))
         # Record Label sits with the reference sites, but keeps its own setting (DISCOVER_LABEL), on unless unticked
         self.vars["DISCOVER_LABEL"] = tk.BooleanVar(
             value=self.env.get("DISCOVER_LABEL", "1").strip().lower() in ("1", "true", "yes"))
         n = len(engine.REFERENCE_OPTIONS)
-        label_tick = ttk.Checkbutton(box, text="Record Label", variable=self.vars["DISCOVER_LABEL"],
+        label_tick = ttk.Checkbutton(box, text=t("Record Label"), variable=self.vars["DISCOVER_LABEL"],
                                      command=self._save, style="Big.TCheckbutton")
         label_tick.grid(row=n // cols, column=n % cols, sticky="w", padx=(0, 16), pady=2)
-        Tooltip(label_tick, "Adds a Label button to the Discover tab. It finds who released the selected track "
-                            "and opens the label on Bandcamp, so buying it supports the artist through their label.")
-        box = section(tab, "Listen", "Search by artist and track. Each ticked site gets its own button on the "
-                                     "Discover tab.")
+        Tooltip(label_tick, t("Adds a Label button to the Discover tab. It finds who released the selected track "
+                            "and opens the label on Bandcamp, so buying it supports the artist through their label."))
+        box = section(tab, t("Listen"), t("Search by artist and track. Each ticked site gets its own button on the "
+                                     "Discover tab."))
         ticks(box, "LISTEN_SITES", engine.LISTEN_OPTIONS, self._csv_list("LISTEN_SITES", "youtube"))
-        box = section(tab, "Create Playlist",
-                      "Tick rows on the Discover tab, then make them into one playlist to listen through. Each "
+        box = section(tab, t("Create Playlist"),
+                      t("Tick rows on the Discover tab, then make them into one playlist to listen through. Each "
                       "ticked service gets its own button there. YouTube opens them in your browser; Tidal puts "
                       "them in your playlist called 24bit7, in place of what was there (sign in under Settings > "
                       "Keys). This is for the Discover tab only: the Play tab's Output list is set under "
-                      "Settings > Other > Additional Outputs.")
+                      "Settings > Other > Additional Outputs."))
         ticks(box, "PLAYLIST_SITES", engine.PLAYLIST_OPTIONS, self._csv_list("PLAYLIST_SITES", "youtube"))
 
-        box = section(tab, "Custom sites",
-                      "To add a site: search for anything on it, copy the address from your browser, then replace "
+        box = section(tab, t("Custom sites"),
+                      t("To add a site: search for anything on it, copy the address from your browser, then replace "
                       "your search words with {query}. Example: https://www.prestomusic.com/search?q={query}\n"
                       "Clear the button name to remove a site. Only links starting with http:// or https:// "
-                      "are used.")
+                      "are used."))
         box.grid_columnconfigure(1, weight=1)   # the link field takes whatever width is left
-        for c, heading in enumerate(("Button name", "Search link", "Search by")):
+        for c, heading in enumerate((t("Button name"), t("Search link"), t("Search by"))):
             tk.Label(box, text=heading, fg=PALETTE["help_fg"], font=HELP_FONT).grid(
                 row=0, column=c, sticky="w", padx=(0, 8))
         for n in range(1, engine.CUSTOM_SITE_SLOTS + 1):
@@ -4379,8 +4404,8 @@ class SettingsTab(tk.Frame):
             url_entry.grid(row=n, column=1, sticky="ew", padx=(0, 8), pady=2)
             for entry in (name_entry, url_entry):
                 entry.bind("<FocusOut>", self._save)   # save when leaving the field
-            mode_cb = ttk.Combobox(box, textvariable=mode_var, state="readonly", width=16,
-                                   values=["Artist and track", "Artist only"])
+            mode_cb = TCombobox(box, textvariable=mode_var, state="readonly", width=16,
+                                   values=[N_("Artist and track"), N_("Artist only")])
             mode_cb.grid(row=n, column=2, sticky="w", pady=2)
             mode_cb.bind("<<ComboboxSelected>>", self._save)
 
@@ -4391,10 +4416,10 @@ class SettingsTab(tk.Frame):
         Additional Outputs: the streaming services the Play tab's Output list offers besides
         JRiver's zones, each with its own settings under it, greyed out while it's unticked.
         """
-        box = section(tab, "Additional Outputs",
-                      "Besides your JRiver zones, the Play tab's Output list can send a playlist to these. "
+        box = section(tab, t("Additional Outputs"),
+                      t("Besides your JRiver zones, the Play tab's Output list can send a playlist to these. "
                       "Untick one to take it out of the list. Discover's Create Playlist buttons are set "
-                      "separately, under Settings > Discover.")
+                      "separately, under Settings > Discover."))
         chosen = self._csv_list("EXTRA_OUTPUTS", "youtube")
         self.vars["EXTRA_OUTPUTS"] = {code: tk.BooleanVar(value=code in chosen) for code, _ in engine.OUTPUT_OPTIONS}
         self._output_parts = {}   # code -> the widgets greyed out while it's unticked
@@ -4403,8 +4428,8 @@ class SettingsTab(tk.Frame):
         tick = ttk.Checkbutton(box, text="YouTube", variable=self.vars["EXTRA_OUTPUTS"]["youtube"],
                                command=self._extra_outputs_changed, style="Big.TCheckbutton")
         tick.grid(row=0, column=0, columnspan=3, sticky="w", pady=(2, 0))
-        Tooltip(tick, "Output on YouTube opens the playlist in your browser, as one YouTube playlist.")
-        tk.Label(box, text="YouTube playlist length", anchor="w").grid(row=1, column=0, sticky="w",
+        Tooltip(tick, t("Output on YouTube opens the playlist in your browser, as one YouTube playlist."))
+        tk.Label(box, text=t("YouTube playlist length"), anchor="w").grid(row=1, column=0, sticky="w",
                                                                          padx=(24, 0), pady=4)
         self.vars["YOUTUBE_PLAYLIST_LENGTH"] = tk.StringVar(value=self.env.get("YOUTUBE_PLAYLIST_LENGTH", "50"))
         cell = tk.Frame(box)
@@ -4412,35 +4437,35 @@ class SettingsTab(tk.Frame):
         spin = tk.Spinbox(cell, from_=5, to=50, textvariable=self.vars["YOUTUBE_PLAYLIST_LENGTH"], width=6,
                           command=self._save)
         spin.pack(side="left")
-        help_mark(cell, "How many videos a playlist holds when Output is set to YouTube (5 to 50). "
-                        "50 is the most YouTube allows in one playlist link.").pack(side="left", padx=(8, 0))
+        help_mark(cell, t("How many videos a playlist holds when Output is set to YouTube (5 to 50). "
+                        "50 is the most YouTube allows in one playlist link.")).pack(side="left", padx=(8, 0))
         self.vars["YOUTUBE_PLAYLIST_LENGTH"].trace_add("write", self._save)
         self.vars["PREFER_OFFICIAL_VIDEOS"] = tk.BooleanVar(
             value=self.env.get("PREFER_OFFICIAL_VIDEOS", "0") in ("1", "true", "yes"))
         cell = tk.Frame(box)
         cell.grid(row=2, column=0, columnspan=3, sticky="w", padx=(24, 0), pady=4)
-        official = ttk.Checkbutton(cell, text="Prefer official music videos",
+        official = ttk.Checkbutton(cell, text=t("Prefer official music videos"),
                                    variable=self.vars["PREFER_OFFICIAL_VIDEOS"], command=self._save)
         official.pack(side="left")
-        help_mark(cell, "YouTube Music usually plays the audio-only version of a song, shown with the album cover. Tick this to play the artist's official music video instead, where one exists. Videos can run longer than the song because of intros and outros, and a few may not play in your region. Songs without an official video still play as audio.").pack(side="left", padx=(8, 0))
+        help_mark(cell, t("YouTube Music usually plays the audio-only version of a song, shown with the album cover. Tick this to play the artist's official music video instead, where one exists. Videos can run longer than the song because of intros and outros, and a few may not play in your region. Songs without an official video still play as audio.")).pack(side="left", padx=(8, 0))
         self._output_parts["youtube"] = [spin, official]
 
         # Tidal, with whether you're signed in
         tick = ttk.Checkbutton(box, text="Tidal", variable=self.vars["EXTRA_OUTPUTS"]["tidal"],
                                command=self._extra_outputs_changed, style="Big.TCheckbutton")
         tick.grid(row=3, column=0, columnspan=3, sticky="w", pady=(10, 0))
-        Tooltip(tick, "Output on Tidal puts the playlist in your Tidal playlist called 24bit7, in place of "
-                      "what was there. Rename it in Tidal to keep it.")
+        Tooltip(tick, t("Output on Tidal puts the playlist in your Tidal playlist called 24bit7, in place of "
+                      "what was there. Rename it in Tidal to keep it."))
         self._tidal_output_note = tk.Label(box, text="", fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w")
         self._tidal_output_note.grid(row=4, column=0, columnspan=3, sticky="w", padx=(24, 0), pady=4)
-        title = tk.Label(box, text="Open In", anchor="w")
+        title = tk.Label(box, text=t("Open In"), anchor="w")
         title.grid(row=5, column=0, sticky="w", padx=(24, 0), pady=4)
-        Tooltip(title, "Where the playlist opens once it's filled: the Tidal app, or Tidal's website in your "
+        Tooltip(title, t("Where the playlist opens once it's filled: the Tidal app, or Tidal's website in your "
                        "browser. If the app isn't installed, it opens on the website. The console offers the "
-                       "other one too.")
+                       "other one too."))
         self.vars["TIDAL_OPEN"] = tk.StringVar(
             value="Tidal Web" if self.env.get("TIDAL_OPEN", "app").strip().lower() == "web" else "Tidal App")
-        open_cb = ttk.Combobox(box, textvariable=self.vars["TIDAL_OPEN"], values=["Tidal App", "Tidal Web"],
+        open_cb = TCombobox(box, textvariable=self.vars["TIDAL_OPEN"], values=[N_("Tidal App"), N_("Tidal Web")],
                                state="readonly", width=12)
         open_cb.grid(row=5, column=1, sticky="w", padx=(12, 0))
         open_cb.bind("<<ComboboxSelected>>", lambda e: (open_cb.selection_clear(), self._save()))
@@ -4452,8 +4477,8 @@ class SettingsTab(tk.Frame):
         if not hasattr(self, "_output_parts"):
             return
         self._tidal_output_note.config(
-            text="Signed in to Tidal." if engine.tidal_signed_in()
-            else "Not signed in yet: Settings > Keys, Sign In to Tidal.")
+            text=t("Signed in to Tidal.") if engine.tidal_signed_in()
+            else t("Not signed in yet: Settings > Keys, Sign In to Tidal."))
         for code, parts in self._output_parts.items():
             on = self.vars["EXTRA_OUTPUTS"][code].get()
             for w in parts:
@@ -4475,4 +4500,4 @@ class SettingsTab(tk.Frame):
 
     def _show_help(self, key):
         title, body = KEY_HELP[key]
-        messagebox.showinfo(title, body, parent=self)
+        messagebox.showinfo(t(title), t(body), parent=self)

@@ -22,6 +22,8 @@ import json
 import time
 import uuid
 
+from i18n import N_
+
 import engine
 
 META_KEY = "filters"
@@ -99,19 +101,19 @@ def device_for_zone(zone_name):
 
 # (code, label, [(condition, label)], kind of value)
 FIELDS = [
-    ("rating", "Rating", [("any", "is any of")], "stars"),
-    ("year", "Year", [("before", "before"), ("after", "after"), ("between", "between")], "year"),
-    ("last_played", "Last played", [("within", "within the last"), ("not_within", "not within the last")], "days"),
-    ("play_count", "Play count", [("more", "more than"), ("fewer", "fewer than")], "number"),
-    ("imported", "Date imported", [("within", "within the last"), ("not_within", "not within the last")], "days"),
-    ("genre", "Genre", [("contains", "contains"), ("not_contains", "doesn't contain")], "text"),
-    ("artist", "Artist", [("contains", "contains"), ("not_contains", "doesn't contain")], "text"),
-    ("album", "Album", [("contains", "contains"), ("not_contains", "doesn't contain")], "text"),
-    ("duration", "Duration", [("longer", "longer than"), ("shorter", "shorter than")], "minutes"),
-    ("file_type", "File type", [("is", "is"), ("is_not", "isn't")], "text"),
-    ("bit_depth", "Bit depth", [("at_least", "at least"), ("exactly", "exactly"), ("at_most", "at most")], "number"),
-    ("sample_rate", "Sample rate", [("at_least", "at least"), ("exactly", "exactly"), ("at_most", "at most")], "khz"),
-    ("location", "File location", [("contains", "contains"), ("not_contains", "doesn't contain")], "text"),
+    ("rating", N_("Rating"), [("any", N_("is any of"))], "stars"),
+    ("year", N_("Year"), [("before", N_("before")), ("after", N_("after")), ("between", N_("between"))], "year"),
+    ("last_played", N_("Last played"), [("within", N_("within the last")), ("not_within", N_("not within the last"))], "days"),
+    ("play_count", N_("Play count"), [("more", N_("more than")), ("fewer", N_("fewer than"))], "number"),
+    ("imported", N_("Date imported"), [("within", N_("within the last")), ("not_within", N_("not within the last"))], "days"),
+    ("genre", N_("Genre"), [("contains", N_("contains")), ("not_contains", N_("doesn't contain"))], "text"),
+    ("artist", N_("Artist"), [("contains", N_("contains")), ("not_contains", N_("doesn't contain"))], "text"),
+    ("album", N_("Album"), [("contains", N_("contains")), ("not_contains", N_("doesn't contain"))], "text"),
+    ("duration", N_("Duration"), [("longer", N_("longer than")), ("shorter", N_("shorter than"))], "minutes"),
+    ("file_type", N_("File type"), [("is", N_("is")), ("is_not", N_("isn't"))], "text"),
+    ("bit_depth", N_("Bit depth"), [("at_least", N_("at least")), ("exactly", N_("exactly")), ("at_most", N_("at most"))], "number"),
+    ("sample_rate", N_("Sample rate"), [("at_least", N_("at least")), ("exactly", N_("exactly")), ("at_most", N_("at most"))], "khz"),
+    ("location", N_("File location"), [("contains", N_("contains")), ("not_contains", N_("doesn't contain"))], "text"),
 ]
 FIELD_INFO = {code: (label, ops, kind) for code, label, ops, kind in FIELDS}
 TEXT_FIELDS = {"genre": "Genre", "artist": "Artist", "album": "Album", "file_type": "File Type", "location": "Filename"}
