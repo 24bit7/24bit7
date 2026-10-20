@@ -137,10 +137,10 @@ class MixRows(tk.Frame):
     def _drag_end(self, _event):
         if self._drag is None:
             return
-        i, t = self._drag, self._target
+        i, to = self._drag, self._target
         self._drag = self._target = None
-        if t is not None and t != i:
-            self.rows.insert(t, self.rows.pop(i))
+        if to is not None and to != i:
+            self.rows.insert(to, self.rows.pop(i))
             self._save()
         self._draw()
 

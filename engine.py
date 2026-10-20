@@ -14,6 +14,8 @@ import types as _types
 import sqlite3
 from datetime import datetime
 
+from i18n import N_
+
 
 def app_dir():
     """
@@ -6664,9 +6666,11 @@ def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=Fal
 # Mode 4: Vibe Playlist (AI-described mood)
 # ---------------------------------------------------------------------------
 
-STEER_DIRECTIONS = [("dancier", "Dancier"), ("calmer", "Calmer"), ("faster", "Faster"), ("slower", "Slower"),
-                    ("darker", "Darker"), ("brighter", "Brighter"), ("older", "Older"), ("newer", "Newer"),
-                    ("deeper", "Deeper Cuts"), ("known", "Better Known")]
+# English, as the AI is told them (steer_description); the AI window shows them through t()
+STEER_DIRECTIONS = [("dancier", N_("Dancier")), ("calmer", N_("Calmer")), ("faster", N_("Faster")),
+                    ("slower", N_("Slower")), ("darker", N_("Darker")), ("brighter", N_("Brighter")),
+                    ("older", N_("Older")), ("newer", N_("Newer")), ("deeper", N_("Deeper Cuts")),
+                    ("known", N_("Better Known"))]
 STEER_SEED_CAP = 50   # Playing Now (All) sends at most this many tracks, around the current one
 
 

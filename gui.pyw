@@ -526,14 +526,14 @@ class PlayTab(tk.Frame):
 
     def _seed_explainer(self):
         """The once-only console note for Seed: Playing Now, with the figures as they're set now."""
-        a, t = engine.playing_now_artist_figures(), engine.playing_now_track_figures()
+        art, trk = engine.playing_now_artist_figures(), engine.playing_now_track_figures()
         return [
             "Seed: Playing Now",
             "  Builds now start from your whole Playing Now list instead of the track that's playing.",
-            f"  Similar Artists picks {a['PN_SAMPLE_ARTISTS']} artists from the list at random, then finds "
-            f"{a['PN_ARTISTS_PER_SAMPLE']} similar artists for each, taking them in turn so nobody repeats. "
-            f"Similar Tracks picks {t['PN_SAMPLE_TRACKS']} tracks at random, each from a different artist, "
-            f"and finds {t['PN_TRACKS_PER_SAMPLE']} similar tracks for each.",
+            f"  Similar Artists picks {art['PN_SAMPLE_ARTISTS']} artists from the list at random, then finds "
+            f"{art['PN_ARTISTS_PER_SAMPLE']} similar artists for each, taking them in turn so nobody repeats. "
+            f"Similar Tracks picks {trk['PN_SAMPLE_TRACKS']} tracks at random, each from a different artist, "
+            f"and finds {trk['PN_TRACKS_PER_SAMPLE']} similar tracks for each.",
             "  Only artists and tracks in your library count. If one isn't there, 24bit7 moves further down "
             "the list.",
             "  Tracks already in Playing Now are left out, and the new list replaces Playing Now as usual. Use "

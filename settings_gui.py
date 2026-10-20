@@ -3340,10 +3340,10 @@ class SettingsTab(tk.Frame):
 
     def _fill_usage(self):
         """The AI Usage total and breakdown (heaviest first), then the per-run guide."""
-        t = ai_usage.totals()
-        self.usage_total.config(text=ai_usage.headline(t))
+        totals = ai_usage.totals()
+        self.usage_total.config(text=ai_usage.headline(totals))
         rows = [((f, ""), (f"{n:,}", ""), (f"{i:,}", ""), (f"{o:,}", ""), (self._cost(c), ""))
-                for f, n, i, o, c in t["by_feature"]]
+                for f, n, i, o, c in totals["by_feature"]]
         if rows:
             self._usage_grid(self.usage_table, ("Feature", "Requests", "Input tokens", "Output tokens", "Est. cost"),
                              rows)

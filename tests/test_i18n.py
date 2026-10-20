@@ -80,6 +80,26 @@ def test_every_text_the_code_asks_for_has_german():
     assert not missing, "No German for:\n" + "\n".join(missing)
 
 
+def test_nothing_hides_t():
+    """A variable called t in a file that uses t() hides it there (20 Oct 2026: the AI window's 'a, t = pairs[0]')."""
+    hidden = []
+    for name in sorted(os.listdir(REPO)):
+        if not name.endswith((".py", ".pyw")) or name.startswith(("apply_", "builtin_keys")):
+            continue
+        with open(os.path.join(REPO, name), encoding="utf-8") as f:
+            tree = ast.parse(f.read(), name)
+        uses_t = any(isinstance(n, ast.ImportFrom) and n.module == "i18n" and any(a.name in ("t", "tn") for a in n.names)
+                     for n in ast.walk(tree))
+        if not uses_t:
+            continue
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Name) and n.id in ("t", "tn") and isinstance(n.ctx, ast.Store):
+                hidden.append(f"{name}:{n.lineno}")
+            elif isinstance(n, ast.arg) and n.arg in ("t", "tn"):
+                hidden.append(f"{name}:{n.lineno}")
+    assert not hidden, f"These hide t() with a variable of the same name: {hidden}"
+
+
 def test_german_keeps_the_same_blanks():
     wrong = [en for en, de in _de().items() if _blanks(en) != _blanks(de)]
     assert not wrong, f"These lose or gain a {{blank}} in German: {wrong}"

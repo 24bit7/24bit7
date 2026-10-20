@@ -26,6 +26,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 
 import engine
+from i18n import N_, t
 from settings_gui import Tooltip, read_env, write_env
 from tabs import PALETTE, rounded_shape
 
@@ -35,9 +36,9 @@ GAP = 12                   # between sections
 FONT_FAMILY = "Segoe UI"
 GWL_STYLE, WS_CAPTION, SWP_FRAME = -16, 0x00C00000, 0x0027
 DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND = 33, 2
-IF_SHORT = [("ask", "Ask Again"), ("drift", "Drift"), ("leave", "Leave Short")]
-IF_SHORT_TIP = ("When fewer tracks match your library than you asked for: Ask Again asks the AI for more "
-                "(up to two more rounds), Drift tops up from your music sources, Leave Short stops there.")
+IF_SHORT = [("ask", N_("Ask Again")), ("drift", "Drift"), ("leave", N_("Leave Short"))]
+IF_SHORT_TIP = N_("When fewer tracks match your library than you asked for: Ask Again asks the AI for more "
+                  "(up to two more rounds), Drift tops up from your music sources, Leave Short stops there.")
 COUNT_MIN, COUNT_MAX = 5, 100
 
 
@@ -68,7 +69,7 @@ class AIPlaylistDialog(tk.Toplevel):
 
         # An owned window: always above 24bit7, never above anything else, no focus grabbing.
         # Its own title bar goes (Windows), the header below is the handle; Windows 11 rounds the corners.
-        self.title("AI Playlist")
+        self.title(t("AI Playlist"))
         self.transient(master)
         self.resizable(False, False)
         self.configure(bg=self.p["line"], padx=max(1, self._px(1)), pady=max(1, self._px(1)))   # a 1px edge
@@ -185,7 +186,7 @@ class AIPlaylistDialog(tk.Toplevel):
         p, body = self.p, self.body
         head = tk.Frame(body, bg=p["window_bg"])
         head.pack(fill="x")
-        tk.Label(head, text="AI Playlist", font=self._font(14, True), bg=p["window_bg"], fg=self.ai).pack(side="left")
+        tk.Label(head, text=t("AI Playlist"), font=self._font(14, True), bg=p["window_bg"], fg=self.ai).pack(side="left")
         close = tk.Label(head, text="\u2715", font=self._font(12), bg=p["window_bg"], fg=p["text_secondary"],
                          cursor="hand2", padx=self._px(8))
         close.pack(side="right")
@@ -196,7 +197,7 @@ class AIPlaylistDialog(tk.Toplevel):
 
         modes = tk.Frame(body, bg=p["window_bg"])
         modes.pack(fill="x", pady=(self._px(8), 0))
-        self.mode_switch = self._segment(modes, [("create", "Create"), ("steer", "Steer")], self.mode,
+        self.mode_switch = self._segment(modes, [("create", t("Create")), ("steer", "Steer")], self.mode,
                                          self.set_mode, ai=True)
         self.mode_switch.pack(side="left")
         self.mode_note = tk.Label(modes, text="", font=self._font(9), bg=p["window_bg"], fg=p["text_faint"])
@@ -211,11 +212,11 @@ class AIPlaylistDialog(tk.Toplevel):
         tk.Frame(foot, bg=p["line"], height=1).pack(fill="x", pady=(0, self._px(10)))
         row = tk.Frame(foot, bg=p["window_bg"])
         row.pack(fill="x")
-        tk.Label(row, text="Everything here is remembered for next time.", font=self._font(9), bg=p["window_bg"],
+        tk.Label(row, text=t("Everything here is remembered for next time."), font=self._font(9), bg=p["window_bg"],
                  fg=p["text_faint"]).pack(side="left")
-        self.go_btn = self._button(row, "Build Playlist", self.submit, fill=self.ai, edge=self.ai, fg=self._on_ai())
+        self.go_btn = self._button(row, t("Build Playlist"), self.submit, fill=self.ai, edge=self.ai, fg=self._on_ai())
         self.go_btn.pack(side="right")
-        self._button(row, "Cancel", self.destroy).pack(side="right", padx=(0, self._px(10)))
+        self._button(row, t("Cancel"), self.destroy).pack(side="right", padx=(0, self._px(10)))
         self._show_mode()
 
     def set_mode(self, mode):
@@ -230,12 +231,12 @@ class AIPlaylistDialog(tk.Toplevel):
         for w in self.page.winfo_children():
             w.destroy()
         if self.mode == "steer":
-            self.mode_note.config(text="Move what's playing in a direction.")
+            self.mode_note.config(text=t("Move what's playing in a direction."))
             self.go_btn.config(text="Steer")
             self._build_steer()
         else:
-            self.mode_note.config(text="A new playlist from a theme.")
-            self.go_btn.config(text="Build Playlist")
+            self.mode_note.config(text=t("A new playlist from a theme."))
+            self.go_btn.config(text=t("Build Playlist"))
             self._build_create()
         self._paint_go()
         self.after(10, self._fit)
@@ -262,17 +263,18 @@ class AIPlaylistDialog(tk.Toplevel):
         opts.pack(fill="x", pady=(self._px(GAP), self._px(4)))
         col = tk.Frame(opts, bg=p["window_bg"])
         col.pack(side="left")
-        self._label(col, "Tracks").pack(anchor="w")
+        self._label(col, t("Tracks")).pack(anchor="w")
         self.count = self._entry(col, width=5)
         self.count.pack(anchor="w", ipady=self._px(4), pady=(self._px(4), 0))
         self.count.insert(0, (env.get(count_key) or "").strip() or str(count_default))
-        Tooltip(self.count, f"How many tracks to ask for, {COUNT_MIN} to {COUNT_MAX}.")
+        Tooltip(self.count, t("How many tracks to ask for, {low} to {high}.", low=COUNT_MIN, high=COUNT_MAX))
         col2 = tk.Frame(opts, bg=p["window_bg"])
         col2.pack(side="left", padx=(self._px(28), 0))
-        lab = self._label(col2, "If Short")
+        lab = self._label(col2, t("If Short"))
         lab.pack(anchor="w")
-        Tooltip(lab, IF_SHORT_TIP, click=False)
-        self.if_short_switch = self._segment(col2, IF_SHORT, self.if_short, self.set_if_short)
+        Tooltip(lab, t(IF_SHORT_TIP), click=False)
+        self.if_short_switch = self._segment(col2, [(c, t(name)) for c, name in IF_SHORT], self.if_short,
+                                             self.set_if_short)
         self.if_short_switch.pack(anchor="w", pady=(self._px(4), 0))
 
     # --- Steer ---
@@ -280,19 +282,19 @@ class AIPlaylistDialog(tk.Toplevel):
     def _build_steer(self):
         p, page = self.p, self.page
         env = read_env()
-        self._label(page, "Seed").pack(anchor="w")
+        self._label(page, t("Seed")).pack(anchor="w")
         seed_row = tk.Frame(page, bg=p["window_bg"])
         seed_row.pack(fill="x", pady=(self._px(4), 0))
-        self.seed_switch = self._segment(seed_row, [("current", "Currently Playing"), ("all", "Playing Now (All)")],
+        self.seed_switch = self._segment(seed_row, [("current", t("Currently Playing")), ("all", t("Playing Now (All)"))],
                                          self.seed_kind, self.set_seed)
         self.seed_switch.pack(side="left")
-        Tooltip(self.seed_switch, "Currently Playing steers from the one track on now. Playing Now (All) sends "
-                                  f"the list around it, up to {engine.STEER_SEED_CAP} tracks.", click=False)
+        Tooltip(self.seed_switch, t("Currently Playing steers from the one track on now. Playing Now (All) sends "
+                                    "the list around it, up to {cap} tracks.", cap=engine.STEER_SEED_CAP), click=False)
         self.seed_note = tk.Label(seed_row, text="", font=self._font(9), bg=p["window_bg"], fg=p["text_faint"])
         self.seed_note.pack(side="left", padx=(self._px(12), 0))
         threading.Thread(target=self._load_seed_note, daemon=True).start()
 
-        self._label(page, "Tone (optional)").pack(anchor="w", pady=(self._px(GAP), 0))
+        self._label(page, t("Tone (optional)")).pack(anchor="w", pady=(self._px(GAP), 0))
         tone_row = tk.Frame(page, bg=p["window_bg"])
         tone_row.pack(fill="x", pady=(self._px(4), 0))
         self.tone = tk.Text(tone_row, height=2, width=10, wrap="word", font=self._font(10), bg=p["field_bg"],
@@ -302,13 +304,13 @@ class AIPlaylistDialog(tk.Toplevel):
                             padx=self._px(6), pady=self._px(4))
         self.tone.pack(side="left", fill="x", expand=True)
         self.tone.insert("1.0", env.get("AI_STEER_TONE", "").strip())
-        self.assess_btn = self._button(tone_row, "Assess Tone", self.assess_tone, edge=self.ai, fg=self.ai,
+        self.assess_btn = self._button(tone_row, t("Assess Tone"), self.assess_tone, edge=self.ai, fg=self.ai,
                                        bold=True, pad=20, h=30, font_size=9)
         self.assess_btn.pack(side="left", padx=(self._px(10), 0), anchor="n")
-        Tooltip(self.assess_btn, "Asks the AI to describe the seed's tone and puts it here. Uses AI credits. "
-                                 "Left empty, the AI works from the seed and direction alone.", click=False)
+        Tooltip(self.assess_btn, t("Asks the AI to describe the seed's tone and puts it here. Uses AI credits. "
+                                   "Left empty, the AI works from the seed and direction alone."), click=False)
 
-        self._label(page, "Direction").pack(anchor="w", pady=(self._px(GAP), self._px(6)))
+        self._label(page, t("Direction")).pack(anchor="w", pady=(self._px(GAP), self._px(6)))
         self.dir_box = tk.Frame(page, bg=p["window_bg"])
         self.dir_box.pack(fill="x")
         self.dir_chips = {}
@@ -318,22 +320,22 @@ class AIPlaylistDialog(tk.Toplevel):
         self.own = self._entry(own_row)
         self.own.pack(side="left", fill="x", expand=True, ipady=self._px(4))
         self.own.insert(0, env.get("AI_STEER_OWN", "").strip())
-        self.own_placeholder = tk.Label(page, text="Your own words: more Latin, female vocals...",
+        self.own_placeholder = tk.Label(page, text=t("Your own words: more Latin, female vocals..."),
                                         font=self._font(10), bg=p["field_bg"], fg=p["text_faint"])
         self._sync_own_placeholder()
         for ev in ("<KeyRelease>", "<FocusIn>", "<FocusOut>"):
             self.own.bind(ev, lambda e: self._sync_own_placeholder(), add="+")
-        self.strength_switch = self._segment(own_row, [("little", "A Little"), ("lot", "A Lot")], self.strength,
+        self.strength_switch = self._segment(own_row, [("little", t("A Little")), ("lot", t("A Lot"))], self.strength,
                                              self.set_strength)
         self.strength_switch.pack(side="left", padx=(self._px(12), 0))
-        Tooltip(self.strength_switch, "How far to move from the seed.", click=False)
+        Tooltip(self.strength_switch, t("How far to move from the seed."), click=False)
         self._options_row(page, "AI_STEER_COUNT", 12)
         self.own.bind("<Return>", lambda ev: self.submit())
         self.tone.bind("<Return>", lambda ev: (self.submit(), "break")[1])
 
     def _paint_directions(self):
         chips = self._flow(self.dir_box, [
-            (lambda row, code=code, label=label: self._chip(row, label, lambda: self.toggle_direction(code),
+            (lambda row, code=code, label=label: self._chip(row, t(label), lambda: self.toggle_direction(code),
                                                             on=code in self.directions))
             for code, label in engine.STEER_DIRECTIONS])
         self.dir_chips = dict(zip([c for c, _ in engine.STEER_DIRECTIONS], chips))
@@ -381,12 +383,12 @@ class AIPlaylistDialog(tk.Toplevel):
         if not self.winfo_exists() or self.mode != "steer":
             return
         if not pairs:
-            self.seed_note.config(text="Nothing is playing.")
+            self.seed_note.config(text=t("Nothing is playing."))
         elif len(pairs) == 1:
-            a, t = pairs[0]
-            self.seed_note.config(text=f"{a} - {t}"[:48])
+            artist, title = pairs[0]
+            self.seed_note.config(text=f"{artist} - {title}"[:48])
         else:
-            self.seed_note.config(text=f"{len(pairs)} tracks")
+            self.seed_note.config(text=t("{count} tracks", count=len(pairs)))
 
     def assess_tone(self):
         if getattr(self, "_assessing", False):
@@ -396,7 +398,7 @@ class AIPlaylistDialog(tk.Toplevel):
                              if engine.ai_configured() else f"Note: Assess Tone needs {engine.ai_missing_text()}.")
             return
         self._assessing = True
-        self.assess_btn.config(text="Assessing...")
+        self.assess_btn.config(text=t("Assessing..."))
         kind = self.seed_kind
 
         def work():
@@ -413,7 +415,7 @@ class AIPlaylistDialog(tk.Toplevel):
         self._assessing = False
         if not self.winfo_exists() or self.mode != "steer":
             return
-        self.assess_btn.config(text="Assess Tone")
+        self.assess_btn.config(text=t("Assess Tone"))
         if tone:
             self.tone.delete("1.0", "end")
             self.tone.insert("1.0", tone)
@@ -435,22 +437,22 @@ class AIPlaylistDialog(tk.Toplevel):
     def _build_create(self):
         p, page = self.p, self.page
         env = read_env()
-        self._label(page, "Theme").pack(anchor="w")
+        self._label(page, t("Theme")).pack(anchor="w")
         self.theme = self._entry(page)
         self.theme.pack(fill="x", ipady=self._px(4), pady=(self._px(4), 0))
         self.theme.insert(0, env.get("AI_CREATE_THEME", "").strip())
         self.theme.bind("<Return>", lambda e: self.submit())
-        self.placeholder = tk.Label(page, text="A mood, a place, a decade, a feeling...", font=self._font(10),
+        self.placeholder = tk.Label(page, text=t("A mood, a place, a decade, a feeling..."), font=self._font(10),
                                     bg=p["field_bg"], fg=p["text_faint"])
         self._sync_placeholder()
         self.theme.bind("<KeyRelease>", lambda e: self._sync_placeholder(), add="+")
         self.theme.bind("<FocusIn>", lambda e: self._sync_placeholder(), add="+")
         self.theme.bind("<FocusOut>", lambda e: self._sync_placeholder(), add="+")
 
-        self._label(page, "Ideas").pack(anchor="w", pady=(self._px(GAP), self._px(6)))
+        self._label(page, t("Ideas")).pack(anchor="w", pady=(self._px(GAP), self._px(6)))
         self.ideas = tk.Frame(page, bg=p["window_bg"])
         self.ideas.pack(fill="x")
-        self.ideas_note = tk.Label(self.ideas, text="Thinking...", font=self._font(9), bg=p["window_bg"],
+        self.ideas_note = tk.Label(self.ideas, text=t("Thinking..."), font=self._font(9), bg=p["window_bg"],
                                    fg=p["text_faint"])
         self.ideas_note.pack(anchor="w")
         self.ideas_list, self.idea_chips = [], []
@@ -487,9 +489,12 @@ class AIPlaylistDialog(tk.Toplevel):
         if not info or info.get("PlayingNowPosition") == "-1" or not title or title == "Unknown":
             return
         shown = title if len(title) <= 40 else title[:37].rstrip() + "..."
-        by = f" by {engine.deinvert_the(artist)}" if artist and artist != "Unknown" else ""
-        self.like_text = f'More tracks like "{title}"{by}, with the same tone, energy and mood'
-        self._add_idea(f'More tracks like "{shown}"', self.like_text, first=True)
+        if artist and artist != "Unknown":
+            self.like_text = t('More tracks like "{title}" by {artist}, with the same tone, energy and mood',
+                               title=title, artist=engine.deinvert_the(artist))
+        else:
+            self.like_text = t('More tracks like "{title}", with the same tone, energy and mood', title=title)
+        self._add_idea(t('More tracks like "{title}"', title=shown), self.like_text, first=True)
 
     def _load_suggestions(self):
         try:
@@ -503,7 +508,7 @@ class AIPlaylistDialog(tk.Toplevel):
             return
         self.ideas_note.pack_forget()
         if not ideas and not self.ideas_list:
-            self.ideas_note.config(text="(no suggestions right now)")
+            self.ideas_note.config(text=t("(no suggestions right now)"))
             self.ideas_note.pack(anchor="w")
         for idea in ideas:
             self._add_idea(idea, idea)
@@ -518,7 +523,8 @@ class AIPlaylistDialog(tk.Toplevel):
 
     def _flow_ideas(self):
         self.idea_chips = self._flow(self.ideas, [
-            (lambda row, sh=sh, t=t: self._chip(row, sh, lambda: self._use(t))) for sh, t in self.ideas_list])
+            (lambda row, sh=sh, text=text: self._chip(row, sh, lambda: self._use(text)))
+            for sh, text in self.ideas_list])
         self._fit()
 
     def _use(self, text):
