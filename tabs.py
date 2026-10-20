@@ -1077,7 +1077,7 @@ class NamePrompt(tk.Toplevel):
             self.entry.icursor("end")
         buttons = tk.Frame(inner, bg=bg)
         buttons.pack(anchor="e", pady=(px(16), 0))
-        self.cancel_button = self._button(buttons, "Cancel", self.cancel, bg, line)
+        self.cancel_button = self._button(buttons, t("Cancel"), self.cancel, bg, line)
         self.cancel_button.pack(side="left", padx=(0, px(8)))
         self.ok_button = self._button(buttons, "OK", self.ok, PALETTE.get("field_bg") or PALETTE["button_bg"],
                                       PALETTE["button_accent"])
