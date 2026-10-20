@@ -18,7 +18,7 @@ def _de():
 
 
 def _asked_for():
-    """Every t("...") in the app's code, as (file, English)."""
+    """Every t("...") and N_("...") in the app's code, as (file, English)."""
     found = []
     for name in sorted(os.listdir(REPO)):
         if not name.endswith((".py", ".pyw")) or name.startswith(("apply_", "builtin_keys")):
@@ -26,7 +26,7 @@ def _asked_for():
         with open(os.path.join(REPO, name), encoding="utf-8") as f:
             tree = ast.parse(f.read(), name)
         for node in ast.walk(tree):
-            if (isinstance(node, ast.Call) and getattr(node.func, "id", getattr(node.func, "attr", None)) == "t"
+            if (isinstance(node, ast.Call) and getattr(node.func, "id", getattr(node.func, "attr", None)) in ("t", "N_")
                     and node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)):
                 found.append((name, node.args[0].value))
     return found

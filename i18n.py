@@ -5,7 +5,8 @@ The code keeps its English. t() looks the English up in locale\\<code>.json and
 falls back to the English itself when there's no translation, so nothing ever
 breaks for want of one. Text with a number or a name in it stays one sentence
 with {blanks}, filled by t(text, n=3), so each language can put them where its
-own word order wants them.
+own word order wants them. English kept in a constant is marked with N_() and
+passed through t() where it's shown.
 
 The language is chosen in Settings > Other and set once, as 24bit7 starts:
 switching it restarts the app, so the screens never mix two languages.
@@ -44,6 +45,14 @@ def set_language(code):
     global LANGUAGE, _table
     LANGUAGE = code if code in dict(LANGUAGES) else "en"
     _table = load_table(LANGUAGE)
+
+
+def N_(text):
+    """
+    Marks English kept in a constant (a list, a title at the top of a file) for translation, and
+    returns it unchanged: the file is read before the language is set, so it's t()'d where it's shown.
+    """
+    return text
 
 
 def t(text, **blanks):

@@ -15,11 +15,12 @@ from tkinter import ttk
 import playmix
 import saved_playlists
 import tabs
+from i18n import N_, t
 from settings_gui import Tooltip
 from tabs import PALETTE
 
 HANDLE = "\u2261"     # the grab handle
-FORGET_TIP = "Takes it out of Most used. The playlist stays in JRiver, and in any row that uses it."
+FORGET_TIP = N_("Takes it out of Most used. The playlist stays in JRiver, and in any row that uses it.")
 DIVIDER = "\u2500" * 34
 
 
@@ -69,7 +70,7 @@ class MixRows(tk.Frame):
             handle.bind("<B1-Motion>", self._drag_move)
             handle.bind("<ButtonRelease-1>", self._drag_end)
 
-            pick = tk.Label(row, text=f"{r['name'] or 'Choose a playlist'}  \u25be", width=36, anchor="w",
+            pick = tk.Label(row, text=f"{r['name'] or t('Choose a playlist')}  \u25be", width=36, anchor="w",
                             bg=fbg, fg=ffg, relief="solid", bd=1, padx=6, pady=2, cursor="hand2")
             pick.pack(side="left")
             pick.bind("<Button-1>", lambda e, i=i: self._open_picker(i))
@@ -201,7 +202,7 @@ class MixRows(tk.Frame):
                 m.bind("<Button-1>", lambda e, pid=pid: forget(pid))
                 m.bind("<Enter>", lambda e, m=m: m.config(fg=ffg))
                 m.bind("<Leave>", lambda e, m=m: m.config(fg=muted))
-                Tooltip(m, FORGET_TIP)
+                Tooltip(m, t(FORGET_TIP))
                 pop.marks[pid] = m
 
         def forget(pid):
@@ -229,11 +230,11 @@ class MixRows(tk.Frame):
             used_at.clear()
             place_marks()
             if playlists is None:
-                line("JRiver isn't answering, so there are no playlists to show.", faint=True)
+                line(t("JRiver isn't answering, so there are no playlists to show."), faint=True)
                 return
             used, rest = playmix.picker_order(playlists, search.get())
             if used:
-                line("Most used", faint=True)
+                line(t("Most used"), faint=True)
                 for p, count in used:
                     line(f"{label(p)}   ({count})", p)
                     used_at[lb.size() - 1] = p["ID"]
@@ -241,11 +242,11 @@ class MixRows(tk.Frame):
             if used and rest:
                 line(DIVIDER, faint=True)
             if rest:
-                line("All playlists", faint=True)
+                line(t("All playlists"), faint=True)
                 for p in rest:
                     line(label(p), p)
             if not used and not rest:
-                line("No playlists match", faint=True)
+                line(t("No playlists match"), faint=True)
 
         def choose(item):
             if item is None:
