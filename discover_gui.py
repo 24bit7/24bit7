@@ -22,6 +22,7 @@ from tkinter import font as tkfont
 from datetime import datetime
 
 import engine
+from i18n import t, tn
 from tabs import PALETTE, FlatButton, RoundedEntry
 
 # Search URL builders per store. Each takes an "artist track" query string.
@@ -84,8 +85,8 @@ class DiscoverTab(tk.Frame):
         # so app startup isn't slowed by inserting hundreds of table rows. Everything
         # else is in place from the start: the site buttons are drawn now, and
         # Session says it's loading until the sessions arrive.
-        self.session_var.set("Loading sessions...")
-        self.count_label.config(text="Loading...")
+        self.session_var.set(t("Loading sessions..."))
+        self.count_label.config(text=t("Loading..."))
         self.after_idle(self._rebuild_site_buttons)
 
     def _apply_table_font(self):
@@ -131,7 +132,7 @@ class DiscoverTab(tk.Frame):
         if not self._loaded:
             self._loaded = True
             # The tab shows straight away with "Loading..."; the table fills a moment later
-            self.count_label.config(text="Loading...")
+            self.count_label.config(text=t("Loading..."))
             self.after_idle(lambda: self.after(15, self._first_load))
         else:
             engine.refresh_settings_if_changed()   # a site ticked in Settings shows up straight away
@@ -149,11 +150,11 @@ class DiscoverTab(tk.Frame):
         bar.pack(fill="x", pady=(14, 0))   # clear of the tabs above
 
         # Show: which discoveries the table lists (the value the rest of the tab reads)
-        tk.Label(bar, text="Show:").pack(side="left")
+        tk.Label(bar, text=t("Show:")).pack(side="left")
         self.filter_var = tk.StringVar(value="misses")
-        self._filter_names = {"Misses": "misses", "Hits": "hits", "All": "all"}
-        self.filter_menu = ttk.Combobox(bar, values=list(self._filter_names), state="readonly", width=8)
-        self.filter_menu.set("Misses")
+        self._filter_names = {t("Misses"): "misses", t("Hits"): "hits", t("All"): "all"}
+        self.filter_menu = ttk.Combobox(bar, values=list(self._filter_names), state="readonly", width=10)
+        self.filter_menu.set(t("Misses"))
         self.filter_menu.pack(side="left", padx=(4, 0))
         self.filter_menu.bind("<<ComboboxSelected>>", self._on_filter_changed)
 
@@ -162,8 +163,8 @@ class DiscoverTab(tk.Frame):
         self.count_label = tk.Label(bar, text="", fg=PALETTE["text_muted"])
         self.count_label.pack(side="right")
 
-        tk.Label(bar, text="   Session:").pack(side="left")
-        self.session_var = tk.StringVar(value="All sessions")
+        tk.Label(bar, text="   " + t("Session:")).pack(side="left")
+        self.session_var = tk.StringVar(value=t("All sessions"))
         self.session_menu = ttk.Combobox(bar, textvariable=self.session_var,
                                          state="readonly", width=SESSION_MENU_WIDTH)
         self.session_menu.pack(side="left", padx=(4, 12), fill="x", expand=True)
@@ -171,11 +172,11 @@ class DiscoverTab(tk.Frame):
 
         search_bar = tk.Frame(self, padx=22)
         search_bar.pack(fill="x", pady=(8, 4))
-        tk.Label(search_bar, text="Search:").pack(side="left")
+        tk.Label(search_bar, text=t("Search:")).pack(side="left")
         self.search_var = tk.StringVar()
         self.search_var.trace_add("write", lambda *a: self._populate())
         self.search_box = RoundedEntry(search_bar, width=36, font=("Segoe UI", 9),
-                                       placeholder="Artist, track or seed", textvariable=self.search_var)
+                                       placeholder=t("Artist, track or seed"), textvariable=self.search_var)
         self.search_box.pack(side="left", padx=(4, 0))
         # Text size for the table, right-aligned on the search row: A- and A+ (6 to 16, remembered)
         self.font_var = tk.StringVar(value=str(getattr(engine, "TABLE_FONT_SIZE", 9)))
@@ -225,8 +226,8 @@ class DiscoverTab(tk.Frame):
         self.tree = ttk.Treeview(wrap, columns=cols, show="headings",
                                  selectmode="browse")
         self._apply_table_font()
-        headings = {"tick": "", "seed": "Seed", "artist": "Artist", "track": "Track",
-                    "sources": "Suggested by", "found": "In library", "date": "When"}
+        headings = {"tick": "", "seed": t("Seed"), "artist": t("Artist"), "track": t("Track"),
+                    "sources": t("Suggested by"), "found": t("In library"), "date": t("When")}
         widths = {"tick": self._tick_width, "seed": 160, "artist": 140, "track": 150, "sources": 120,
                   "found": 65, "date": 100}
         for c in cols:
@@ -257,25 +258,25 @@ class DiscoverTab(tk.Frame):
         self._bar_right = tk.Frame(self._bar_top)
         self._bar_right.pack(side="right")
         FlatButton(self._bar_right, text="CSV", quiet=True, height=1, command=self.export_csv).pack(side="right")
-        FlatButton(self._bar_right, text="Refresh", quiet=True, height=1,
+        FlatButton(self._bar_right, text=t("Refresh"), quiet=True, height=1,
                    command=self.refresh).pack(side="right", padx=(0, 8))
-        FlatButton(self._bar_right, text="Select None", quiet=True, height=1,
+        FlatButton(self._bar_right, text=t("Select None"), quiet=True, height=1,
                    command=self.select_none).pack(side="right", padx=(0, 8))
-        self._select_all_button = FlatButton(self._bar_right, text="Select All", quiet=True, height=1,
+        self._select_all_button = FlatButton(self._bar_right, text=t("Select All"), quiet=True, height=1,
                                              command=self.select_all)
         self._select_all_button.pack(side="right", padx=(0, 4))
         # Appears once a row is ticked; the status line beside it says how the last playlist went
-        self._yt_button = FlatButton(self._bar_right, text="Create YouTube Playlist", quiet=True, height=1,
+        self._yt_button = FlatButton(self._bar_right, text=t("Create YouTube Playlist"), quiet=True, height=1,
                                      command=self.create_youtube_playlist)
-        self._tidal_button = FlatButton(self._bar_right, text="Create Tidal Playlist", quiet=True, height=1,
+        self._tidal_button = FlatButton(self._bar_right, text=t("Create Tidal Playlist"), quiet=True, height=1,
                                         command=self.create_tidal_playlist)
         # After a Tidal playlist is filled: links to open it, until the next thing the status line says
         self._tidal_open = tk.Frame(self._bar_right)
         self._tidal_open_pid = None
         # Clear all always shows, at the far left of the group; Clear selected appears with the ticks
-        FlatButton(self._bar_right, text="Clear All", quiet=True, height=1,
+        FlatButton(self._bar_right, text=t("Clear All"), quiet=True, height=1,
                    command=self.clear_all).pack(side="right", padx=(0, 16))
-        self._clear_sel_button = FlatButton(self._bar_right, text="Clear Selected", quiet=True, height=1,
+        self._clear_sel_button = FlatButton(self._bar_right, text=t("Clear Selected"), quiet=True, height=1,
                                             command=self.clear_selected)
         self._yt_note = ""   # how the last YouTube playlist went, shown after the row count
         self._last_view = None
@@ -299,7 +300,7 @@ class DiscoverTab(tk.Frame):
 
     def _reload_sessions(self):
         self.sessions = engine.list_sessions()
-        labels = ["All sessions"]
+        labels = [t("All sessions")]
         self._session_ids = [None]
         for sid, started, mode, artist, track in self.sessions:
             seed = artist or "?"
@@ -310,7 +311,7 @@ class DiscoverTab(tk.Frame):
         self.session_menu.config(values=labels)
         # Until you pick one, Discover opens on the latest session (All sessions stays first in the list)
         if not getattr(self, "_session_picked", False) or self.session_var.get() not in labels:
-            self.session_var.set(labels[1] if len(labels) > 1 else "All sessions")
+            self.session_var.set(labels[1] if len(labels) > 1 else t("All sessions"))
 
     def refresh(self):
         self._reload_sessions()
@@ -337,7 +338,7 @@ class DiscoverTab(tk.Frame):
         labels = dict(engine.STORE_OPTIONS + engine.REFERENCE_OPTIONS)
         stores = [labels.get(c, c) for c in engine.DIGITAL_STORES]
         refs = [labels.get(c, c) for c in engine.REFERENCE_SITES]
-        text = "Search: " + ", ".join(stores)
+        text = t("Search:") + " " + ", ".join(stores)
         if refs:
             text += "  +  " + ", ".join(refs)
         return text
@@ -356,7 +357,7 @@ class DiscoverTab(tk.Frame):
         self._visible = []
         for i, r in enumerate(self._rows):
             seed = self._seed_text(r)
-            found = "yes" if r["found"] else "no"
+            found = t("yes") if r["found"] else t("no")
             haystack = " ".join([seed, r["artist"] or "", r["track"] or "",
                                  r["sources"] or "", found, r["date"] or ""]).lower()
             if term and term not in haystack:
@@ -372,22 +373,23 @@ class DiscoverTab(tk.Frame):
 
     def export_csv(self):
         if not getattr(self, "_visible", None):
-            messagebox.showinfo("Nothing to export", "No rows are shown.", parent=self)
+            messagebox.showinfo(t("Nothing to export"), t("No rows are shown."), parent=self)
             return
         path = filedialog.asksaveasfilename(
             parent=self, defaultextension=".csv",
-            filetypes=[("CSV files", "*.csv")], initialfile="24bit7_discoveries.csv")
+            filetypes=[(t("CSV files"), "*.csv")], initialfile="24bit7_discoveries.csv")
         if not path:
             return
         try:
             with open(path, "w", newline="", encoding="utf-8") as f:
                 w = csv.writer(f)
-                w.writerow(["Seed", "Artist", "Track", "Suggested by", "In library", "When"])
+                w.writerow([t("Seed"), t("Artist"), t("Track"), t("Suggested by"), t("In library"), t("When")])
                 w.writerows(self._visible)
         except Exception as e:
-            messagebox.showerror("Export failed", str(e), parent=self)
+            messagebox.showerror(t("Export failed"), str(e), parent=self)
             return
-        messagebox.showinfo("Exported", f"Saved {len(self._visible)} rows to\n{path}", parent=self)
+        messagebox.showinfo(t("Exported"), tn("Saved {count} row to\n{path}", "Saved {count} rows to\n{path}",
+                                              len(self._visible), path=path), parent=self)
 
     def _sort_by(self, col):
         if self._sort_col == col:
@@ -461,11 +463,11 @@ class DiscoverTab(tk.Frame):
             for b in wanted:
                 b.pack(side="right", padx=(0, 8), after=after)
                 after = b
-        self._clear_sel_button.config(text=f"Clear Selected ({count})")
+        self._clear_sel_button.config(text=f"{t('Clear Selected')} ({count})")
         if str(self._yt_button.cget("state")) != "disabled":
-            self._yt_button.config(text=f"Create YouTube Playlist ({count})")
+            self._yt_button.config(text=f"{t('Create YouTube Playlist')} ({count})")
         if str(self._tidal_button.cget("state")) != "disabled":
-            self._tidal_button.config(text=f"Create Tidal Playlist ({count})")
+            self._tidal_button.config(text=f"{t('Create Tidal Playlist')} ({count})")
         self._place_site_buttons()
 
     def create_tidal_playlist(self):
@@ -473,12 +475,12 @@ class DiscoverTab(tk.Frame):
         ticked = [r for r in self._rows if r.get("_ticked")]
         pairs = [(r["artist"], r["track"]) for r in ticked if r.get("artist") and r.get("track")]
         if not pairs:
-            self._set_yt_status("None of the ticked rows has a track to look up.")
+            self._set_yt_status(t("None of the ticked rows has a track to look up."))
             return
         if not engine.tidal_signed_in():
-            self._set_yt_status("Sign in to Tidal first: Settings > Keys, Sign In to Tidal.")
+            self._set_yt_status(t("Sign in to Tidal first: Settings > Keys, Sign In to Tidal."))
             return
-        self._tidal_button.config(state="disabled", text="Looking up on Tidal...")
+        self._tidal_button.config(state="disabled", text=t("Looking up on Tidal..."))
         self._set_yt_status("")
 
         def work():
@@ -487,7 +489,7 @@ class DiscoverTab(tk.Frame):
                 ids = engine.tidal_ids_for_pairs(pairs)
                 sent = engine.send_to_tidal([i for i in ids if i], report=said.append) if any(ids) else 0
             except Exception as e:
-                ids, sent, said = [], 0, [f"Problem: Tidal lookup failed ({e})."]
+                ids, sent, said = [], 0, [t("Problem: Tidal lookup failed ({error}).", error=e)]
             self.after(0, lambda: self._tidal_done(pairs, ids, sent, said))
         threading.Thread(target=work, daemon=True).start()
 
@@ -497,15 +499,18 @@ class DiscoverTab(tk.Frame):
         if not sent:
             problem = next((line for line in said if line.startswith("Problem:")), "")
             self._set_yt_status(problem.replace("Problem: ", "", 1) if problem
-                                else "None of the ticked tracks were found on Tidal.")
+                                else t("None of the ticked tracks were found on Tidal."))
             return
         missing = len(pairs) - len([i for i in ids if i])
-        text = f'{sent} of {len(pairs)} in your Tidal playlist "{engine.TIDAL_PLAYLIST_NAME}"'
         if missing:
-            text += f", {missing} not found on Tidal"
-        if any("Tidal app isn't installed" in line for line in said):
-            text += ". The Tidal app isn't installed, so it opened on Tidal's website"
-        self._set_yt_status(text + ".")
+            text = t('{sent} of {total} in your Tidal playlist "{name}", {missing} not found on Tidal.',
+                     sent=sent, total=len(pairs), name=engine.TIDAL_PLAYLIST_NAME, missing=missing)
+        else:
+            text = t('{sent} of {total} in your Tidal playlist "{name}".',
+                     sent=sent, total=len(pairs), name=engine.TIDAL_PLAYLIST_NAME)
+        if any("Tidal app isn't installed" in line for line in said):   # engine's English line, until stage 3
+            text += " " + t("The Tidal app isn't installed, so it opened on Tidal's website.")
+        self._set_yt_status(text)
         self._show_tidal_open(engine.TIDAL_PLAYLIST_ID)
 
     def _show_tidal_open(self, pid):
@@ -518,8 +523,8 @@ class DiscoverTab(tk.Frame):
             return
         app_url, web_url = engine.tidal_open_links(pid)
         opened = getattr(engine, "TIDAL_OPENED", None)   # the playlist has just opened there: offer the other
-        links = ([("Open in Tidal app", app_url)] if engine.tidal_app_installed() and opened != "app" else []) + (
-            [("Open in Tidal web", web_url)] if opened != "web" else [])
+        links = ([(t("Open in Tidal app"), app_url)] if engine.tidal_app_installed() and opened != "app" else []) + (
+            [(t("Open in Tidal web"), web_url)] if opened != "web" else [])
         for n, (text, url) in enumerate(links):
             if n:
                 tk.Label(self._tidal_open, text="·").pack(side="left", padx=4)
@@ -536,18 +541,18 @@ class DiscoverTab(tk.Frame):
             else:
                 webbrowser.open(url)
         except OSError as e:
-            messagebox.showerror("Tidal", f"Couldn't open Tidal ({e}).", parent=self)
+            messagebox.showerror("Tidal", t("Couldn't open Tidal ({error}).", error=e), parent=self)
 
     def create_youtube_playlist(self):
         """Looks the ticked tracks up on YouTube (in table order) and opens them as an instant playlist."""
         ticked = [r for r in self._rows if r.get("_ticked")]
         pairs = [(r["artist"], r["track"]) for r in ticked if r.get("artist") and r.get("track")]
         if not pairs:
-            self._set_yt_status("None of the ticked rows has a track to look up.")
+            self._set_yt_status(t("None of the ticked rows has a track to look up."))
             return
         over = max(0, len(pairs) - engine.YOUTUBE_PLAYLIST_MAX)
         pairs = pairs[:engine.YOUTUBE_PLAYLIST_MAX]
-        self._yt_button.config(state="disabled", text="Looking up on YouTube...")
+        self._yt_button.config(state="disabled", text=t("Looking up on YouTube..."))
         self._set_yt_status("")
 
         def work():
@@ -564,50 +569,54 @@ class DiscoverTab(tk.Frame):
         self._yt_button.config(state="normal")
         self._sync_ticks()
         if error is not None:
-            self._set_yt_status(f"YouTube lookup failed: {error}")
+            self._set_yt_status(t("YouTube lookup failed: {error}", error=error))
             return
         found = list(dict.fromkeys(v for v in ids if v))
         if not found:
-            self._set_yt_status("None of the ticked tracks were found on YouTube.")
+            self._set_yt_status(t("None of the ticked tracks were found on YouTube."))
             return
         webbrowser.open("https://www.youtube.com/watch_videos?video_ids=" + ",".join(found))
         missing = len(pairs) - len(found)
-        text = f"Opened {len(found)} of {len(pairs)}"
         if missing:
-            text += f", {missing} not found on YouTube"
+            text = t("Opened {found} of {total}, {missing} not found on YouTube.",
+                     found=len(found), total=len(pairs), missing=missing)
+        else:
+            text = t("Opened {found} of {total}.", found=len(found), total=len(pairs))
         if over:
-            text += f". YouTube takes {engine.YOUTUBE_PLAYLIST_MAX} at most, so {over} more were left out"
-        self._set_yt_status(text + ".")
+            text += " " + t("YouTube takes {most} at most, so {over} more were left out.",
+                            most=engine.YOUTUBE_PLAYLIST_MAX, over=over)
+        self._set_yt_status(text)
 
     def clear_all(self):
         if not messagebox.askyesno(
-                "Clear all history",
-                "Are you sure? This will clear your whole Discover history, every session.\n\n"
-                "It can't be undone.",
+                t("Clear all history"),
+                t("Are you sure? This will clear your whole Discover history, every session.\n\n"
+                  "It can't be undone."),
                 icon="warning", default="no", parent=self):
             return
         removed = engine.clear_discoveries()
         self._rows = []
-        self.session_var.set("All sessions")
+        self.session_var.set(t("All sessions"))
         self.refresh()
-        self._set_yt_status(f"History cleared ({removed} {'row' if removed == 1 else 'rows'}).")
+        self._set_yt_status(tn("History cleared ({count} row).", "History cleared ({count} rows).", removed))
 
     def clear_selected(self):
         ticked = [r for r in self._rows if r.get("_ticked")]
         if not ticked:
             return
-        word = "row" if len(ticked) == 1 else "rows"
         if not messagebox.askyesno(
-                "Clear selected",
-                f"Are you sure? This will clear the {len(ticked)} ticked {word} from your Discover history.\n\n"
-                "It can't be undone.",
+                t("Clear selected"),
+                tn("Are you sure? This will clear the {count} ticked row from your Discover history.\n\n"
+                   "It can't be undone.",
+                   "Are you sure? This will clear the {count} ticked rows from your Discover history.\n\n"
+                   "It can't be undone.", len(ticked)),
                 icon="warning", default="no", parent=self):
             return
         removed = engine.clear_discoveries([r.get("id") for r in ticked])
         for r in self._rows:
             r["_ticked"] = False
         self.refresh()
-        self._set_yt_status(f"Cleared {removed} {'row' if removed == 1 else 'rows'}.")
+        self._set_yt_status(tn("Cleared {count} row.", "Cleared {count} rows.", removed))
 
     def _set_yt_status(self, text):
         self._yt_note = text
@@ -617,7 +626,7 @@ class DiscoverTab(tk.Frame):
 
     def _show_count(self):
         """The row count at the top right, followed by how the last YouTube playlist went."""
-        text = f"{len(getattr(self, '_visible', []))} shown"
+        text = t("{count} shown", count=len(getattr(self, '_visible', [])))
         self.count_label.config(text=f"{self._yt_note}    {text}" if self._yt_note else text)
 
     # --- actions -----------------------------------------------------------
@@ -649,7 +658,7 @@ class DiscoverTab(tk.Frame):
         self._site_buttons = []
         self._label_button = None
         if show_label:   # Settings > Discover > Reference > Record Label
-            self._label_button = FlatButton(parent, text="Finding label..." if self._label_busy else "Label",
+            self._label_button = FlatButton(parent, text=t("Finding label...") if self._label_busy else t("Label"),
                                             quiet=True, height=1,
                                            command=self.find_label)
             self._label_button.pack(side="left", padx=(0, 12))
@@ -694,7 +703,7 @@ class DiscoverTab(tk.Frame):
         row = self._rows[int(sel[0])]
         artist, track = (row.get("artist") or "").strip(), (row.get("track") or "").strip()
         if not artist or not track:
-            self._set_yt_status("Label needs a row with both an artist and a track.")
+            self._set_yt_status(t("Label needs a row with both an artist and a track."))
             return
         key = f"{engine.artist_key(artist)}|{engine.clean_name(track)}"
         cached = engine.cache_get("24bit7", "label", key)
@@ -702,8 +711,8 @@ class DiscoverTab(tk.Frame):
             self._open_label(artist, track, cached)
             return
         self._label_busy = True
-        self._label_button.config(text="Finding label...", state="disabled")
-        self._set_yt_status(f"Finding the label for {artist} - {track}...")
+        self._label_button.config(text=t("Finding label..."), state="disabled")
+        self._set_yt_status(t("Finding the label for {artist} - {track}...", artist=artist, track=track))
 
         def work():
             try:
@@ -716,12 +725,12 @@ class DiscoverTab(tk.Frame):
     def _label_done(self, artist, track, key, result, error):
         self._label_busy = False
         try:
-            self._label_button.config(text="Label")
+            self._label_button.config(text=t("Label"))
         except (tk.TclError, AttributeError):   # gone, or switched off in Settings meanwhile
             pass
         self._sync_site_buttons()
         if error is not None:
-            self._set_yt_status(f"Label lookup failed: {error}")
+            self._set_yt_status(t("Label lookup failed: {error}", error=error))
             return
         if result.get("label") is not None:   # a label (or self-released) is kept; "not found" is tried again next time
             engine.cache_put("24bit7", "label", key, result)
