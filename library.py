@@ -556,6 +556,29 @@ def _primary_match(artist, tagged):
                for part in (tagged or "").split(";") if part.strip())
 
 
+def suggest_artist(typed):
+    """
+    For an artist typed into Search that isn't in the library: the library artist it most likely
+    means, or None. The same words in another order ('eleven finger' for Finger Eleven) first, then
+    the one clear nearest name. Only ever offered, never used without asking.
+    """
+    want = norm(typed)
+    if not want:
+        return None
+    ensure_loaded()
+    with _lock:
+        if want in _artists:
+            return None
+        words = sorted(want.split())
+        swapped = [a for n, a in _artists.items() if sorted(n.split()) == words]
+        if len(swapped) == 1:
+            return swapped[0]
+        ranked = sorted(((score(typed, a), a) for a in _artists.values()), key=lambda x: -x[0])
+    if not ranked or ranked[0][0] < GOOD or (len(ranked) > 1 and ranked[1][0] == ranked[0][0]):
+        return None
+    return ranked[0][1]
+
+
 def artist_tracks(heard):
     """
     Every track by the closest artist: tagged as the artist (multi-artist tags

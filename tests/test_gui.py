@@ -1827,3 +1827,33 @@ def test_the_console_tabs_and_log_are_german(app, german, ui):
         assert int(shown[title].cget("width")) >= len(title), f"{title} is cut short"
     assert "Ausgewogen, 1 entfernt" in shown, "the Moderator column fits its German"
     play._set_tabs_open(False, save=False)
+
+
+# --- Did you mean ---
+
+def test_a_misspelt_search_offers_the_library_artist(app, ui):
+    """24 Oct 2026: 'eleven finger' typed into Search; a click on the offer builds from Finger Eleven."""
+    j = app.jriver
+    template = next(r for r in j.tracks if r["Genre"] == "Rock")
+    for n, title in enumerate(("Paralyzer", "One Thing", "Slow Chemical")):
+        row = dict(template, Key=str(95000 + n), Artist="Finger Eleven", Name=title, Album="Them vs. You vs. Me",
+                   **{"Album Artist (auto)": "Finger Eleven"})
+        j.tracks.append(row)
+        j.by_key[row["Key"]] = row
+    app.library.load()
+    play = ui.play
+    play.seed_nb.select(play.search_tab)
+    play.search_artist.insert(0, "eleven finger")
+    play.on_top_tracks()
+    ui.wait_idle()
+    assert 'No "eleven finger" in your library. Did you mean Finger Eleven?' in console(ui)
+    first = play.log.tag_ranges("suggest")[0]
+    play.log.see(first)
+    ui.pump(0.2)
+    x, y, w, h = play.log.bbox(first)
+    play.log.event_generate("<Motion>", x=x + 2, y=y + h // 2)   # a tag hears a click only once the mouse is over it
+    play.log.event_generate("<Button-1>", x=x + 2, y=y + h // 2)
+    ui.pump(0.2)
+    assert play.search_artist.get() == "Finger Eleven"
+    ui.wait_idle()
+    assert "Artist's Top Tracks: Finger Eleven" in console(ui) and "Did you mean" not in console(ui)

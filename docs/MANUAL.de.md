@@ -59,7 +59,7 @@ Deine Einstellungen und dein Verlauf liegen in zwei Dateien neben der App: `.env
 Jede Playlist beginnt mit einem Seed, dem Ausgangspunkt. Der Seed ist der der beiden kleinen Tabs, der gerade zu sehen ist, wenn du einen Knopf drückst.
 
 - **Läuft gerade** zeigt, was JRiver spielt. **Zone** wählt, aus welcher JRiver-Zone der Seed kommt. Ist Playing Now dieser Zone leer, nehmen die Knöpfe den zuletzt von JRiver gespielten Titel als Seed.
-- **Suche** lässt dich jeden Künstler und Titel eintippen, ob du ihn besitzt oder nicht. Ähnliche Künstler und Top-Titel des Künstlers brauchen nur den Künstler. Enter startet Ähnliche Künstler.
+- **Suche** lässt dich jeden Künstler und Titel eintippen, ob du ihn besitzt oder nicht. Ähnliche Künstler und Top-Titel des Künstlers brauchen nur den Künstler. Enter startet Ähnliche Künstler. Ist der eingetippte Künstler nicht in deiner Bibliothek, aber einer, der ihm nahekommt, etwa Finger Eleven für "eleven finger", fragt die Konsole am Ende der Playlist **Meintest du Finger Eleven?**: Ein Klick darauf erstellt die Playlist noch einmal mit diesem Künstler.
 
 **Seed** unter **Mehr Optionen** steht für Ähnliche Künstler und Ähnliche Titel im Tab Läuft gerade auf **Aktueller Titel** oder **Playing Now**. Aktueller Titel geht vom laufenden Titel aus. Playing Now geht von deiner ganzen Playing-Now-Liste aus: Ein paar Künstler (bei Ähnliche Titel: Titel verschiedener Künstler) werden zufällig gewählt, und jeder bringt der Reihe nach seinen Anteil ähnlicher mit, oben aus seiner eigenen Liste gelesen, sodass kein Künstler doppelt vorkommt. Titel, die schon in Playing Now sind, bleiben draußen, und die neue Playlist ersetzt Playing Now wie gewohnt (mit dem Review-Modus kannst du stattdessen hinzufügen). Solange es an ist, werden die Balken unter den beiden Knöpfen türkis. Mit weniger als zwei Titeln in Playing Now ist der aktuelle Titel der Seed. Top-Titel des Künstlers, KI-Playlist, Suche, Sprachbefehle, Tastenkürzel und Non-stop verwenden immer den aktuellen (oder eingetippten) Titel. Die Werte stehen unter Einstellungen > Playlist, in der Spalte Playing Now.
 
@@ -339,6 +339,10 @@ Läuft in der Ausgabe-Zone nichts, startet der erste gefundene Titel sofort, und
 ### Einreihen
 
 Neue Titel werden rund um den aktuellen eingereiht: Der Rest von Playing Now wird geleert, der aktuelle Titel spielt ohne Lücke weiter, und die neue Playlist folgt ihm. Playing Now enthält dann genau "was ich gehört habe, plus was 24bit7 gewählt hat", was sich sauber als JRiver-Playlist speichern lässt. Eine gestoppte Zone startet die Playlist sofort. Kommt der Seed aus einer Zone und geht die Playlist in eine andere, eröffnet der Seed-Titel die Playlist in der neuen Zone.
+
+### Überblenden
+
+24bit7 ändert nicht, wie JRiver von einem Titel zum nächsten wechselt, aber Überblenden lässt eine Mischung schön fließen. Setz in JRiver unter Tools > Options > Audio > Track Change **Switch tracks** auf **S-Curve** mit etwa sechs Sekunden und lass **Use gapless for sequential album tracks** angehakt. Dann blenden Mischungen von einem Song in den nächsten über, während Alben, die der Reihe nach laufen, nahtlos bleiben. **S-Curve (aggressive)** holt den nächsten Titel kräftiger herein, eher wie ein DJ. Die Einstellung gilt pro Zone, setz sie also in jeder Zone, in der du sie haben willst. Ein Sonos- oder anderer DLNA-Lautsprecher bekommt davon nichts mit, da er jeden Titel selbst abspielt.
 
 ### Drift
 

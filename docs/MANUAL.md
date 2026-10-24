@@ -55,7 +55,7 @@ Your settings and history live in two files next to the app: `.env` (settings an
 Every playlist starts from a seed. The seed is whichever of the two small tabs is showing when you press a button.
 
 - **Now Playing** shows what JRiver is playing. **Zone** picks which JRiver zone you seed from. If that zone's Playing Now is empty, the buttons seed from the last track JRiver played.
-- **Search** lets you type any artist and track, whether you own it or not. Similar Artists and Artist's Top Tracks need only the artist. Press Enter for Similar Artists.
+- **Search** lets you type any artist and track, whether you own it or not. Similar Artists and Artist's Top Tracks need only the artist. Press Enter for Similar Artists. If the artist you typed isn't in your library but one close to it is, such as Finger Eleven for "eleven finger", the console asks **Did you mean Finger Eleven?** at the end of the build: click it to build again from that artist.
 
 **Seed**, under **More Options**, is **Current Track** or **Playing Now** for Similar Artists and Similar Tracks on the Now Playing tab. Current Track starts from the track that's playing. Playing Now starts from your whole Playing Now list: a few artists (or, for Similar Tracks, tracks from different artists) are picked at random, and each in turn brings its own share of similar ones, read from the top of its own list, so no artist is used twice. Tracks already in Playing Now are left out, and the new playlist replaces Playing Now as usual (use Review Mode to add to it instead). While it's on, the bars under the two buttons turn teal. With fewer than two tracks in Playing Now, the current track seeds instead. Artist's Top Tracks, AI Playlist, Search, voice commands, shortcuts and Non-stop always use the current (or typed) track. The figures are in Settings > Playlist, in the Playing Now column.
 
@@ -333,6 +333,10 @@ With nothing playing on the output zone, the first track found starts straight a
 ### Queueing
 
 New tracks are queued around the current one: the rest of Playing Now is cleared, the current track keeps playing with no gap, and the new playlist follows it. Playing Now then holds exactly "what I was listening to, plus what 24bit7 chose", which saves cleanly as a JRiver playlist. A stopped zone starts the playlist straight away. If you seed from one zone and send to another, the seed track opens the playlist on the new zone.
+
+### Crossfade
+
+24bit7 doesn't change how JRiver moves from one track to the next, but a crossfade makes a mix flow nicely. In JRiver, under Tools > Options > Audio > Track Change, set **Switch tracks** to **S-Curve** at about six seconds, and keep **Use gapless for sequential album tracks** ticked. Mixes then fade from one song into the next, while albums played in order stay seamless. **S-Curve (aggressive)** brings the next track in harder, closer to a DJ. The setting belongs to each zone, so set it on every zone you want it in. It doesn't reach a Sonos or other DLNA speaker, which plays each track itself.
 
 ### Drift
 

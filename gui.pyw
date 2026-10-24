@@ -1593,6 +1593,8 @@ class PlayTab(tk.Frame):
         if (engine.LAST_OUTPUT == "Tidal" and engine.TIDAL_PLAYLIST_ID and not getattr(self, "_job_cancelled", False)
                 and getattr(self, "_job_origin", None) is None):
             self._append_tidal_links(engine.TIDAL_PLAYLIST_ID)
+        if getattr(self, "_suggestion", None) and not getattr(self, "_job_cancelled", False):
+            self._append_suggestion()
         try:
             buildlog.record_job(getattr(self, "_job_origin", None), self.log.get("1.0", "end-1c"))
         except Exception as e:
@@ -1632,8 +1634,7 @@ class PlayTab(tk.Frame):
             seed = self._typed_seed(need_track=engine.similar_needs_track(),
                                     why=engine.SIMILAR_NEEDS_TRACK_TEXT)
             if seed:
-                self._run_job(lambda: engine.create_similar_playlist(report=self.report, seed_info=seed),
-                              needs_playing=False, review=True)
+                self._run_typed(engine.create_similar_playlist, seed, self.on_similar)
             return
         playing_now = engine.play_seed_is_playing_now()   # the Seed setting: Current Track or Playing Now
         self._run_job(lambda: self._seeded(engine.create_similar_playlist, playing_now=playing_now),
@@ -1643,8 +1644,7 @@ class PlayTab(tk.Frame):
         if self._seed_is_search():
             seed = self._typed_seed(need_track=True)
             if seed:
-                self._run_job(lambda: engine.create_similar_tracks_playlist(report=self.report, seed_info=seed),
-                              needs_playing=False, review=True)
+                self._run_typed(engine.create_similar_tracks_playlist, seed, self.on_similar_tracks)
             return
         playing_now = engine.play_seed_is_playing_now()   # the Seed setting: Current Track or Playing Now
         self._run_job(lambda: self._seeded(engine.create_similar_tracks_playlist, playing_now=playing_now),
@@ -1654,10 +1654,57 @@ class PlayTab(tk.Frame):
         if self._seed_is_search():
             seed = self._typed_seed(need_track=False)
             if seed:
-                self._run_job(lambda: engine.play_top_n(report=self.report, seed_info=seed),
-                              needs_playing=False, review=True)
+                self._run_typed(engine.play_top_n, seed, self.on_top_tracks)
             return
         self._run_job(lambda: self._seeded(engine.play_top_n), needs_playing=False, review=True)
+
+    def _run_typed(self, build, seed, again):
+        """
+        A build from a typed seed. Afterwards, if the artist isn't in the library but one close to it
+        is ('eleven finger' for Finger Eleven), the console offers it: a click types it in and runs
+        the same build again.
+        """
+        self._suggestion = None
+
+        def target():
+            build(report=self.report, seed_info=seed)
+            try:
+                artist = library.suggest_artist(seed["Artist"])
+            except Exception:
+                artist = None
+            if artist:
+                self._suggestion = (seed["Artist"], artist, again)
+        self._run_job(target, needs_playing=False, review=True)
+
+    def _append_suggestion(self):
+        """'No "eleven finger" in your library. Did you mean Finger Eleven?', the question a link."""
+        typed, artist, again = self._suggestion
+        self._suggestion = None
+        lead = t('No "{typed}" in your library.', typed=typed)
+        ask = t("Did you mean {artist}?", artist=artist)
+        self._live.append(lead + " " + ask)
+        if not self._live_visible():
+            return
+        self.log.config(state="normal")
+        self.log.insert("end", lead + " ", ("note",))
+        self.log.tag_configure("suggest", foreground="#00ff41", underline=True)
+        self.log.tag_bind("suggest", "<Button-1>", lambda e: self._take_suggestion(artist, again))
+        self.log.tag_bind("suggest", "<Enter>", lambda e: self.log.config(cursor="hand2"))
+        self.log.tag_bind("suggest", "<Leave>", lambda e: self.log.config(cursor=""))
+        self.log.insert("end", ask, ("suggest",))
+        self.log.insert("end", "\n")
+        self.log.see("end")
+        self.log.config(state="disabled")
+
+    def _take_suggestion(self, artist, again):
+        """Types the suggested artist into Search and runs the same build again."""
+        if self.running:
+            return
+        self.log.config(cursor="")
+        self.search_artist.delete(0, "end")
+        self.search_artist.insert(0, artist)
+        self.seed_nb.select(self.search_tab)
+        again()
 
     def _seeded(self, build, **options):
         """Seeds from the Now Playing zone's track, or the last track played when its Playing Now is empty."""

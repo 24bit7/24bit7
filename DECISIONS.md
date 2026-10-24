@@ -259,3 +259,7 @@ Helmut writes to us in his second language and asked Claude to translate the man
 
 **20 Oct 2026: The German manual is its own file, with its own screenshots.**
 docs/MANUAL.de.md is a full translation rather than generated from the English, so it reads as German, not as a word swap; a release that changes the English manual changes the German one in the same commit. Its screenshots live in docs/images/de, taken by screenshots.py --lang de from the same demo data, and a shot not yet taken in German falls back to the English one so the PDF always builds. Taking the shots in German turned out to be the best check of the translation: it found English left on screens the tests hadn't reached.
+
+**24 Oct 2026: Did you mean, from the library, offered and never assumed.**
+"eleven finger" typed into Search found Last.fm's page for misfiled scrobbles, whose tracks never matched Ben's Finger Eleven. Ben's first idea was an AI suggestion with its own setting. The library is the better dictionary: it already holds every artist you own, costs nothing, works offline and can only suggest something you have. The nearest name is close to the fuzzy matching we keep out, but matching still never guesses: the console offers the name as a link, and only a click uses it. Same words in another order come first, then the one clear nearest name; a tie offers nothing.
+
