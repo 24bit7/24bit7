@@ -302,7 +302,14 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.24.0
+## What's new in 1.25.0
+
+- **Voice playlists wait for the playing song**: the song finishes, what was queued after it is cleared, and the new playlist follows. Settings > Voice Commands > New Playlists sets it back to Play now.
+- **Two new Alexa commands**: "only chill Led Zeppelin" builds an AI Playlist from one artist's tracks in your library, and "more artists like this" builds Similar Artists from what's playing. Paste the new skill files into the Alexa console to use them.
+- **No two in a row**: every playlist except Artist's Top Tracks is spread so the same artist never plays twice running, where that can be avoided.
+- **AI Playlist** has its own Most tracks per artist setting, three to start.
+
+### Earlier: 1.24.0
 
 - **24bit7 in German**: Settings > Other > Language switches the screens and console to German (Deutsch), with a German manual, 24bit7_Handbuch.pdf, beside the English one. Song, artist and album names stay as they are, and Alexa stays English. Want another language? Ask on the JRiver forum or GitHub.
 - **An empty saved playlist** now says when JRiver refused the tracks for want of a login, and how to set one up.

@@ -94,6 +94,8 @@ Die Aktionen gehen dorthin, wo **Ausgabe** gerade hinzeigt, wenn du sie drückst
 | **Top-Titel des Künstlers** | Die beliebtesten Titel des Künstlers, die du besitzt, gemischt oder nach Beliebtheit. Aus der Suche braucht es nur den Künstler. |
 | **KI-Playlist** | Öffnet das Fenster KI-Playlist mit zwei Modi. **Erstellen**: Beschreib eine Stimmung oder Szene oder klick auf eine Idee (Mehr Titel wie der laufende Song, dann die Vorschläge der KI), und die KI wählt eine Playlist aus deiner Bibliothek. **Steer**: Lenk die laufende Musik in eine Richtung. Die KI muss unter Einstellungen > Schlüssel eingerichtet sein. Siehe unten. |
 
+Jede Playlist außer Top-Titel des Künstlers wird so verteilt, dass derselbe Künstler nie zweimal hintereinander läuft, und die Titel werden dabei so wenig wie möglich verschoben. Bleibt gegen Ende nur ein Künstler übrig, laufen seine Titel direkt nacheinander.
+
 ### Das Fenster KI-Playlist
 
 ![KI-Playlist, Erstellen](images/de/ai_playlist_create.png)
@@ -231,7 +233,7 @@ Wie jede Abspieloption ihre Playlist erstellt, mit einem Tab für jede Option.
 
 ![Einstellungen, Playlist](images/de/settings_playlist_similar_artists.png)
 
-- **Playlist**: Ähnliche Künstler stellt **Titel insgesamt begrenzen auf** ein, wie viele Künstler, aus wie vielen Top-Titeln jedes Künstlers gewählt wird und wie viele pro Künstler genommen werden. Ein ähnlicher Künstler zählt erst, wenn er einen Titel aus deiner Bibliothek liefert; einer, der das nicht tut, wird übersprungen und der nächste gelesen. Nimm den Haken bei der Grenze weg, um jeden gefundenen Titel zu behalten; sind dazu die letzten beiden Werte gleich (etwa 5 von 5), gibt es gar keine Zufallsauswahl. Ähnliche Titel stellt ein, wie viele Titel, wie viele ein einzelner Künstler höchstens bekommt und, für jede Spalte, die Reihenfolge und **Abwechslung**. Top-Titel des Künstlers stellt gemischt oder nach Beliebtheit ein.
+- **Playlist**: Ähnliche Künstler stellt **Titel insgesamt begrenzen auf** ein, wie viele Künstler, aus wie vielen Top-Titeln jedes Künstlers gewählt wird und wie viele pro Künstler genommen werden. Ein ähnlicher Künstler zählt erst, wenn er einen Titel aus deiner Bibliothek liefert; einer, der das nicht tut, wird übersprungen und der nächste gelesen. Nimm den Haken bei der Grenze weg, um jeden gefundenen Titel zu behalten; sind dazu die letzten beiden Werte gleich (etwa 5 von 5), gibt es gar keine Zufallsauswahl. Ähnliche Titel stellt ein, wie viele Titel, wie viele ein einzelner Künstler höchstens bekommt und, für jede Spalte, die Reihenfolge und **Abwechslung**. Top-Titel des Künstlers stellt gemischt oder nach Beliebtheit ein. KI-Playlist stellt ein, wie viele Titel und wie viele ein einzelner Künstler höchstens bekommt, damit eine Stimmung, die die KI mit einer Band verbindet, nicht nur aus dieser Band besteht.
   Unter Windows (Haupt) haben Ähnliche Künstler und Ähnliche Titel vier Spalten: **Seed** (Aktueller Titel und Playing Now) und **Review-Modus** (Aktueller Titel und Playing Now). Playing Now fügt **Zufällige Künstler aus Playing Now** oder **Zufällige Titel aus Playing Now** hinzu, und seine Anzahl Künstler oder Titel gilt pro zufällig gewähltem Künstler oder Titel; die Voreinstellungen (5 Künstler mit je 4 ähnlichen oder 5 Titel mit je 6 ähnlichen) ergeben ungefähr so lange Playlists wie Aktueller Titel. Die Spalten des Review-Modus folgen ihrem Seed, solange **Wie Aktueller Titel** oder **Wie Playing Now** angehakt ist; nimm einen Haken weg, um dem Review-Modus eine eigene kurze Auswahl zu geben. Top-Titel des Künstlers hat Aktueller Titel und Review-Modus. Alles andere im Abschnitt gilt für beide, und Sprachbefehle gehen nie in Review oder verwenden Playing Now, Geräte haben daher nur die Spalte Aktueller Titel.
 - **Titel auslassen, die gespielt wurden in den letzten ... Tagen** lässt alles weg, was JRiver kürzlich gespielt hat, damit ein Lieblingstitel nicht am selben Abend wiederkommt. Der Seed-Titel wird nie weggelassen. Anfangs aus.
 - **Drift** (Aus, Keep It Tight oder Weit) sucht erneut, wenn deine Bibliothek die angestrebte Länge nicht erreicht. Ähnliche Künstler und Ähnliche Titel haben außerdem **Moderator für Drift-Titel**. Siehe [Drift](#drift).
@@ -282,7 +284,7 @@ Schlüssel verlassen deinen PC nie, außer zu dem Dienst, zu dem sie gehören, u
 
 ![Einstellungen, Sprachbefehle](images/de/settings_voice_commands.png)
 
-Schaltet Sprache ein, enthält den Schlüssel, den der Alexa-Skill schickt, und listet jedes Alexa-Gerät mit der Zone, in der es spielt. **Umschalten erlauben** wählt, in welche Zonen "switch" die Musik bringen kann; zwei Geräte in derselben Zone teilen sich einen Haken, und eine Zone, in der kein Gerät spielt, wird nicht angeboten. **Zeitausgleich beim Umschalten** stimmt das Umschalten auf einen Sonos oder anderen DLNA-Lautsprecher fein ab: Wiederholt er den letzten Moment, den du im anderen Raum gehört hast, stell es Richtung Minus; springt er ein wenig, Richtung Plus. **Test** schickt einen gespielten Befehl, als hätte ein Gerät ihn gehört. Siehe [Sprachbefehle](#sprachbefehle) und [Den Alexa-Skill einrichten](#den-alexa-skill-einrichten).
+Schaltet Sprache ein, enthält den Schlüssel, den der Alexa-Skill schickt, legt **Neue Playlists** fest und listet jedes Alexa-Gerät mit der Zone, in der es spielt. **Umschalten erlauben** wählt, in welche Zonen "switch" die Musik bringen kann; zwei Geräte in derselben Zone teilen sich einen Haken, und eine Zone, in der kein Gerät spielt, wird nicht angeboten. **Zeitausgleich beim Umschalten** stimmt das Umschalten auf einen Sonos oder anderen DLNA-Lautsprecher fein ab: Wiederholt er den letzten Moment, den du im anderen Raum gehört hast, stell es Richtung Minus; springt er ein wenig, Richtung Plus. **Neue Playlists** legt fest, was eine per Sprache angeforderte Playlist tut, wenn in der Zone schon etwas läuft: **Nach diesem Titel** (Standard) lässt den Song zu Ende spielen, entfernt, was danach eingereiht war, und spielt die neue Playlist als Nächstes; **Sofort abspielen** übernimmt sofort. Eine gestoppte oder pausierte Zone startet in beiden Fällen sofort, und Alben, Songs, deine JRiver-Playlists und Shuffles spielen immer sofort. **Test** schickt einen gespielten Befehl, als hätte ein Gerät ihn gehört. Siehe [Sprachbefehle](#sprachbefehle) und [Den Alexa-Skill einrichten](#den-alexa-skill-einrichten).
 
 ### JRiver-Playlists
 
@@ -436,6 +438,7 @@ Das läuft über einen eigenen Alexa-Skill, den du einmal einrichtest. Das geht 
 | "music like *artist*" | Ähnliche Künstler, ausgehend vom beliebtesten Titel des Künstlers |
 | "tracks like *song*" oder "tracks like *song* by *artist*" | Ähnliche Titel |
 | "genre *anything*", etwa "genre nu metal with grunge" | KI-Playlist (KI muss eingerichtet sein) |
+| "only *Künstler und Stimmung*", etwa "only chill Led Zeppelin" oder "only Queen anthems" | Eine KI-Playlist nur dieses Künstlers: Die KI wählt aus seinen Titeln in deiner Bibliothek, also kommt niemand anderes dazu. Der Künstler muss in deiner Bibliothek sein. Ohne Stimmung ("only Led Zeppelin") seine bekanntesten Songs (KI muss eingerichtet sein) |
 | "album *name*" | Spielt das Album sofort, in Titelreihenfolge |
 | "song *title*" | Spielt den Song sofort und hört dann auf |
 | "playlist *name*" | Spielt sofort eine deiner JRiver-Playlists oder Smartlists, mit ihren Einstellungen aus Einstellungen > JRiver-Playlists |
@@ -443,6 +446,7 @@ Das läuft über einen eigenen Alexa-Skill, den du einmal einrichtest. Das geht 
 | "skip", "next" oder "next song" | Der nächste Titel in der Zone dieses Geräts |
 | "who is this" oder "what's playing" | Alexa nennt Titel, Künstler und Album, die in der Zone dieses Geräts laufen |
 | "more like this" oder "more of this" | Ähnliche Titel zum Laufenden. Der aktuelle Titel läuft weiter, und die neue Playlist ersetzt, was danach eingereiht war |
+| "more artists like this" oder "music like this" | Ähnliche Künstler zum Laufenden, ebenso nach dem aktuellen Titel |
 | "switch" oder "switch to *zone*" | Bringt das Laufende in eine andere Zone, beim selben Song und an derselben Stelle; die verlassene Zone stoppt |
 | "stop the music", "pause the music" oder "resume the music" | Stoppt, pausiert oder setzt die Zone dieses Geräts fort |
 | "keep it going", "non stop" oder "go continuous" | Schaltet Non-stop einmalig für das ein, was in der Zone dieses Geräts läuft |
@@ -454,7 +458,7 @@ Haben mehrere Alben oder Songs denselben Titel, fragt Alexa nach dem Künstler, 
 
 Kein Befehl beginnt mit "play". Alexa gibt alles, was mit "play" beginnt, gern an einen Musikdienst statt an den Skill.
 
-Skip, who is this und more like this brauchen immer den Namen des Skills: "Alexa, ask needle drop to skip". Ein einfaches "Alexa, skip" geht an den Lautsprecher selbst, der keine eigene Warteschlange hat, während er eine JRiver-Zone spielt. Eine Alexa-Routine kann dir einen kürzeren Satz geben: Lass "next song" die eigene Aktion "ask needle drop to skip" ausführen.
+Skip, who is this und die "more like this"-Befehle brauchen immer den Namen des Skills: "Alexa, ask needle drop to skip". Ein einfaches "Alexa, skip" geht an den Lautsprecher selbst, der keine eigene Warteschlange hat, während er eine JRiver-Zone spielt. Eine Alexa-Routine kann dir einen kürzeren Satz geben: Lass "next song" die eigene Aktion "ask needle drop to skip" ausführen.
 
 Den Namen des Skills wählst du selbst. Dieser heißt "needle drop", weil Alexa die erste Wahl ständig falsch verstanden hat.
 
@@ -466,7 +470,7 @@ Den Namen des Skills wählst du selbst. Dieser heißt "needle drop", weil Alexa 
 - **Ein kurzer Ton**, wenn ein Befehl angenommen ist. Die Musik folgt fast sofort.
 - **"Please wait, request pending."**, wenn noch eine andere Playlist erstellt wird. Deine kommt dran, sobald sie fertig ist.
 - **"That's *track* by *artist*, from *album*."** nach "who is this".
-- **"Nothing's playing on *zone*."** nach skip, who is this oder more like this, wenn die Zone gestoppt ist, und **"Nothing to skip to."** beim letzten Titel.
+- **"Nothing's playing on *zone*."** nach skip, who is this oder einem "more like this"-Befehl, wenn die Zone gestoppt ist, und **"Nothing to skip to."** beim letzten Titel.
 - **Eine gesprochene Erklärung**, wenn etwas nicht stimmt, etwa ein Gerät ohne Zone. [Probleme mit Sprache](#probleme-mit-sprache) nennt jede einzelne.
 
 Alben, Songs, Playlists und gemischte Wiedergabe müssen nicht erstellt werden und ersetzen das Laufende daher sofort. Playlists, die erstellt werden, nutzen den [Schnellstart](#schnellstart) und reihen sich hinter das Laufende ein.
@@ -613,6 +617,7 @@ Jeder Befehl, aus dem nichts wird, erscheint auch in der Konsole, unter dem Tab 
 | "Please wait, request pending." | Eine andere Playlist wird noch erstellt. | Nichts: Deine kommt als Nächstes. |
 | Der Skill öffnet sich gar nicht | Alexa hat den Aufrufnamen nicht erkannt. | Schau im Sprachverlauf der Alexa-App nach, was sie gehört hat, und wähl einen deutlicheren Namen. |
 | Die Musik kommt stattdessen von Amazon Music oder Spotify | Der Befehl begann mit "play", oder der Name des Skills wurde überhört. | Lass "play" weg. Nimm "ask needle drop for ...", wenn der Skill immer wieder überhört wird. |
+| Stille nach "Alexa, stop" und einer neuen Anfrage, auf einem Sonos oder anderen DLNA-Lautsprecher | Mit **Neue Playlists** auf Nach diesem Titel wartet die neue Playlist, bis der laufende Titel zu Ende ist. Ein einfaches "Alexa, stop" pausiert den Lautsprecher selbst, aber JRiver kann den Titel noch für laufend halten, also endet er nie. | Sag stattdessen "ask needle drop to stop the music", das stoppt die Zone in JRiver, oder stell **Neue Playlists** unter Einstellungen > Sprachbefehle auf Sofort abspielen. |
 | Alexa versteht die Befehle nicht | Das Gerät ist auf Deutsch eingestellt. | Stell das Gerät in der Alexa-App auf Englisch; der Skill ist englisch. |
 
 Um den Weg vom PC selbst aus zu prüfen, schickt das hier dieselbe Anfrage wie der Skill (mit deiner eigenen Adresse und deinem Schlüssel):

@@ -579,6 +579,42 @@ def suggest_artist(typed):
     return ranked[0][1]
 
 
+FILLER = {"songs", "song", "tracks", "track", "music", "by", "the", "of", "from", "some", "stuff"}
+
+
+def artist_in_text(text):
+    """
+    The library artist named somewhere in free text, for "only chill Led Zeppelin": (artist as
+    tagged, the other words), or (None, "") when no artist you own is named. The words must
+    appear whole and in order. The longest name wins ('Guns N Roses' over 'Roses'); between
+    names of the same length, the artist with more tracks. Names under three letters are
+    ignored, as they turn up inside ordinary words. The other words come back without filler
+    ('songs', 'by'), so an empty string means no mood was given.
+    """
+    words = norm(text).split()
+    if not words:
+        return None, ""
+    ensure_loaded()
+    padded = " " + " ".join(words) + " "
+    with _lock:
+        found = [(n, a) for n, a in _artists.items() if len(n) >= 3 and f" {n} " in padded]
+        if not found:
+            return None, ""
+        size = {}
+        if len(found) > 1:
+            wanted = {n for n, _ in found}
+            for row in _tracks:
+                for a in (row.get("Artist") or "").split(";"):
+                    n = norm(a)
+                    if n in wanted:
+                        size[n] = size.get(n, 0) + 1
+    n, artist = max(found, key=lambda f: (len(f[0].split()), size.get(f[0], 0)))
+    name = n.split()
+    at = next(i for i in range(len(words)) if words[i:i + len(name)] == name)
+    rest = [w for w in words[:at] + words[at + len(name):] if w not in FILLER]
+    return artist, " ".join(rest)
+
+
 def artist_tracks(heard):
     """
     Every track by the closest artist: tagged as the artist (multi-artist tags

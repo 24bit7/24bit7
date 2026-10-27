@@ -5,9 +5,9 @@ A small listener for the Alexa skill (or anything else that knows the key).
 It only listens on this PC (127.0.0.1); a tunnel is what connects it to Amazon.
 
   POST /command   header X-24bit7-Key: <VOICE_KEY>
-                  body {"intent": "songs_by" | "music_like" | "genre" |
+                  body {"intent": "songs_by" | "music_like" | "genre" | "only" |
                                   "tracks_like" | "album" | "song" | "playlist" | "shuffle" |
-                                  "skip" | "who_is_this" | "more_like",
+                                  "skip" | "who_is_this" | "more_like" | "more_artists",
                         "value": "Agnes Obel", "device": "<Alexa device ID>",
                         "zone": "Sonos"}        # zone is optional and beats the device's zone
                   reply {"speech": "Music like Agnes Obel, coming up on Sonos."}
@@ -55,12 +55,14 @@ def _takes_over(zone):
     with _take_lock:
         return _running[0] == zone and not any(n > 0 for z, n in _open.items() if z != zone)
 
-INTENTS = ("songs_by", "music_like", "genre", "tracks_like", "album", "song", "playlist", "shuffle",
-           "skip", "who_is_this", "more_like", "switch_zones", "keep_going", "stop", "pause", "resume")
+INTENTS = ("songs_by", "music_like", "genre", "only", "tracks_like", "album", "song", "playlist", "shuffle",
+           "skip", "who_is_this", "more_like", "more_artists", "switch_zones", "keep_going", "stop", "pause", "resume")
 COMING = ()   # intents in the skill whose 24bit7 side isn't built yet
-ZONE_INTENTS = ("skip", "who_is_this", "more_like", "stop", "pause", "resume",
+ZONE_INTENTS = ("skip", "who_is_this", "more_like", "more_artists", "stop", "pause", "resume",
                 "keep_going")   # act on what the zone is playing
-THIS_WORDS = ("this", "this one", "this song", "this track", "it")   # "tracks like this" = more like this
+THIS_WORDS = ("this", "this one", "this song", "this track", "it")   # "tracks like this" = more like this,
+                                                                     # "music like this" = more artists like this
+MORE = ("more_like", "more_artists")   # seeded from the zone's track, and always queued after it
 INSTANT = ("album", "song", "playlist", "shuffle")   # played straight away, nothing to build
 SHUFFLE_CAP = 400                            # most tracks a shuffle sends to JRiver
 TEST_DEVICE = "24bit7-settings-test"
@@ -222,9 +224,10 @@ def _job(intent, value, zone, profile=None, device=None):
             engine.refresh_settings_if_changed()
             engine.OUTPUT_OVERRIDE = zone
             engine.use_profile(profile)
-            # More like this keeps the current track playing and replaces what's queued after it,
-            # so it uses the Play tab's rule (queue after a busy zone) rather than taking the zone over
-            engine.VOICE_TAKEOVER = intent != "more_like"
+            # More like this and more artists like this keep the current track playing and replace what's
+            # queued after it, so they use the Play tab's rule (queue after a busy zone), not a takeover
+            engine.VOICE_TAKEOVER = intent not in MORE
+            engine.VOICE_WAIT = engine.VOICE_NEW_PLAYLISTS == "after"   # Settings > Voice Commands > New Playlists
             engine.CANCEL_CHECK = superseded
             engine.FILTER_DEVICE = device   # Settings > Filters ticked for this device apply
             _build(intent, value, guarded)
@@ -236,6 +239,7 @@ def _job(intent, value, zone, profile=None, device=None):
             engine.OUTPUT_OVERRIDE = None
             engine.use_profile(None)
             engine.VOICE_TAKEOVER = False
+            engine.VOICE_WAIT = False
             engine.CANCEL_CHECK = None
             engine.FILTER_DEVICE = None
             with _take_lock:
@@ -261,6 +265,10 @@ def _build(intent, value, report):
                                               seed_info=engine.typed_seed_info(artist, title))
     elif intent == "more_like":   # value: the zone's track when the command was heard
         engine.create_similar_tracks_playlist(report=report, seed_info=value)
+    elif intent == "more_artists":
+        engine.create_similar_playlist(report=report, seed_info=value)
+    elif intent == "only":   # value: the words as heard, artist and mood together
+        engine.create_only_playlist(value, report=report)
     else:
         engine.create_vibe_playlist(value, report=report)
 
@@ -456,20 +464,28 @@ def _zone_command(intent, device, body):
         print(t("[Voice] {name}: who is this on {zone}: {speech}", name=name, zone=zone, speech=speech))
         return "said", speech, {}
 
-    # more like this: Similar Tracks seeded from the zone's track, queued after it
+    # more like this (Similar Tracks) and more artists like this (Similar Artists): seeded from the
+    # zone's track, queued after it
     if _submit is None:
         return "problem", "24bit7 isn't ready yet. Try again in a moment.", {}
     seed = dict(info)
     seed["ZoneID"] = zid
-    shown = t("{title} by {artist}", title=title, artist=artist) if artist else title
     profile = device_profile(device or "unknown device")
-    _submit(_job("more_like", seed, zone, profile, device or "unknown device"),
-            t("Voice, {name}: more like {shown}, to {zone}{own}", name=name, shown=shown, zone=zone,
-              own=t(", with its own settings") if profile else ""),
+    own = t(", with its own settings") if profile else ""
+    if intent == "more_artists":
+        shown = artist or title
+        heading = t("Voice, {name}: more artists like {shown}, to {zone}{own}", name=name, shown=shown, zone=zone,
+                    own=own)
+        speech = f"More artists like {shown}, coming up on {zone}."
+    else:
+        shown = t("{title} by {artist}", title=title, artist=artist) if artist else title
+        heading = t("Voice, {name}: more like {shown}, to {zone}{own}", name=name, shown=shown, zone=zone, own=own)
+        speech = f"More like {f'{title} by {artist}' if artist else title}, coming up on {zone}."
+    _submit(_job(intent, seed, zone, profile, device or "unknown device"), heading,
             {"from": "voice", "device": device or "unknown device"})
     if _is_busy() and not _takes_over(zone):
         return "pending", "Please wait, request pending.", {}
-    return "started", f"More like {shown}, coming up on {zone}.", {}
+    return "started", speech, {}
 
 
 # --- switch, stop, pause, resume ------------------------------------------------
@@ -817,7 +833,7 @@ def handle_command(body, busy=False):
     if intent == "song" and value.lower().startswith("by "):   # Alexa heard "songs by" as "song by"
         intent, value = "songs_by", value[3:].strip()
     if intent in ("tracks_like", "music_like") and value.lower() in THIS_WORDS:   # "songs like this"
-        intent, value = "more_like", ""
+        intent, value = ("more_artists" if intent == "music_like" else "more_like"), ""
     if intent == "switch_zones":
         try:
             return _switch(device, value, body)
@@ -833,7 +849,7 @@ def handle_command(body, busy=False):
             print(t("[Voice] {intent} failed: {e}", intent=intent, e=e))
             return "problem", "I couldn't reach JRiver. Is it running on the media PC?", {}
     if not value:
-        missing = {"genre": "the genre", "album": "the album", "song": "the song", "tracks_like": "the song",
+        missing = {"genre": "the genre", "only": "the artist", "album": "the album", "song": "the song", "tracks_like": "the song",
                    "playlist": "the playlist"}.get(intent, "the artist")
         return "problem", f"I didn't catch {missing}.", {}
 
@@ -849,8 +865,15 @@ def handle_command(body, busy=False):
         except Exception as e:
             print(t("[Voice] {intent} '{value}' failed: {e}", intent=intent, value=value, e=e))
             return "problem", "I couldn't reach the library in JRiver. Is JRiver running on the media PC?", {}
-    if intent == "genre" and engine.vibe_blocker():
-        return "problem", "Genre playlists need the AI set up in 24bit7.", {}
+    if intent in ("genre", "only") and engine.vibe_blocker():
+        return "problem", ("Genre" if intent == "genre" else "Only") + " playlists need the AI set up in 24bit7.", {}
+    if intent == "only":   # the artist must be one you own, found before Alexa says it's coming
+        try:
+            if not library.artist_in_text(value)[0]:
+                return "problem", f"I couldn't find an artist you own in {value}.", {}
+        except Exception as e:
+            print(t("[Voice] only '{value}' failed: {e}", value=value, e=e))
+            return "problem", "I couldn't reach the library in JRiver. Is JRiver running on the media PC?", {}
     if _submit is None:
         return "problem", "24bit7 isn't ready yet. Try again in a moment.", {}
     if intent == "tracks_like":
@@ -869,10 +892,11 @@ def handle_command(body, busy=False):
 
     shown = f"{value[1]} by {library.spoken(value[0])}" if intent == "tracks_like" else value
     words = {"songs_by": f"Songs by {shown}", "music_like": f"Music like {shown}",
-             "genre": f"A {shown} playlist", "tracks_like": f"Tracks like {shown}"}[intent]
+             "genre": f"A {shown} playlist", "only": f"Only {shown}", "tracks_like": f"Tracks like {shown}"}[intent]
     heading = {"songs_by": N_("Voice, {name}: songs by {shown}{heard}, to {zone}{own}"),
                "music_like": N_("Voice, {name}: music like {shown}{heard}, to {zone}{own}"),
                "genre": N_("Voice, {name}: genre {shown}{heard}, to {zone}{own}"),
+               "only": N_("Voice, {name}: only {shown}{heard}, to {zone}{own}"),
                "tracks_like": N_("Voice, {name}: tracks like {shown}{heard}, to {zone}{own}")}[intent]
     profile = device_profile(device or "unknown device")
     if intent == "tracks_like":   # the console's version; the spoken reply keeps its English
@@ -927,9 +951,10 @@ class _Handler(BaseHTTPRequestHandler):
         self._reply(200, {"status": status, "speech": speech, **extra})
 
 
-SAID = {"songs_by": "songs by", "music_like": "music like", "tracks_like": "tracks like", "genre": "genre",
+SAID = {"songs_by": "songs by", "music_like": "music like", "tracks_like": "tracks like", "genre": "genre", "only": "only",
         "album": "album", "song": "song", "playlist": "playlist", "shuffle": "shuffle songs by", "skip": "skip",
-        "who_is_this": "who is this", "more_like": "more like this", "switch_zones": "switch zones",
+        "who_is_this": "who is this", "more_like": "more like this",
+        "more_artists": "more artists like this", "switch_zones": "switch zones",
         "keep_going": "keep it going", "stop": "stop the music", "pause": "pause the music",
         "resume": "resume the music"}
 
@@ -976,6 +1001,18 @@ def status():
     return _status
 
 
+def status_shown(status=None):
+    """The listener's status as Settings shows it, in the chosen language. status() stays English,
+    as code reads it ("Listening...")."""
+    status = status or _status
+    port = engine.VOICE_PORT
+    if status.startswith("Listening"):
+        return t("Listening on 127.0.0.1:{port}", port=port)
+    if status.endswith("already in use"):
+        return t("Off: port {port} is already in use", port=port)
+    return t(status)   # "Off", "Off: no key yet"
+
+
 def stop():
     global _server, _thread, _status
     if _server is not None:
@@ -992,7 +1029,7 @@ def restart():
     if not engine.VOICE_ENABLED:
         return _status
     if not engine.VOICE_KEY:
-        _status = "Off: no key yet"
+        _status = N_("Off: no key yet")
         return _status
     try:
         _server = ThreadingHTTPServer(("127.0.0.1", engine.VOICE_PORT), _Handler)

@@ -29,9 +29,10 @@ KINDS = {"similar": N_("Similar Artists"), "youtube_queue": N_("Similar Artists"
 HEADINGS = (N_("Similar Artists"), N_("Similar Tracks"), N_("Artist's Top Tracks"), N_("AI Playlist"), N_("Show Credits"),
             N_("Blend"))
 INSTANT = {"songs_by": N_("Artist's Top Tracks"), "music_like": N_("Similar Artists"), "tracks_like": N_("Similar Tracks"),
-           "genre": N_("AI Playlist"), "album": N_("Album"), "song": N_("Song"), "playlist": N_("Playlist"),
+           "genre": N_("AI Playlist"), "only": N_("Only"), "album": N_("Album"), "song": N_("Song"), "playlist": N_("Playlist"),
            "shuffle": N_("Shuffle Songs by Artist"), "skip": N_("Skip"), "who_is_this": N_("Who Is This"),
-           "more_like": N_("More Like This"), "switch_zones": N_("Switch"), "stop": N_("Stop"), "pause": N_("Pause"),
+           "more_like": N_("More Like This"),
+           "more_artists": N_("More Artists Like This"), "switch_zones": N_("Switch"), "stop": N_("Stop"), "pause": N_("Pause"),
            "resume": N_("Resume"), "keep_going": N_("Keep It Going")}
 _TIME = re.compile(r"^\d\d:\d\d  ")
 

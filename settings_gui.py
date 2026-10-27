@@ -51,12 +51,16 @@ ABOUT_INTRO = (N_("Builds playlists from your own JRiver library around whatever
                "Last.fm, ListenBrainz, Deezer, Tidal and YouTube Music. It runs without AI; the AI "
                "features are optional and need your own key for Anthropic, OpenAI or Google Gemini, "
                "or a local model through Ollama."))
+# Settings > Voice Commands > New Playlists: (saved value, label shown)
+VOICE_NEW_OPTIONS = [("after", N_("After this track")), ("now", N_("Play now"))]
+
 # The voice commands, as in the manual's Voice Commands chapter
 VOICE_COMMAND_LIST = [
     ("songs by <artist>", N_("Artist's Top Tracks")),
     ("music like <artist>", N_("Similar Artists, seeded from the artist's most popular track")),
     ("tracks like <song>  (by <artist>)", N_("Similar Tracks")),
     ("genre <anything>", N_("AI Playlist, e.g. \"genre nu metal with grunge\" (needs the AI set up)")),
+    ("only <artist> <mood>", N_("AI Playlist of one artist you own, e.g. \"only chill Led Zeppelin\" (needs the AI set up)")),
     ("album <name>", N_("Plays the album now, in track order")),
     ("song <title>  (by <artist>)", N_("Plays the song now, then stops")),
     ("playlist <name>", N_("Plays one of your JRiver playlists or smartlists now")),
@@ -64,6 +68,7 @@ VOICE_COMMAND_LIST = [
     ("skip / next / next song", N_("The next track in that device's zone")),
     ("who is this / what's playing", N_("Alexa says the track, artist and album")),
     ("more like this / more of this", N_("Similar Tracks seeded from what's playing")),
+    ("more artists like this", N_("Similar Artists seeded from what's playing")),
     ("switch / switch to <zone>", N_("Moves what's playing to another zone (Enable Switch To)")),
     ("stop / pause / resume the music", N_("On that device's zone")),
     ("keep it going / non stop / go continuous", N_("Non-stop, once, for whatever is playing")),
@@ -536,7 +541,7 @@ class ProfilePage:
 PLAYLIST_TEXT_KEYS = ["SIMILAR_ARTIST_TRACK_COUNT", "SIMILAR_ARTIST_LIMIT", "TRACKS_PER_ARTIST_POOL",
                       "TRACKS_PER_ARTIST_PICK", "SIMILAR_TRACK_COUNT", "SIMILAR_TRACK_PER_ARTIST",
                       "SIMILAR_TRACK_ORDER", "SIMILAR_TRACK_VARIETY", "TOP_TRACKS_COUNT", "TOP_TRACKS_ORDER",
-                      "VIBE_TRACK_COUNT",
+                      "VIBE_TRACK_COUNT", "VIBE_PER_ARTIST",
                       "SKIP_PLAYED_ARTISTS_DAYS", "SKIP_PLAYED_TRACKS_DAYS",
                       "SKIP_PLAYED_TOP_DAYS", "SKIP_PLAYED_VIBE_DAYS"]
 
@@ -2995,6 +3000,9 @@ class SettingsTab(tk.Frame):
         # --- Vibe Playlist ---
         begin("vibe", t("Playlist"))
         spin(t("Number of tracks"), "VIBE_TRACK_COUNT", "20", 5, 100, t(TARGET_HELP))
+        spin(t("Most tracks per artist"), "VIBE_PER_ARTIST", "3", 1, 20,
+             t("The AI often suggests several songs by one artist. Once an artist has this many, the rest "
+               "of theirs are left out and the other suggestions fill the playlist. Drift keeps to it too."))
         recent("vibe")
         drift("vibe")
         deep_cuts("vibe")
@@ -3868,13 +3876,13 @@ class SettingsTab(tk.Frame):
             row=1, column=0, columnspan=2, sticky="w", pady=(0, 6))
         for r, (say, get) in enumerate(VOICE_COMMAND_LIST, start=2):
             tk.Label(box, text=say, font=LABEL_FONT, anchor="w").grid(row=r, column=0, sticky="w", pady=1)
-            tk.Label(box, text=get, anchor="w", justify="left", wraplength=420).grid(
+            tk.Label(box, text=t(get), anchor="w", justify="left", wraplength=420).grid(
                 row=r, column=1, sticky="w", padx=(16, 0), pady=1)
         r = len(VOICE_COMMAND_LIST) + 2
         tk.Label(box, text=t("No command starts with \"play\": Alexa hands those to a music service instead."),
                  fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=r, column=0, columnspan=2, sticky="w", pady=(6, 2))
         self._about_link(box, t("How Voice Commands work"), f"{REPO_URL}/blob/{ref}/docs/MANUAL.md#voice-commands",
-                         r + 1, "Every command, what you hear back, and settings per device.")
+                         r + 1, t("Every command, what you hear back, and settings per device."))
 
         # --- Credits ---
         box = section(tab, t("Credits"))
@@ -3887,7 +3895,7 @@ class SettingsTab(tk.Frame):
         box = section(tab, t("Thanks"))
         for r, (name, why) in enumerate(THANKS):
             tk.Label(box, text=name, font=LABEL_FONT, anchor="w").grid(row=r, column=0, sticky="nw", pady=1)
-            tk.Label(box, text=why, anchor="w", justify="left", wraplength=420).grid(
+            tk.Label(box, text=t(why), anchor="w", justify="left", wraplength=420).grid(
                 row=r, column=1, sticky="w", padx=(16, 0), pady=1)
 
         # --- Licence ---
@@ -4141,7 +4149,7 @@ class SettingsTab(tk.Frame):
         ttk.Checkbutton(box, text=t("Voice Commands (listen for commands from the Alexa skill)"),
                         variable=self.voice_on, command=self._voice_toggled).grid(
             row=0, column=0, columnspan=5, sticky="w")
-        self.voice_status = tk.Label(box, text=voice.status(), fg=PALETTE["help_fg"], font=HELP_FONT)
+        self.voice_status = tk.Label(box, text=voice.status_shown(), fg=PALETTE["help_fg"], font=HELP_FONT)
         self.voice_status.grid(row=1, column=0, columnspan=5, sticky="w")
 
         tk.Label(box, text=t("Key"), anchor="w").grid(row=2, column=0, sticky="w", pady=(12, 2))
@@ -4156,11 +4164,26 @@ class SettingsTab(tk.Frame):
                        command=lambda: key_entry.config(show="" if show_key.get() else "\u2022")).pack(
             side="left", padx=(6, 0))
         tk.Button(box, text=t("Copy"), width=8, command=self._voice_copy_key).grid(row=2, column=2, sticky="w", pady=(12, 2))
-        tk.Button(box, text=t("New key"), width=8, command=self._voice_new_key).grid(
+        tk.Button(box, text=t("New key"), width=max(8, len(t("New key")) + 2), command=self._voice_new_key).grid(
             row=2, column=3, sticky="w", padx=(8, 0), pady=(12, 2))
         help_mark(box, t("The Alexa skill sends this key with every command; anything without it is refused. "
                        "24bit7 only listens on this PC. The tunnel set up for the skill connects it to Amazon.")
                   ).grid(row=2, column=4, sticky="w", padx=(8, 0), pady=(12, 2))
+
+        new_title = tk.Label(box, text=t("New Playlists"), anchor="w")
+        new_title.grid(row=3, column=0, sticky="w", pady=(8, 2))
+        self.voice_new_var = tk.StringVar(value=option_label(VOICE_NEW_OPTIONS, engine.VOICE_NEW_PLAYLISTS))
+        new_cb = TCombobox(box, textvariable=self.voice_new_var, values=[l for _, l in VOICE_NEW_OPTIONS],
+                           state="readonly", width=16)
+        new_cb.grid(row=3, column=1, sticky="w", padx=(12, 8), pady=(8, 2))
+        new_cb.bind("<<ComboboxSelected>>", lambda e: write_env(
+            {"VOICE_NEW_PLAYLISTS": option_code(VOICE_NEW_OPTIONS, self.voice_new_var.get())}))
+        help_mark(box, t("After this track: the song playing finishes, what was queued after it is cleared, and "
+                         "the new playlist follows. A stopped or paused zone starts straight away.\n"
+                         "Play now: the new playlist takes over at once.\n"
+                         "For playlists you ask for by voice or through the listener. Albums, songs, your JRiver "
+                         "playlists and shuffles always play at once, and \"more like this\" always waits."),
+                  on=new_title)
 
         # --- Devices ---
         box = section(tab, t("Devices"),
@@ -4211,7 +4234,7 @@ class SettingsTab(tk.Frame):
             link.bind("<Button-1>", lambda e, u=url: webbrowser.open_new_tab(u))
             tk.Label(box, text=t(blurb), fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=r, column=1, sticky="w", padx=(12, 0))
 
-        tab.bind("<<Shown>>", lambda e: (self.voice_status.config(text=voice.status()), self._fill_voice_devices()))
+        tab.bind("<<Shown>>", lambda e: (self.voice_status.config(text=voice.status_shown()), self._fill_voice_devices()))
 
     def _voice_toggled(self):
         updates = {"VOICE_ENABLED": "1" if self.voice_on.get() else "0"}
@@ -4224,7 +4247,7 @@ class SettingsTab(tk.Frame):
         self._voice_restart()
 
     def _voice_restart(self):
-        self.voice_status.config(text=voice.restart())
+        self.voice_status.config(text=voice.status_shown(voice.restart()))
         self.voice_key_var.set(engine.VOICE_KEY or "")
 
     def _voice_copy_key(self):

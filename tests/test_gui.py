@@ -1857,3 +1857,22 @@ def test_a_misspelt_search_offers_the_library_artist(app, ui):
     assert play.search_artist.get() == "Finger Eleven"
     ui.wait_idle()
     assert "Artist's Top Tracks: Finger Eleven" in console(ui) and "Did you mean" not in console(ui)
+
+
+def test_the_voice_pages_are_german(app, german, ui):
+    """27 Oct 2026: German About still listed the voice commands, Thanks and a link note in English, the
+    listener's status said "Listening on...", and "Neuer Schlüssel" was cut short on its button."""
+    import settings_gui
+    s = settings_gui.SettingsTab(ui.nb)
+    ui.nb.add(s, text="Einstellungen 2")
+    ui.nb.select(s)
+    ui.pump(0.5)
+    visit_every_page(ui, next(c for c in s.winfo_children() if hasattr(c, "select")))
+    shown = dict(_texts(s))
+    assert "Ähnliche Titel, ausgehend vom laufenden Titel" in shown
+    assert "Similar Tracks seeded from what's playing" not in shown
+    assert not any(str(text).startswith("Every command") for text in shown)
+    assert any(str(text).startswith(("Hört auf", "Aus")) for text in shown), "the listener's status"
+    key = shown["Neuer Schlüssel"]
+    assert int(key.cget("width")) >= len("Neuer Schlüssel"), "the button fits its German"
+    s.destroy()

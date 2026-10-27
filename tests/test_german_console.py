@@ -50,3 +50,11 @@ def test_the_log_shows_its_columns_in_german(app, german):
     assert buildlog.playlist_type({"kind": "Similar Tracks (Cancelled)", "chain_pos": 2}) == \
         "Ähnliche Titel (Abgebrochen) · Non-stop 002"
     assert buildlog.moderator_shown("Balanced, 3 removed") == "Ausgewogen, 3 entfernt"
+
+
+def test_the_listener_status_is_german(app, german):
+    """27 Oct 2026: the German Settings > Voice Commands shot still said "Listening on 127.0.0.1:...". """
+    status = app.voice.restart()
+    assert status.startswith("Listening"), "code still reads the English"
+    assert app.voice.status_shown(status).startswith("Hört auf 127.0.0.1:"), app.voice.status_shown(status)
+    assert app.voice.status_shown("Off: no key yet") == "Aus: noch kein Schlüssel"

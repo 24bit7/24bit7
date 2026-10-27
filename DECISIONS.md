@@ -263,3 +263,18 @@ docs/MANUAL.de.md is a full translation rather than generated from the English, 
 **24 Oct 2026: Did you mean, from the library, offered and never assumed.**
 "eleven finger" typed into Search found Last.fm's page for misfiled scrobbles, whose tracks never matched Ben's Finger Eleven. Ben's first idea was an AI suggestion with its own setting. The library is the better dictionary: it already holds every artist you own, costs nothing, works offline and can only suggest something you have. The nearest name is close to the fuzzy matching we keep out, but matching still never guesses: the console offers the name as a link, and only a click uses it. Same words in another order come first, then the one clear nearest name; a tie offers nothing.
 
+
+**27 Oct 2026: The AI Playlist gets its own tracks-per-artist limit.**
+datdude asked for "industrial rock" and half the list was NIN. The limit covered Drift's top-up but not the AI's own picks. Reusing the Similar Tracks limit was considered and turned down: changing one playlist type's setting shouldn't quietly change another's. Every other type already has its own, so the AI Playlist column got one too, default three.
+
+**27 Oct 2026: No two by the same artist in a row, with no setting.**
+Nobody wants the same artist twice running when it can be avoided, so there's nothing to choose. A repeat swaps with the next track by someone else, so orders such as similar first barely change; when one artist is all that's left, the repeats stay. Artist's Top Tracks, albums, songs and the user's own playlists keep their order.
+
+**27 Oct 2026: Voice playlists wait for the playing track by default.**
+datdude wanted a request to let the current song finish. An API flag was considered first, but Ben wanted it for everyone as a choice, so it became New Playlists under Settings > Voice Commands: After this track (the default) or Play now. A stopped or paused zone starts at once either way, and albums, songs, playlists and shuffles always play at once, as they're asked for by name.
+
+**27 Oct 2026: "More artists like this" alongside "more like this".**
+More like this gives Similar Tracks, and there was no voice way to get Similar Artists from what's playing. "Music like this" used to fall back to Similar Tracks and now goes to more artists, which is what the words say.
+
+**27 Oct 2026: "Only" is a separate command, not a change to Genre.**
+"chill Led Zeppelin" through Genre brought in the Eagles, as the AI Playlist spreads across artists on purpose. Spotting an artist's name inside Genre requests was turned down: it would guess, and Ben uses Genre for broad moods. A two-slot command ("chill songs by Led Zeppelin") was turned down too, as Alexa mishears enough with one slot. So "only" takes one slot, 24bit7 finds an artist you own in the words, and the AI chooses from that artist's tracks in the library, so nothing it picks can be missing.

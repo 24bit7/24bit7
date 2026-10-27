@@ -509,6 +509,13 @@ def test_tracks_like_this_means_more_like_this(app, alexa):
     assert alexa.jobs and "more like" in alexa.jobs[0][1]
 
 
+def test_music_like_this_means_more_artists_like_this(app, alexa):
+    app.jriver.play("Kitchen", [app.jriver.key_of("The Beatles", "Something")])
+    r = alexa.say("MusicLikeIntent", "this")
+    assert r.started, r
+    assert alexa.jobs and "more artists like The Beatles" in alexa.jobs[0][1], alexa.jobs
+
+
 def test_genre(app, alexa):
     r = alexa.say("GenreIntent", "sunday morning coffee")
     assert r.started
@@ -579,6 +586,62 @@ def test_more_like_this_keeps_current_track(app, alexa):
     z = app.jriver.zone("Kitchen")
     assert z.playlist[0] == first and z.pos == 0, log.text()
     assert len(z.playlist) > 2
+
+
+def test_more_artists_like_this_keeps_current_track(app, alexa):
+    """27 Oct 2026: Similar Artists from what's playing, after it, whatever New Playlists says."""
+    app.set_env(VOICE_NEW_PLAYLISTS="now")
+    first = app.jriver.key_of("The Beatles", "Something")
+    app.jriver.play("Kitchen", [first, app.jriver.key_of("Queen", "Somebody To Love")])
+    r = alexa.say("MoreArtistsLikeThisIntent")
+    assert r.started and "more artists like The Beatles" in alexa.jobs[0][1], r
+    log = alexa.run_jobs()[0]
+    z = app.jriver.zone("Kitchen")
+    assert log.has("Similar Artists:"), log.text()
+    assert z.playlist[0] == first and z.pos == 0, log.text()
+    assert len(z.playlist) > 2
+
+
+# --- New Playlists (Settings > Voice Commands, 27 Oct 2026): wait for the playing track, or take over ---
+
+def _playing_in_kitchen(app):
+    first = app.jriver.key_of("The Beatles", "Something")
+    queued = app.jriver.key_of("Queen", "Somebody To Love")
+    app.jriver.play("Kitchen", [first, queued])
+    return first, queued
+
+
+def test_after_this_track_is_the_default(app):
+    assert app.engine.VOICE_NEW_PLAYLISTS == "after"
+
+
+def test_after_this_track_waits_for_the_playing_song(app, alexa):
+    app.set_env(VOICE_NEW_PLAYLISTS="after")
+    first, queued = _playing_in_kitchen(app)
+    assert alexa.say("MusicLikeIntent", "the hollies").started
+    log = alexa.run_jobs()[0]
+    z = app.jriver.zone("Kitchen")
+    assert z.playlist[0] == first and z.pos == 0 and z.state == 2, log.text()
+    assert log.has("after the current track") and len(z.playlist) > 2, log.text()
+
+
+def test_after_this_track_starts_a_paused_zone(app, alexa):
+    app.set_env(VOICE_NEW_PLAYLISTS="after")
+    first, _ = _playing_in_kitchen(app)
+    app.jriver.zone("Kitchen").state = 1
+    alexa.say("MusicLikeIntent", "the hollies")
+    log = alexa.run_jobs()[0]
+    z = app.jriver.zone("Kitchen")
+    assert z.playlist[0] != first and z.state == 2, log.text()
+
+
+def test_play_now_takes_over(app, alexa):
+    app.set_env(VOICE_NEW_PLAYLISTS="now")
+    first, _ = _playing_in_kitchen(app)
+    alexa.say("MusicLikeIntent", "the hollies")
+    log = alexa.run_jobs()[0]
+    z = app.jriver.zone("Kitchen")
+    assert first not in z.playlist[:1] and z.state == 2, log.text()
 
 
 def test_jriver_down(app, alexa):

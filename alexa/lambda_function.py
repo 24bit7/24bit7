@@ -5,6 +5,7 @@ needle drop - the Alexa skill for 24bit7.
     "songs by <artist>"     Artist's Top Tracks
     "music like <artist>"   Similar Artists
     "genre <anything>"      Vibe Playlist
+    "only <artist, mood>"   AI Playlist from one artist's tracks ("only chill Led Zeppelin")
     "tracks like <song>"    Similar Tracks ("tracks like <song> by <artist>" works too)
     "album <name>"          plays that album now ("album <name> by <artist>" if several share it)
     "song <title>"          plays that song now, then stops ("song <title> by <artist>" works too)
@@ -13,6 +14,7 @@ needle drop - the Alexa skill for 24bit7.
     "skip" / "next"         the next track on this device's zone
     "who is this"           says the track, artist and album playing there
     "more like this"        Similar Tracks from what's playing, queued after it
+    "more artists like this" Similar Artists from what's playing, queued after it
 Or in one go: "Alexa, ask needle drop for music like Agnes Obel".
 If several albums or songs share a title, Alexa asks which, and you answer "by <artist>".
 No phrase starts with "play", so Alexa isn't tempted to hand it to a music service.
@@ -51,17 +53,18 @@ TIMEOUT = 6   # seconds; Alexa gives the whole skill about eight
 SHORT = "Say list commands to hear them."
 NOT_CAUGHT = "Sorry, I didn't catch that. " + SHORT
 COMMANDS = ("To build a playlist: songs by, music like, or tracks like, then an artist or a song, "
-            "or genre, then any style. "
+            "or genre, then any style, or only, then an artist and a mood. "
             "To play now: album, song, or playlist, then its name, or shuffle songs by, then an artist. "
-            "For what's playing: skip, who is this, more like this, keep it going, "
+            "For what's playing: skip, who is this, more like this, more artists like this, keep it going, "
             "or stop, pause or resume the music. "
             "And switch, or switch to, then a zone.")
 REPROMPT = {"playlist": "Say by, then the folder.", "zone": "Say to, then the zone."}
-INTENTS = {"SongsByIntent": "songs_by", "MusicLikeIntent": "music_like", "GenreIntent": "genre",
+INTENTS = {"SongsByIntent": "songs_by", "MusicLikeIntent": "music_like", "GenreIntent": "genre", "OnlyIntent": "only",
            "TracksLikeIntent": "tracks_like",
            "AlbumIntent": "album", "SongIntent": "song", "PlaylistIntent": "playlist",
            "ShuffleIntent": "shuffle"}
 ZONE_INTENTS = {"SkipIntent": "skip", "WhoIsThisIntent": "who_is_this", "MoreLikeThisIntent": "more_like",
+                "MoreArtistsLikeThisIntent": "more_artists",
                 "SwitchZonesIntent": "switch_zones", "KeepGoingIntent": "keep_going",
                 "StopMusicIntent": "stop", "PauseMusicIntent": "pause", "ResumeMusicIntent": "resume"}
 

@@ -90,6 +90,8 @@ The actions go wherever **Output** says when you press them (a zone, or the Now 
 | **Artist's Top Tracks** | The artist's most popular tracks that you own, shuffled or in popularity order. From Search it needs only the artist. |
 | **AI Playlist** | Opens the AI Playlist window, with two modes. **Create**: describe a mood or a scene, or click an idea chip (More tracks like the song that's playing, then the AI's suggestions), and the AI chooses a playlist from your library. **Steer**: move what's playing in a direction. Needs the AI set up under Settings > Keys. See below. |
 
+Every playlist except Artist's Top Tracks is spread so the same artist never plays twice in a row, moving tracks as little as it can. When one artist is all that's left near the end, they play back to back.
+
 ### The AI Playlist window
 
 ![AI Playlist, Create](images/ai_playlist_create.png)
@@ -225,7 +227,7 @@ How each Play option builds its playlist, with a tab for each option.
 
 ![Settings, Playlist](images/settings_playlist_similar_artists.png)
 
-- **Playlist**: Similar Artists sets **Limit total tracks to**, how many artists, how many of each artist's top tracks to draw from, and how many to pick per artist. A similar artist only counts once it gives a track from your library; one that doesn't is skipped and the next one down is read instead. Untick the limit to keep every track found; with the last two the same (say 5 of 5) as well, there's no random pick at all. Similar Tracks sets how many tracks, the most any one artist gets, and, for every column, the order and **Variety**. Artist's Top Tracks sets shuffled or popular order.
+- **Playlist**: Similar Artists sets **Limit total tracks to**, how many artists, how many of each artist's top tracks to draw from, and how many to pick per artist. A similar artist only counts once it gives a track from your library; one that doesn't is skipped and the next one down is read instead. Untick the limit to keep every track found; with the last two the same (say 5 of 5) as well, there's no random pick at all. Similar Tracks sets how many tracks, the most any one artist gets, and, for every column, the order and **Variety**. Artist's Top Tracks sets shuffled or popular order. AI Playlist sets how many tracks and the most any one artist gets, so a mood the AI links to one band doesn't fill up with them.
   On Windows (Main), Similar Artists and Similar Tracks have four columns: **Seed** (Current Track and Playing Now) and **Review Mode** (Current Track and Playing Now). Playing Now adds **Artists sampled from Playing Now** or **Tracks sampled from Playing Now**, and its Number of artists or tracks is per sampled artist or track; the defaults (5 artists with 4 similar each, or 5 tracks with 6 similar each) give about the same size of playlist as Current Track. Review Mode's columns follow their seed while **Mirror Current Track** or **Mirror Playing Now** is ticked; untick one to give Review Mode a shortlist of its own. Artist's Top Tracks has Current Track and Review Mode. Everything else in the section is shared, and voice builds never review or use Playing Now, so devices have the Current Track column only.
 - **Skip tracks played in the last ... days** leaves out anything JRiver has played recently, so a favourite doesn't come round again the same evening. The seed track is never left out. Off by default.
 - **Drift** (Off, Keep It Tight or Spread) searches again when your library falls short of the target length. Similar Artists and Similar Tracks also have **Moderator on Drift tracks**. See [Drift](#drift).
@@ -276,7 +278,7 @@ Keys never leave your PC except to the service they belong to, and they never ap
 
 ![Settings, Voice Commands](images/settings_voice_commands.png)
 
-Switches voice on, holds the key the Alexa skill sends, and lists each Alexa device with the zone it plays to. **Enable Switch To** picks which zones "switch" can move the music to; two devices on the same zone share one tick, and a zone no device plays to isn't offered. **Switch Timing Adjustment** fine-tunes switching to a Sonos or other DLNA speaker: if it repeats the last moment you heard in the other room, move it towards minus; if it skips a little, towards plus. **Test** sends a pretend command, as if a device had heard it. See [Voice Commands](#voice-commands) and [Setting up the Alexa skill](#setting-up-the-alexa-skill).
+Switches voice on, holds the key the Alexa skill sends, sets **New Playlists**, and lists each Alexa device with the zone it plays to. **Enable Switch To** picks which zones "switch" can move the music to; two devices on the same zone share one tick, and a zone no device plays to isn't offered. **Switch Timing Adjustment** fine-tunes switching to a Sonos or other DLNA speaker: if it repeats the last moment you heard in the other room, move it towards minus; if it skips a little, towards plus. **New Playlists** decides what a playlist asked for by voice does when the zone is already playing: **After this track** (the default) lets the song finish, clears what was queued after it and plays the new playlist next; **Play now** takes over straight away. A stopped or paused zone starts at once either way, and albums, songs, your JRiver playlists and shuffles always play at once. **Test** sends a pretend command, as if a device had heard it. See [Voice Commands](#voice-commands) and [Setting up the Alexa skill](#setting-up-the-alexa-skill).
 
 ### JRiver Playlists
 
@@ -428,6 +430,7 @@ Open the skill first ("Alexa, open needle drop"), then say the command, or say i
 | "music like *artist*" | Similar Artists, seeded from the artist's most popular track |
 | "tracks like *song*", or "tracks like *song* by *artist*" | Similar Tracks |
 | "genre *anything*", such as "genre nu metal with grunge" | AI Playlist (needs the AI set up) |
+| "only *artist and mood*", such as "only chill Led Zeppelin" or "only Queen anthems" | An AI Playlist of that one artist: the AI chooses from their tracks in your library, so nobody else gets in. The artist must be one you own. With no mood ("only Led Zeppelin"), their best known songs (needs the AI set up) |
 | "album *name*" | Plays the album now, in track order |
 | "song *title*" | Plays the song now, then stops |
 | "playlist *name*" | Plays one of your JRiver playlists or smartlists now, with its settings from Settings > JRiver Playlists |
@@ -435,6 +438,7 @@ Open the skill first ("Alexa, open needle drop"), then say the command, or say i
 | "skip", "next" or "next song" | The next track in that device's zone |
 | "who is this" or "what's playing" | Alexa says the track, artist and album playing in that device's zone |
 | "more like this" or "more of this" | Similar Tracks from what's playing. The current track carries on and the new playlist replaces what was queued after it |
+| "more artists like this" or "music like this" | Similar Artists from what's playing, after the current track in the same way |
 | "switch", or "switch to *zone*" | Moves what's playing to another zone, at the same song and point; the zone it left stops |
 | "stop the music", "pause the music" or "resume the music" | Stops, pauses or resumes that device's zone |
 | "keep it going", "non stop" or "go continuous" | Turns on Non-stop for whatever is playing in that device's zone, once |
@@ -446,7 +450,7 @@ When several albums or songs share a title, Alexa asks which artist, and you ans
 
 No command starts with "play". Alexa tends to hand anything starting with "play" to a music service instead of the skill.
 
-Skip, who is this and more like this always need the skill's name: "Alexa, ask needle drop to skip". A plain "Alexa, skip" goes to the speaker itself, which has no queue of its own when it's playing a JRiver zone. An Alexa Routine can give you a shorter phrase: set "next song" to run the custom action "ask needle drop to skip".
+Skip, who is this and the "more like this" commands always need the skill's name: "Alexa, ask needle drop to skip". A plain "Alexa, skip" goes to the speaker itself, which has no queue of its own when it's playing a JRiver zone. An Alexa Routine can give you a shorter phrase: set "next song" to run the custom action "ask needle drop to skip".
 
 The skill name is up to you. This one is "needle drop" because Alexa kept mishearing the first choice.
 
@@ -458,7 +462,7 @@ The skill name is up to you. This one is "needle drop" because Alexa kept mishea
 - **A short tone** when a command is accepted. The music follows almost at once.
 - **"Please wait, request pending."** if another playlist is still building. Yours runs as soon as it finishes.
 - **"That's *track* by *artist*, from *album*."** after "who is this".
-- **"Nothing's playing on *zone*."** after skip, who is this or more like this when the zone is stopped, and **"Nothing to skip to."** on the last track.
+- **"Nothing's playing on *zone*."** after skip, who is this or a "more like this" command when the zone is stopped, and **"Nothing to skip to."** on the last track.
 - **A spoken explanation** when something is wrong, such as a device without a zone. [Troubleshooting voice](#troubleshooting-voice) lists each one.
 
 Albums, songs, playlists and shuffles need no building, so they replace whatever is playing at once. Playlists that are built use [fast start](#fast-start) and queue behind anything already playing.
@@ -605,6 +609,7 @@ Every command that comes to nothing also appears in the console, under the devic
 | "Please wait, request pending." | Another playlist is still building. | Nothing: yours runs next. |
 | The skill doesn't open at all | Alexa didn't recognise the invocation name. | Check what it heard in the Alexa app's voice history, and choose a clearer name. |
 | Music comes from Amazon Music or Spotify instead | The command started with "play", or the skill name was missed. | Leave out "play". Use "ask needle drop for ..." if the skill keeps being missed. |
+| Silence after "Alexa, stop" and a new request, on a Sonos or other DLNA speaker | With **New Playlists** on After this track, the new playlist waits for the current track to finish. A plain "Alexa, stop" pauses the speaker itself, but JRiver can still think the track is playing, so it never finishes. | Say "ask needle drop to stop the music" instead, which stops the zone in JRiver, or set **New Playlists** to Play now under Settings > Voice Commands. |
 
 To check the route from the PC itself, this sends the same request the skill does (with your own address and key):
 

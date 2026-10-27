@@ -31,7 +31,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.24.1"
+VERSION = "1.25.0"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
@@ -48,7 +48,7 @@ PROFILE_KEYS = {
                  "TRACKS_PER_ARTIST_POOL",
                  "TRACKS_PER_ARTIST_PICK", "SIMILAR_TRACK_COUNT", "SIMILAR_TRACK_PER_ARTIST", "SIMILAR_TRACK_ORDER",
                  "SIMILAR_TRACK_VARIETY",
-                 "TOP_TRACKS_COUNT", "TOP_TRACKS_ORDER", "VIBE_TRACK_COUNT",
+                 "TOP_TRACKS_COUNT", "TOP_TRACKS_ORDER", "VIBE_TRACK_COUNT", "VIBE_PER_ARTIST",
                  "IF_ALL_ELSE_FAILS_ARTISTS", "IF_ALL_ELSE_FAILS_TRACKS", "IF_ALL_ELSE_FAILS_TOP",
                  "IF_ALL_ELSE_FAILS_VIBE", "FALLBACK_SPOKEN",
                  *[f"IF_ALL_ELSE_FAILS_{g}_{part}" for g in ("ARTISTS", "TRACKS", "TOP", "VIBE")
@@ -287,10 +287,10 @@ def load_settings():
     global SIMILAR_TRACK_PER_ARTIST, SIMILAR_TRACK_ORDER, SIMILAR_TRACK_VARIETY
     global LISTENBRAINZ_TRACK_ALGORITHM_SETTING
     global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, CACHE_DAYS, CACHE_KEEP
-    global TABLE_FONT_SIZE, VIBE_TRACK_COUNT
+    global TABLE_FONT_SIZE, VIBE_TRACK_COUNT, VIBE_PER_ARTIST
     global OUTPUT_TARGET, YOUTUBE_PLAYLIST_LENGTH, HIDDEN_ZONES, DEFAULT_ZONE, FOLLOW_ACTIVE_ZONE
     global PREFER_OFFICIAL_VIDEOS, THEME, UI_LANGUAGE
-    global VOICE_ENABLED, VOICE_KEY, VOICE_PORT
+    global VOICE_ENABLED, VOICE_KEY, VOICE_PORT, VOICE_NEW_PLAYLISTS
     global START_IN_TRAY, CLOSE_TO_TRAY
     global LISTEN_SITES, CUSTOM_SITES, PLAYLIST_SITES, EXTRA_OUTPUTS, TIDAL_OPEN
     global SKIP_LONG_CLOSERS, LONG_CLOSER_MINUTES
@@ -437,6 +437,7 @@ def load_settings():
     if CREDITS_FIRST not in ("track", "album"):
         CREDITS_FIRST = "track"
     VIBE_TRACK_COUNT = _int_setting("VIBE_TRACK_COUNT", 20, 5, 100)  # target size for vibe playlists
+    VIBE_PER_ARTIST = _int_setting("VIBE_PER_ARTIST", 3, 1, 20)     # most tracks any one artist gets in one
     # Hidden-track check: leave out an album's last track when it runs longer than this
     # Moderator (Play tab Yes/No) and whether its one-off credits warning has been shown
     AI_MODERATOR = moderator_level_value(os.getenv("AI_MODERATOR", "0"))
@@ -488,6 +489,9 @@ def load_settings():
     VOICE_ENABLED = os.getenv("VOICE_ENABLED", "0").strip().lower() in ("1", "true", "yes")
     VOICE_KEY = os.getenv("VOICE_KEY", "").strip()
     VOICE_PORT = _int_setting("VOICE_PORT", 52180, 1024, 65535)
+    # New Playlists (Settings > Voice Commands): a voice build waits for the playing track ("after"),
+    # or takes the zone over at once ("now")
+    VOICE_NEW_PLAYLISTS = "now" if os.getenv("VOICE_NEW_PLAYLISTS", "after").strip().lower() == "now" else "after"
     # Tray (Settings > Other > Windows): start hidden when Windows launches it, and X hides rather than quits
     START_IN_TRAY = os.getenv("START_IN_TRAY", "1").strip().lower() in ("1", "true", "yes")
     CLOSE_TO_TRAY = os.getenv("CLOSE_TO_TRAY", "0").strip().lower() in ("1", "true", "yes")
@@ -615,6 +619,7 @@ TRACKS_PER_ARTIST_PICK=3
 TOP_TRACKS_COUNT=10
 TOP_TRACKS_ORDER=popular
 VIBE_TRACK_COUNT=20
+VIBE_PER_ARTIST=3
 # Moderator: an AI check that drops tracks clashing with the seed's tone,
 # energy and mood (set on the Play tab). Needs the AI set up in Settings > Keys > AI.
 AI_MODERATOR=0
@@ -684,6 +689,8 @@ FOLLOW_ACTIVE_ZONE=0
 # Voice commands (Settings > Voice). The key is made when you switch it on.
 VOICE_ENABLED=0
 VOICE_KEY=
+# Voice playlists: after (the playing track finishes first) or now (they take over at once)
+VOICE_NEW_PLAYLISTS=after
 VOICE_PORT=52180
 
 # Tray (Settings > Other). Start with Windows itself is stored by Windows, not here.
@@ -4193,13 +4200,14 @@ def typed_seed_key(seed_info, seeds, session_id, report=print):
     return None
 
 
-def jriver_is_stopped(zone=ACTIVE_ZONE):
-    """True only when the zone clearly reports it is stopped. Any doubt counts as 'not stopped'."""
+def jriver_is_stopped(zone=ACTIVE_ZONE, paused_too=False):
+    """True only when the zone clearly reports it is stopped (or, with paused_too, paused).
+    Any doubt counts as 'not stopped'."""
     try:
         r = requests.get(f"{JRIVER_BASE}/Playback/Info", params={"Zone": zone}, auth=AUTH)
         for item in ET.fromstring(xml_safe(r.text)).findall("Item"):
             if item.get("Name") == "State":
-                return (item.text or "").strip() == "0"
+                return (item.text or "").strip() in (("0", "1") if paused_too else ("0",))
     except Exception:
         pass
     return False
@@ -4212,6 +4220,7 @@ def jriver_is_stopped(zone=ACTIVE_ZONE):
 # older build. The Play tab is unaffected: both flags are only set by voice.py.
 
 VOICE_TAKEOVER = False   # True while a voice build runs
+VOICE_WAIT = False       # True while it runs with New Playlists set to After this track
 MIX_ROWS = None          # the Play tab's added playlists for this build; None for voice, shortcuts, non-stop
 MIX_KEEP = set()         # keys from those playlists: the hidden-track check leaves them alone
 REVIEW_MODE = False      # True while an app build runs as Review: tracks are collected, JRiver is left alone
@@ -4396,10 +4405,13 @@ def zone_state(zone=ACTIVE_ZONE):
 
 
 def zone_is_free(zone=ACTIVE_ZONE):
-    """Stopped. A voice build always takes the zone over, whatever JRiver reports
-    (after "Alexa, stop" the Sonos is paused but JRiver can still say playing)."""
+    """Stopped. A voice build takes the zone over, whatever JRiver reports (after "Alexa, stop"
+    the Sonos is paused but JRiver can still say playing), unless New Playlists is After this
+    track: then only a stopped or paused zone is free, and a playing one is queued after its track."""
     if not VOICE_TAKEOVER:
         return jriver_is_stopped(zone)
+    if VOICE_WAIT:   # After this track: a playing zone keeps its track, and the playlist follows it
+        return jriver_is_stopped(zone, paused_too=True)
     return True
 
 
@@ -4509,6 +4521,9 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
         if keys and not fresh_keys:
             report("  " + t("Note: nothing new to add, as every track found had already been sent to this zone."))
         keys, append = fresh_keys, True
+        rows = playing_now_rows(zone) if keys else []
+        if rows:   # no two in a row across the join with what the zone already has
+            keys = spread_artists(keys, after=rows[-1].get("Key"))
         held = nonstop_held(zone) if keys else None
         if held:
             with _nonstop_lock:
@@ -4645,6 +4660,7 @@ def create_youtube_queue_playlist(seed_info, seeds, report=print):
     if dropped:
         report("  " + t("Seed artist kept to about a quarter of the playlist ({dropped} of their tracks left out).", dropped=dropped))
     queued = 0
+    keys = spread_artists(keys, keep=first_key)
     if mix_active():
         if not keys:
             report(t("Problem: nothing suggested is {where_found}.", where_found=where_found(True)))
@@ -5628,6 +5644,53 @@ def _deep_cut_top_tracks(artist):
     return [tval for tval, _ in blended_top_tracks(artist, 10)[0]]
 
 
+def _who_plays(key):
+    """
+    The artist a track counts as for no two in a row: the first act tagged, so 'Bob Marley & The
+    Wailers' and 'Bob Marley' count as one, and on a various artists album named 'Artist - Title',
+    that artist. None for a track the library doesn't hold, which never counts as a repeat.
+    """
+    import library   # here rather than at the top: library imports engine
+    row = library.track_row(key)
+    if not row:
+        return None
+    artist = _row_artist(row)
+    name = row.get("Name") or ""
+    if " - " in name and artist_key(artist) in ("various artists", "various"):
+        artist = name.split(" - ", 1)[0]
+    return artist_key(primary_artist(artist) or artist) or None
+
+
+def spread_artists(keys, keep=None, after=None):
+    """
+    The playlist with no two tracks by the same artist in a row, where it allows that; where it
+    doesn't (one artist left at the end), the repeats stay. Moves as little as it can: a repeat
+    swaps with the next track by someone else, so an order such as similar first barely changes.
+    keep: the track already playing after a fast start, which stays first. after: the track
+    before keys in Playing Now (a Drift round), so the join is checked too.
+    """
+    keys = list(keys)
+    out = []
+    if keep and keys and str(keys[0]) == str(keep):
+        out.append(keys.pop(0))
+    who = {str(k): _who_plays(k) for k in keys}
+    prev = _who_plays(out[-1]) if out else (_who_plays(after) if after else None)
+    while keys:
+        pick = next((i for i, k in enumerate(keys) if who[str(k)] is None or who[str(k)] != prev), 0)
+        counts = {}
+        for k in keys:
+            a = who[str(k)]
+            if a is not None and a != prev:
+                counts[a] = counts.get(a, 0) + 1
+        if counts:   # an artist holding over half of what's left must go now, or it can't be spread
+            top = max(counts, key=counts.get)
+            if counts[top] * 2 > len(keys):
+                pick = next(i for i, k in enumerate(keys) if who[str(k)] == top)
+        out.append(keys.pop(pick))
+        prev = who[str(out[-1])]
+    return out
+
+
 def finish_playlist(keys, drift, fast, seed_info, report, detail=""):
     """
     Sends a first pass, then lets Drift top it up. JRiver output: the first pass
@@ -5637,9 +5700,10 @@ def finish_playlist(keys, drift, fast, seed_info, report, detail=""):
     they sit around the whole set. YouTube output: Drift runs first, as the link
     is made once. Returns how many were sent.
     """
-    keys = add_deep_cuts(keys, seed_info, report)
+    keys = spread_artists(add_deep_cuts(keys, seed_info, report), keep=fast.key)
     if mix_active():
         drift.run(keys)
+        keys = spread_artists(keys, keep=fast.key)
         final = combine_with_mix(keys, report)
         rest = fast.rest(final)
         if rest:
@@ -5649,6 +5713,7 @@ def finish_playlist(keys, drift, fast, seed_info, report, detail=""):
     mix_skipped(report)
     if output_streaming():
         drift.run(keys)
+        keys = spread_artists(keys)
         if keys:
             report(sending_message(len(keys), detail))
             send_to_jriver(keys, seed_info=seed_info, report=report)
@@ -5657,7 +5722,12 @@ def finish_playlist(keys, drift, fast, seed_info, report, detail=""):
     if rest:
         report(sending_message(len(keys), detail))
         send_to_jriver(rest, seed_info=seed_info, report=report, append=fast.started)
-    drift.run(keys, on_round=lambda new: send_to_jriver(new, seed_info=seed_info, report=report, append=True))
+
+    def send_round(new):   # each Drift round goes on the end, checked against the track before it
+        new = spread_artists(new, after=keys[-len(new) - 1] if len(keys) > len(new) else None)
+        keys[-len(new):] = new
+        send_to_jriver(new, seed_info=seed_info, report=report, append=True)
+    drift.run(keys, on_round=send_round)
     return len(keys)
 
 
@@ -5750,7 +5820,8 @@ def genre_shuffle(kind, genre, bpm, seed_info, report=print):
     import library
     count = {"artists": SIMILAR_ARTIST_TRACK_COUNT, "tracks": SIMILAR_TRACK_COUNT, "top": TOP_TRACKS_COUNT,
              "vibe": VIBE_TRACK_COUNT}.get(kind, 30)
-    per_artist = {"artists": TRACKS_PER_ARTIST_PICK, "tracks": SIMILAR_TRACK_PER_ARTIST}.get(kind, 3)
+    per_artist = {"artists": TRACKS_PER_ARTIST_PICK, "tracks": SIMILAR_TRACK_PER_ARTIST,
+                  "vibe": VIBE_PER_ARTIST}.get(kind, 3)
     seed_artist = artist_key(_row_artist(seed_info or {}))
     seed_key = str((seed_info or {}).get("FileKey") or "")
     played = PlayedFilter(kind, report=report, filters=True)
@@ -5884,6 +5955,7 @@ def if_all_else_fails(kind, seed_info, report=print, why=N_("nothing suggested i
         LAST_NO_MATCH = True
         return 0
     keys, at_tempo = genre_shuffle(kind, genre, bpm, seed_info, report)
+    keys = spread_artists(keys)
     if not keys:
         report(t("I couldn't find a match. Please try another seed. The build was empty because {why}, and nothing else in {genre} could be used.", why=t(why), genre=genre))
         LAST_NO_MATCH = True
@@ -6876,7 +6948,7 @@ def create_vibe_playlist(vibe, report=print, count=None, prompt=None, if_short=N
     session_id = session_start("vibe", seed_info, "AI")
     fast = FastStart(None, report)
     played = PlayedFilter("vibe", report=report, filters=True)
-    drift = Drift("vibe", target, session_id, report, per_artist=TRACKS_PER_ARTIST_PICK, seed=f"vibe: {vibe}",
+    drift = Drift("vibe", target, session_id, report, per_artist=VIBE_PER_ARTIST, seed=f"vibe: {vibe}",
                   played=played, vibe=vibe)
     drift.prompt, drift.check = prompt, check
     if if_short == "ask":        # the AI Playlist window's If Short: asked again, up to two more rounds
@@ -6897,7 +6969,7 @@ def create_vibe_playlist(vibe, report=print, count=None, prompt=None, if_short=N
         return
 
     prefetch_youtube_ids(pairs)
-    keys, misses = [], 0
+    keys, misses, over = [], 0, 0
     for artist, track in pairs:
         key = find_jriver_key_by_track(artist, track)
         if key and check is not None and not check.allows(key, artist, track):
@@ -6906,7 +6978,11 @@ def create_vibe_playlist(vibe, report=print, count=None, prompt=None, if_short=N
             continue
         if key:
             report("    " + t("{found_label}: {artist} - {track}", found_label=found_label(True), artist=artist, track=track))
-            if key not in keys and played.fresh(key):
+            if key in keys or not played.fresh(key):
+                pass
+            elif drift._room(artist, key) <= 0:   # at most VIBE_PER_ARTIST per artist
+                over += 1
+            else:
                 keys.append(key)
                 drift.note(artist, track, key, 1)
                 fast.play(key)
@@ -6917,6 +6993,10 @@ def create_vibe_playlist(vibe, report=print, count=None, prompt=None, if_short=N
             drift.ai_tried.add((artist, track))   # so Drift using the AI doesn't ask for it again
             session_log(session_id, artist, track, "AI", found=False)
     report("  " + t("AI picks: {keys_count} {where_found}, {misses} not.", keys_count=len(keys), where_found=where_found(), misses=misses))
+    if over:
+        report("  " + tn("{count} more left out, as its artist already had {per_artist}.",
+                         "{count} more left out, as their artists already had {per_artist}.", over,
+                         per_artist=VIBE_PER_ARTIST))
     if check is not None:
         check.summary()
     # the AI's own picks aren't moderated; Drift tracks from the sources can be (Settings > Playlist)
@@ -6936,6 +7016,81 @@ def create_vibe_playlist(vibe, report=print, count=None, prompt=None, if_short=N
     played.done()
     debug("Queue refreshed")
     session_finish(session_id, sent, report=report)
+
+
+AI_ONLY_PROMPT = (
+    "Here are the songs by {artist} in a listener's library:\n{titles}\n\n"
+    "Pick up to {count} of them that best fit this request: \"{text}\". "
+    "If it names no mood or style, pick {artist}'s best-known songs. Use only titles from the list, "
+    "written exactly as they appear there. Respond with a JSON array of title strings only, "
+    "compact on a single line, no commentary, no code fences."
+)
+ONLY_TITLE_LIMIT = 400   # most of the artist's titles sent to the AI
+
+
+def create_only_playlist(text, report=print):
+    """
+    "Only" (voice and the listener): an AI Playlist from one artist's tracks in the library, for
+    "only chill Led Zeppelin". The artist is the one named in the text (library.artist_in_text);
+    the AI is shown that artist's titles and picks the ones that fit, so nothing it picks can be
+    missing from the library. Skip Recently Played and Filters apply; the per-artist limit,
+    Drift and Deep Cuts don't, as every track is the one artist. Shuffled, like the AI Playlist.
+    """
+    import library   # here rather than at the top: library imports engine
+    refresh_settings_if_changed()
+    text = (text or "").strip()
+    artist, mood = library.artist_in_text(text)
+    if not artist:
+        report(t("Problem: no artist in your library is named in \"{words}\".", words=text))
+        return
+    if not ai_configured():
+        report(t("Problem: AI Playlist needs {what}. Settings > Keys", what=ai_missing_text()))
+        return
+    target = VIBE_TRACK_COUNT
+    report(t("Only: {words}  ({artist}, target {target} tracks)", words=text, artist=deinvert_the(artist),
+             target=target))
+    session_id = session_start("vibe", {"Artist": artist, "Name": text, "Album": ""}, "AI")
+    played = PlayedFilter("vibe", report=report, filters=True)
+    by_title = {}
+    for key in library.artist_tracks(artist)[1]:
+        name = ((library.track_row(key) or {}).get("Name") or "").strip()
+        if name and library.norm(name) and played.fresh(key):
+            by_title.setdefault(library.norm(name), (name, str(key)))
+    if not by_title:
+        report("  " + t("Problem: every track by {artist} was played recently or is left out by your Filters.",
+                        artist=deinvert_the(artist)))
+        session_finish(session_id, 0, report=report)
+        return
+    titles = [name for name, _ in by_title.values()][:ONLY_TITLE_LIMIT]
+    report("  " + tn("Asking the AI to choose from {count} track by {artist}...",
+                     "Asking the AI to choose from {count} tracks by {artist}...", len(titles),
+                     artist=deinvert_the(artist)))
+    data = ai_ask_json(AI_ONLY_PROMPT.format(artist=deinvert_the(artist), titles="\n".join(titles), count=target,
+                                             text=text), feature="AI Playlist")
+    keys = []
+    for pick in (data if isinstance(data, list) else []):
+        found = next((by_title[k] for k in library.title_keys(str(pick)) if k in by_title), None)
+        if found and found[1] not in keys:
+            keys.append(found[1])
+            session_log(session_id, artist, found[0], "AI", found=True)
+    keys = keys[:target]
+    report("  " + tn("AI picks: {count} track.", "AI picks: {count} tracks.", len(keys)))
+    if not keys:
+        report(t("Problem: the AI picked nothing from the list. Try different words."))
+        session_finish(session_id, 0, report=report)
+        return
+    if len(keys) < target:
+        report("  " + t("Note: {count} of {target}, as that's what fits from your {artist} tracks.",
+                        count=len(keys), target=target, artist=deinvert_the(artist)))
+    random.shuffle(keys)
+    fast = FastStart(None, report)
+    fast.play(keys[0])
+    rest = fast.rest(keys)
+    if rest:
+        report(sending_message(len(keys), N_(" (shuffled)")))
+        send_to_jriver(rest, report=report, append=fast.started)
+    played.done()
+    session_finish(session_id, len(keys), report=report)
 
 
 # ---------------------------------------------------------------------------

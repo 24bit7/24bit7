@@ -19,6 +19,11 @@
           "samples": ["genre {query}", "a genre of {query}"]
         },
         {
+          "name": "OnlyIntent",
+          "slots": [{"name": "query", "type": "AMAZON.SearchQuery"}],
+          "samples": ["only {query}"]
+        },
+        {
           "name": "TracksLikeIntent",
           "slots": [{"name": "query", "type": "AMAZON.SearchQuery"}],
           "samples": ["tracks like {query}", "songs like {query}"]
@@ -60,6 +65,12 @@
           "slots": [],
           "samples": ["more like this", "more like this one", "more of this", "more songs like this",
                       "more like this song", "keep this vibe going"]
+        },
+        {
+          "name": "MoreArtistsLikeThisIntent",
+          "slots": [],
+          "samples": ["more artists like this", "more artists like this one", "artists like this",
+                      "more music like this"]
         },
         {
           "name": "ByArtistIntent",
