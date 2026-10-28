@@ -33,3 +33,21 @@ def test_classic_widgets_are_flat(theme):
         assert str(button.cget("background")).lower() == tabs.PALETTE["button_bg"].lower()
     finally:
         root.destroy()
+
+
+def test_apply_theme_takes_the_accent():
+    """The accent colour (test_accent_colour.py) is set by apply_theme."""
+    import tabs
+    try:
+        root = tk.Tk()
+    except tk.TclError:
+        pytest.skip("no display")
+    try:
+        root.withdraw()
+        tabs.apply_theme(root, "dark", "#3d98ff")
+        assert tabs.PALETTE["button_fg"] == tabs.MATRIX_FG == "#3d98ff"
+        tabs.apply_theme(root, "light", "")
+        assert tabs.MATRIX_FG == tabs.DEFAULT_ACCENT, "the console takes the accent in light too"
+    finally:
+        tabs.set_accent("")
+        root.destroy()

@@ -34,11 +34,9 @@ import tabs
 from tabs import rounded_shape
 
 # The console stays black and green in both themes; Review follows the theme (the 7 Oct mockups).
-CONSOLE = {"bg": "#000000", "accent": "#00ff41", "on_accent": "#000000"}
-DARK = {"bg": "#000000", "text": "#d8ffe0", "muted": "#7fbf8f", "line": "#123a1c", "accent": "#00ff41",
-        "on_accent": "#000000", "row_on": "#0b2412", "stripe": "#07120a", "row_prev": "#2a1a08", "tick_off": "#2f6b3d",
-        "tick_on_bg": "#000000", "tick_on_fg": "#00ff41", "act_bg": "#000000", "act_fg": "#00ff41",
-        "act_hover": "#0b2412", "act_dim": "#1d4d2a", "act_dim_fg": "#1d4d2a"}
+# The greens are filled in from the accent colour by _accented().
+CONSOLE = {"bg": "#000000", "on_accent": "#000000"}
+DARK = {"bg": "#000000", "on_accent": "#000000", "row_prev": "#2a1a08", "tick_on_bg": "#000000", "act_bg": "#000000"}
 LIGHT = {"bg": "#ffffff", "text": "#1a1a1a", "muted": "#4a4d52", "line": "#dcdfe3", "accent": "#1f4e8c",
          "on_accent": "#ffffff", "row_on": "#e3edf9", "stripe": "#f6f7f9", "row_prev": "#fff1e0", "tick_off": "#9aa0a6",
          "tick_on_bg": "#1f4e8c", "tick_on_fg": "#ffffff", "act_bg": "#1f4e8c", "act_fg": "#ffffff",
@@ -50,7 +48,21 @@ SIZE_MIN, SIZE_MAX, SIZE_DEFAULT = 6, 14, 9   # the track list's text size, set 
 DOT = "\u25cf"
 
 
+def _accented():
+    """The console's and dark Review's greens, worked out from the accent (Settings > Other > Accent Colour)."""
+    a, shade, tint = tabs.ACCENT, tabs.shade, tabs.tint
+    CONSOLE["accent"] = a
+    DARK.update({"text": tint(a, 0.85), "muted": tint(shade(a, 0.75), 0.5), "line": shade(a, 0.23),
+                 "accent": a, "row_on": shade(a, 0.14), "stripe": shade(a, 0.07), "tick_off": shade(a, 0.42),
+                 "tick_on_fg": a, "act_fg": a, "act_hover": shade(a, 0.14), "act_dim": shade(a, 0.3),
+                 "act_dim_fg": shade(a, 0.3)})
+
+
+_accented()
+
+
 def palette():
+    _accented()
     return DARK if getattr(engine, "THEME", "light") == "dark" else LIGHT
 PLAY_MARK, STOP_MARK = "\u25b6", "\u25a0"
 PREVIEW_TIP = N_("Listen to a track before you add it, in a zone with its own speakers or headphones. "

@@ -65,14 +65,14 @@ LIGHT.update({   # the redesign: a blue strip, #BFC3C9 header bars and inactive 
 })
 DARK = {
     "tab_selected_bg": None,
-    "tab_selected_fg": "#00ff41",
+    "tab_selected_fg": None,
     "tab_bg":          "#000000",   # inactive tabs: absolute black
-    "tab_fg":          "#00ff41",
+    "tab_fg":          None,
     "line":            "#2a2c30",   # borders take the buttons' grey
-    "brand_blue":      "#00ff41",   # logo blue lightened so it reads on charcoal
+    "brand_blue":      None,   # the accent: set_accent fills this and the other ACCENT_KEYS
     "brand_orange":    "#f28c28",
     "button_bg":       "#2a2c30",
-    "button_fg":       "#00ff41",
+    "button_fg":       None,
     "button_outline":  "#2a2c30",
     "button_accent":   "#f28c28",
     "button_hover":    "#3a2f24",
@@ -85,21 +85,21 @@ DARK = {
     "text_secondary":  "#b8bcc2",
     "text_muted":      "#9aa0a6",
     "text_faint":      "#7d8288",
-    "link":            "#00ff41",   # matrix green
-    "section_fg":      "#00ff41",
+    "link":            None,
+    "section_fg":      None,
     "section_edge":    "#2a2c30",
     "help_fg":         "#9aa0a6",
     "help_mark_bg":    "#000000",
-    "help_mark_fg":    "#00ff41",
+    "help_mark_fg":    None,
     "tooltip_bg":      "#000000",
-    "tooltip_fg":      "#00ff41",
+    "tooltip_fg":      None,
     "ai_purple":       "#ff33ff",   # bright magenta, so it reads on charcoal
     # the redesign: a black strip, black header bars, green ticks, dark grey fields
     "strip_bg":        "#000000",
-    "strip_fg":        "#00ff41",
+    "strip_fg":        None,
     "head_bg":         "#000000",
-    "head_fg":         "#00ff41",
-    "tick_fill":       "#00ff41",
+    "head_fg":         None,
+    "tick_fill":       None,
     "tick_mark":       "#000000",
     "tick_edge":       "#9aa0a6",
     "tick_inside":     "#000000",
@@ -108,6 +108,116 @@ DARK = {
     "select_bg":       "#3a3d42",
 }
 THEME = "light"
+LIGHT["logo_bit"] = DARK["logo_bit"] = LIGHT["brand_orange"]   # the logo's "bit"; dark pairs it with the accent
+
+# The accent (Settings > Other > Accent Colour): every green in the dark theme, and the console's
+# green in both. The default was softened on 28 Oct 2026, as full-strength green glared on laptop screens.
+DEFAULT_ACCENT = "#7bd88f"
+ACCENT = DEFAULT_ACCENT
+ACCENT_KEYS = ("tab_selected_fg", "tab_fg", "brand_blue", "button_fg", "link", "section_fg", "help_mark_fg",
+               "tooltip_fg", "strip_fg", "head_fg", "tick_fill")
+AI_HUE = 300          # magenta, kept for anything that uses AI credits
+AI_HUE_GAP = 35       # an accent within this many degrees of it is moved to the edge
+MIN_CONTRAST = 4.5    # against the buttons' grey, so accent text on a button reads
+
+
+def _hex_rgb(colour):
+    colour = colour.strip().lstrip("#")
+    if len(colour) == 3:
+        colour = "".join(c * 2 for c in colour)
+    return tuple(int(colour[i:i + 2], 16) / 255 for i in (0, 2, 4))
+
+
+def _rgb_hex(rgb):
+    return "#%02x%02x%02x" % tuple(round(max(0.0, min(1.0, v)) * 255) for v in rgb)
+
+
+def valid_colour(colour):
+    """True for a #rrggbb (or #rgb) colour."""
+    try:
+        return isinstance(colour, str) and len(colour.strip().lstrip("#")) in (3, 6) and bool(_hex_rgb(colour))
+    except ValueError:
+        return False
+
+
+def contrast(a, b):
+    """The WCAG contrast ratio between two colours, 1 to 21."""
+    def lum(colour):
+        return sum(w * (v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4)
+                   for w, v in zip((0.2126, 0.7152, 0.0722), _hex_rgb(colour)))
+    hi, lo = sorted((lum(a), lum(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def shade(colour, amount):
+    """colour taken towards black: amount 1 keeps it, 0 is black."""
+    return _rgb_hex(v * amount for v in _hex_rgb(colour))
+
+
+def tint(colour, amount):
+    """colour taken towards white: amount 0 keeps it, 1 is white."""
+    return _rgb_hex(v + (1 - v) * amount for v in _hex_rgb(colour))
+
+
+def _hue_gap(h, centre):
+    return abs((h - centre + 180) % 360 - 180)
+
+
+def tidy_accent(colour):
+    """
+    The colour as it will be used: moved off magenta (which marks anything that uses AI
+    credits) and lightened until it reads on the dark theme's buttons. A blank or broken
+    value gives the default.
+    """
+    import colorsys
+    if not valid_colour(colour):
+        return DEFAULT_ACCENT
+    h, l, s = colorsys.rgb_to_hls(*_hex_rgb(colour))
+    hue = h * 360
+    if s > 0.25 and _hue_gap(hue, AI_HUE) < AI_HUE_GAP:
+        hue = AI_HUE + (AI_HUE_GAP if (hue - AI_HUE + 180) % 360 - 180 >= 0 else -AI_HUE_GAP)
+    out = _rgb_hex(colorsys.hls_to_rgb(hue % 360 / 360, l, s))
+    while contrast(out, DARK["button_bg"]) < MIN_CONTRAST and l < 1:
+        l = min(1.0, l + 0.02)
+        out = _rgb_hex(colorsys.hls_to_rgb(hue % 360 / 360, l, s))
+    return out
+
+
+def accent_change(picked, used):
+    """Why tidy_accent changed a colour: "magenta" (moved off it), "lighter", or None if it didn't."""
+    import colorsys
+    if not valid_colour(picked) or _rgb_hex(_hex_rgb(picked)) == used:
+        return None
+    before = colorsys.rgb_to_hls(*_hex_rgb(picked))[0] * 360
+    after = colorsys.rgb_to_hls(*_hex_rgb(used))[0] * 360
+    return "magenta" if _hue_gap(before, after) > 2 else "lighter"
+
+
+def logo_partner(accent):
+    """
+    The logo's "bit" beside an accent: the opposite hue, or the brand orange when the
+    opposite would be magenta (the AI colour) or the accent is close to grey.
+    """
+    import colorsys
+    h, l, s = colorsys.rgb_to_hls(*_hex_rgb(accent))
+    opposite = (h * 360 + 180) % 360
+    if s < 0.2 or _hue_gap(opposite, AI_HUE) < 45:
+        return LIGHT["brand_orange"]
+    return tidy_accent(_rgb_hex(colorsys.hls_to_rgb(opposite / 360, l, s)))
+
+
+def set_accent(colour):
+    """Sets the accent everywhere it's used. Call before apply_theme."""
+    global ACCENT, MATRIX_FG, MATRIX_HI
+    ACCENT = MATRIX_FG = tidy_accent(colour)
+    MATRIX_HI = shade(ACCENT, 0.3)
+    for key in ACCENT_KEYS:
+        DARK[key] = ACCENT
+    DARK["logo_bit"] = logo_partner(ACCENT)
+    return ACCENT
+
+
+set_accent(DEFAULT_ACCENT)
 
 
 def _button_enter(event):
@@ -154,14 +264,16 @@ def flat_classic_widgets(root):
     root.bind_class("Button", "<Leave>", _button_leave, add="+")
 
 
-def apply_theme(root, name):
+def apply_theme(root, name, accent=None):
     """
-    Picks the palette for "light" or "dark". Call straight after tk.Tk(), before
+    Picks the palette for "light" or "dark", with the accent colour (blank for the
+    default). Call straight after tk.Tk(), before
     any widgets are made. Sets default colours for every plain Tk widget and styles
     the ttk widgets for the theme; dark also darkens the Windows title bar.
     """
     global THEME
     THEME = "dark" if str(name).strip().lower() == "dark" else "light"
+    set_accent(accent)
     PALETTE.clear()
     PALETTE.update(DARK if THEME == "dark" else LIGHT)
     bg, fg, field = PALETTE["window_bg"], PALETTE["text"], PALETTE["field_bg"]
@@ -633,8 +745,8 @@ class InfoLine(tk.Text):
 
 
 MATRIX_BG = "#000000"
-MATRIX_FG = "#00ff41"      # the log's green
-MATRIX_HI = "#0d4d1c"      # a highlighted row in an open dropdown
+MATRIX_FG = DEFAULT_ACCENT   # the console's colour, set by set_accent
+MATRIX_HI = shade(DEFAULT_ACCENT, 0.3)   # a highlighted row in an open dropdown
 
 
 def themed_ttk(root):

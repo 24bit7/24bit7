@@ -34,6 +34,7 @@ import nonstop
 from settings_gui import SettingsTab, write_env, read_env, warn_moderator_once, Tooltip, NO_KEY_TEXT
 from settings_gui import MODERATOR_CHOICES, MODERATOR_LEVELS_HELP
 from discover_gui import DiscoverTab
+import tabs
 from tabs import TabbedPane, PALETTE, FlatButton, InfoLine, apply_theme, ClickThrough, RoundedEntry
 from mix_gui import MixRows
 from review_gui import ReviewPanel
@@ -137,8 +138,8 @@ class PlayTab(tk.Frame):
                  fg=PALETTE["text_muted"]).pack(side="right", anchor="s", pady=(0, 5))
         title = tk.Frame(header)
         title.pack(side="left", anchor="w")
-        BLUE, ORANGE = PALETTE["brand_blue"], PALETTE["brand_orange"]
-        for part, colour in (("24", BLUE), ("bit", ORANGE), ("7", BLUE)):
+        BLUE, BIT = PALETTE["brand_blue"], PALETTE["logo_bit"]
+        for part, colour in (("24", BLUE), ("bit", BIT), ("7", BLUE)):
             tk.Label(title, text=part, font=("Segoe UI", 18, "bold"),
                      fg=colour).pack(side="left", padx=0)
         # The tagline sits beside the logo after a "/", both at their usual sizes
@@ -697,8 +698,8 @@ class PlayTab(tk.Frame):
         self.console_box = tk.Frame(frame, bg="#000000", highlightthickness=1, highlightbackground="#555555")
         self.console_box.pack(fill="both", expand=True)
         self.log = scrolledtext.ScrolledText(self.console_box, wrap="word", state="disabled",
-                                             font=("Consolas", 9), bg="#000000", fg="#00ff41",
-                                             insertbackground="#00ff41", bd=0, highlightthickness=0)
+                                             font=("Consolas", 9), bg="#000000", fg=tabs.MATRIX_FG,
+                                             insertbackground=tabs.MATRIX_FG, bd=0, highlightthickness=0)
         self.log.pack(fill="both", expand=True)
         # Colour by line type (the words lead, so Copy, Export and Query read the same without colour)
         bold = ("Consolas", 9, "bold")
@@ -964,7 +965,7 @@ class PlayTab(tk.Frame):
         for n, (text, url, tag) in enumerate(links):
             if n:
                 self.log.insert("end", "  ·  ")
-            self.log.tag_configure(tag, foreground="#00ff41", underline=True)
+            self.log.tag_configure(tag, foreground=tabs.MATRIX_FG, underline=True)
             self.log.tag_bind(tag, "<Button-1>", lambda e, u=url: self._open_tidal(u))
             self.log.tag_bind(tag, "<Enter>", lambda e: self.log.config(cursor="hand2"))
             self.log.tag_bind(tag, "<Leave>", lambda e: self.log.config(cursor=""))
@@ -1020,7 +1021,7 @@ class PlayTab(tk.Frame):
     # --- the console strip: Copy and Clear, shown when you click into the console ---
 
     def _build_console_strip(self, frame):
-        black, green, dim = "#000000", "#00ff41", "#0d4d1c"   # the console's own colours
+        black, green, dim = "#000000", tabs.MATRIX_FG, tabs.MATRIX_HI   # the console's own colours
         self.console_strip = tk.Frame(frame, bg=black)
         self.console_buttons = {}
         self.console_frame = frame
@@ -1049,14 +1050,14 @@ class PlayTab(tk.Frame):
 
     def _head_box(self, parent, text, command):
         """A box in the tab row, drawn like the console: green on black, a thin dark green edge."""
-        b = tk.Label(parent, text=text, font=("Consolas", 9), bg="#000000", fg="#00ff41", padx=10, pady=2,
-                     cursor="hand2", highlightthickness=1, highlightbackground="#0d4d1c",
-                     highlightcolor="#0d4d1c")
+        b = tk.Label(parent, text=text, font=("Consolas", 9), bg="#000000", fg=tabs.MATRIX_FG, padx=10, pady=2,
+                     cursor="hand2", highlightthickness=1, highlightbackground=tabs.MATRIX_HI,
+                     highlightcolor=tabs.MATRIX_HI)
         b.bind("<Button-1>", lambda e: command())
         return b
 
     def _build_console_head(self):
-        black, green = "#000000", "#00ff41"
+        black, green = "#000000", tabs.MATRIX_FG
         self.console_head = tk.Frame(self.console_box, bg=black)   # packed only while the tabs are open
         # Closed, the arrow floats over the top middle of the text, so the text starts on the first line
         self.head_arrow = tk.Label(self.console_box, text="\u25bc", font=("Consolas", 10), bg=black, fg=green,
@@ -1169,7 +1170,7 @@ class PlayTab(tk.Frame):
         self._fill_log_table()
 
     def _fill_log_table(self):
-        black, green, dim, white = "#000000", "#00ff41", "#0d4d1c", "#ffffff"
+        black, green, dim, white = "#000000", tabs.MATRIX_FG, tabs.MATRIX_HI, "#ffffff"
         grid = self.log_grid
         for child in grid.winfo_children():
             child.destroy()
@@ -1246,7 +1247,7 @@ class PlayTab(tk.Frame):
         source = t("Main Window") if self.view == "main" else buildlog.device_name(self.view)
         self._show_text(row["text"] or "")
         self.log.config(state="normal")
-        self.log.tag_configure("back", foreground="#00ff41", underline=True)
+        self.log.tag_configure("back", foreground=tabs.MATRIX_FG, underline=True)
         self.log.tag_bind("back", "<Button-1>", lambda e, v=self.view: self._select_view(v))
         self.log.tag_bind("back", "<Enter>", lambda e: self.log.config(cursor="hand2"))
         self.log.tag_bind("back", "<Leave>", lambda e: self.log.config(cursor=""))
@@ -1288,7 +1289,7 @@ class PlayTab(tk.Frame):
         for key, label in [("all", t("All")), ("main", t("Main Window"))] + devices + [("log", t("Log"))]:
             b = self._head_box(self.head_tabs, label, lambda k=key: self._select_view(k))
             if key == self.view:   # the tab on screen: inverted, green with black text
-                b.config(bg="#00ff41", fg="#000000", font=("Consolas", 9, "bold"), highlightbackground="#00ff41")
+                b.config(bg=tabs.MATRIX_FG, fg="#000000", font=("Consolas", 9, "bold"), highlightbackground=tabs.MATRIX_FG)
             b.pack(side="left", padx=(0, 4))
 
     def _live_visible(self):
@@ -1687,7 +1688,7 @@ class PlayTab(tk.Frame):
             return
         self.log.config(state="normal")
         self.log.insert("end", lead + " ", ("note",))
-        self.log.tag_configure("suggest", foreground="#00ff41", underline=True)
+        self.log.tag_configure("suggest", foreground=tabs.MATRIX_FG, underline=True)
         self.log.tag_bind("suggest", "<Button-1>", lambda e: self._take_suggestion(artist, again))
         self.log.tag_bind("suggest", "<Enter>", lambda e: self.log.config(cursor="hand2"))
         self.log.tag_bind("suggest", "<Leave>", lambda e: self.log.config(cursor=""))
@@ -1863,7 +1864,7 @@ def main():
     root = tk.Tk()
     root.withdraw()   # built out of sight and shown once it's ready, so it doesn't flash up small first
     _set_window_icon(root)
-    apply_theme(root, engine.THEME)   # before any widgets, so they all pick it up
+    apply_theme(root, engine.THEME, engine.ACCENT_COLOUR)   # before any widgets, so they all pick it up
     root.title(f"24bit7  v{engine.VERSION}")
     # Open at 75% of the screen so it fits any monitor/DPI, then centre it.
     sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()

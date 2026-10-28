@@ -31,7 +31,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.25.1"
+VERSION = "1.26.0"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
@@ -289,7 +289,7 @@ def load_settings():
     global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, CACHE_DAYS, CACHE_KEEP
     global TABLE_FONT_SIZE, VIBE_TRACK_COUNT, VIBE_PER_ARTIST
     global OUTPUT_TARGET, YOUTUBE_PLAYLIST_LENGTH, HIDDEN_ZONES, DEFAULT_ZONE, FOLLOW_ACTIVE_ZONE
-    global PREFER_OFFICIAL_VIDEOS, THEME, UI_LANGUAGE
+    global PREFER_OFFICIAL_VIDEOS, THEME, ACCENT_COLOUR, UI_LANGUAGE
     global VOICE_ENABLED, VOICE_KEY, VOICE_PORT, VOICE_NEW_PLAYLISTS
     global START_IN_TRAY, CLOSE_TO_TRAY
     global LISTEN_SITES, CUSTOM_SITES, PLAYLIST_SITES, EXTRA_OUTPUTS, TIDAL_OPEN
@@ -500,6 +500,8 @@ def load_settings():
     PREFER_OFFICIAL_VIDEOS = os.getenv("PREFER_OFFICIAL_VIDEOS", "0").strip().lower() in ("1", "true", "yes")
     # Settings > Other: light or dark, applied when the app starts
     THEME = "dark" if os.getenv("THEME", "light").strip().lower() == "dark" else "light"
+    # Settings > Other: the dark theme's colour and the console's, #rrggbb (blank = the default green)
+    ACCENT_COLOUR = os.getenv("ACCENT_COLOUR", "").strip()
     # Settings > Other: the language of the screens and console, applied when the app starts (i18n.py)
     UI_LANGUAGE = os.getenv("UI_LANGUAGE", "en").strip().lower() or "en"
 
@@ -677,6 +679,8 @@ YOUTUBE_PLAYLIST_LENGTH=50
 PREFER_OFFICIAL_VIDEOS=0
 # Colour theme: light or dark (Settings > Other)
 THEME=light
+# Accent colour for the dark theme and the console, as #rrggbb; blank for the default (Settings > Other)
+ACCENT_COLOUR=
 # Language of the screens and console: en (English) or de (Deutsch) (Settings > Other)
 UI_LANGUAGE=en
 # JRiver zones hidden from the Play tab's lists, separated by | (Settings > Other)

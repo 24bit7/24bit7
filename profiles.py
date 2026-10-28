@@ -36,6 +36,7 @@ EXTRA_ENV_KEYS = ["PLAY_BEHAVIOUR", "OUTPUT_TARGET", "YOUTUBE_PLAYLIST_LENGTH", 
                   # (a surround profile plays to a different zone from a stereo one)
                   "DEFAULT_ZONE", "FOLLOW_ACTIVE_ZONE", "HOTKEY_ZONE",
                   "CREDITS_SCOPE", "CREDITS_FIRST",   # Settings > Other > Show Credits
+                  "ACCENT_COLOUR",   # Settings > Other > Accent Colour
                   # the AI Playlist window's choices (a DJ profile can open on Steer with its usual chips)
                   "AI_DIALOG_MODE", "AI_CREATE_THEME", "AI_IF_SHORT", "AI_STEER_SEED", "AI_STEER_TONE",
                   "AI_STEER_DIRS", "AI_STEER_OWN", "AI_STEER_STRENGTH", "AI_STEER_COUNT",

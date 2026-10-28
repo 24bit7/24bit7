@@ -302,7 +302,11 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.25.0
+## What's new in 1.26.0
+
+- **A softer green, or a colour of your own**: the dark theme's green is gentler, as the old one glared on many screens. Settings > Other > Accent Colour picks any colour for the dark theme and the console, with a preview to choose by. The AI buttons stay magenta.
+
+### Earlier: 1.25.0
 
 - **Voice playlists wait for the playing song**: the song finishes, what was queued after it is cleared, and the new playlist follows. Settings > Voice Commands > New Playlists sets it back to Play now.
 - **Two new Alexa commands**: "only chill Led Zeppelin" builds an AI Playlist from one artist's tracks in your library, and "more artists like this" builds Similar Artists from what's playing. Paste the new skill files into the Alexa console to use them.

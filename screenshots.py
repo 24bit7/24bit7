@@ -81,7 +81,7 @@ DEMO_ENV = {"HIDDEN_ZONES": "", "DEFAULT_ZONE": "Speakers", "FOLLOW_ACTIVE_ZONE"
             "EXTRA_OUTPUTS": "youtube,tidal", "PLAYLIST_SITES": "youtube,tidal", "LISTEN_SITES": "youtube,tidal",
             # Deep Cuts on, Spaced, so More Options and the console show it; ? off, as it starts
             "DEEP_CUTS_ARTISTS": "spaced", "DEEP_CUTS_TRACKS": "spaced", "DEEP_CUTS_VIBE": "spaced", "PLAY_HELP": "0",
-            "THEME": "light"}   # the manual is light, whatever 24bit7 itself is set to
+            "THEME": "light", "ACCENT_COLOUR": ""}   # the manual is light, and its console the default green
 # JRiver Playlists: one playlist blended and one with Non-stop, so the shot shows both
 DEMO_SAVED_ROWS = {"201": {"blend": "tracks"}, "202": {"nonstop": "artists"}}
 DEMO_DEVICES = [("demo-kitchen", "Kitchen Echo", "Kitchen", 0, "2026-10-04 10:41"),
@@ -424,7 +424,7 @@ def build_window(gui):
     root = tk.Tk()
     draw_at_100(root)
     gui._set_window_icon(root)
-    gui.apply_theme(root, engine.THEME)
+    gui.apply_theme(root, engine.THEME, engine.ACCENT_COLOUR)
     root.title(f"24bit7  v{engine.VERSION}")
     scale = root.winfo_fpixels("1i") / 96.0
     global SCALE

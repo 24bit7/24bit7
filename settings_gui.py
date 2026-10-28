@@ -887,6 +887,7 @@ class SettingsTab(tk.Frame):
         updates["DEBUG"] = None   # replaced by the console's Simple/Advanced switch in 1.11.0
         updates["CONSOLE_QUERY"] = "1" if self.vars["CONSOLE_QUERY"].get() else "0"
         updates["THEME"] = self.vars["THEME"].get().lower()
+        updates["ACCENT_COLOUR"] = self.vars["ACCENT_COLOUR"].get()
         if "UI_LANGUAGE" in self.vars:
             codes = {name: code for code, name in i18n.LANGUAGES}
             updates["UI_LANGUAGE"] = codes.get(self.vars["UI_LANGUAGE"].get(), "en")
@@ -911,6 +912,62 @@ class SettingsTab(tk.Frame):
                else t("Restart 24bit7 now to switch to the light theme?"))
         if messagebox.askyesno(t("Theme"), ask, parent=self):
             self.winfo_toplevel().event_generate("<<Restart24bit7>>")
+
+    def _choose_accent(self):
+        from tkinter import colorchooser
+        current = tabs.tidy_accent(self.vars["ACCENT_COLOUR"].get())
+        _rgb, picked = colorchooser.askcolor(color=current, title=t("Accent Colour"), parent=self)
+        if picked:
+            self._set_accent(picked)
+
+    def _set_accent(self, picked):
+        """Shows a colour in the preview and saves it (blank is the default), then offers a restart."""
+        used = tabs.tidy_accent(picked) if picked else ""
+        if used == self.vars["ACCENT_COLOUR"].get():
+            return
+        self.vars["ACCENT_COLOUR"].set(used)
+        self._draw_accent_preview()
+        why = tabs.accent_change(picked, used) if picked else None
+        note = {"magenta": t("Moved away from magenta, which marks anything that uses AI credits."),
+                "lighter": t("Made lighter, so it reads on the dark theme's buttons.")}.get(why, "")
+        self.accent_note.config(text=note)
+        if note:
+            self.accent_note.pack(anchor="w")
+        else:
+            self.accent_note.pack_forget()
+        self._save()
+        if messagebox.askyesno(t("Accent Colour"), t("Restart 24bit7 now to use the new accent colour?"),
+                               parent=self):
+            self.winfo_toplevel().event_generate("<<Restart24bit7>>")
+
+    def _draw_accent_preview(self):
+        """A small piece of the dark theme in the chosen colour: logo, tabs, two buttons and the console."""
+        a = tabs.tidy_accent(self.vars["ACCENT_COLOUR"].get())
+        self.accent_swatch.config(bg=a)
+        self.accent_code.config(text=a if self.vars["ACCENT_COLOUR"].get() else t("Default"))
+        d, c = tabs.DARK, self.accent_preview
+        k = scaled(self, 100) / 100
+        c.delete("all")
+        c.config(bg=d["window_bg"])
+        c.create_rectangle(0, 0, 520 * k, 26 * k, fill="#000000", width=0)
+        x = 10 * k
+        for name in (t("Play"), t("Discover"), t("Settings")):
+            item = c.create_text(x, 13 * k, text=name, anchor="w", fill=a, font=("Segoe UI", 9, "bold"))
+            x = c.bbox(item)[2] + 18 * k
+        x = 10 * k
+        for part, colour in (("24", a), ("bit", tabs.logo_partner(a)), ("7", a)):
+            item = c.create_text(x, 50 * k, text=part, anchor="w", fill=colour, font=("Segoe UI", 15, "bold"))
+            x = c.bbox(item)[2] + 5 * k   # spaced as on the Play tab
+        for i, (name, fg, bar) in enumerate(((t("Similar Tracks"), a, d["button_accent"]),
+                                             (t("AI Playlist"), d["ai_purple"], d["ai_purple"]))):
+            left = (10 + i * 128) * k
+            c.create_rectangle(left, 82 * k, left + 120 * k, 110 * k, fill=d["button_bg"], width=0)
+            c.create_rectangle(left, 107 * k, left + 120 * k, 110 * k, fill=bar, width=0)
+            c.create_text(left + 60 * k, 95 * k, text=name, fill=fg, font=("Segoe UI", 8, "bold"))
+        c.create_rectangle(276 * k, 36 * k, 510 * k, 140 * k, fill="#000000", width=0)
+        c.create_rectangle(276 * k, 70 * k, 510 * k, 92 * k, fill=tabs.shade(a, 0.3), width=0)
+        for i, text in enumerate((t("Similar Tracks") + ": Braided Hair", "  1 Giant Leap", t("Playing Now"))):
+            c.create_text(284 * k, (48 + i * 33) * k, text=text, anchor="w", fill=a, font=("Consolas", 9))
 
     def _on_language_changed(self, *_):
         """Saves the language, then offers to restart so the whole app switches at once."""
@@ -3692,8 +3749,35 @@ class SettingsTab(tk.Frame):
                         "move the window, double-click it to maximise. Tick this for Windows' usual title bar "
                         "instead. Either way takes effect when 24bit7 restarts.")).pack(side="left", padx=(8, 0))
 
+        # Accent Colour: the dark theme's colour and the console's, with a preview to choose by
+        tk.Label(box, text=t("Accent Colour"), anchor="w").grid(row=5, column=0, sticky="nw", pady=4)
+        saved = self.env.get("ACCENT_COLOUR", "").strip()
+        self.vars["ACCENT_COLOUR"] = tk.StringVar(value=tabs.tidy_accent(saved) if saved else "")
+        cell = tk.Frame(box)
+        cell.grid(row=5, column=1, columnspan=2, sticky="w", padx=(12, 0), pady=4)
+        line = tk.Frame(cell)
+        line.pack(anchor="w")
+        self.accent_swatch = tk.Frame(line, width=scaled(self, 18), height=scaled(self, 18),
+                                      highlightthickness=1, highlightbackground=PALETTE["line"])
+        self.accent_swatch.pack(side="left")
+        self.accent_code = tk.Label(line, text="", width=8, anchor="w")
+        self.accent_code.pack(side="left", padx=(6, 8))
+        FlatButton(line, text=t("Choose Colour"), command=self._choose_accent, quiet=True).pack(side="left")
+        FlatButton(line, text=t("Use the Default"), command=lambda: self._set_accent(""),
+                   quiet=True).pack(side="left", padx=(8, 0))
+        help_mark(line, t("The colour of the dark theme's tabs, buttons and titles, and of the console in either "
+                          "theme. The preview shows it in the dark theme. A colour too dark to read is made lighter, "
+                          "and one close to magenta is moved away from it, as magenta marks anything that uses AI "
+                          "credits. It's applied when 24bit7 starts, so changing it offers a restart.")
+                  ).pack(side="left", padx=(8, 0))
+        self.accent_preview = tk.Canvas(cell, width=scaled(self, 520), height=scaled(self, 146),
+                                        highlightthickness=0, bd=0)
+        self.accent_preview.pack(anchor="w", pady=(8, 0))
+        self.accent_note = tk.Label(cell, text="", fg=PALETTE["help_fg"], font=HELP_FONT)   # shown when a pick is changed
+        self._draw_accent_preview()
+
         row = tk.Frame(box)
-        row.grid(row=5, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        row.grid(row=6, column=0, columnspan=3, sticky="w", pady=(8, 0))
         # Console Query: magenta, as it uses AI credits. Off by default; ticking it asks first.
         self.vars["CONSOLE_QUERY"] = tk.BooleanVar(
             value=self.env.get("CONSOLE_QUERY", "0").strip().lower() in ("1", "true", "yes"))
@@ -3713,9 +3797,9 @@ class SettingsTab(tk.Frame):
                   ).pack(side="left", padx=(8, 0))
 
         # Show Credits: the playing track's credits or every track's, and which list comes first
-        tk.Label(box, text=t("Show Credits"), anchor="w").grid(row=6, column=0, sticky="w", pady=(8, 4))
+        tk.Label(box, text=t("Show Credits"), anchor="w").grid(row=7, column=0, sticky="w", pady=(8, 4))
         cell = tk.Frame(box)
-        cell.grid(row=6, column=1, columnspan=2, sticky="w", padx=(12, 0), pady=(8, 4))
+        cell.grid(row=7, column=1, columnspan=2, sticky="w", padx=(12, 0), pady=(8, 4))
         self.vars["CREDITS_SCOPE"] = tk.StringVar(value=option_label(CREDITS_SCOPE_OPTIONS, engine.CREDITS_SCOPE))
         scope_cb = TCombobox(cell, textvariable=self.vars["CREDITS_SCOPE"], state="readonly", width=20,
                                 values=[s for _, s in CREDITS_SCOPE_OPTIONS])
@@ -3827,7 +3911,7 @@ class SettingsTab(tk.Frame):
         # --- Logo, tagline, version ---
         head = tk.Frame(tab)
         head.grid(row=0, column=0, sticky="w", pady=(0, 4))
-        for part, colour in (("24", PALETTE["brand_blue"]), ("bit", PALETTE["brand_orange"]),
+        for part, colour in (("24", PALETTE["brand_blue"]), ("bit", PALETTE["logo_bit"]),
                              ("7", PALETTE["brand_blue"])):
             tk.Label(head, text=part, font=("Segoe UI", 18, "bold"), fg=colour).pack(side="left")
         tk.Label(head, text="/", font=("Segoe UI", 10), fg=PALETTE["text_muted"]).pack(
