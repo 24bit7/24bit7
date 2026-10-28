@@ -1271,5 +1271,8 @@
   "Listening on 127.0.0.1:{port}": "Hört auf 127.0.0.1:{port}",
   "Off: port {port} is already in use": "Aus: Port {port} wird schon verwendet",
   "Off: no key yet": "Aus: noch kein Schlüssel",
-  "Every command, what you hear back, and settings per device.": "Jeder Befehl, was du zur Antwort hörst, und Einstellungen pro Gerät."
+  "Every command, what you hear back, and settings per device.": "Jeder Befehl, was du zur Antwort hörst, und Einstellungen pro Gerät.",
+  "Problem: the {count} track the AI picked from your library was left out by your filters or the recently played check (Settings > Filters, Settings > Playlist).": "Problem: Der {count} Titel, den die KI aus deiner Bibliothek gewählt hat, wurde von deinen Filtern oder der Prüfung auf kürzlich gespielte Titel weggelassen (Einstellungen > Filter, Einstellungen > Playlist).",
+  "Problem: the {count} tracks the AI picked from your library were all left out by your filters or the recently played check (Settings > Filters, Settings > Playlist).": "Problem: Alle {count} Titel, die die KI aus deiner Bibliothek gewählt hat, wurden von deinen Filtern oder der Prüfung auf kürzlich gespielte Titel weggelassen (Einstellungen > Filter, Einstellungen > Playlist).",
+  "what the AI picked from your library was left out by your filters": "das, was die KI aus deiner Bibliothek gewählt hat, von deinen Filtern weggelassen wurde"
 }

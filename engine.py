@@ -31,7 +31,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.25.0"
+VERSION = "1.25.1"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
@@ -6969,7 +6969,7 @@ def create_vibe_playlist(vibe, report=print, count=None, prompt=None, if_short=N
         return
 
     prefetch_youtube_ids(pairs)
-    keys, misses, over = [], 0, 0
+    keys, misses, over, left_out = [], 0, 0, 0
     for artist, track in pairs:
         key = find_jriver_key_by_track(artist, track)
         if key and check is not None and not check.allows(key, artist, track):
@@ -6978,8 +6978,10 @@ def create_vibe_playlist(vibe, report=print, count=None, prompt=None, if_short=N
             continue
         if key:
             report("    " + t("{found_label}: {artist} - {track}", found_label=found_label(True), artist=artist, track=track))
-            if key in keys or not played.fresh(key):
+            if key in keys:
                 pass
+            elif not played.fresh(key):   # Settings > Filters, recently played or a hidden track
+                left_out += 1
             elif drift._room(artist, key) <= 0:   # at most VIBE_PER_ARTIST per artist
                 over += 1
             else:
@@ -7002,11 +7004,19 @@ def create_vibe_playlist(vibe, report=print, count=None, prompt=None, if_short=N
     # the AI's own picks aren't moderated; Drift tracks from the sources can be (Settings > Playlist)
 
     if not keys:
-        report(t("Problem: nothing the AI picked is {where_found}. Try a different description.", where_found=where_found(True)))
+        played.done()   # says what the filters and the recently played check left out
+        if left_out:   # found in the library, but none of them allowed in
+            report(tn("Problem: the {count} track the AI picked from your library was left out by your filters "
+                      "or the recently played check (Settings > Filters, Settings > Playlist).",
+                      "Problem: the {count} tracks the AI picked from your library were all left out by your filters "
+                      "or the recently played check (Settings > Filters, Settings > Playlist).", left_out))
+            why = N_("what the AI picked from your library was left out by your filters")
+        else:
+            report(t("Problem: nothing the AI picked is {where_found}. Try a different description.", where_found=where_found(True)))
+            why = N_("nothing the AI picked is in your library")
         queued = send_mix_only(fast, None, report)
         if not queued:   # If All Else Fails: the playing track's genre, if anything is playing
-            queued = if_all_else_fails("vibe", get_playing_info(), report,
-                                       why=N_("nothing the AI picked is in your library"))
+            queued = if_all_else_fails("vibe", get_playing_info(), report, why=why)
         session_finish(session_id, queued, report=report)
         return
 
@@ -7057,6 +7067,7 @@ def create_only_playlist(text, report=print):
         if name and library.norm(name) and played.fresh(key):
             by_title.setdefault(library.norm(name), (name, str(key)))
     if not by_title:
+        played.done()
         report("  " + t("Problem: every track by {artist} was played recently or is left out by your Filters.",
                         artist=deinvert_the(artist)))
         session_finish(session_id, 0, report=report)
@@ -7076,6 +7087,7 @@ def create_only_playlist(text, report=print):
     keys = keys[:target]
     report("  " + tn("AI picks: {count} track.", "AI picks: {count} tracks.", len(keys)))
     if not keys:
+        played.done()
         report(t("Problem: the AI picked nothing from the list. Try different words."))
         session_finish(session_id, 0, report=report)
         return
