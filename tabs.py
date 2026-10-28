@@ -108,7 +108,7 @@ DARK = {
     "select_bg":       "#3a3d42",
 }
 THEME = "light"
-LIGHT["logo_bit"] = DARK["logo_bit"] = LIGHT["brand_orange"]   # the logo's "bit"; dark pairs it with the accent
+PALETTE["logo_bit"] = LIGHT["logo_bit"] = DARK["logo_bit"] = LIGHT["brand_orange"]   # the logo's "bit"; dark pairs it with the accent
 
 # The accent (Settings > Other > Accent Colour): every green in the dark theme, and the console's
 # green in both. The default was softened on 28 Oct 2026, as full-strength green glared on laptop screens.

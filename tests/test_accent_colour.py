@@ -71,10 +71,14 @@ def test_review_follows_the_accent(monkeypatch):
     import engine
     import review_gui
     monkeypatch.setattr(engine, "THEME", "dark")
-    tabs.set_accent("#ffb000")
-    p = review_gui.palette()
-    assert p["accent"] == p["act_fg"] == review_gui.CONSOLE["accent"] == "#ffb000"
-    assert p["line"] == tabs.shade("#ffb000", 0.23)
+    own = review_gui.tabs   # in the full suite Review can be loaded from the test's copy of the app
+    try:
+        own.set_accent("#ffb000")
+        p = review_gui.palette()
+        assert p["accent"] == p["act_fg"] == review_gui.CONSOLE["accent"] == "#ffb000"
+        assert p["line"] == own.shade("#ffb000", 0.23)
+    finally:
+        own.set_accent("")
 
 
 def test_saved_in_profiles_and_read_at_start(app):
