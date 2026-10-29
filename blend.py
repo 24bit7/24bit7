@@ -104,7 +104,10 @@ def find(keys, report, quiet=None, mode="tracks"):
             if not key or str(key) in exclude or str(key) in found:
                 continue
             owner = engine.owner_key(a, key)
-            if per.get(owner, 0) >= per_artist or not played.fresh(key):
+            if per.get(owner, 0) >= per_artist:
+                continue
+            key = played.pick(key)   # may be another copy you own of the same song
+            if not key or str(key) in exclude or str(key) in found:
                 continue
             per[owner] = per.get(owner, 0) + 1
             found.append(str(key))

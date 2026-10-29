@@ -288,8 +288,12 @@ class Active:
             self.missing += 1
         return True
 
+    def passes(self, key):
+        """allows() without counting a track left out: for trying your other copies of a song."""
+        return all(str(key) in pool for pool in self.pools) and self._rules_pass(key)
+
     def allows(self, key):
-        if all(str(key) in pool for pool in self.pools) and self._rules_pass(key):
+        if self.passes(key):
             return True
         self.left_out += 1
         return False

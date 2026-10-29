@@ -31,7 +31,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.26.0"
+VERSION = "1.26.1"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
@@ -4958,13 +4958,40 @@ class PlayedFilter:
                 return False
         if self.filters is not None and not self.filters.allows(key):
             return False
+        return not self._recent(key)
+
+    def _recent(self, key):
+        """True (and counted) when any copy you own of this track was played within the set days."""
         if not self.on:
-            return True
-        when = self.library.last_played(key)
+            return False
+        when = self.library.last_played_any(key)
         if when and when >= self.cutoff:
             self.skipped += 1
-            return False
-        return True
+            return True
+        return False
+
+    def pick(self, key):
+        """
+        For a track found by name: the copy of it to use, or None. Where the filters or the
+        hidden-track check turn this copy down, your other copies are tried in turn (a stereo
+        MP3 for a surround FLAC of the same album: issue #10), and the first that passes is used.
+        """
+        if not key or str(key) in self.keep:
+            return key
+        if (self.filters is not None or self.closer_limit is not None) and not self._passes_quietly(key):
+            import library   # here rather than at the top: library imports engine
+            for k in library.copies(key)[1:]:
+                if self._passes_quietly(k):
+                    return None if self._recent(k) else k
+        return key if self.fresh(key) else None   # counted and reported as before when no copy passes
+
+    def _passes_quietly(self, key):
+        """The hidden-track check and the filters for one copy, without counting or reporting."""
+        if self.closer_limit is not None:
+            closer = self.closer_library.closer_info(key)
+            if closer and closer[0] > self.closer_limit:
+                return False
+        return self.filters is None or self.filters.passes(key)
 
     def done(self):
         if self.filters is not None:
@@ -5388,8 +5415,10 @@ class Drift:
     def _take(self, keys, artist, title, key, score, parent=None):
         if not key or str(key) in self.exclude or key in keys or self._room(artist, key) <= 0:
             return False
-        if self.played and not self.played.fresh(key):
-            return False
+        if self.played:
+            key = self.played.pick(key)   # may be another copy you own of the same song
+            if not key or str(key) in self.exclude or key in keys:
+                return False
         keys.append(key)
         self.note(artist, title, key, score, parent=parent)
         return True
@@ -6148,8 +6177,11 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
         """Adds the hits that fit; returns how many made it in."""
         added = 0
         for artist, title, key in found:
-            if key not in collected_keys and key != first_key and str(key) not in pn_keys \
-                    and played.fresh(key) and drift._room(artist, key) > 0:   # one allowance per artist as tagged
+            if key in collected_keys or key == first_key or str(key) in pn_keys:
+                continue
+            key = played.pick(key)   # may be another copy you own of the same song
+            if key and key not in collected_keys and key != first_key and str(key) not in pn_keys \
+                    and drift._room(artist, key) > 0:   # one allowance per artist as tagged
                 collected_keys.append(key)
                 drift.note(artist, title, key, score)
                 fast.play(key)
@@ -6579,12 +6611,14 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
                     report("    " + t("Already in Playing Now: {c_artist} - {c_title}", c_artist=c_artist, c_title=c_title))
                     continue
                 owner = owner_key(c_artist, key) if key else ident[0]   # counted as tagged in the library
-                if (key and key not in keys and str(key) not in pool_keys and played.fresh(key)
-                        and pool_per.get(owner, 0) < per_artist * variety):
-                    pool.append((c_artist, c_title, key, sources, owner))
-                    pool_keys.add(str(key))
+                use = (played.pick(key)   # may be another copy you own of the same song
+                       if key and key not in keys and str(key) not in pool_keys
+                       and pool_per.get(owner, 0) < per_artist * variety else None)
+                if use and use not in keys and str(use) not in pool_keys:
+                    pool.append((c_artist, c_title, use, sources, owner))
+                    pool_keys.add(str(use))
                     pool_per[owner] = pool_per.get(owner, 0) + 1
-                    fast.play(key)
+                    fast.play(use)
                     report("    " + t("{found_label}: {c_artist} - {c_title}  ({items})", found_label=found_label(True), c_artist=c_artist, c_title=c_title, items=', '.join(sources)))
                 elif not key:
                     report("    " + t("{found_label}: {c_artist} - {c_title}", found_label=found_label(False), c_artist=c_artist, c_title=c_title))
@@ -6722,12 +6756,14 @@ def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=Fal
             key = find_jriver_key_by_track(artist, title) if use_stream else library.find_track_key(artist, title)
             session_log(session_id, artist, title, sources, found=bool(key))
             owner = owner_key(artist, key) if key else ident[0]   # counted as tagged in the library
-            if (key and key not in keys and str(key) not in pool_keys and played.fresh(key)
-                    and pool_per.get(owner, 0) < per_artist * variety):
-                pool.append((artist, title, key, sources, owner))
-                pool_keys.add(str(key))
+            use = (played.pick(key)   # may be another copy you own of the same song
+                   if key and key not in keys and str(key) not in pool_keys
+                   and pool_per.get(owner, 0) < per_artist * variety else None)
+            if use and use not in keys and str(use) not in pool_keys:
+                pool.append((artist, title, use, sources, owner))
+                pool_keys.add(str(use))
                 pool_per[owner] = pool_per.get(owner, 0) + 1
-                fast.play(key)
+                fast.play(use)
                 report("    " + t("{found_label}: {artist} - {title}  ({items})", found_label=found_label(True), artist=artist, title=title, items=', '.join(sources)))
             elif not key:
                 report("    " + t("{found_label}: {artist} - {title}", found_label=found_label(False), artist=artist, title=title))
@@ -6982,16 +7018,17 @@ def create_vibe_playlist(vibe, report=print, count=None, prompt=None, if_short=N
             continue
         if key:
             report("    " + t("{found_label}: {artist} - {track}", found_label=found_label(True), artist=artist, track=track))
-            if key in keys:
+            use = None if key in keys else played.pick(key)   # may be another copy you own of the same song
+            if key in keys or use in keys:
                 pass
-            elif not played.fresh(key):   # Settings > Filters, recently played or a hidden track
+            elif not use:   # Settings > Filters, recently played or a hidden track
                 left_out += 1
-            elif drift._room(artist, key) <= 0:   # at most VIBE_PER_ARTIST per artist
+            elif drift._room(artist, use) <= 0:   # at most VIBE_PER_ARTIST per artist
                 over += 1
             else:
-                keys.append(key)
-                drift.note(artist, track, key, 1)
-                fast.play(key)
+                keys.append(use)
+                drift.note(artist, track, use, 1)
+                fast.play(use)
             session_log(session_id, artist, track, "AI", found=True)
         else:
             report("    " + t("{found_label}: {artist} - {track}", found_label=found_label(False), artist=artist, track=track))
@@ -7164,9 +7201,10 @@ def play_top_n(report=print, seed_info=None):
             is_playing = bool(key) and str(key) == playing_key
             report(f"    {'Playing now' if is_playing else found_label(bool(key))}: {artist} - {track_name}  "
                    f"({', '.join(suggested_by)})")
-            if key and not is_playing and key not in ordered_keys and played.fresh(key):
-                ordered_keys.append(key)
-                fast.play(key)
+            use = played.pick(key) if key and not is_playing and key not in ordered_keys else None
+            if use and use not in ordered_keys and str(use) != playing_key:   # may be another copy you own
+                ordered_keys.append(use)
+                fast.play(use)
             session_log(session_id, artist, track_name, suggested_by, found=bool(key))
 
     if session_id is None:

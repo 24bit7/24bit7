@@ -47,6 +47,7 @@ _closers = {}            # key -> (seconds, name, artist) for the last track of 
 _played = {}             # key -> when JRiver last played it (Unix seconds), for tracks it has played
 _played_unread = False   # True when the library had Last Played values but none could be read
 _by_key = {}             # key -> track row, for filter rules
+_copies = {}             # key -> every copy you own of that song, best first (see copies())
 _timer = None
 
 
@@ -102,6 +103,9 @@ def _spell_numbers(text):
 def norm(text):
     """Both sides of a comparison go through this: what Alexa hears and what the tags say."""
     text = engine.fold_name_chars(text)                          # the character rules every comparison shares
+    if _APOSTROPHE.search(text):   # only when there is one: the library runs every name through this
+        text = _N_JOINER.sub(" n ", text)                        # Rock'n'Roll: the n stands alone, as 'and'
+        text = _APOSTROPHE.sub("", text)                         # Jane's = Jane’s = Janes, D'Angelo = Dangelo
     text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
     text = re.sub(r",\s*the\s*$", "", text.strip())            # Kooks, The
     text = text.replace("&", " and ").replace("+", " and ")
@@ -112,7 +116,14 @@ def norm(text):
     words = ["okay" if w == "ok" else w for w in text.split() if w != "and"]
     if words and words[0] == "the":
         words = words[1:]
-    return " ".join(_join_initials(words))
+    # a lone 'n' left after the initials join up is 'and' (Guns N' Roses, Salt-N-Pepa), so dropped
+    # like it; N.W.A keeps its n, and Youssou N'Dour's became 'ndour' with the apostrophe
+    return " ".join(w for w in _join_initials(words) if w != "n")
+
+
+# Apostrophes go without leaving a gap, straight or curly: a tag may use either
+_APOSTROPHE = re.compile(r"['’‘`]")
+_N_JOINER = re.compile(r"(?<=\w)\s*['’‘`]n['’‘`]\s*(?=\w)", re.I)
 
 
 def _join_initials(words):
@@ -220,18 +231,25 @@ def _read_playlists():
 def load():
     """Reads the whole library from JRiver. Returns a line for the log."""
     global _albums, _artists, _tracks, _songs, _song_titles, _playlists, _loaded_at, _closers
-    global _played, _played_unread, _by_key
+    global _played, _played_unread, _by_key, _copies
     engine.refresh_settings_if_changed()
     started = time.time()
     tracks = _read_tracks()
     playlists = _read_playlists()
-    albums, artists, songs = {}, {}, {}
+    albums, artists, songs, groups, normed = {}, {}, {}, {}, {}
     for row in tracks:
         title, artist = (row.get("Name") or "").strip(), (row.get("Artist") or "").strip()
         album, album_artist = row.get("Album") or "", row.get("Album Artist (auto)") or ""
         if title:
-            for k in title_keys(title):
+            keys = title_keys(title)
+            for k in keys:
                 songs.setdefault(k, []).append((title, artist, row["Key"], album, album_artist, False))
+            if keys and artist:
+                if artist not in normed:
+                    normed[artist] = norm(artist)
+                live = "live" in album.lower() and "live" in norm(album).split()   # another song, not a copy
+                groups.setdefault((normed[artist], keys[0], live), []).append(
+                    (title, artist, row["Key"], album, album_artist, False))
         if " - " in title:   # a compilation track named 'Artist - Title'
             by, just_title = (part.strip() for part in title.split(" - ", 1))
             if by and just_title:
@@ -265,9 +283,16 @@ def load():
             if when:
                 played[str(row["Key"])] = when
     by_key = {str(row.get("Key")): row for row in tracks}
+    copies_of = {}
+    for (artist_norm, _, _), entries in groups.items():
+        if len(entries) > 1:
+            best = [str(e[2]) for e in sorted(entries, key=lambda e: _album_version_first(e, artist_norm))]
+            for k in best:
+                copies_of[k] = best
     with _lock:
         _albums, _artists, _tracks, _playlists = albums, artists, tracks, playlists
         _by_key = by_key
+        _copies = copies_of
         _closers = closers
         _played, _played_unread = played, bool(seen and not played)
         _songs, _song_titles = songs, [tval for tval in songs if tval]
@@ -343,6 +368,27 @@ def last_played(key):
     """When JRiver last played this track (Unix seconds), or None if never (or unknown)."""
     with _lock:
         return _played.get(str(key))
+
+
+def copies(key):
+    """
+    Every copy you own of this track: the key itself first, then the others the way
+    find_track_key prefers them (studio album first). A copy is the same artist and title
+    as tagged, such as a stereo MP3 and a surround FLAC of one album; a live recording
+    only counts as a copy of another live one. Just [key] for a track with no copies.
+    """
+    with _lock:
+        best = _copies.get(str(key))
+    if not best:
+        return [str(key)]
+    return [str(key)] + [k for k in best if k != str(key)]
+
+
+def last_played_any(key):
+    """When JRiver last played any copy of this track (Unix seconds), or None."""
+    with _lock:
+        times = [_played[k] for k in (_copies.get(str(key)) or [str(key)]) if k in _played]
+    return max(times) if times else None
 
 
 def played_dates_unreadable():
@@ -586,32 +632,37 @@ def artist_in_text(text):
     """
     The library artist named somewhere in free text, for "only chill Led Zeppelin": (artist as
     tagged, the other words), or (None, "") when no artist you own is named. The words must
-    appear whole and in order. The longest name wins ('Guns N Roses' over 'Roses'); between
-    names of the same length, the artist with more tracks. Names under three letters are
-    ignored, as they turn up inside ordinary words. The other words come back without filler
-    ('songs', 'by'), so an empty string means no mood was given.
+    appear whole and in order, with or without the gaps between them: Alexa writes AC/DC as
+    'ACDC' (issue #12), and GusGus may be tagged 'Gus Gus'. The longest name wins ('Guns N
+    Roses' over 'Roses'); between names of the same length, the artist with more tracks. Names
+    under three letters are ignored, as they turn up inside ordinary words. The other words come
+    back without filler ('songs', 'by'), so an empty string means no mood was given.
     """
     words = norm(text).split()
     if not words:
         return None, ""
     ensure_loaded()
-    padded = " " + " ".join(words) + " "
     with _lock:
-        found = [(n, a) for n, a in _artists.items() if len(n) >= 3 and f" {n} " in padded]
+        squashed = {}
+        for n, a in _artists.items():
+            if len(n) >= 3:
+                squashed.setdefault(n.replace(" ", ""), []).append((n, a))
+        found = []   # (normalised name, artist as tagged, where its words start and end)
+        for i in range(len(words)):
+            for j in range(i + 1, min(len(words), i + 8) + 1):
+                found += [(n, a, i, j) for n, a in squashed.get("".join(words[i:j]), [])]
         if not found:
             return None, ""
         size = {}
-        if len(found) > 1:
-            wanted = {n for n, _ in found}
+        if len({f[0] for f in found}) > 1:
+            wanted = {f[0] for f in found}
             for row in _tracks:
                 for a in (row.get("Artist") or "").split(";"):
                     n = norm(a)
                     if n in wanted:
                         size[n] = size.get(n, 0) + 1
-    n, artist = max(found, key=lambda f: (len(f[0].split()), size.get(f[0], 0)))
-    name = n.split()
-    at = next(i for i in range(len(words)) if words[i:i + len(name)] == name)
-    rest = [w for w in words[:at] + words[at + len(name):] if w not in FILLER]
+    n, artist, at, end = max(found, key=lambda f: (len(f[0].split()), size.get(f[0], 0)))
+    rest = [w for w in words[:at] + words[end:] if w not in FILLER]
     return artist, " ".join(rest)
 
 
