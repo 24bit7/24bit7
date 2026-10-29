@@ -1281,5 +1281,18 @@
   "The colour of the dark theme's tabs, buttons and titles, and of the console in either theme. The preview shows it in the dark theme. A colour too dark to read is made lighter, and one close to magenta is moved away from it, as magenta marks anything that uses AI credits. It's applied when 24bit7 starts, so changing it offers a restart.": "Die Farbe der Reiter, Schaltflächen und Überschriften im dunklen Design und die der Konsole in beiden Designs. Die Vorschau zeigt sie im dunklen Design. Eine Farbe, die zu dunkel zum Lesen ist, wird heller gemacht, und eine Farbe nahe Magenta wird davon weggerückt, denn Magenta kennzeichnet alles, was KI-Guthaben verbraucht. Sie wird beim Start von 24bit7 angewendet, daher wird nach einer Änderung ein Neustart angeboten.",
   "Moved away from magenta, which marks anything that uses AI credits.": "Von Magenta weggerückt, denn Magenta kennzeichnet alles, was KI-Guthaben verbraucht.",
   "Made lighter, so it reads on the dark theme's buttons.": "Heller gemacht, damit sie auf den Schaltflächen des dunklen Designs lesbar ist.",
-  "Restart 24bit7 now to use the new accent colour?": "24bit7 jetzt neu starten, um die neue Akzentfarbe zu verwenden?"
+  "Restart 24bit7 now to use the new accent colour?": "24bit7 jetzt neu starten, um die neue Akzentfarbe zu verwenden?",
+  "{zone}: asking the AI": "{zone}: frage die KI",
+  "{zone}: finding tracks": "{zone}: suche Titel",
+  "{count} track added": "{count} Titel hinzugefügt",
+  "{count} tracks added": "{count} Titel hinzugefügt",
+  "Nothing added": "Nichts hinzugefügt",
+  "Not played: {asked}": "Nicht gespielt: {asked}",
+  "More artists like {shown}": "Mehr Künstler wie {shown}",
+  "More like {shown}": "Mehr in der Art von {shown}",
+  "Songs by {shown}": "Songs von {shown}",
+  "Music like {shown}": "Musik wie {shown}",
+  "Genre: {shown}": "Genre: {shown}",
+  "Only {shown}": "Only {shown}",
+  "Tracks like {shown}": "Titel wie {shown}"
 }

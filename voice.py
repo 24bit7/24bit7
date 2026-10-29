@@ -476,13 +476,15 @@ def _zone_command(intent, device, body):
         shown = artist or title
         heading = t("Voice, {name}: more artists like {shown}, to {zone}{own}", name=name, shown=shown, zone=zone,
                     own=own)
+        asked = t("More artists like {shown}", shown=shown)
         speech = f"More artists like {shown}, coming up on {zone}."
     else:
         shown = t("{title} by {artist}", title=title, artist=artist) if artist else title
         heading = t("Voice, {name}: more like {shown}, to {zone}{own}", name=name, shown=shown, zone=zone, own=own)
+        asked = t("More like {shown}", shown=shown)
         speech = f"More like {f'{title} by {artist}' if artist else title}, coming up on {zone}."
     _submit(_job(intent, seed, zone, profile, device or "unknown device"), heading,
-            {"from": "voice", "device": device or "unknown device"})
+            {"from": "voice", "device": device or "unknown device", "badge": (asked, zone, False)})
     if _is_busy() and not _takes_over(zone):
         return "pending", "Please wait, request pending.", {}
     return "started", speech, {}
@@ -904,7 +906,8 @@ def handle_command(body, busy=False):
     _submit(_job(intent, value, zone, profile, device or "unknown device"),
             t(heading, name=name, shown=shown, heard=corrected, zone=zone,
               own=t(", with its own settings") if profile else ""),
-            {"from": "voice", "device": device or "unknown device"})
+            {"from": "voice", "device": device or "unknown device",
+             "badge": (t(BADGE_ASKED[intent], shown=shown), zone, intent in ("genre", "only"))})
     if busy and not _takes_over(zone):
         return "pending", "Please wait, request pending.", {}
     return "started", f"{words}, coming up on {zone}.", {}
@@ -951,6 +954,10 @@ class _Handler(BaseHTTPRequestHandler):
         self._reply(200, {"status": status, "speech": speech, **extra})
 
 
+# What the badge says was asked (badge.py): the console's heading, shorter
+BADGE_ASKED = {"songs_by": N_("Songs by {shown}"), "music_like": N_("Music like {shown}"),
+               "genre": N_("Genre: {shown}"), "only": N_("Only {shown}"), "tracks_like": N_("Tracks like {shown}")}
+
 SAID = {"songs_by": "songs by", "music_like": "music like", "tracks_like": "tracks like", "genre": "genre", "only": "only",
         "album": "album", "song": "song", "playlist": "playlist", "shuffle": "shuffle songs by", "skip": "skip",
         "who_is_this": "who is this", "more_like": "more like this",
@@ -975,6 +982,8 @@ def _log_problem(body, speech):
     second = "  " + t('Problem: Alexa said "{speech}"', speech=speech)
     engine.print(first)
     engine.print(second)
+    if _on_problem is not None:   # the badge, from the couch
+        _on_problem(asked, speech)
     try:
         import buildlog   # here rather than at the top: it imports engine
         buildlog.record_instant(device or "unknown device", intent, first + "\n" + second)
@@ -983,6 +992,7 @@ def _log_problem(body, speech):
 
 
 _is_busy = lambda: False   # replaced by the GUI
+_on_problem = None         # set by the GUI: on_problem(asked, speech) shows it on the badge
 
 
 # --- starting and stopping ------------------------------------------------------
@@ -991,6 +1001,12 @@ def attach(submit, is_busy):
     """The GUI hands over how to queue a build and how to tell if one is running."""
     global _submit, _is_busy
     _submit, _is_busy = submit, is_busy
+
+
+def attach_badge(on_problem):
+    """The GUI hands over how to show a request that came to nothing on the badge."""
+    global _on_problem
+    _on_problem = on_problem
 
 
 def new_key():

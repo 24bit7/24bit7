@@ -467,6 +467,12 @@ The skill name is up to you. This one is "needle drop" because Alexa kept mishea
 
 Albums, songs, playlists and shuffles need no building, so they replace whatever is playing at once. Playlists that are built use [fast start](#fast-start) and queue behind anything already playing.
 
+### What you see
+
+While a voice command builds a playlist, a small 24bit7 badge sits in the top right of the main screen, on top of everything, JRiver's Theater View included. It shows what you asked for and the zone, with a dot that moves while it works (magenta while the AI is choosing). It stays up while [Drift](#drift) is still finding tracks, so you know when more are on the way. When the playlist is done it says how many tracks went in, or why none did, then fades after a few seconds. A command that comes to nothing shows there too, with what Alexa said.
+
+The badge never takes focus, and clicks go straight through it, so the remote and JRiver carry on as normal. It's for voice only: at the desk the console shows the same thing. Its colours follow your accent colour (Settings > Other).
+
 ### Keeping it going
 
 With **Non-stop** ticked for a Play option, a playlist a voice command built carries on when it reaches its last track. "Shuffle songs by" carries on the same way once the shuffle runs out. Your own JRiver playlists can keep going too, set per playlist under Settings > JRiver Playlists. Albums and songs end as normal, unless you say **"keep it going"**: that turns on Non-stop once for whatever the zone is playing, even an album you started in JRiver, using the zone's Similar Tracks Non-stop settings: Wander if Non-stop is Off there, otherwise the mode chosen there. It ends when something else replaces the music.

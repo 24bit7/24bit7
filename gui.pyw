@@ -38,6 +38,7 @@ import tabs
 from tabs import TabbedPane, PALETTE, FlatButton, InfoLine, apply_theme, ClickThrough, RoundedEntry
 from mix_gui import MixRows
 from review_gui import ReviewPanel
+import badge
 import console_query
 import playmix
 import profiles
@@ -115,6 +116,8 @@ class PlayTab(tk.Frame):
         self.running = False
         self.last_playing = None
         self.voice_jobs = queue.Queue()   # (job, heading) from voice commands, run one at a time
+        self.badge = badge.Badge(root)    # voice builds show on it, over Theater View
+        self.badge_problems = queue.Queue()   # (asked, what Alexa said) from the voice thread
 
         self._build_now_playing()
         self._build_buttons()
@@ -995,6 +998,11 @@ class PlayTab(tk.Frame):
                 self._append_log(line)
         except queue.Empty:
             pass
+        try:
+            while True:
+                self.badge.problem(*self.badge_problems.get_nowait())
+        except queue.Empty:
+            pass
         self._next_voice_job()
         self.after(POLL_MS, self._drain_log_queue)
 
@@ -1012,6 +1020,22 @@ class PlayTab(tk.Frame):
             job(self.report)
         # voice, shortcuts, non-stop: no added playlists
         self._run_job(target, needs_playing=False, mix=False, origin=origin)
+
+    def _badge_result(self):
+        """A voice build has finished: the badge says how many tracks went in, or why none did."""
+        job, self._badge_job = getattr(self, "_badge_job", None), None
+        if not job:
+            return
+        if getattr(self, "_job_cancelled", False):
+            return self.badge.hide()
+        count = (engine.LAST_BUILD or {}).get("queued") or 0
+        why = ""
+        if not count:   # the build's last Problem line, without its label
+            lines = "\n".join(self._live).splitlines()   # this build's lines, whichever tab is showing
+            problems = [x.strip() for x in lines if x.strip().startswith(t("Problem:"))]
+            if problems:
+                why = problems[-1][len(t("Problem:")):].strip()
+        self.badge.done(count, job[1], why)
 
     def _clear_log(self):
         self.log.config(state="normal")
@@ -1540,6 +1564,9 @@ class PlayTab(tk.Frame):
             b.config(state="disabled")
         self._begin_live(origin)
         self._stamp_next = True   # the build's first line gets the time
+        self._badge_job = (origin or {}).get("badge")   # (asked, zone, uses AI) for a voice build
+        if self._badge_job:
+            self.badge.working(*self._badge_job)
 
         rows = (playmix.rows() or None) if mix else None   # added playlists: app builds only
         review = review and bool(mix) and self._review_mode()   # Review: app builds, never voice
@@ -1608,6 +1635,7 @@ class PlayTab(tk.Frame):
         self.running = False
         engine.CANCEL_REQUESTED.clear()
         self._sync_cancel_strip()
+        self._badge_result()
         if (engine.LAST_NO_MATCH and getattr(self, "_job_origin", None) is None
                 and not getattr(self, "_job_cancelled", False)):   # a build from the app found nothing at all
             engine.LAST_NO_MATCH = False
@@ -1935,6 +1963,7 @@ def main():
     library.start()   # the whole library in memory: Similar Tracks and voice match against it
     voice.attach(lambda job, heading, origin=None: play.voice_jobs.put((job, heading, origin)),
                  lambda: play.running or not play.voice_jobs.empty())
+    voice.attach_badge(lambda asked, said: play.badge_problems.put((asked, said)))
     voice.restart()
     # Keyboard shortcuts (Settings > Other): queued on the Play tab like voice commands
     hotkeys.attach(lambda job, heading, origin=None: play.voice_jobs.put((job, heading, origin)),

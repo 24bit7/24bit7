@@ -302,7 +302,13 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.26.0
+## What's new in 1.27.0
+
+- **See your voice requests**: while a voice command builds a playlist, a small badge in the top right of the screen, over Theater View too, shows what you asked for, stays up while Drift adds more, then says how many tracks went in or why none did.
+- **Songs you own twice get past your filters**: if a filter leaves out one copy of a song (a surround FLAC, say), your other copies are tried, so the stereo MP3 plays instead.
+- **"only ACDC" finds AC/DC**, "Guns and Roses" finds Guns N' Roses, and an artist tagged with both kinds of apostrophe is one artist.
+
+### Earlier: 1.26.0
 
 - **A softer green, or a colour of your own**: the dark theme's green is gentler, as the old one glared on many screens. Settings > Other > Accent Colour picks any colour for the dark theme and the console, with a preview to choose by. The AI buttons stay magenta.
 
