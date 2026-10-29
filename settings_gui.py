@@ -4174,8 +4174,12 @@ class SettingsTab(tk.Frame):
         names = engine.zone_names(include_hidden=True)
         self.zone_vars, self.zone_radios = {}, {}
         if not names:
-            tk.Label(self.zone_frame, text=t("No zones found. Is JRiver running, with Media Network on?"),
-                     fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=0, column=0, sticky="w")
+            tk.Label(self.zone_frame, text=t("No zones found: JRiver turned 24bit7 away. Set a login under "
+                                             "Tools > Options > Media Network > Authentication in JRiver, "
+                                             "and the same in Settings > Keys.") if engine.JRIVER_REFUSED[0] else
+                     t("No zones found. Is JRiver running, with Media Network on?"),
+                     fg=PALETTE["help_fg"], font=HELP_FONT, wraplength=scaled(self.zone_frame, 420),
+                     justify="left").grid(row=0, column=0, sticky="w")
             return
         tk.Label(self.zone_frame, text=t("Show"), fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=0, column=0, sticky="w")
         tk.Label(self.zone_frame, text=t("Default"), fg=PALETTE["help_fg"], font=HELP_FONT).grid(

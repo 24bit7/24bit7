@@ -31,7 +31,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.27.0"
+VERSION = "1.27.1"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
@@ -792,10 +792,14 @@ def diagnostics_text():
              f"Folder: {APP_DIR}"]
     try:
         r = requests.get(f"{JRIVER_BASE}/Alive", auth=AUTH, timeout=3)
+        if r.status_code in (401, 403):
+            raise JRiverRefused(r.status_code)
         m = re.search(r'Name="ProgramVersion">([^<]+)', r.text)
         lines.append(f"JRiver: {m.group(1) if m else 'answered, version not read'}  ({JRIVER_BASE})")
     except Exception as e:
-        lines.append(f"JRiver: not reachable at {JRIVER_BASE} ({e.__class__.__name__})")
+        lines.append(f"JRiver: refused 24bit7 (error {e.args[0]}), no login or a different one  ({JRIVER_BASE})"
+                     if isinstance(e, JRiverRefused) else
+                     f"JRiver: not reachable at {JRIVER_BASE} ({e.__class__.__name__})")
     try:
         import library
         with library._lock:
@@ -1311,15 +1315,51 @@ def clear_discoveries(ids=None):
 
 
 _jriver_unreachable = []   # becomes non-empty after the first failed read
+JRIVER_REFUSED = [False]   # the last read was turned away, for Settings' zone note
+
+
+class JRiverRefused(Exception):
+    """JRiver answered but turned 24bit7 away (401 or 403): no login set in JRiver, or a different one."""
+
+
+def _jriver_xml(r):
+    """The XML of a JRiver reply. Raises JRiverRefused rather than trying to read 'Access denied.' as XML."""
+    JRIVER_REFUSED[0] = r.status_code in (401, 403)
+    if JRIVER_REFUSED[0]:
+        raise JRiverRefused(r.status_code)
+    return ET.fromstring(xml_safe(r.text))
+
+
+def jriver_problem(e):
+    """
+    One plain line for a failed JRiver read, saying what to fix (jkrichards, 26 Oct 2026: with no login
+    in JRiver, the console said "JRiver isn't reachable (syntax error: line 1, column 0)").
+    """
+    if isinstance(e, JRiverRefused):
+        return t("Problem: JRiver turned 24bit7 away (error {code}). Set a username and password in JRiver "
+                 "(Tools > Options > Media Network > Authentication), then enter the same in Settings > Keys.",
+                 code=e.args[0])
+    if isinstance(e, requests.ConnectionError):
+        return t("Problem: JRiver isn't answering at {host}. Is it running, with Media Network on "
+                 "(Tools > Options > Media Network)? If JRiver is on another PC, put its address under "
+                 "Settings > Other > JRiver host.", host=JRIVER_HOST)
+    return t("Problem: JRiver isn't reachable ({e}). The Search tab with YouTube output works without it.", e=e)
+
+
+def _say_jriver_problem(e):
+    if not _jriver_unreachable:   # say it once; the GUI asks every few seconds
+        _jriver_unreachable.append(True)
+        print(jriver_problem(e))
 
 
 def _read_zones():
     """JRiver's zones as [(id, name)] in JRiver's order, plus the active zone's ID. ([], None) if unreachable."""
     try:
         r = requests.get(f"{JRIVER_BASE}/Playback/Zones", auth=AUTH, timeout=5)
-        items = {i.get("Name"): (i.text or "").strip() for i in ET.fromstring(xml_safe(r.text)).findall("Item")}
+        items = {i.get("Name"): (i.text or "").strip() for i in _jriver_xml(r).findall("Item")}
         count = int(items.get("NumberZones") or 0)
-    except Exception:
+    except Exception as e:
+        _say_jriver_problem(e)
         return [], None
     zones = [(items.get(f"ZoneID{n}"), items.get(f"ZoneName{n}")) for n in range(count)]
     return [(i, n) for i, n in zones if i and n], items.get("CurrentZoneID")
@@ -1375,7 +1415,7 @@ def get_playing_info(zone=None):
         if zone is None:
             return None
         r = requests.get(f"{JRIVER_BASE}/Playback/Info", params={"Zone": zone}, auth=AUTH, timeout=10)
-        root = ET.fromstring(xml_safe(r.text))
+        root = _jriver_xml(r)
         info = {"Artist": "Unknown", "Album": "Unknown", "Name": "Unknown",
                 "PlayingNowPosition": "-1", "PlayingNowTracks": "0", "FileKey": "", "ZoneID": "",
                 "State": "", "PositionMS": "", "DurationMS": ""}
@@ -1384,9 +1424,7 @@ def get_playing_info(zone=None):
                 info[item.get('Name')] = item.text
         return info
     except Exception as e:
-        if not _jriver_unreachable:   # say it once; the GUI asks every few seconds
-            _jriver_unreachable.append(True)
-            print(t("Problem: JRiver isn't reachable ({e}). The Search tab with YouTube output works without it.", e=e))
+        _say_jriver_problem(e)
         return None
 
 

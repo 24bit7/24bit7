@@ -1294,5 +1294,8 @@
   "Music like {shown}": "Musik wie {shown}",
   "Genre: {shown}": "Genre: {shown}",
   "Only {shown}": "Only {shown}",
-  "Tracks like {shown}": "Titel wie {shown}"
+  "Tracks like {shown}": "Titel wie {shown}",
+  "Problem: JRiver turned 24bit7 away (error {code}). Set a username and password in JRiver (Tools > Options > Media Network > Authentication), then enter the same in Settings > Keys.": "Problem: JRiver hat 24bit7 abgewiesen (Fehler {code}). Lege in JRiver einen Benutzernamen und ein Passwort fest (Tools > Options > Media Network > Authentication) und trage dieselben unter Einstellungen > Schlüssel ein.",
+  "Problem: JRiver isn't answering at {host}. Is it running, with Media Network on (Tools > Options > Media Network)? If JRiver is on another PC, put its address under Settings > Other > JRiver host.": "Problem: JRiver antwortet nicht unter {host}. Läuft es mit eingeschaltetem Media Network (Tools > Options > Media Network)? Läuft JRiver auf einem anderen PC, trage dessen Adresse unter Einstellungen > Sonstiges > JRiver host ein.",
+  "No zones found: JRiver turned 24bit7 away. Set a login under Tools > Options > Media Network > Authentication in JRiver, and the same in Settings > Keys.": "Keine Zonen gefunden: JRiver hat 24bit7 abgewiesen. Lege in JRiver unter Tools > Options > Media Network > Authentication ein Login fest und trage dasselbe unter Einstellungen > Schlüssel ein."
 }
