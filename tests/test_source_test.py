@@ -189,3 +189,27 @@ def test_sample_wording_and_export(app, tmp_path):
     text = open(path, encoding="utf-8").read()
     assert text.startswith("Section,Genre,Source,Score %") and "Similar Tracks,Rock,Last.fm" in text
     assert "Seeds answered" in s.cell_detail(result, "tracks", "Rock", "lastfm")
+
+
+def test_ready_line_waits_for_a_running_build(app, monkeypatch):
+    """24 Oct 2026: a test that finished mid-build printed its ready line among the build's lines."""
+    s = st(app)
+    sid = app.engine.session_start("Similar Tracks", {"Artist": "Queen", "Name": "Bohemian Rhapsody"})
+    monkeypatch.setattr(s, "run", lambda **k: {})   # finishes while the build is still going
+    assert s.start_background(quick=True)
+    s._thread.join(timeout=60)
+    assert not app.printed.has("Source test ready"), "not in the middle of the build"
+    app.engine.session_finish(sid, 5, report=app.printed)
+    lines = app.printed.text()
+    assert lines.index("Done:") < lines.index("Source test ready"), lines
+    app.printed.clear()
+    app.engine.session_finish(sid, 5, report=app.printed)
+    assert not app.printed.has("Source test ready"), "said once"
+
+
+def test_ready_line_straight_away_with_no_build(app, monkeypatch):
+    s = st(app)
+    monkeypatch.setattr(s, "run", lambda **k: {})
+    assert s.start_background(quick=True)
+    s._thread.join(timeout=60)
+    assert app.printed.has("Source test ready")

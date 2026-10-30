@@ -62,6 +62,7 @@ READY_LINE = ("Source test ready: open Full Results under Settings > Sources to 
               "does with your library.")
 
 _thread = None
+_held = [False]   # finished while a build ran: said when the build ends
 _lock = threading.Lock()
 _stop = threading.Event()                  # set by cancel(): the running test stops before the next seed
 progress_state = {"n": 0, "of": 0}       # for the screens: which seed a running test is on
@@ -295,7 +296,7 @@ def start_background(quick=False, include_ai=False):
         def work():
             try:
                 if run(quick=quick, include_ai=include_ai, stop=_stop.is_set) is not None:
-                    engine.print(READY_LINE)
+                    _say_ready()
                 else:
                     engine.print(t("Source test cancelled. Nothing was saved, so the last results still show."))
             except Exception as e:
@@ -303,6 +304,21 @@ def start_background(quick=False, include_ai=False):
         _thread = threading.Thread(target=work, daemon=True, name="source-test")
         _thread.start()
         return True
+
+
+def _say_ready():
+    """The ready line, held back while a build runs (24 Oct 2026: it landed among a Search build's lines)."""
+    if build_running():
+        _held[0] = True
+    else:
+        engine.print(READY_LINE)
+
+
+def after_build():
+    """At the end of a build: the ready line, if the test finished while it ran."""
+    if _held[0] and not build_running():
+        _held[0] = False
+        engine.print(READY_LINE)
 
 
 def is_running():
@@ -407,6 +423,7 @@ def remind_if_ready():
     """At the start of each build: the ready line again, until the report has been opened."""
     try:
         if not is_running() and unseen():
+            _held[0] = False   # said here, so not again when this build ends
             engine.print(READY_LINE)
     except Exception:
         pass

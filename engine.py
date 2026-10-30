@@ -31,7 +31,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.27.2"
+VERSION = "1.27.3"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
@@ -1149,6 +1149,11 @@ def session_finish(session_id, queued, sources=None, report=print):
     mod = (f"{MODERATOR_RUN['level']}, {MODERATOR_RUN['removed']} removed" if MODERATOR_RUN["level"] else "")
     globals()["LAST_BUILD"] = {"mode": row[0], "sources": row[1], "queued": queued, "misses": misses, "moderator": mod}
     report(done_line(queued, misses, _SESSION_STARTED.pop(session_id, None)))
+    try:   # a source test that finished during this build says so now, after its Done line
+        import source_test
+        source_test.after_build()
+    except Exception:
+        pass
     if not NONSTOP_APPEND:   # every finished build, matches or not (not a non-stop top-up)
         run_after_building(report)
 
