@@ -469,7 +469,7 @@ Albums, songs, playlists and shuffles need no building, so they replace whatever
 
 ### What you see
 
-While a voice command builds a playlist, a small 24bit7 badge sits in the top right of the main screen, on top of everything, JRiver's Theater View included. It shows what you asked for and the zone, with a dot that moves while it works (magenta while the AI is choosing). It stays up while [Drift](#drift) is still finding tracks, so you know when more are on the way. When the playlist is done it says how many tracks went in, or why none did, then fades after a few seconds. A command that comes to nothing shows there too, with what Alexa said.
+While a voice command builds a playlist, a small 24bit7 badge sits in the top right of the main screen, on top of everything, JRiver's Theater View included. It shows what you asked for and the zone, with a dot in your accent colour that moves while it works. It stays up while [Drift](#drift) is still finding tracks, so you know when more are on the way. When the playlist is done it says how many tracks went in, or why none did, then fades after a few seconds. A command that comes to nothing shows there too, with what Alexa said.
 
 The badge never takes focus, and clicks go straight through it, so the remote and JRiver carry on as normal. It's for voice only: at the desk the console shows the same thing. Its colours follow your accent colour (Settings > Other).
 

@@ -7,6 +7,9 @@ runs, a small badge sits in the top right of the main screen, on top of everythi
 included. It never takes focus and clicks go straight through it. It shows what was asked and the
 zone, stays up while Drift is still finding tracks, then says how many went in, or what went
 wrong, and fades. Voice only, with no setting; its colours follow the accent (Settings > Other).
+The working dots stay in the accent while the AI chooses too (datdude, 29 Oct: magenta flashing
+over Theater View distracted; magenta marks a button that will spend AI credits, and by now the
+request is made, with "asking the AI" on the line below).
 """
 
 import ctypes
@@ -19,7 +22,7 @@ from i18n import t, tn
 import tabs
 
 BG, TEXT, MUTED, DOT_OFF = "#16181c", "#e8eaed", "#9aa0a6", "#3a3d42"   # always dark: it sits over Theater View
-WIDTH, HEIGHT, MARGIN = 340, 84, 32   # at 96 dpi; scaled with Windows' display scaling
+WIDTH, HEIGHT, MARGIN = 340, 84, 16   # at 96 dpi; scaled with Windows' display scaling
 TICK_MS = 400      # the working dot moves on
 HOLD_MS = 6000     # how long the result stays before it fades
 FADE_STEPS = 10
@@ -31,6 +34,7 @@ GWL_EXSTYLE, GWLP_HWNDPARENT = -20, -8
 WS_EX_LAYERED, WS_EX_TRANSPARENT, WS_EX_TOOLWINDOW = 0x80000, 0x20, 0x80
 WS_EX_NOACTIVATE, WS_EX_TOPMOST = 0x08000000, 0x8
 SW_HIDE, SW_SHOWNOACTIVATE = 0, 4
+SWP_NOZORDER, SWP_NOACTIVATE = 0x4, 0x10
 
 
 def _ellipsis(text, font, width):
@@ -59,7 +63,7 @@ class Badge:
     def working(self, asked, zone, ai=False):
         """A voice build has started: what was asked, and the zone it's for."""
         self._show("working", asked, t("{zone}: asking the AI", zone=zone) if ai else
-                   t("{zone}: finding tracks", zone=zone), tabs.DARK["ai_purple"] if ai else tabs.ACCENT)
+                   t("{zone}: finding tracks", zone=zone), tabs.ACCENT)
 
     def done(self, count, zone, why=""):
         """The build finished: how many tracks went in, or why none did."""
@@ -113,8 +117,10 @@ class Badge:
 
     def _place(self):
         s = self.scale
-        x = self.root.winfo_screenwidth() - self.width - int(MARGIN * s)
-        self.win.geometry(f"{self.width}x{int(HEIGHT * s)}+{x}+{int(MARGIN * s)}")
+        x, y, h = self.root.winfo_screenwidth() - self.width - int(MARGIN * s), int(MARGIN * s), int(HEIGHT * s)
+        self.win.geometry(f"{self.width}x{h}+{x}+{y}")
+        if self.hwnd:   # shown through Windows, so Tk's geometry isn't applied before the first show (datdude: top left)
+            ctypes.windll.user32.SetWindowPos(self.hwnd, 0, x, y, self.width, h, SWP_NOZORDER | SWP_NOACTIVATE)
 
     def _draw(self):
         c, s = self.canvas, self.scale

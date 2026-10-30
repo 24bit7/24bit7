@@ -72,7 +72,8 @@ def test_what_each_state_says(root):
     import tabs
     b = badge.Badge(root)
     b.working("Only AC/DC", "Living Room", ai=True)
-    assert b.lines == ("Only AC/DC", "Living Room: asking the AI") and b.dot == tabs.DARK["ai_purple"]
+    assert b.lines == ("Only AC/DC", "Living Room: asking the AI")
+    assert b.dot == tabs.ACCENT, "the accent while the AI works too (datdude: magenta flashing distracted)"
     b.working("Songs by Queen", "Kitchen")
     assert b.lines == ("Songs by Queen", "Kitchen: finding tracks") and b.dot == tabs.ACCENT
     b.done(24, "Kitchen")
@@ -82,6 +83,24 @@ def test_what_each_state_says(root):
     assert b.dot != tabs.DARK["ai_purple"]
     b.problem("only ACDC", "I couldn't find an artist you own in ACDC.")
     assert b.lines == ("Not played: only ACDC", "I couldn't find an artist you own in ACDC.")
+    b.hide()
+
+
+class RECT(ctypes.Structure):
+    _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long), ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+
+
+def test_first_show_is_top_right_and_close_to_the_edge(root):
+    """datdude (29 Oct 2026): the very first badge came up top left, and the gap to the edge was too big."""
+    import badge
+    b = badge.Badge(root)
+    b.working("Songs by Queen", "Kitchen")
+    rect = RECT()
+    user32.GetWindowRect(b.hwnd, ctypes.byref(rect))
+    margin = int(badge.MARGIN * b.scale)
+    assert rect.right == root.winfo_screenwidth() - margin, (rect.left, rect.right)
+    assert rect.top == margin
+    assert badge.MARGIN <= 16
     b.hide()
 
 

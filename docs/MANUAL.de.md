@@ -477,7 +477,7 @@ Alben, Songs, Playlists und gemischte Wiedergabe müssen nicht erstellt werden u
 
 ### Was du siehst
 
-Während ein Sprachbefehl eine Playlist erstellt, sitzt oben rechts auf dem Hauptbildschirm ein kleines 24bit7-Abzeichen, über allem anderen, auch über JRivers Theater View. Es zeigt, was du dir gewünscht hast, und die Zone, mit einem Punkt, der wandert, solange es arbeitet (magenta, während die KI auswählt). Es bleibt stehen, solange [Drift](#drift) noch Titel sucht, damit du weißt, dass noch mehr kommen. Ist die Playlist fertig, sagt es, wie viele Titel hinzugefügt wurden oder warum keine, und blendet sich nach ein paar Sekunden aus. Ein Befehl, aus dem nichts wird, erscheint dort auch, mit dem, was Alexa gesagt hat.
+Während ein Sprachbefehl eine Playlist erstellt, sitzt oben rechts auf dem Hauptbildschirm ein kleines 24bit7-Abzeichen, über allem anderen, auch über JRivers Theater View. Es zeigt, was du dir gewünscht hast, und die Zone, mit einem Punkt in deiner Akzentfarbe, der wandert, solange es arbeitet. Es bleibt stehen, solange [Drift](#drift) noch Titel sucht, damit du weißt, dass noch mehr kommen. Ist die Playlist fertig, sagt es, wie viele Titel hinzugefügt wurden oder warum keine, und blendet sich nach ein paar Sekunden aus. Ein Befehl, aus dem nichts wird, erscheint dort auch, mit dem, was Alexa gesagt hat.
 
 Das Abzeichen nimmt nie den Fokus, und Klicks gehen einfach hindurch, sodass Fernbedienung und JRiver wie gewohnt weiterlaufen. Es gibt es nur für Sprachbefehle: Am Schreibtisch zeigt die Konsole dasselbe. Seine Farben folgen deiner Akzentfarbe (Einstellungen > Sonstiges).
 
