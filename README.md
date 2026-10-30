@@ -302,7 +302,12 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.27.0
+## What's new in 1.28.0
+
+- **Know when there's a new version**: when 24bit7 opens, it checks GitHub, and if a newer version is out, the console says so with a link to download it. Nothing is said when you're up to date.
+- **The source test's ready line waits its turn**: if Test My Sources finishes during a build, its line now comes after the build, not in the middle of it.
+
+### Earlier: 1.27.0
 
 - **See your voice requests**: while a voice command builds a playlist, a small badge in the top right of the screen, over Theater View too, shows what you asked for, stays up while Drift adds more, then says how many tracks went in or why none did.
 - **Songs you own twice get past your filters**: if a filter leaves out one copy of a song (a surround FLAC, say), your other copies are tried, so the stereo MP3 plays instead.

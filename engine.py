@@ -31,13 +31,48 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.27.3"
+VERSION = "1.28.0"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
 OUTPUT_OVERRIDE = None  # a zone name that beats the Output setting for one run (voice commands)
 MODERATOR_OVERRIDE = None  # True/False beats the AI_MODERATOR setting for one run
 PROFILE = {}               # a device's own Sources/Playlist settings, laid over .env for its voice commands
+RELEASES_API = "https://api.github.com/repos/24bit7/24bit7/releases/latest"
+RELEASES_PAGE = "https://github.com/24bit7/24bit7/releases/"
+
+
+def _version_numbers(text):
+    return tuple(int(n) for n in re.findall(r"\d+", text)[:3])
+
+
+def newer_release():
+    """
+    (version, link) when GitHub has a newer 24bit7 than this one, else None. Asked once at
+    start-up (30 Oct 2026, in place of an updater: an unsigned program that downloads and
+    replaces programs is what antivirus distrusts). Offline or no answer: None, nothing said.
+    """
+    try:
+        r = requests.get(RELEASES_API, timeout=10, headers={"Accept": "application/vnd.github+json"})
+        r.raise_for_status()
+        data = r.json()
+        latest = str(data["tag_name"]).lstrip("vV")
+        if _version_numbers(latest) <= _version_numbers(VERSION):
+            return None
+        link = str(data.get("html_url") or "")
+        if not link.startswith(RELEASES_PAGE):   # only ever our own release page
+            link = f"{RELEASES_PAGE}tag/v{latest}"
+        return latest, link
+    except Exception:
+        return None
+
+
+def say_if_newer(report=print):
+    """The console line when a newer 24bit7 is out. Runs off the main thread."""
+    found = newer_release()
+    if found:
+        report(t("Note: 24bit7 {latest} is out (you have {version}). Download: {link}",
+                 latest=found[0], version=VERSION, link=found[1]))
 
 # The settings a device can have its own copy of (Settings > Sources and Playlist, device tabs)
 PROFILE_KEYS = {

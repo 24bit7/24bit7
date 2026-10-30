@@ -44,6 +44,8 @@ To run from source instead, you need Python 3.10 or newer. Run `pip install -r r
 
 Your settings and history live in two files next to the app: `.env` (settings and keys) and `24bit7.db` (cache and Discover history). Copy both into the new version's folder and everything carries over. Settings from older versions are converted automatically. When a release changes the Alexa skill, as 1.12.0 does, paste the new `alexa\interaction_model.json` and `alexa\lambda_function.py` into the Alexa developer console as in [Steps 4 and 5](#step-4-add-the-interaction-model), then Build and Deploy.
 
+You don't have to keep an eye out for new versions: each time 24bit7 opens, it asks GitHub for the latest one, and if it's newer than yours, a line in the console says so, with a link to download it. When you're up to date, or offline, it says nothing.
+
 ---
 
 ## The Play tab

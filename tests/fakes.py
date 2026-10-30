@@ -359,6 +359,7 @@ class FakeWeb:
         self.calls = []                 # (service, detail)
         self.down = set()               # services answering with an error
         self.empty = set()              # services answering with nothing
+        self.latest_release = None      # GitHub's latest release, e.g. {"tag_name": "v9.9.9", "html_url": ...}
         self.unknown = set()            # artist names every service treats as unknown (joint credits)
         self.acr_miss = set()           # (artist, title) ListenBrainz's own lookup can't find
         self.tidal_login = {"challenge": None, "code": "good-code", "refresh": "fake-refresh",
@@ -398,13 +399,17 @@ class FakeWeb:
         service = {"ws.audioscrobbler.com": "lastfm", "api.deezer.com": "deezer", "musicbrainz.org": "musicbrainz",
                    "labs.api.listenbrainz.org": "listenbrainz", "api.listenbrainz.org": "listenbrainz",
                    "api.discogs.com": "discogs", "127.0.0.1:11434": "ollama",
-                   "openapi.tidal.com": "tidal", "auth.tidal.com": "tidal"}.get(host)
+                   "openapi.tidal.com": "tidal", "auth.tidal.com": "tidal", "api.github.com": "github"}.get(host)
         if service is None:
             raise AssertionError(f"Unexpected network call: {method} {url}")
         self.calls.append((service, path, dict(params or {})))
         if service in self.down:
             raise requests.ConnectionError(f"{service} is down (fake)")
         empty = service in self.empty
+        if service == "github":   # the start-up check for a newer 24bit7
+            if self.latest_release is None or empty:
+                return Resp(404, data={"message": "Not Found"})
+            return Resp(data=self.latest_release)
         if service == "lastfm":
             m, artist = params.get("method"), params.get("artist", "")
             empty = empty or artist in self.unknown

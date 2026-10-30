@@ -720,6 +720,7 @@ class PlayTab(tk.Frame):
         self._greeting_active = True
         self._held = []   # console lines that arrive while the greeting types: shown once it clears
         self._type_greeting(t("Follow the white rabbit."), 0)
+        threading.Thread(target=lambda: engine.say_if_newer(self.report), daemon=True, name="update-check").start()
 
     def _window_visible(self):
         try:
@@ -943,7 +944,18 @@ class PlayTab(tk.Frame):
         at_bottom = self.log.yview()[1] >= 0.999   # scrolled up to read? new lines don't pull you down
         self.log.config(state="normal")
         kind = self._line_kind(line)
-        self.log.insert("end", line + "\n", (kind,) if kind else ())
+        tags = (kind,) if kind else ()
+        link = re.search(re.escape(engine.RELEASES_PAGE) + r"\S+", line)   # the new-version line's download link
+        if link:
+            self.log.tag_configure("release_link", underline=True)
+            self.log.tag_bind("release_link", "<Button-1>", lambda e, u=link.group(0): webbrowser.open(u))
+            self.log.tag_bind("release_link", "<Enter>", lambda e: self.log.config(cursor="hand2"))
+            self.log.tag_bind("release_link", "<Leave>", lambda e: self.log.config(cursor=""))
+            self.log.insert("end", line[:link.start()], tags)
+            self.log.insert("end", link.group(0), tags + ("release_link",))
+            self.log.insert("end", line[link.end():] + "\n", tags)
+        else:
+            self.log.insert("end", line + "\n", tags)
         if at_bottom:
             self.log.see("end")
         self.log.config(state="disabled")

@@ -48,6 +48,8 @@ Die Sprache stellst du unter **Einstellungen > Sonstiges > Sprache** ein. Beim W
 
 Deine Einstellungen und dein Verlauf liegen in zwei Dateien neben der App: `.env` (Einstellungen und Schlüssel) und `24bit7.db` (Cache und Entdecken-Verlauf). Kopier beide in den Ordner der neuen Version, und alles ist wieder da. Einstellungen älterer Versionen werden automatisch umgewandelt. Wenn eine Version den Alexa-Skill ändert, wie 1.12.0, füg die neuen Dateien `alexa\interaction_model.json` und `alexa\lambda_function.py` wie in [Schritt 4 und 5](#schritt-4-das-interaktionsmodell-hinzufügen) in die Alexa-Entwicklerkonsole ein und führ dann Build und Deploy aus.
 
+Nach neuen Versionen musst du nicht selbst Ausschau halten: Jedes Mal, wenn 24bit7 startet, fragt es bei GitHub nach der neuesten Version, und ist sie neuer als deine, sagt es eine Zeile in der Konsole, mit einem Link zum Herunterladen. Bist du auf dem neuesten Stand oder offline, sagt es nichts.
+
 ---
 
 ## Der Abspielen-Tab
