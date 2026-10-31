@@ -75,6 +75,8 @@ def say_if_newer(report=print):
                  latest=found[0], version=VERSION, link=found[1]))
 
 # The settings a button carries its own copy of (Settings > Buttons), laid over .env by buttons.run
+INNER_CIRCLE = {"artists": (False, 3, 2), "tracks": (False, 3, 2)}   # set by load_settings; see there
+
 PROFILE_KEYS = {
     "sources": ["SIMILAR_SOURCES", "SIMILAR_MIN_AGREEMENT", "LISTENBRAINZ_ALGORITHM", "SIMILAR_TRACK_SOURCES",
                 "SIMILAR_TRACK_MIN_AGREEMENT", "LISTENBRAINZ_TRACK_ALGORITHM", "TOP_TRACK_SOURCES", "AI_MODERATOR",
@@ -97,6 +99,7 @@ PROFILE_KEYS = {
                                 "FROM", "MODERATOR")],
                  *[f"NONSTOP_{g}_MODE" for g in ("ARTISTS", "TRACKS", "TOP", "VIBE")],
                  "TOP_GUESTS",
+                 *[f"INNER_CIRCLE_{g}{part}" for g in ("ARTISTS", "TRACKS") for part in ("", "_SIZE", "_AGREE")],
                  "SKIP_LONG_CLOSERS", "LONG_CLOSER_MINUTES",
                  "SKIP_PLAYED_ARTISTS", "SKIP_PLAYED_ARTISTS_DAYS", "SKIP_PLAYED_TRACKS", "SKIP_PLAYED_TRACKS_DAYS",
                  "SKIP_PLAYED_TOP", "SKIP_PLAYED_TOP_DAYS", "SKIP_PLAYED_VIBE", "SKIP_PLAYED_VIBE_DAYS",
@@ -335,7 +338,7 @@ def load_settings():
     global SIMILAR_ARTIST_TRACK_COUNT, SIMILAR_ARTIST_TRACK_LIMIT, DRIFT, DEEP_CUTS
     global AI_MODERATOR, MODERATOR_WARNED, SKIP_PLAYED
     global NONSTOP, NONSTOP_USING, NONSTOP_RESEED, NONSTOP_TOP_REST, NONSTOP_TOP_REST_COUNT, NONSTOP_VIBE
-    global NONSTOP_BY, LONG_CLOSERS, AI_MODERATOR_BY, RUN_AFTER
+    global NONSTOP_BY, LONG_CLOSERS, AI_MODERATOR_BY, RUN_AFTER, INNER_CIRCLE
     global CONSOLE_QUERY, USE_AI, CREDITS_SCOPE, CREDITS_FIRST
 
     load_dotenv(ENV_FILE, override=True)
@@ -414,6 +417,12 @@ def load_settings():
     SIMILAR_TRACK_VARIETY = os.getenv("SIMILAR_TRACK_VARIETY", "no").strip().lower() not in ("no", "0", "false")
 
     SIMILAR_ARTIST_LIMIT = _int_setting("SIMILAR_ARTIST_LIMIT", 20, 1, 50)
+    # Inner Circle, per matching kind: (on, how many of the seed's closest make the circle, how many of
+    # their lists a neighbour must be on). Fewer in the circle and more agreeing is tighter.
+    INNER_CIRCLE = {g: (os.getenv(f"INNER_CIRCLE_{g.upper()}", "0").strip().lower() in YES,
+                        _int_setting(f"INNER_CIRCLE_{g.upper()}_SIZE", 3, 3, 5),
+                        _int_setting(f"INNER_CIRCLE_{g.upper()}_AGREE", 2, 2, 5))
+                    for g in ("artists", "tracks")}
     SIMILAR_ARTIST_TRACK_COUNT = _int_setting("SIMILAR_ARTIST_TRACK_COUNT", 30, 5, 100)
     # Limit total tracks to: unticked, every track found goes in
     SIMILAR_ARTIST_TRACK_LIMIT = os.getenv("SIMILAR_ARTIST_TRACK_LIMIT", "1").strip().lower() in ("1", "true", "yes")
@@ -6155,6 +6164,71 @@ def playing_now_artists(rows):
     return list(names.values())
 
 
+def _same_act(a, b):
+    """
+    Two artist keys taken for the same act: one is a whole word or words inside the other and the
+    shorter has five letters or more, so Nick Cave and Nick Cave & The Bad Seeds match while Air
+    and Air Supply, or Muse and Amused, don't. A narrow rule on names, like the rest of matching.
+    """
+    short, long = sorted((a, b), key=len)
+    return len(short) >= 5 and short != long and re.search(r"(?<!\w)" + re.escape(short) + r"(?!\w)", long) is not None
+
+
+def inner_circle(circle, fetch, agree, exclude=(), key=lambda x: x, same_act=True, label=str):
+    """
+    Inner Circle: `circle` holds the seed's closest neighbours (or what was sampled from Playing
+    Now); fetch(member) gives each member's own neighbours, best first. What's on `agree` or more
+    of those lists comes back after the circle members themselves, in order of how many lists it's
+    on. key(item) is how two items are known to be the same; a neighbour whose name contains a
+    circle member's or a seed's (or the other way round) is taken for the same act and skipped when
+    same_act is set. Returns ([(item, [what it stands on])], how many were skipped as the same act).
+    """
+    members = list(circle)
+    member_keys = {key(m) for m in members}
+    excluded = set(exclude) | member_keys
+    counts, first = {}, {}
+    for member in members:
+        check_cancelled()
+        seen = set()
+        for n, item in enumerate(fetch(member)):
+            k = key(item)
+            if k in seen:
+                continue
+            seen.add(k)
+            counts[k] = counts.get(k, 0) + 1
+            first.setdefault(k, (len(first), item))
+    out = [(m, [t("circle")]) for m in members]
+    same = 0
+    for k, c in sorted(counts.items(), key=lambda kv: (-kv[1], first[kv[0]][0])):
+        if c < agree or k in excluded:
+            continue
+        item = first[k][1]
+        if same_act and any(_same_act(k, other) for other in excluded if isinstance(other, str)):
+            same += 1
+            continue
+        out.append((item, [t("on {count} of {size} lists", count=c, size=len(members))]))
+    return out, same
+
+
+def inner_circle_tracks(circle, agree, report):
+    """
+    Inner Circle for Track Matching: each circle track's own similar tracks are fetched, and the
+    tracks on `agree` or more of those lists come back behind the circle itself, as the candidate
+    list the build then matches against the library. Returns (candidates, agree as used).
+    """
+    agree = max(2, min(agree, len(circle))) if len(circle) >= 2 else 1
+    report("  " + t("Inner Circle: {names} (circle of {size}, agree on {agree})",
+                    names="; ".join(f"{a} - {tl}" for a, tl in circle), size=len(circle), agree=agree))
+    candidates, _ = inner_circle(circle, lambda m: [p for p, _ in similar_track_candidates([m[0]], m[1], report)[0]],
+                                 agree, key=lambda p: (artist_key(p[0]), clean_name(p[1])), same_act=False)
+    agreed = len(candidates) - len(circle)
+    report("  " + t("{agreed} tracks on {agree} or more of their lists.", agreed=agreed, agree=agree))
+    if not agreed:
+        report("  " + t("Note: Inner Circle found no tracks the circle agrees on. A bigger circle or fewer agreeing "
+                        "would find more; Drift fills in if it's on."))
+    return candidates, agree
+
+
 def create_similar_playlist(report=print, seed_info=None, topup=False, playing_now=False):
     """
     Builds a playlist around the playing artist:
@@ -6333,11 +6407,49 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
         similar, source_label = blended_similar_artists(seeds, limit=fetch, seed_track=seed_info['Name'],
                                                         report=report)
         labels.append(source_label)
-        report("  " + t("Similar artists from {replace}: {similar_count} suggested, taking {want} with tracks in your library", replace=source_label.replace(' + ', ', '), similar_count=len(similar), want=want))
+        ic_on, ic_size, ic_agree = INNER_CIRCLE["artists"]
+        if ic_on:
+            circle = [a for a, _ in similar][:ic_size]
+            report("  " + t("Inner Circle: {names} (circle of {size}, agree on {agree})", names=", ".join(circle),
+                            size=len(circle), agree=ic_agree))
+            similar, same = inner_circle(circle, lambda m: [a for a, _ in blended_similar_artists(m, limit=30, report=report)[0]],
+                                         ic_agree, exclude={artist_key(s) for s in seeds}, key=artist_key)
+            agreed = len(similar) - len(circle)
+            report("  " + t("{agreed} artists on {agree} or more of their lists{same}.", agreed=agreed, agree=ic_agree,
+                            same=t("; {same} skipped as the same act", same=same) if same else ""))
+            if not agreed:
+                report("  " + t("Note: Inner Circle found no artists the circle agrees on. A bigger circle or fewer "
+                                "agreeing would find more; Drift fills in if it's on."))
+            want = min(want, len(similar))
+        else:
+            report("  " + t("Similar artists from {replace}: {similar_count} suggested, taking {want} with tracks in your library", replace=source_label.replace(' + ', ', '), similar_count=len(similar), want=want))
         got, checked = take(similar, want)
         report("  " + (t("Similar artists in your library: {got} of {want} ({skipped} skipped with no tracks in your "
                          "library).", got=got, want=want, skipped=checked - got) if checked > got
                        else t("Similar artists in your library: {got} of {want}.", got=got, want=want)))
+    elif INNER_CIRCLE["artists"][0]:
+        per = figs["PN_ARTISTS_PER_SAMPLE"]
+        ic_agree = min(INNER_CIRCLE["artists"][2], len(seeds))
+        report("  " + t("Inner Circle: {names} (circle of {size}, agree on {agree})", names=", ".join(seeds),
+                        size=len(seeds), agree=ic_agree))
+        circle_labels = []
+
+        def around(member):
+            found, source_label = blended_similar_artists(member, limit=30, report=report,
+                                                          seed_track=seed_titles.get(artist_key(member)))
+            if source_label not in circle_labels and source_label != "none":
+                circle_labels.append(source_label)
+            return [a for a, _ in found]
+        candidates, same = inner_circle(seeds, around, ic_agree, key=artist_key)
+        labels.extend(circle_labels)
+        agreed = len(candidates) - len(seeds)
+        report("  " + t("{agreed} artists on {agree} or more of their lists{same}.", agreed=agreed, agree=ic_agree,
+                        same=t("; {same} skipped as the same act", same=same) if same else ""))
+        if not agreed:
+            report("  " + t("Note: Inner Circle found no artists the circle agrees on. A bigger circle or fewer "
+                            "agreeing would find more; Drift fills in if it's on."))
+        total, _ = take([c for c in candidates if artist_key(c[0]) not in used], per * len(seeds))
+        report("  " + t("Similar artists in your library: {total} of {value}.", total=total, value=per * len(seeds)))
     else:
         per = figs["PN_ARTISTS_PER_SAMPLE"]
         need, total = 0, 0
@@ -6668,15 +6780,25 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
     keys, per, groups, labels = [], {}, [], []
     checked = {(artist_key(a), clean_name(tval)) for a, tval in samples}
     owed = 0
-    for i, (artist, title) in enumerate(samples):
+    ic_on = INNER_CIRCLE["tracks"][0]
+    plan = [(a, tval, None) for a, tval in samples]
+    if ic_on:   # the sampled tracks are the circle: one pass over what they agree on
+        agreed, ic_agree = inner_circle_tracks(list(samples), min(INNER_CIRCLE["tracks"][2], len(samples)), report)
+        plan = [(PLAYING_NOW_SESSION, "", agreed)]
+        per_sample, extra_each = target, extra
+    for i, (artist, title, ready) in enumerate(plan):
         check_cancelled()
         owed += per_sample + extra_each   # this sample's share, plus any shortfall passed on
-        report("  " + t("Similar to {artist} - {title}, taking {owed}:", artist=artist, title=title, owed=owed))
-        blended, responding = similar_track_candidates([artist], title, report)
+        if ready is None:
+            report("  " + t("Similar to {artist} - {title}, taking {owed}:", artist=artist, title=title, owed=owed))
+            blended, responding = similar_track_candidates([artist], title, report)
+        else:
+            report("  " + t("Taking {owed} from what the circle agrees on:", owed=owed))
+            blended, responding = ready, []
         for name in responding:
             if name not in labels:
                 labels.append(name)
-        need = max(1, min(SIMILAR_TRACK_MIN_AGREEMENT, len(responding)))
+        need = 1 if ic_on else max(1, min(SIMILAR_TRACK_MIN_AGREEMENT, len(responding)))
         pool, pool_keys, pool_per = [], set(), dict(per)
         pool_size = owed * variety
         if use_stream:   # this sample's likely picks looked up together, a little over what's owed
@@ -6722,7 +6844,7 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
         if len(picks) < len(pool):
             report("    " + t("Picked {picks_count} of {pool_count} at random, the closest the most likely, for variety.", picks_count=len(picks), pool_count=len(pool)))
         owed -= len(picks)
-        if owed > 0 and i < len(samples) - 1:
+        if owed > 0 and i < len(plan) - 1:
             report("    " + t("{owed} short, passed on to the next sampled track.", owed=owed))
     report("  " + t("Similar tracks {where_found}: {min} of {target}.", where_found=where_found(True), min=min(len(keys), target), target=target))
     drift.checked |= checked
@@ -6813,6 +6935,9 @@ def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=Fal
     blended, responding = similar_track_candidates(seeds, track, report)
     seed_keys, playing = {artist_key(s) for s in seeds}, clean_name(track)
     candidates = [(p, s) for p, s in blended if not (artist_key(p[0]) in seed_keys and clean_name(p[1]) == playing)]
+    ic_on, ic_size, ic_agree = INNER_CIRCLE["tracks"]
+    if ic_on:
+        candidates, ic_agree = inner_circle_tracks([p for p, _ in candidates][:ic_size], ic_agree, report)
     use_stream = bool(output_streaming())
     if use_stream:   # Tidal is slow to ask, so only a little over what's wanted; the rest one by one if needed
         ahead = target + target // 5 + 2 if output_is_tidal() else target * 2
@@ -6823,7 +6948,7 @@ def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=Fal
         keys.append(first_key)
         per[artist_key(seeds[0])] = 1
         drift.per[artist_key(seeds[0])] = 1
-    need = max(1, min(SIMILAR_TRACK_MIN_AGREEMENT, len(responding)))
+    need = 1 if ic_on else max(1, min(SIMILAR_TRACK_MIN_AGREEMENT, len(responding)))   # the circle has agreed already
     # Variety on: collect up to VARIETY_POOL times what's wanted (and per artist), then pick
     # at random with the closest the most likely, so the same seed doesn't always give the same tracks.
     # Variety off: collect just what's wanted, so the closest matches go in, in order.

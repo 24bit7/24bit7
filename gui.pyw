@@ -80,6 +80,8 @@ PLAY_NOTES = {
     "Artist's Top Tracks": N_("Plays the seed artist's most popular tracks that you own."),
     "Headliner": N_("The seed artist's most popular tracks, with every third track a guest spot: one track each "
                     "from the closest similar artists you own."),
+    "Inner Circle": N_("Artist Matching with Inner Circle on: the seed's three closest artists, then only the artists "
+                       "their own lists agree on. Tight, and sometimes short."),
     "AI Playlist": N_("Describe a mood or moment and the AI picks tracks for it, from your library. Uses AI credits."),
     "+": N_("Puts a playlist you've taken off the row back, or makes a new one. Right-click any playlist to rename, "
             "copy, move or remove it; hold one to drag it."),

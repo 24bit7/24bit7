@@ -210,7 +210,7 @@ def test_the_old_build_shortcuts_move_onto_the_standard_buttons(app):
                                   hotkeys.button_code(buttons.standard("top")["id"]): "Ctrl+Alt+3",
                                   "SHUFFLE_ARTIST": "Ctrl+Alt+4"}
     assert [c for c, _ in hotkeys.ACTIONS] == ["SHUFFLE_ARTIST", "SWITCH_ZONES", "SWITCH_PROFILES", "KEEP_GOING"]
-    assert len(items) == 5
+    assert len(items) == 6
 
 
 def test_a_removed_or_ai_buttons_shortcut_says_so(app):

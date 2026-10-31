@@ -69,7 +69,7 @@ def test_playlists_tab_replaces_sources_playlist_and_filters(app, ui):
     titles = tab_titles(settings_pane(ui))
     assert "Playlists" in titles and not {"Sources", "Playlist", "Filters", "Buttons", "Zones"} & set(titles), titles
     assert "Devices" in titles
-    assert s._button_names() == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Headliner", "AI Playlist"]
+    assert s._button_names() == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Headliner", "Inner Circle", "AI Playlist"]
     assert s._button_id == s._buttons[0]["id"] and s._button_page.button["name"] == "Similar Artists"
     assert not [w for w in walk(s._button_right) if hasattr(w, "_tabs")], "one page, no inner tabs"
     texts = labels(s._button_inner)
@@ -129,6 +129,41 @@ def test_a_page_shows_only_its_kind_with_its_switches(app, ui):
     assert "AI_MODERATOR_ARTISTS" in p.vars, "the Moderator is on every button's Sources page"
     assert "DEEP_CUTS_ARTISTS" in p.vars and "DEEP_CUTS_ARTISTS_SHARE" in p.vars, "and the Deep Cuts switch further down the page"
     assert "TOP_TRACKS_COUNT" not in p.vars
+    assert not ui.errors, ui.errors[0]
+
+
+def test_inner_circle_sits_on_a_matching_page_and_its_dials_keep_in_step(app, ui):
+    import buttons
+    import settings_gui
+    p = pick_button(ui, "Headliner")
+    assert not any(k.startswith("INNER_CIRCLE") for k in p.vars), "Top Tracks has no circle"
+    p = pick_button(ui, "Similar Artists")
+    page = inner_page(ui, "Sources")
+    tick = next(w for w in walk(page) if isinstance(w, ttk.Checkbutton) and w.cget("text") == "Inner Circle")
+    size_cb = next(c for c in walk(page) if isinstance(c, ttk.Combobox) and tuple(c.cget("values")) == ("3", "4", "5"))
+    agree_cb = next(c for c in walk(page) if isinstance(c, ttk.Combobox) and tuple(c.cget("values")) == ("2", "3"))
+    assert "disabled" in size_cb.state() and "disabled" in agree_cb.state(), "greyed out until Inner Circle is on"
+    tick.invoke()
+    ui.pump(0.3)
+    assert "disabled" not in size_cb.state()
+    assert buttons.standard("artists")["settings"]["INNER_CIRCLE_ARTISTS"] == "1"
+    assert settings_gui.read_env().get("INNER_CIRCLE_ARTISTS") == "1", "the standard playlist also writes .env"
+    size_cb.set("5")
+    size_cb.event_generate("<<ComboboxSelected>>")
+    ui.pump(0.3)
+    assert tuple(agree_cb.cget("values")) == ("2", "3", "4", "5")
+    agree_cb.set("4")
+    agree_cb.event_generate("<<ComboboxSelected>>")
+    ui.pump(0.3)
+    s = buttons.standard("artists")["settings"]
+    assert s["INNER_CIRCLE_ARTISTS_SIZE"] == "5" and s["INNER_CIRCLE_ARTISTS_AGREE"] == "4"
+    size_cb.set("3")
+    size_cb.event_generate("<<ComboboxSelected>>")
+    ui.pump(0.3)
+    assert agree_cb.get() == "3", "agree can't be more than the circle"
+    assert buttons.standard("artists")["settings"]["INNER_CIRCLE_ARTISTS_AGREE"] == "3"
+    p = pick_button(ui, "Inner Circle")
+    assert p.vars["INNER_CIRCLE_ARTISTS"].get() is True and p.vars["INNER_CIRCLE_ARTISTS_SIZE"].get() == "3"
     assert not ui.errors, ui.errors[0]
 
 

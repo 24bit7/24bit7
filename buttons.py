@@ -35,6 +35,10 @@ KIND_NAMES = dict(KINDS)   # the standard playlists' names, as they always were
 KIND_LABELS = {"artists": N_("Artist Matching"), "tracks": N_("Track Matching"),
                "top": N_("Artist's Top Tracks"), "vibe": N_("AI Playlist")}
 TEMPLATE = "template"   # New Playlist's "from": the kind's shipped defaults rather than one of your playlists
+# The ready-made playlists: (key, name, kind, the settings that make them), offered as templates and made at the upgrade
+READY_MADE = [("headliner", N_("Headliner"), "top", {"TOP_GUESTS": "third"}),
+              ("inner_circle", N_("Inner Circle"), "artists",
+               {"INNER_CIRCLE_ARTISTS": "1", "INNER_CIRCLE_ARTISTS_SIZE": "3", "INNER_CIRCLE_ARTISTS_AGREE": "2"})]
 
 # The settings each kind carries. Every key under Settings > Sources and Playlist
 # belongs to one kind, or stays in .env for every build (GLOBAL_KEYS); tests check that.
@@ -48,10 +52,12 @@ _DRIFT = ["DRIFT_{G}", "DRIFT_{G}_USING", "DRIFT_{G}_ROUNDS", "DRIFT_{G}_FROM", 
 _OWN = {
     "artists": ["SIMILAR_SOURCES", "SIMILAR_MIN_AGREEMENT", "LISTENBRAINZ_ALGORITHM", "AI_MODERATOR_ARTISTS",
                 "SIMILAR_ARTIST_TRACK_COUNT", "SIMILAR_ARTIST_TRACK_LIMIT", "SIMILAR_ARTIST_LIMIT",
-                "TRACKS_PER_ARTIST_POOL", "TRACKS_PER_ARTIST_PICK", "NONSTOP_ARTISTS_USING"],
+                "TRACKS_PER_ARTIST_POOL", "TRACKS_PER_ARTIST_PICK", "NONSTOP_ARTISTS_USING",
+                "INNER_CIRCLE_ARTISTS", "INNER_CIRCLE_ARTISTS_SIZE", "INNER_CIRCLE_ARTISTS_AGREE"],
     "tracks": ["SIMILAR_TRACK_SOURCES", "SIMILAR_TRACK_MIN_AGREEMENT", "LISTENBRAINZ_TRACK_ALGORITHM",
                "AI_MODERATOR_TRACKS", "SIMILAR_TRACK_COUNT", "SIMILAR_TRACK_PER_ARTIST", "SIMILAR_TRACK_ORDER",
-               "SIMILAR_TRACK_VARIETY", "NONSTOP_TRACKS_USING"],
+               "SIMILAR_TRACK_VARIETY", "NONSTOP_TRACKS_USING",
+               "INNER_CIRCLE_TRACKS", "INNER_CIRCLE_TRACKS_SIZE", "INNER_CIRCLE_TRACKS_AGREE"],
     "top": ["TOP_TRACK_SOURCES", "TOP_TRACKS_COUNT", "TOP_TRACKS_ORDER", "TOP_GUESTS", "NONSTOP_TOP_USING",
             "NONSTOP_TOP_REST", "NONSTOP_TOP_REST_COUNT"],
     "vibe": ["VIBE_TRACK_COUNT", "VIBE_PER_ARTIST", "AI_MODERATOR_VIBE", "NONSTOP_VIBE_WITH"],
@@ -156,7 +162,14 @@ def add(name, kind, from_id=None):
     """
     items = load()
     new = blank(name.strip() or t(KIND_LABELS[kind]), kind)
-    if from_id == TEMPLATE:
+    ready = next((r for r in READY_MADE if from_id == f"{TEMPLATE}:{r[0]}"), None)
+    if ready is not None:   # Headliner, Inner Circle: the standard playlist of the kind with the recipe's settings on top
+        kind = ready[2]
+        new["kind"] = kind
+        base = standard(kind)
+        new["settings"] = dict(base["settings"] if base else template_settings(kind), **ready[3])
+        new["filters"] = list(base["filters"]) if base else []
+    elif from_id == TEMPLATE:
         new["settings"] = template_settings(kind)
     else:
         source = next((b for b in items if b["id"] == from_id and b["kind"] == kind), None) or standard(kind)
@@ -399,9 +412,15 @@ def standard_buttons(env=None):
 
 def headliner_button(top):
     """Headliner: the standard Artist's Top Tracks with Guests on."""
-    b = blank(t("Headliner"), "top")
-    b["settings"] = dict(top["settings"], TOP_GUESTS="third")
-    b["filters"] = list(top["filters"])
+    return ready_made_button("headliner", top)
+
+
+def ready_made_button(key, base):
+    """A ready-made playlist (Headliner, Inner Circle) from the standard playlist of its kind."""
+    _key, name, kind, extra = next(r for r in READY_MADE if r[0] == key)
+    b = blank(t(name), kind)
+    b["settings"] = dict(base["settings"], **extra)
+    b["filters"] = list(base["filters"])
     return b
 
 
@@ -461,7 +480,9 @@ def upgrade():
     env = _env_values()
     items = standard_buttons(env)
     by_kind = {b["kind"]: b for b in items}
-    items.insert(items.index(by_kind["vibe"]), headliner_button(by_kind["top"]))   # before AI Playlist (Ben, 30 Oct)
+    at = items.index(by_kind["vibe"])   # before AI Playlist (Ben, 30 Oct): Headliner, then Inner Circle
+    items.insert(at, headliner_button(by_kind["top"]))
+    items.insert(at + 1, ready_made_button("inner_circle", by_kind["artists"]))
     all_filters = filters.stored_raw()   # with their old Applies on lists
     shared = [f["id"] for f in all_filters
               if _OLD_ALL in f.get("devices", []) or _OLD_MAIN in f.get("devices", [])]
@@ -543,6 +564,8 @@ def describe(button):
     bits = [t(KIND_LABELS[button["kind"]])]
     if button["kind"] == "top" and s.get("TOP_GUESTS") == "third":
         bits.append(t("Guests"))
+    if s.get(f"INNER_CIRCLE_{g}", "0") in engine.YES:
+        bits.append("Inner Circle")
     if s.get(f"DRIFT_{g}", "0") in engine.YES:
         bits.append("Drift")
     if s.get(f"DEEP_CUTS_{g}", "off") not in ("off", ""):

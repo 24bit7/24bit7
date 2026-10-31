@@ -21,7 +21,7 @@ class Click:
 def test_row_comes_from_the_ticked_playlists_then_more_options_and_plus(app, ui):
     import buttons
     p = ui.play
-    assert names(p) == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Headliner", "AI Playlist"]
+    assert names(p) == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Headliner", "Inner Circle", "AI Playlist"]
     buttons.set_shown(buttons.standard("vibe")["id"], False)
     p.refresh_buttons()
     assert names(p) == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Headliner"], "unticked: off the row"

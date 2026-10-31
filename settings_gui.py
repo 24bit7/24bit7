@@ -529,6 +529,11 @@ class ProfilePage:
                 out[f"{name}_MODERATOR"] = option_code(DRIFT_MODERATOR_OPTIONS, v[f"{name}_MODERATOR"].get())
         if "AI_MODERATOR_VIBE" in v:
             out["AI_MODERATOR_VIBE"] = v["AI_MODERATOR_VIBE"].get().lower()
+        for g in ("ARTISTS", "TRACKS"):
+            if f"INNER_CIRCLE_{g}" in v:
+                out[f"INNER_CIRCLE_{g}"] = "1" if v[f"INNER_CIRCLE_{g}"].get() else "0"
+                out[f"INNER_CIRCLE_{g}_SIZE"] = v[f"INNER_CIRCLE_{g}_SIZE"].get()
+                out[f"INNER_CIRCLE_{g}_AGREE"] = v[f"INNER_CIRCLE_{g}_AGREE"].get()
         if "FALLBACK_SPOKEN" in v:
             out["FALLBACK_SPOKEN"] = "1" if v["FALLBACK_SPOKEN"].get() else "0"
         for group in engine.PLAYED_GROUPS:
@@ -867,6 +872,8 @@ class AddButtonPrompt(NamePrompt):
         self.kind, self.start_from = "artists", buttons.TEMPLATE
         self._choices = [(t("{kind} (template)", kind=t(label)), kind, buttons.TEMPLATE)
                          for kind, label in buttons.KIND_LABELS.items()]
+        self._choices += [(t("{kind} (template)", kind=t(name)), kind, f"{buttons.TEMPLATE}:{key}")
+                          for key, name, kind, _extra in buttons.READY_MADE]
         self._choices += [(b["name"], b["kind"], b["id"]) for b in buttons.load()]
         self._auto = buttons.unique_name(t(buttons.KIND_LABELS["artists"]))
         super().__init__(parent, t("New Playlist"), t("Name"), initial=self._auto)
@@ -894,7 +901,8 @@ class AddButtonPrompt(NamePrompt):
         label, kind, from_id = self._choice()
         typed = self.entry.get().strip()
         if not typed or typed == self._auto:   # the name follows the choice until you type one of your own
-            base = t(buttons.KIND_LABELS[kind]) if from_id == buttons.TEMPLATE else label
+            ready = next((r for r in buttons.READY_MADE if from_id == f"{buttons.TEMPLATE}:{r[0]}"), None)
+            base = (t(ready[1]) if ready else t(buttons.KIND_LABELS[kind]) if from_id == buttons.TEMPLATE else label)
             self._auto = buttons.unique_name(base)
             self.entry.delete(0, "end")
             self.entry.insert(0, self._auto)
@@ -2543,6 +2551,49 @@ class SettingsTab(tk.Frame):
         for tick, cb in getattr(p, "lb_cbs", []):
             cb.state(["!disabled"] if tick.get() else ["disabled"])
 
+    def _inner_circle_section(self, p, page, group):
+        """Inner Circle for a matching config: On or Off, the circle's size, and how many lists must agree."""
+        g = group.upper()
+        what = t("artists") if group == "artists" else t("tracks")
+        box = section(page, t("Inner Circle"),
+                      t("Instead of the seed's own list of similar {what}, Inner Circle takes the seed's closest few, "
+                        "fetches each one's own similar {what}, and keeps what two or more of those lists agree on: "
+                        "what the things you're listening to have in common. With Seed on Playing Now, the "
+                        "sampled {what} are the circle. Fewer in the circle and more agreeing is tighter, and can "
+                        "come up short; the console says so, and Drift fills in if it's on.", what=what))
+        on_key, size_key, agree_key = f"INNER_CIRCLE_{g}", f"INNER_CIRCLE_{g}_SIZE", f"INNER_CIRCLE_{g}_AGREE"
+        p.vars[on_key] = tk.BooleanVar(value=p.env.get(on_key, "0").strip().lower() in engine.YES)
+        p.vars[size_key] = tk.StringVar(value=p.env.get(size_key, "3").strip() or "3")
+        p.vars[agree_key] = tk.StringVar(value=p.env.get(agree_key, "2").strip() or "2")
+        tick = ttk.Checkbutton(box, text=t("Inner Circle"), variable=p.vars[on_key], command=lambda: (sync(), p.save()))
+        tick.grid(row=0, column=0, columnspan=6, sticky="w")
+        row = self._line(box, 1, t("Circle"), pady=(6, 0))
+        size_cb = TCombobox(row, textvariable=p.vars[size_key], values=["3", "4", "5"], state="readonly", width=4)
+        size_cb.pack(side="left")
+        tk.Label(row, text=t("of the seed's closest {what}", what=what), fg=PALETTE["help_fg"], font=HELP_FONT).pack(
+            side="left", padx=(8, 0))
+        row = self._line(box, 2, t("Must agree"), pady=(4, 0))
+        agree_cb = TCombobox(row, textvariable=p.vars[agree_key], values=["2", "3", "4", "5"], state="readonly", width=4)
+        agree_cb.pack(side="left")
+        tk.Label(row, text=t("of their lists"), fg=PALETTE["help_fg"], font=HELP_FONT).pack(side="left", padx=(8, 0))
+
+        def sync(*_):
+            size = int(p.vars[size_key].get() or 3)
+            agree_cb.config(values=[str(n) for n in range(2, size + 1)])
+            if int(p.vars[agree_key].get() or 2) > size:
+                p.vars[agree_key].set(str(size))
+            on = p.vars[on_key].get()
+            for cb in (size_cb, agree_cb):
+                cb.state(["!disabled"] if on else ["disabled"])
+
+        def size_changed(_e=None):
+            size_cb.selection_clear()
+            sync()
+            p.save()
+        size_cb.bind("<<ComboboxSelected>>", size_changed)
+        agree_cb.bind("<<ComboboxSelected>>", lambda e: (agree_cb.selection_clear(), p.save()))
+        sync()
+
     def _moderator_section(self, p, page, group):
         """A Moderator tick for one Play option, greyed out until the AI is set up."""
         box = section(page, t("Moderator"),
@@ -2606,6 +2657,7 @@ class SettingsTab(tk.Frame):
             help_mark(row, t("How many sources must agree before an artist is picked. Higher means a smoother "
                            "playlist with fewer wildcards, but less chance of discovering something new. "
                            "Tip: try single sources on their own before blending.")).pack(side="left", padx=(8, 0))
+            self._inner_circle_section(p, pages["artists"], "artists")
             self._moderator_section(p, pages["artists"], "artists")
 
         # --- Similar Tracks: its own sources and agreement ---
@@ -2627,6 +2679,7 @@ class SettingsTab(tk.Frame):
             help_mark(row, t("How many sources must agree on a track before it's used. If too few agreed tracks "
                            "are in your library, the agreement is relaxed a step at a time, and the log says so.")
                       ).pack(side="left", padx=(8, 0))
+            self._inner_circle_section(p, pages["tracks"], "tracks")
             self._moderator_section(p, pages["tracks"], "tracks")
 
         # --- Artist's Top Tracks ---

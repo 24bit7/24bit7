@@ -67,8 +67,8 @@ def test_first_load_makes_the_standard_four_from_env_then_headliner(app):
     buttons, _, _ = mods()
     items = buttons.load()
     assert [b["name"] for b in items] == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Headliner",
-                                          "AI Playlist"]
-    assert [b["kind"] for b in items] == ["artists", "tracks", "top", "top", "vibe"]
+                                          "Inner Circle", "AI Playlist"]
+    assert [b["kind"] for b in items] == ["artists", "tracks", "top", "top", "artists", "vibe"]
     by = {b["name"]: b for b in items}
     assert by["Similar Artists"]["settings"]["SIMILAR_ARTIST_LIMIT"] == "7"
     assert by["Similar Tracks"]["settings"]["SIMILAR_TRACK_COUNT"] == "8"
@@ -77,6 +77,12 @@ def test_first_load_makes_the_standard_four_from_env_then_headliner(app):
     assert by["Headliner"]["settings"]["TOP_GUESTS"] == "third"
     assert by["Headliner"]["settings"]["TOP_TRACKS_COUNT"] == "12", "Headliner starts from the standard Top Tracks"
     assert "SIMILAR_TRACK_COUNT" not in by["Similar Artists"]["settings"], "a button only holds its kind's keys"
+    circle = by["Inner Circle"]
+    assert circle["kind"] == "artists" and circle["standard"] == "" and circle["shown"] is True
+    assert circle["settings"]["INNER_CIRCLE_ARTISTS"] == "1" and circle["settings"]["INNER_CIRCLE_ARTISTS_SIZE"] == "3"
+    assert circle["settings"]["INNER_CIRCLE_ARTISTS_AGREE"] == "2"
+    assert circle["settings"]["SIMILAR_ARTIST_LIMIT"] == "7", "Inner Circle starts from the standard Similar Artists"
+    assert "INNER_CIRCLE_ARTISTS" not in by["Similar Artists"]["settings"], "and the standard one stays as it was"
 
 
 def test_upgrade_resolves_the_old_single_settings_into_each_button(app):
@@ -116,7 +122,7 @@ def test_device_with_its_own_settings_gets_a_playlist_it_runs_kept_off_the_play_
     own = next(b for b in items if b["name"] == "Kitchen Echo Similar Tracks")
     assert own["kind"] == "tracks" and own["settings"]["SIMILAR_TRACK_COUNT"] == "12"
     assert own["shown"] is False and all(b["shown"] for b in items if b is not own), "off the Play tab; the rest on it"
-    assert [b["name"] for b in buttons.shown()] == names[:5]
+    assert [b["name"] for b in buttons.shown()] == names[:6]
     record = devices.load()[KITCHEN]
     assert record["buttons"]["tracks_like"] == own["id"]
     assert record["buttons"]["music_like"] is None
@@ -132,7 +138,7 @@ def test_device_with_its_own_settings_gets_a_playlist_it_runs_kept_off_the_play_
 def test_device_whose_settings_match_main_gets_no_playlist(app):
     buttons, devices, _ = mods()
     kitchen(app, page=dict(app.engine.profile_values("playlist")), saved=app.saved_playlists.blank())
-    assert len(buttons.load()) == 5
+    assert len(buttons.load()) == 6
     assert all(v is None for v in devices.load().get(KITCHEN, devices.blank())["buttons"].values())
     assert app.printed.has("Kitchen Echo's own JRiver Playlists settings are no longer used"), app.printed.text()
     assert not app.printed.has("had settings of its own")
@@ -166,6 +172,22 @@ def test_a_template_starts_from_the_shipped_defaults_and_a_copy_gets_the_next_fr
     assert [b["name"] for b in buttons.load()][1:3] == ["Similar Tracks", "Similar Tracks 2"], "right after its source"
 
 
+def test_the_ready_made_templates_make_headliner_and_inner_circle_from_the_standard_ones(app):
+    app.set_env(SIMILAR_ARTIST_LIMIT="7", TOP_TRACKS_COUNT="12")
+    buttons, _, _ = mods()
+    buttons.load()
+    assert [r[0] for r in buttons.READY_MADE] == ["headliner", "inner_circle"]
+    head = buttons.add(buttons.unique_name("Headliner"), "artists", "template:headliner")
+    assert head["name"] == "Headliner 2" and head["kind"] == "top", "the recipe's kind wins over the one passed"
+    assert head["settings"]["TOP_GUESTS"] == "third" and head["settings"]["TOP_TRACKS_COUNT"] == "12"
+    circle = buttons.add("Tight", "artists", "template:inner_circle")
+    assert circle["kind"] == "artists" and circle["settings"]["INNER_CIRCLE_ARTISTS"] == "1"
+    assert circle["settings"]["SIMILAR_ARTIST_LIMIT"] == "7"
+    assert buttons.describe(circle).startswith("Artist Matching, Inner Circle"), buttons.describe(circle)
+    for key in ("INNER_CIRCLE_TRACKS", "INNER_CIRCLE_TRACKS_SIZE", "INNER_CIRCLE_TRACKS_AGREE"):
+        assert key in buttons.KIND_KEYS["tracks"] and key not in buttons.KIND_KEYS["artists"]
+
+
 def test_restore_default_buttons_puts_back_only_what_is_missing(app):
     buttons, _, _ = mods()
     items = buttons.load()
@@ -174,7 +196,7 @@ def test_restore_default_buttons_puts_back_only_what_is_missing(app):
     back = buttons.restore_standard()
     assert [b["standard"] for b in back] == ["artists"]
     names = [b["name"] for b in buttons.load()]
-    assert names == ["Similar Tracks", "Artist's Top Tracks", "Headliner", "AI Playlist", "Similar Artists"]
+    assert names == ["Similar Tracks", "Artist's Top Tracks", "Headliner", "Inner Circle", "AI Playlist", "Similar Artists"]
     assert buttons.restore_standard() == []
 
 
@@ -281,7 +303,7 @@ def test_rename_move_and_remove(app):
     assert buttons.load()[-1]["id"] == head["id"], "and at the right"
     buttons.move("no-such-id", 1)
     buttons.remove(head["id"])
-    assert buttons.get(head["id"]) is None and len(buttons.load()) == 4
+    assert buttons.get(head["id"]) is None and len(buttons.load()) == 5
     assert buttons.standard("top")["name"] == "Artist's Top Tracks"
 
 
@@ -329,4 +351,4 @@ def test_set_settings_keeps_only_the_kinds_keys_and_filters_say_who_uses_them(ap
     buttons.set_shown(head["id"], True)
     assert buttons.get(head["id"])["shown"] is True
     buttons.set_filters("no-such-id", [f["id"]])
-    assert len(buttons.load()) == 5
+    assert len(buttons.load()) == 6
