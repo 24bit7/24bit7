@@ -31,7 +31,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.28.0"
+VERSION = "1.29.0"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
@@ -93,7 +93,10 @@ PROFILE_KEYS = {
                  "DRIFT_VIBE", "DRIFT_VIBE_USING", "DRIFT_VIBE_ROUNDS", "AI_MODERATOR_VIBE",
                  *[f"DEEP_CUTS_{g}{part}" for g in ("ARTISTS", "TRACKS", "VIBE") for part in ("", "_SHARE")],
                  *[f"DRIFT_{g}_{part}" for g in ("ARTISTS", "TRACKS", "VIBE")
-                   for part in ("SOURCES_MODE", "ARTIST_SOURCES", "ARTIST_AGREE", "TRACK_SOURCES", "TRACK_AGREE")],
+                   for part in ("SOURCES_MODE", "ARTIST_SOURCES", "ARTIST_AGREE", "TRACK_SOURCES", "TRACK_AGREE",
+                                "FROM", "MODERATOR")],
+                 *[f"NONSTOP_{g}_MODE" for g in ("ARTISTS", "TRACKS", "TOP", "VIBE")],
+                 "TOP_GUESTS",
                  "SKIP_LONG_CLOSERS", "LONG_CLOSER_MINUTES",
                  "SKIP_PLAYED_ARTISTS", "SKIP_PLAYED_ARTISTS_DAYS", "SKIP_PLAYED_TRACKS", "SKIP_PLAYED_TRACKS_DAYS",
                  "SKIP_PLAYED_TOP", "SKIP_PLAYED_TOP_DAYS", "SKIP_PLAYED_VIBE", "SKIP_PLAYED_VIBE_DAYS",
@@ -321,7 +324,7 @@ def load_settings():
     global SIMILAR_TRACK_SOURCES, SIMILAR_TRACK_MIN_AGREEMENT, SIMILAR_TRACK_COUNT
     global SIMILAR_TRACK_PER_ARTIST, SIMILAR_TRACK_ORDER, SIMILAR_TRACK_VARIETY
     global LISTENBRAINZ_TRACK_ALGORITHM_SETTING
-    global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, CACHE_DAYS, CACHE_KEEP
+    global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, TOP_GUESTS, CACHE_DAYS, CACHE_KEEP
     global TABLE_FONT_SIZE, VIBE_TRACK_COUNT, VIBE_PER_ARTIST
     global OUTPUT_TARGET, YOUTUBE_PLAYLIST_LENGTH, HIDDEN_ZONES, DEFAULT_ZONE, FOLLOW_ACTIVE_ZONE
     global PREFER_OFFICIAL_VIDEOS, THEME, ACCENT_COLOUR, UI_LANGUAGE
@@ -458,6 +461,8 @@ def load_settings():
     if TOP_TRACKS_ORDER not in ("popular", "reverse", "random"):
         print(t("Note: the setting TOP_TRACKS_ORDER='{top_tracks_order}' isn't recognised, so 'popular' is used.", top_tracks_order=TOP_TRACKS_ORDER))
         TOP_TRACKS_ORDER = "popular"
+    # Guests (Artist's Top Tracks): "third" makes the build a Headliner, a guest every third track
+    TOP_GUESTS = "third" if os.getenv("TOP_GUESTS", "off").strip().lower() == "third" else "off"
     # How long answers are reused: 1 Month, 1 Year or Permanent (an older CACHE_DAYS carries over)
     CACHE_KEEP = os.getenv("CACHE_KEEP", "").strip().lower()
     if CACHE_KEEP not in ("month", "year", "permanent"):
@@ -1011,12 +1016,13 @@ import itertools as _itertools
 import threading as _threading
 
 NONSTOP_KINDS = {"similar": "artists", "youtube_queue": "artists", "similar_tracks": "tracks",
-                 "top_tracks": "top", "vibe": "vibe"}
+                 "top_tracks": "top", "headliner": "top", "vibe": "vibe"}
 NONSTOP_CONTEXT = {}     # the build in progress (set by session_start)
 # RUN_AFTER: group -> (on, path), from Settings > Playlist > Run After Building. Set only by load_settings():
 # a default here would undo the startup load.
 NONSTOP_APPEND = False   # True while a non-stop top-up builds: it only ever adds, never repeats
 FILTER_DEVICE = None     # the Alexa device a build is for (None: Windows (Main)), for Settings > Filters
+FILTER_IDS = None        # the filters a button build runs under (its own plus the zone's); None: by device, as before buttons
 NONSTOP_ZONES = {}       # zone ID -> {"keys", "build", "kind", "vibe", "top_artist", "top_first", "stage", "fired"}
 _nonstop_lock = _threading.Lock()
 _nonstop_ids = _itertools.count(1)
@@ -1028,7 +1034,7 @@ def nonstop_begin(mode, seed_info=None):
     seed_info = seed_info or {}
     NONSTOP_CONTEXT = {"build": next(_nonstop_ids), "kind": NONSTOP_KINDS.get(mode, "artists"),
                        "vibe": seed_info.get("Name") if mode == "vibe" else None,
-                       "top_artist": seed_artists(seed_info)[0] if mode == "top_tracks" else None}
+                       "top_artist": seed_artists(seed_info)[0] if mode in ("top_tracks", "headliner") else None}
 
 
 def nonstop_record(zone, keys, append=False, **fields):
@@ -5004,7 +5010,8 @@ class PlayedFilter:
         if filters:   # Settings > Filters, for the playlists 24bit7 builds
             try:
                 import filters as filter_settings
-                self.filters = filter_settings.Active(FILTER_DEVICE, report) or None
+                self.filters = filter_settings.Active(FILTER_IDS if FILTER_IDS is not None else FILTER_DEVICE,
+                                                      report) or None
             except Exception as e:
                 report("  " + t("Problem: the filters didn't run ({e}).", e=e))
         if not self.on:
@@ -7241,6 +7248,8 @@ def play_top_n(report=print, seed_info=None):
     voice command), the most popular track found starts straight away.
     """
     refresh_settings_if_changed()
+    if TOP_GUESTS == "third":   # the button's Guests setting: a guest every third track
+        return play_headliner(report=report, seed_info=seed_info)
     if seed_info is None:   # no searched seed handed in, so read what JRiver is playing
         seed_info = get_playing_info()
     if not seed_info or seed_info["PlayingNowPosition"] == "-1":
@@ -7316,6 +7325,168 @@ def play_top_n(report=print, seed_info=None):
     if rest:
         send_to_jriver(rest, seed_info=seed_info, report=report, append=fast.started)
     session_finish(session_id, len(ordered_keys), sources=" + ".join(labels_used), report=report)
+
+
+# ---------------------------------------------------------------------------
+# Mode 2b: Headliner (Ben, 30 Oct 2026, listening to Zero 7)
+# ---------------------------------------------------------------------------
+# The seed artist's top tracks, as Artist's Top Tracks plays them, with every third track a
+# guest spot: one track each from the closest similar artists in the library. A guest's track
+# is the one the Similar Tracks sources play next to the headliner's own hits, else their most
+# popular one you own. It uses Artist's Top Tracks' settings (how many, order, Skip recent).
+
+HEADLINER_EVERY = 3          # every third track is a guest's
+HEADLINER_GUEST_POOL = 25    # similar artists looked through for guests, closest first
+HEADLINER_LINK_TRACKS = 3    # the headliner's top tracks whose similar tracks choose each guest's track
+
+
+def headliner_links(artist, titles):
+    """
+    What the Similar Tracks sources play next to the headliner's top tracks, as
+    {artist key: [(title, headliner's title)]}, most often linked first. AI and YouTube sit
+    this out: no AI credits from a button that isn't magenta, and YouTube is slow.
+    """
+    counts, first = {}, {}
+    for code in SIMILAR_TRACK_SOURCES:
+        if code in ("ai", "youtube") or code not in TRACK_PROVIDERS or not source_has_key(code):
+            continue
+        name, fetch = TRACK_PROVIDERS[code]
+        label = f"{name} ({LISTENBRAINZ_TRACK_ALGORITHM_SETTING})" if code == "listenbrainz" else name
+        for title in titles:
+            pairs = cached_call(label, "similar_tracks", f"{artist_key(artist)}|{clean_name(title)}",
+                                lambda: fetch(artist, title)) or []
+            for p in pairs:
+                if isinstance(p, (list, tuple)) and len(p) == 2 and p[0] and p[1]:
+                    k = (artist_key(p[0]), clean_name(p[1]))
+                    counts[k] = counts.get(k, 0) + 1
+                    first.setdefault(k, (normalise_punctuation(p[1]), title))
+    links = {}
+    for k in sorted(counts, key=lambda k: -counts[k]):
+        links.setdefault(k[0], []).append(first[k])
+    return links
+
+
+def weave_guests(hosts, guests, every=HEADLINER_EVERY):
+    """The headliner's tracks with a guest after every (every - 1) of them, while guests last."""
+    out, guests = [], list(guests)
+    for i, key in enumerate(hosts, 1):
+        out.append(key)
+        if i % (every - 1) == 0 and guests:
+            out.append(guests.pop(0))
+    return out
+
+
+def _guest_track(guest, links, played, taken):
+    """A guest's one track: the most linked to the headliner, else their most popular you own.
+    (key, title, headliner's title or None), or None."""
+    tries = list(links.get(artist_key(guest), []))
+    top, _ = blended_top_tracks(guest, limit=10)
+    tries += [(title, None) for title, _ in top]
+    for title, via in tries:
+        key = find_jriver_key_by_track(guest, title)
+        use = played.pick(key) if key and str(key) not in taken else None
+        if use and str(use) not in taken:
+            return use, title, via
+    return None
+
+
+def play_headliner(report=print, seed_info=None):
+    """
+    Headliner: the seed artist's top tracks with a guest every third track (see above).
+    Honest about guests: if fewer turn up than there are spots, it says so and the
+    headliner fills the rest. Like Artist's Top Tracks, it can run mid-album.
+    """
+    refresh_settings_if_changed()
+    if seed_info is None:
+        seed_info = get_playing_info()
+    if not seed_info or seed_info["PlayingNowPosition"] == "-1":
+        report(NOTHING_PLAYING)
+        return
+
+    seeds = seed_artists(seed_info)
+    artist = seeds[0]
+    report_missing_keys(report, similar=True, top_tracks=True)
+    n, order = TOP_TRACKS_COUNT, TOP_TRACKS_ORDER
+    report(t("Headliner: {artist}, with a guest every third track  (top {n}, {order} order)",
+             artist=artist, n=n, order=order))
+
+    top, source_label = blended_top_tracks(artist, limit=n)
+    if not top:
+        report("  " + t("Problem: no source returned top tracks for {artist}.", artist=artist))
+        nonstop_begin("headliner", seed_info)
+        if not send_mix_only(FastStart(None, report, enabled=False), seed_info, report):
+            if_all_else_fails("top", seed_info, report, why=N_("no source returned any top tracks"))
+        run_after_building(report)
+        return
+    report("  " + t("{artist}: ranked from {replace}", artist=artist, replace=source_label.replace(' + ', ', ')))
+    session_id = session_start("headliner", seed_info, source_label)
+    fast = FastStart(seed_info, report, enabled=(order == "popular"))
+    played = PlayedFilter("top", report=report, filters=True)
+    playing_key = "" if seed_info.get("Typed") else str(seed_info.get("FileKey") or "")
+
+    hosts = []
+    prefetch_youtube_ids([(artist, title) for title, _ in top[:n]])
+    for title, suggested_by in top[:n]:
+        key = find_jriver_key_by_track(artist, title)
+        is_playing = bool(key) and str(key) == playing_key
+        report(f"    {'Playing now' if is_playing else found_label(bool(key))}: {artist} - {title}  "
+               f"({', '.join(suggested_by)})")
+        use = played.pick(key) if key and not is_playing and key not in hosts else None
+        if use and use not in hosts and str(use) != playing_key:
+            hosts.append(use)
+            fast.play(use)
+        session_log(session_id, artist, title, suggested_by, found=bool(key))
+    if not hosts:
+        played.done()
+        report(t("Problem: none of the top tracks are {where}.", where=where_found(True)))
+        queued = send_mix_only(fast, seed_info, report)
+        if not queued:
+            queued = if_all_else_fails("top", seed_info, report, why=N_("none of the top tracks could be used"))
+        session_finish(session_id, queued, report=report)
+        return
+
+    wanted = len(hosts) // (HEADLINER_EVERY - 1)
+    similar, similar_label = blended_similar_artists(seeds, limit=HEADLINER_GUEST_POOL, report=report)
+    streaming = output_streaming()
+    candidates = [(a, s) for a, s in similar if streaming or library_has_artist(a)]
+    report("  " + t("Guests: the closest similar artists {where}, one track each", where=where_found(True)))
+    links = headliner_links(artist, [title for title, _ in top[:HEADLINER_LINK_TRACKS]]) if candidates else {}
+    guests, taken = [], {str(k) for k in hosts} | {playing_key}
+    for guest, suggested_by in candidates:
+        if len(guests) >= wanted:
+            break
+        found = _guest_track(guest, links, played, taken)
+        if not found:
+            continue
+        key, title, via = found
+        guests.append(key)
+        taken.add(str(key))
+        report("    " + (t("Guest: {artist} - {track}  (played alongside {via})", artist=guest, track=title, via=via)
+                          if via else t("Guest: {artist} - {track}", artist=guest, track=title)))
+        session_log(session_id, guest, title, suggested_by, found=True)
+    played.done()
+    if not guests:
+        report("  " + t("Note: no guests found {where}, so this is {artist} on their own.", where=where_found(True),
+                        artist=artist))
+    elif len(guests) < wanted:
+        report("  " + t("Note: {found} of {wanted} guest spots filled, so the rest is {artist}.",
+                        found=len(guests), wanted=wanted, artist=artist))
+
+    NONSTOP_CONTEXT["top_first"] = str(hosts[0])
+    if order == "random":
+        random.shuffle(hosts)
+        random.shuffle(guests)
+    elif order == "reverse":
+        hosts.reverse()
+    keys = weave_guests(hosts, guests)
+    labels = {"popular": "most popular first", "reverse": "least popular first", "random": "random order"}
+    report("  " + t("Sending {ordered_keys_count} tracks, {value}...", ordered_keys_count=len(keys), value=labels[order]))
+    mix_skipped(report)
+    rest = fast.rest(combine_with_mix(keys, report) if mix_active() else keys)
+    if rest:
+        send_to_jriver(rest, seed_info=seed_info, report=report, append=fast.started)
+    sources = source_label if not guests else f"{source_label} + {similar_label}"
+    session_finish(session_id, len(keys), sources=sources, report=report)
 
 
 # ---------------------------------------------------------------------------

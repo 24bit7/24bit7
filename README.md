@@ -302,7 +302,13 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.28.0
+## What's new in 1.29.0
+
+- **Headliner**: a new Play button. The artist's top tracks, with every third track a guest spot from the closest similar artists you own, one track each, chosen for how often it's played next to the headliner's own hits. If the guests run short, the console says so.
+- **Output moves up** to the right of the Zone line, so there's room for the new button. The AI usage figure, if you show it, sits on the row with the Now Playing and Search tabs.
+- **Off reads lighter**: More Options switches that are Off, and ones you can't click, are a lighter grey, so what's on stands out.
+
+### Earlier: 1.28.0
 
 - **Know when there's a new version**: when 24bit7 opens, it checks GitHub, and if a newer version is out, the console says so with a link to download it. Nothing is said when you're up to date.
 - **The source test's ready line waits its turn**: if Test My Sources finishes during a build, its line now comes after the build, not in the middle of it.

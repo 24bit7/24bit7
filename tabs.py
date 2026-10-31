@@ -977,9 +977,9 @@ class ClickThrough(FlatButton):
             fill, edge, text = mix_colour(self, colour, base, 0.16), colour, colour
         else:
             fill, edge = base, PALETTE["button_outline"]
-            text = PALETTE["button_fg"] if on else PALETTE["button_off_fg"]
+            text = PALETTE["button_fg"] if on else mix_colour(self, PALETTE["text_muted"], back, 0.35)   # can't click: lighter still than Off
             if on and value in self._plain and self._prefix:
-                text = PALETTE["text_muted"]   # Off reads quieter than a lit value
+                text = mix_colour(self, PALETTE["text_muted"], back, 0.5)   # Off reads quieter than a lit value (Ben, 30 Oct: halfway to the background)
         if on and (self._inside or self._pressed):
             fill = mix_colour(self, edge if edge != PALETTE["button_outline"] else PALETTE["button_fg"],
                               base, 0.28 if self._pressed else 0.10)
@@ -1263,6 +1263,7 @@ class NamePrompt(tk.Toplevel):
             self.entry.insert(0, initial)
             self.entry.select_range(0, "end")
             self.entry.icursor("end")
+        self._extra(inner, bg, fg)   # a subclass's rows under the name (the Play tab's Add Button)
         buttons = tk.Frame(inner, bg=bg)
         buttons.pack(anchor="e", pady=(px(16), 0))
         self.cancel_button = self._button(buttons, t("Cancel"), self.cancel, bg, line)
@@ -1275,6 +1276,9 @@ class NamePrompt(tk.Toplevel):
         self.bind("<Escape>", lambda e: self.cancel())
         self.protocol("WM_DELETE_WINDOW", self.cancel)
         self.after(10, lambda: self._show_over(top))
+
+    def _extra(self, inner, bg, fg):
+        """Nothing here: a subclass adds its own rows between the name box and the buttons."""
 
     def _button(self, parent, text, command, fill, edge):
         """A rounded button drawn as an image with the text on top, as the AI Playlist window's."""

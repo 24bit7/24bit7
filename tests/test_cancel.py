@@ -72,7 +72,7 @@ def test_console_cancel_button(app, ui, monkeypatch):
 
     monkeypatch.setattr(app.engine, "blended_similar_artists", slow)
     ui.play.on_similar()
-    ui.pump(until=lambda: ui.play.running, timeout=10)
+    ui.pump(until=lambda: ui.play.running and "Similar Artists:" in console(ui), timeout=10)   # inside the lookup
     strip = ui.play.console_buttons
     assert strip["Cancel"].winfo_manager() and not strip["Copy"].winfo_manager()
     ui.play._cancel_build()

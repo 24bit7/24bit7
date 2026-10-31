@@ -238,19 +238,6 @@ def test_simple_mode_hides_debug(app, ui):
     assert shown and all("[debug]" in x for x in shown)
 
 
-def test_play_tab_switches_write_settings(app, ui):
-    """More Options' Drift and Non-stop are a second door onto Settings > Playlist."""
-    p = ui.play
-    if not hasattr(p, "nonstop_var"):
-        pytest.skip("Play tab switches not found by name")
-    p.nonstop_cb.set("Wander")
-    p.nonstop_cb.event_generate("<<ComboboxSelected>>")
-    ui.pump(0.5)
-    from dotenv import dotenv_values
-    env = dotenv_values(app.engine.ENV_FILE)
-    assert all(env.get(f"NONSTOP_{g}") == "1" for g in ("ARTISTS", "TRACKS", "TOP", "VIBE")), env
-
-
 # --- JRiver Playlists page: the global rows (the 1.11.1 fix) ---------------------------
 
 def find_saved_global_combos(widget):
@@ -535,22 +522,6 @@ def test_ai_usage_click_switches_dollars_and_tokens(app, ui):
     assert "$1 buys about" in ui.settings.usage_dollar.cget("text")
 
 
-def test_play_tab_drift_modes_write_settings(app, ui):
-    play = ui.play
-    play.drift_var.set("Keep It Tight")
-    play._on_drift_changed()
-    ui.pump(0.3)
-    e = app.engine
-    assert all(e.DRIFT[g]["on"] and e.DRIFT[g]["from"] == "close" for g in ("artists", "tracks", "vibe"))
-    play.drift_var.set("Off")
-    play._on_drift_changed()
-    ui.pump(0.3)
-    assert not any(e.DRIFT[g]["on"] for g in ("artists", "tracks", "vibe"))
-    assert all(e.DRIFT[g]["from"] == "close" for g in ("artists", "tracks", "vibe")), "the mode is kept for next time"
-    play._sync_play_switches()
-    assert play.drift_var.get() == "Off"
-
-
 def test_support_window(app, ui):
     import support_gui
     win = support_gui.show(ui.root)
@@ -571,21 +542,6 @@ def test_support_window(app, ui):
     assert "GitHub Issues" in joined and "Anthropic credits" not in joined
     assert support_gui.show(ui.root) is win, "a second click brings the same window forward"
     win.destroy()
-
-
-def test_play_tab_nonstop_modes_write_settings(app, ui):
-    play = ui.play
-    play.nonstop_var.set("Keep It Tight")
-    play._on_nonstop_changed()
-    ui.pump(0.3)
-    by = app.engine.NONSTOP_BY
-    assert all(by[g]["on"] and by[g]["mode"] == "tight" for g in ("artists", "tracks", "top", "vibe"))
-    play.nonstop_var.set("Off")
-    play._on_nonstop_changed()
-    ui.pump(0.3)
-    assert not any(app.engine.NONSTOP_BY[g]["on"] for g in ("artists", "tracks", "top", "vibe"))
-    play._sync_play_switches()
-    assert play.nonstop_var.get() == "Off"
 
 
 # --- Discover: the latest session first, and Label as an option ---------------------------------
@@ -1326,19 +1282,18 @@ def test_use_ai_off_pauses_the_ai(app, ui):
     app.engine.load_settings()
     play.sync_moderator()
     ai_button = next(b for b in play.buttons if b.cget("text") == "AI Playlist")
-    assert ai_button.cget("state") == "normal" and not play.moderator_cb.instate(["disabled"])
+    assert ai_button.cget("state") == "normal"
     assert s.use_ai_var.get() == "On"
     s.use_ai_var.set("Off"); s._use_ai_changed()
     ui.pump(0.2)
     assert settings_gui.read_env().get("USE_AI") == "0" and app.engine.USE_AI is False
     assert not app.engine.ai_enabled()
     assert ai_button.cget("state") == "disabled", "AI Playlist greys out"
-    assert play.moderator_cb.instate(["disabled"]), "the moderator dropdown greys out"
     assert "Use AI is Off" in app.engine.vibe_blocker()
     assert app.engine.ai_ask_json("anything") is None and app.engine.AI_LAST_ERROR == "Use AI is Off"
     s.use_ai_var.set("On"); s._use_ai_changed()
     ui.pump(0.2)
-    assert ai_button.cget("state") == "normal" and not play.moderator_cb.instate(["disabled"])
+    assert ai_button.cget("state") == "normal"
 
 
 def test_use_ai_off_moderator_notes_once_and_sources_skip(app, ui):
@@ -1555,46 +1510,6 @@ def test_tidal_open_in_setting_and_the_other_link(app, ui, monkeypatch):
     last = play.log.get("1.0", "end").strip().splitlines()[-1]
     assert "Open in Tidal app" in last and "Open in Tidal web" not in last
     app.engine.TIDAL_OPENED = None
-    assert not ui.errors, ui.errors
-
-
-def test_settings_deep_cuts_section(app, ui):
-    """Settings > Playlist has only how much to top up by: on or off is the Play tab's button."""
-    s = ui.settings
-    visit_every_page(ui, next(c for c in s.winfo_children() if hasattr(c, "select")))
-    page = s._main_playlist
-    for g in ("ARTISTS", "TRACKS", "VIBE"):
-        assert f"DEEP_CUTS_{g}_SHARE" in page.vars and f"DEEP_CUTS_{g}" not in page.vars
-    assert "DEEP_CUTS_TOP_SHARE" not in page.vars, "not Artist's Top Tracks"
-    app.set_env(DEEP_CUTS_TRACKS="spaced")
-    page.vars["DEEP_CUTS_TRACKS_SHARE"].set("30")
-    s._save()
-    app.engine.refresh_settings_if_changed()
-    assert app.engine.DEEP_CUTS["tracks"] == {"mode": "spaced", "share": 30}, "saving the share leaves the switch alone"
-    assert not ui.errors, ui.errors
-
-
-def test_device_with_own_settings_has_its_deep_cuts_switch(app, ui):
-    """An Echo Dot or speaker with settings of its own switches Deep Cuts on its own Playlist tab."""
-    s = ui.settings
-    app.voice.set_device_page(KITCHEN, "playlist", {})
-    s._layout_device_pane("playlist")
-    info = s._panes["playlist"]
-    page = info["devices"][KITCHEN]
-    info["pane"].select(page["outer"])
-    s._fill_device_page("playlist", KITCHEN)
-    ui.pump(0.5)
-    visit_every_page(ui, info["pane"])
-    switches = [w for w in _everything(page["inner"]) if isinstance(w, ttk.Combobox)
-                and tuple(w.cget("values")) == ("Off", "Spaced", "Shuffled")]
-    assert len(switches) == 3, "Similar Artists, Similar Tracks and AI Playlist"
-    switches[0].set("Spaced")
-    switches[0].event_generate("<<ComboboxSelected>>")
-    ui.pump(0.3)
-    assert app.voice.device_page(KITCHEN, "playlist").get("DEEP_CUTS_ARTISTS") == "spaced"
-    main = s._main_playlist
-    assert "DEEP_CUTS_ARTISTS_SHARE" in main.vars and not any(
-        f"DEEP_CUTS_{g}" in main.vars for g in ("ARTISTS", "TRACKS", "VIBE")), "Windows (Main) uses the Play tab"
     assert not ui.errors, ui.errors
 
 

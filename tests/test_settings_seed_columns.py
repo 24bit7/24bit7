@@ -1,21 +1,13 @@
 """
-Settings > Playlist: the Seed and Review Mode columns (Current Track | Playing Now, twice),
-on Windows (Main) only, each saving straight to .env.
+Settings > Buttons: the Seed and Review Mode columns (Current Track | Playing Now, twice) on a
+standard button's Playlist page only, each saving straight to .env.
 """
 
 import tkinter as tk
 from tkinter import ttk
 
-from test_gui import all_panes, ui  # noqa: F401  (the GUI fixture)
-
-
-def pick(ui, pane, title):
-    for i, page in enumerate(pane._pages):
-        if pane._tabs[i].cget("text").strip() == title:
-            pane.select(page)
-            ui.pump(0.4)
-            return page
-    raise KeyError(title)
+from test_gui import ui  # noqa: F401  (the GUI fixture)
+from test_settings_buttons import inner_page, pick_button
 
 
 def walk(widget):
@@ -24,15 +16,10 @@ def walk(widget):
         yield from walk(child)
 
 
-def option_page(ui, device="Windows (Main)", option="Similar Artists"):
-    """The Playlist page for a device and a Play option, built and on screen."""
-    settings = pick(ui, ui.nb, "Settings")
-    top = [p for p in all_panes(settings) if p is not ui.nb][0]
-    playlist = pick(ui, top, "Playlist")
-    devices = [p for p in all_panes(playlist) if p is not top][0]
-    page = pick(ui, devices, device)
-    options = [p for p in all_panes(page) if p is not devices and p is not top][0]
-    return pick(ui, options, option)
+def option_page(ui, button="Similar Artists"):
+    """A button's Playlist page, built and on screen."""
+    pick_button(ui, button)
+    return inner_page(ui, "Playlist")
 
 
 def row_cell(page, label, column):
@@ -93,7 +80,7 @@ def test_mirror_playing_now_greys_its_column(app, ui):
 
 def test_similar_tracks_columns(app, ui):
     import settings_gui
-    page = option_page(ui, option="Similar Tracks")
+    page = option_page(ui, "Similar Tracks")
     sb = spinbox_in(row_cell(page, "Number of tracks", 2))
     assert sb.get() == "6"
     sb.delete(0, "end")
@@ -118,8 +105,10 @@ def test_profiles_carry_the_new_settings(app):
     assert "SEED_PLAYING_NOW_SEEN" not in keys   # the first-time note never comes back with a profile
 
 
-def test_device_tabs_have_no_playing_now_column(app, ui):
-    page = option_page(ui, device="Kitchen Echo")
+def test_a_button_of_your_own_has_no_playing_now_column(app, ui):
+    import buttons
+    buttons.add("Sunday", "artists")
+    page = option_page(ui, "Sunday")
     texts = [str(w.cget("text")) for w in walk(page) if isinstance(w, tk.Label)]
     assert "Playing Now" not in texts and "SEED" not in texts, texts
     assert not ui.errors, ui.errors

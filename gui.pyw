@@ -31,11 +31,11 @@ import tray
 import voice
 import hotkeys
 import nonstop
-from settings_gui import SettingsTab, write_env, read_env, warn_moderator_once, Tooltip, NO_KEY_TEXT
-from settings_gui import MODERATOR_CHOICES, MODERATOR_LEVELS_HELP
+from settings_gui import SettingsTab, write_env, read_env, Tooltip, NO_KEY_TEXT, ask_new_button
 from discover_gui import DiscoverTab
 import tabs
 from tabs import TabbedPane, PALETTE, FlatButton, InfoLine, apply_theme, ClickThrough, RoundedEntry
+import buttons
 from mix_gui import MixRows
 from review_gui import ReviewPanel
 import badge
@@ -70,47 +70,38 @@ WELCOME_TEXT = N_(
 )
 
 
-# The Play tab's Drift and Non-stop switches: which Play options each covers, and Non-stop's reseed choices
-DRIFT_GROUPS = ("artists", "tracks", "vibe")            # Top Tracks has no Drift
-NONSTOP_GROUPS = ("artists", "tracks", "top", "vibe")
 # The values below stay English in code (the switches hold and compare them); they show through t()
-PLAY_RESEED = [("last", N_("Last track")), ("second", N_("2nd track"))]
-PLAY_NONSTOP = [("off", N_("Off")), ("tight", "Keep It Tight"), ("journey", "Wander")]
 PLAY_BEHAVIOUR = [("instant", N_("Play")), ("review", "Review")]   # every build from the app, not voice
-# What each Play tab control does, shown on hover only while the More Options row's ? is on
+# What each Play tab control does, shown on hover only while the More Options row's ? is on.
+# A button of your own gets its kind's note, and every button adds a line saying what it has on.
 PLAY_NOTES = {
     "Similar Artists": N_("Finds artists like the seed's, then plays their best known tracks you own."),
     "Similar Tracks": N_("Finds songs like the seed track, from every source ticked in Settings > Sources."),
     "Artist's Top Tracks": N_("Plays the seed artist's most popular tracks that you own."),
+    "Headliner": N_("The seed artist's most popular tracks, with every third track a guest spot: one track each "
+                    "from the closest similar artists you own."),
     "AI Playlist": N_("Describe a mood or moment and the AI picks tracks for it, from your library. Uses AI credits."),
-    "More Options": N_("Opens the row below: Seed, Mode, Moderator, Drift, Deep Cuts, Non-stop and your own playlists."),
+    "+": N_("Adds a button of your own, starting from one you already have. Right-click any button to rename, "
+            "move or remove it."),
+    "More Options": N_("Opens the row below: Seed, Mode and your own playlists."),
     "Output": N_("Where the finished playlist goes: the zone you seeded from, another JRiver zone, or YouTube or "
                  "Tidal (ticked under Settings > Other > Additional Outputs)."),
     "Zone": N_("Which JRiver zone Now Playing shows and seeds from."),
     "Seed": N_("What Similar Artists and Similar Tracks start from: the current track, or every track in Playing Now."),
     "Mode": N_("Play Mode plays the playlist straight away. Review Mode lists it first, so you choose what goes."),
-    "Moderator": N_("Uses the AI to check each playlist and take out tracks that clash with the seed's mood. "
-                    "Relaxed takes out the least, Strict the most. Uses AI credits."),
-    "Drift": N_("When a build comes up short, carries on from what it found until the playlist is full. Keep It "
-                "Tight stays close to the seed; Spread wanders further."),
-    "Deep Cuts": N_("Tops each playlist up with the least played artists or tracks in the seed's genre, by the share "
-                    "set in Settings > Playlist. Spaced places them evenly; Shuffled at random."),
-    "Non-stop": N_("Non-stop: when a playlist from 24bit7 reaches its last track, more are added, so the music "
-                   "keeps going. Keep It Tight stays close to the start; Wander lets it drift."),
     "+ Add Playlist": N_("Joins one of your own JRiver playlists to the next build."),
     "Show Credits": N_("Lists the producer, engineer, musicians and other credits for what's playing, from Discogs."),
     "Help": N_("Hover notes for the Play tab: on, hovering over anything here explains it; off, no pop-ups."),
 }
-
-PLAY_DEEP_CUTS = [("off", N_("Off")), ("spaced", N_("Spaced")), ("shuffled", N_("Shuffled"))]   # as Settings > Playlist has them
-PLAY_DRIFT = [("off", N_("Off")), ("close", "Keep It Tight"), ("spread", N_("Spread"))]   # as Settings > Playlist shows them
+BUTTON_GAP = 8   # between the Play tab's buttons, and between its rows of them
 
 
 class PlayTab(tk.Frame):
     def __init__(self, master, root):
         super().__init__(master)
         self.root = root
-        self.settings = None   # the Settings tab, once built: Drift and Non-stop write through it
+        self.settings = None   # the Settings tab, once built
+        root.bind("<<ButtonsChanged>>", lambda e: self.refresh_buttons(), add="+")   # from Settings > Buttons
         self.log_queue = queue.Queue()
         engine.OUTPUT_HOOK = self.log_queue.put   # engine's print() and [debug] lines land here
         self.running = False
@@ -189,7 +180,7 @@ class PlayTab(tk.Frame):
         self.np_track.show(("...", None))
 
         # AI Usage at the far right, while "Show in Now Playing" is ticked in Settings > Keys
-        self.usage_box = tk.Frame(frame)
+        self.usage_box = tk.Frame(self.seed_nb)
         self.usage_label = tk.Label(self.usage_box, text="", font=("Segoe UI", 9), fg=PALETTE["ai_purple"])
         self.usage_label.pack(side="left", padx=(0, 10))
         self.usage_label.config(cursor="hand2")
@@ -222,12 +213,14 @@ class PlayTab(tk.Frame):
         self.search_track = RoundedEntry(fields, width=30, font=("Segoe UI", 9))
         self.search_track.pack(side="left", padx=(4, 0))
         tk.Label(self.search_tab, text=t("Build a playlist from any track, even one you don't own. "
-                                         "Similar Artists and Artist's Top Tracks need only the "
-                                         "artist. Press Enter for Similar Artists."),
+                                         "Only Similar Tracks needs the track; the other buttons need "
+                                         "just the artist. Press Enter for Similar Artists."),
                  font=("Segoe UI", 8), fg=PALETTE["text_muted"]).grid(row=1, column=0, columnspan=4, sticky="w", pady=(6, 0))
         for entry in (self.search_artist, self.search_track):
             entry.bind("<Return>", lambda e: self.on_similar())
-        self.seed_nb.bind("<<NotebookTabChanged>>", lambda e: self._sync_seed_buttons())
+        self.seed_nb.bind("<<NotebookTabChanged>>", lambda e: (self._sync_seed_buttons(), self._place_output()))
+        for widget in (fields, self.search_tab):   # the panel settles its height after the switch
+            widget.bind("<Configure>", lambda e: self._seed_is_search() and self.after_idle(self._place_output), add="+")
 
     def _fill_zone_list(self):
         self.zone_cb.config(values=engine.zone_names())
@@ -274,6 +267,24 @@ class PlayTab(tk.Frame):
     def _seed_is_search(self):
         return self.seed_nb.select() == str(self.search_tab)
 
+    def _place_output(self):
+        """Output at the right of the seed tab that's showing: level with Zone, or with the Artist and Track boxes."""
+        box = getattr(self, "output_box", None)
+        if box is None:
+            return
+        if self._seed_is_search():
+            # level with the Artist and Track boxes, which sit centred in the panel: read where they are
+            # (place measures from inside the panel's padding, the same 26 as Zone has on the left)
+            fields = self.search_tab.grid_slaves(row=0, column=0)[0]
+            self.search_tab.update_idletasks()
+            middle = fields.winfo_y() + fields.winfo_height() // 2 - int(self.search_tab.cget("pady"))
+            box.place(in_=self.search_tab, relx=1.0, rely=0, x=0, y=middle, anchor="e")
+        else:
+            box.place(in_=self.seed_nb._pages[0], relx=1.0, rely=0.5, x=0, y=0, anchor="e")
+            box.update_idletasks()   # so its width is known
+            self._usage_info.pack_configure(padx=(0, box.winfo_reqwidth() + 36))   # the track text stops short of it
+        box.lift()
+
     def _sync_seed_buttons(self):
         """Show Credits needs an album, which a typed seed doesn't have, so it greys out on Search."""
         self._sync_seed_bars()   # a typed seed ignores Seed, so the bars go back to orange on Search
@@ -294,36 +305,42 @@ class PlayTab(tk.Frame):
             return None
         return engine.typed_seed_info(artist, track)
 
+    @property
+    def buttons(self):
+        """Everything greyed out during a build: the row's buttons, then Show Credits."""
+        return self.play_buttons + self.extra_buttons
+
     def _build_buttons(self):
-        frame = tk.Frame(self, padx=16, pady=4)
+        # The row of buttons, one per entry in the button list (buttons.py), then More Options
+        # and +. Laid out by hand so they wrap onto another row when the window is narrow.
+        frame = self.button_row = tk.Frame(self)
         frame.pack(fill="x")
-        self.buttons = []
-        for name, handler in [   # name: the English, which the code finds the button by
-            (N_("Similar Artists"), self.on_similar),
-            (N_("Similar Tracks"), self.on_similar_tracks),
-            (N_("Artist's Top Tracks"), self.on_top_tracks),
-            (N_("AI Playlist"), self.on_vibe),
-        ]:
-            b = FlatButton(frame, text=t(name), command=handler, width=18, height=2,
-                           accent=PALETTE["ai_purple"] if handler == self.on_vibe else None,   # magenta: AI credits
-                           text_fg=PALETTE["ai_purple"] if handler == self.on_vibe else None)
-            b.pack(side="left", padx=(0, 8))
-            b._name = name
-            self.buttons.append(b)
+        frame.pack_propagate(False)
+        self.play_buttons, self.extra_buttons = [], []
         # More options: the quieter button. Opens the row below; stays usable during a build.
         self.more_button = FlatButton(frame, text=t("More Options"), command=self._toggle_more,
                                       width=18, height=2, quiet=True)
-        self.more_button.pack(side="left", padx=(0, 8))
+        # +: a button of your own. Right-click: Restore Default Buttons.
+        self.add_button = FlatButton(frame, text="+", command=self.on_add_button, width=2, height=2, quiet=True)
+        self.add_button._name = "+"
+        for w in (self.add_button, self.add_button._label):
+            w.bind("<Button-3>", lambda e: self._button_menu(e, None))
+        self._draw_buttons()
+        frame.bind("<Configure>", lambda e: self._flow_buttons())
 
         # Output: where the finished playlist goes. Saved straight to .env; the engine
         # reads it at the start of each run, so changing it mid-run affects the next one.
-        tk.Label(frame, text=t("Output"), font=("Segoe UI", 9, "bold"), fg=PALETTE["text_secondary"]).pack(side="left", padx=(8, 6))
+        # It sits at the right of the Zone line, on both seed tabs (Ben, 30 Oct 2026: room for Headliner)
+        self.output_box = tk.Frame(self.seed_nb)
+        tk.Label(self.output_box, text=t("Output"), font=("Segoe UI", 9, "bold"),
+                 fg=PALETTE["text_secondary"]).pack(side="left", padx=(0, 6))
         self.output_var = tk.StringVar(value=self._output_label(engine.OUTPUT_TARGET))
-        self.output_cb = ttk.Combobox(frame, textvariable=self.output_var,
+        self.output_cb = ttk.Combobox(self.output_box, textvariable=self.output_var,
                                       values=[t(SAME_ZONE_LABEL)] + self._extra_outputs(), state="readonly", width=24,
                                       postcommand=self._fill_output_list)
         self.output_cb.pack(side="left")
         self.output_cb.bind("<<ComboboxSelected>>", self._on_output_changed)
+        self._place_output()
         self._sync_behaviour()
 
         # The More Options row: click-through buttons (Seed, Mode, Moderator, Drift, Non-stop as ∞), then
@@ -352,28 +369,7 @@ class PlayTab(tk.Frame):
                                          plain=("Play",), lit={"Review": review_colour},
                                          labels={"Play": N_("Play Mode"), "Review": N_("Review Mode")})
         self.behaviour_cb.pack(side="left", padx=(0, 8))
-        # Moderator sets Windows (Main)'s moderator; devices with settings of their own keep theirs.
-        self.moderator_var = tk.StringVar(value="Off")
-        self.moderator_cb = ClickThrough(self.extras_row, "Moderator", self.moderator_var, MODERATOR_CHOICES,
-                                         command=self._on_moderator_changed,
-                                         lit={v: PALETTE["ai_purple"] for v in MODERATOR_CHOICES})
-        self.moderator_cb.pack(side="left", padx=(0, 8))
-        self._moderator_tip = Tooltip(self.moderator_cb, t(NO_KEY_TEXT), when=lambda: not engine.ai_enabled())
-        # Drift and Non-stop: a second door onto Settings > Playlist for Windows (Main).
-        # Changing them here changes them there, for every Play option at once.
-        self.drift_var = tk.StringVar(value="Off")
-        self.drift_cb = ClickThrough(self.extras_row, "Drift", self.drift_var, [s for _, s in PLAY_DRIFT],
-                                     command=self._on_drift_changed)
-        self.drift_cb.pack(side="left", padx=(0, 8))
-        # Deep Cuts: the same second door, for Similar Artists, Similar Tracks and AI Playlist
-        self.deepcuts_var = tk.StringVar(value="Off")
-        self.deepcuts_cb = ClickThrough(self.extras_row, "Deep Cuts", self.deepcuts_var,
-                                        [s for _, s in PLAY_DEEP_CUTS], command=self._on_deepcuts_changed)
-        self.deepcuts_cb.pack(side="left", padx=(0, 8))
-        self.nonstop_var = tk.StringVar(value="Off")
-        self.nonstop_cb = ClickThrough(self.extras_row, "∞", self.nonstop_var, [s for _, s in PLAY_NONSTOP], symbol=True,
-                                       command=self._on_nonstop_changed)   # Non-stop, shown as the infinity sign
-        self.nonstop_cb.pack(side="left", padx=(0, 8))
+        # Moderator, Drift, Deep Cuts and Non-stop belong to each button now (Settings > Buttons)
         tk.Frame(self.extras_row, width=1, height=24, bg=PALETTE["line"]).pack(side="left", padx=(8, 16))
         # Add playlist: JRiver playlists joined to the next build from the app (not voice)
         self.add_playlist_button = FlatButton(self.extras_row, text=t("+ Add Playlist"), quiet=True, width=14,
@@ -382,14 +378,14 @@ class PlayTab(tk.Frame):
         self.credits_button = FlatButton(self.extras_row, text=t("Show Credits"), command=self.on_credits,
                                          quiet=True, width=14, height=1)
         self.credits_button.pack(side="left")
-        self.buttons.append(self.credits_button)   # greyed out during a build, and on the Search tab
+        self.extra_buttons.append(self.credits_button)   # greyed out during a build, and on the Search tab
         # ?: hover notes for the whole Play tab, off until switched on (remembered)
         self.help_var = tk.StringVar(value="On" if read_env().get("PLAY_HELP", "0") == "1" else "Off")
         self.help_cb = ClickThrough(self.extras_row, "", self.help_var, ["Off", "On"], command=self._on_help_changed,
                                     plain=("Off",), labels={"Off": "?", "On": "?"},
                                     lit={"On": PALETTE.get("link") or PALETTE["button_fg"]})
         self.help_cb.pack(side="right")
-        self._add_play_notes(frame)
+        self._add_play_notes()
         self._sync_seed_bars()
         self.mix_rows = MixRows(self.more_box, padx=16)
         self.mix_rows.on_change = self._on_mix_rows_changed
@@ -415,22 +411,146 @@ class PlayTab(tk.Frame):
         except (AttributeError, IndexError):
             return None
 
-    def _add_play_notes(self, button_row):
-        """A note on every Play tab control, shown on hover only while ? is on."""
+    def _add_play_notes(self):
+        """A note on every fixed Play tab control, shown on hover only while ? is on (the row's are drawn with it)."""
         on, wrap = self.help_on, self.note_wrap
-        for b in self.buttons:
-            name = getattr(b, "_name", None) or b.cget("text")
-            if name in PLAY_NOTES:
-                if name == "AI Playlist":   # its "why it's greyed out" note shows whatever ? says
-                    Tooltip(b, t(PLAY_NOTES[name]), when=lambda: on() and engine.ai_enabled(), wrap=wrap)
-                else:
-                    Tooltip(b, t(PLAY_NOTES[name]), when=on, wrap=wrap)
-        for widget, name in ((self.more_button, "More Options"), (self.output_cb, "Output"),
+        for widget, name in ((self.more_button, "More Options"), (self.add_button, "+"), (self.output_cb, "Output"),
                              (self.zone_cb, "Zone"), (self.seed_cb, "Seed"), (self.behaviour_cb, "Mode"),
-                             (self.drift_cb, "Drift"), (self.deepcuts_cb, "Deep Cuts"), (self.nonstop_cb, "Non-stop"),
                              (self.add_playlist_button, "+ Add Playlist"), (self.help_cb, "Help")):
             Tooltip(widget, t(PLAY_NOTES[name]), when=on, wrap=wrap)
-        Tooltip(self.moderator_cb, t(PLAY_NOTES["Moderator"]), when=lambda: on() and engine.ai_enabled(), wrap=wrap)
+
+    # --- the row of buttons -------------------------------------------------------------------------
+
+    def _button_note(self, button):
+        """A button's hover note: its own (a standard button) or its kind's, then a line saying what's on."""
+        kind_name = buttons.KIND_NAMES[button["kind"]]
+        note = t(PLAY_NOTES.get(button["name"] if button.get("standard") or button["name"] in PLAY_NOTES
+                                else kind_name, PLAY_NOTES[kind_name]))
+        extras = buttons.describe(button)
+        if extras != t(kind_name):   # more than the kind alone: Guests, Drift, Deep Cuts, Non-stop, Filters
+            note += "\n" + extras
+        return note
+
+    def _draw_buttons(self):
+        """Draws the row from the button list: one button each, then More Options and +."""
+        for b in self.play_buttons:
+            b.destroy()
+        self.play_buttons = []
+        on, wrap = self.help_on, self.note_wrap
+        for button in buttons.load():
+            ai = button["kind"] == "vibe"
+            b = FlatButton(self.button_row, text=button["name"], width=18, height=2,
+                           command=lambda bt=button: self.on_button(bt),
+                           accent=PALETTE["ai_purple"] if ai else None,   # magenta: AI credits
+                           text_fg=PALETTE["ai_purple"] if ai else None)
+            b._name, b._kind, b._button = button["name"], button["kind"], button
+            for w in (b, b._label):
+                w.bind("<Button-3>", lambda e, bt=button: self._button_menu(e, bt))
+            if ai:   # its "why it's greyed out" note shows whatever ? says
+                Tooltip(b, self._button_note(button), when=lambda: on() and engine.ai_enabled(), wrap=wrap)
+                b._ai_tip = Tooltip(b, "", when=lambda: not engine.ai_enabled())
+            else:
+                Tooltip(b, self._button_note(button), when=on, wrap=wrap)
+            self.play_buttons.append(b)
+        self._sync_ai_button()
+        self._flow_buttons()
+
+    def _flow_buttons(self):
+        """Places the row's buttons left to right, wrapping onto another row when the window is narrow."""
+        row = self.button_row
+        avail = max(row.winfo_width(), 1) - 2 * 16
+        x = y = 0
+        height = 0
+        for b in self.play_buttons + [self.more_button, self.add_button]:
+            w, h = b._size
+            if x and x + w > avail:
+                x, y = 0, y + h + BUTTON_GAP
+            b.place(x=16 + x, y=4 + y)
+            x += w + BUTTON_GAP
+            height = y + h
+        row.config(height=height + 8)
+
+    def refresh_buttons(self):
+        """After the list changed (+, right-click, Settings > Buttons): redraws the row."""
+        self._draw_buttons()
+        if self.running:
+            for b in self.play_buttons:
+                b.config(state="disabled")
+
+    def _standard_button(self, kind):
+        """The button a keyboard Enter or an old caller means: the standard one of that kind, if any."""
+        button = buttons.standard(kind)
+        if button is None:
+            messagebox.showinfo(t("No Button"), t("There's no {kind} button. Right-click a button and choose "
+                                                  "Restore Default Buttons.", kind=t(buttons.KIND_NAMES[kind])),
+                                parent=self)
+        return button
+
+    def _ask_new_button(self):
+        """The + window. (name, kind, the id to start from) or None for Cancel."""
+        return ask_new_button(self)
+
+    def on_add_button(self):
+        answer = self._ask_new_button()
+        if answer is None:
+            return
+        name, kind, from_id = answer
+        buttons.add(name, kind, from_id)
+        self.refresh_buttons()
+
+    def _button_menu(self, event, button):
+        """Right-click on a button: Rename, Move Left, Move Right, Remove, and Restore Default Buttons."""
+        import review_gui
+        p = review_gui.palette()   # the colours Review's Preview menu uses
+        menu = tk.Menu(self, tearoff=0, bg=p["bg"], fg=p["text"], activebackground=p["row_on"],
+                       activeforeground=p["accent"])
+        if button is not None:
+            ids = [b["id"] for b in buttons.load()]
+            i = ids.index(button["id"]) if button["id"] in ids else -1
+            menu.add_command(label=t("Rename"), command=lambda: self._rename_button(button))
+            menu.add_command(label=t("Move Left"), state="normal" if i > 0 else "disabled",
+                             command=lambda: (buttons.move(button["id"], -1), self.refresh_buttons()))
+            menu.add_command(label=t("Move Right"), state="normal" if 0 <= i < len(ids) - 1 else "disabled",
+                             command=lambda: (buttons.move(button["id"], 1), self.refresh_buttons()))
+            menu.add_command(label=t("Remove"), command=lambda: self._remove_button(button))
+            menu.add_separator()
+        have = {b.get("standard") for b in buttons.load()}
+        missing = any(kind not in have for kind, _ in buttons.KINDS)
+        menu.add_command(label=t("Restore Default Buttons"), state="normal" if missing else "disabled",
+                         command=lambda: (buttons.restore_standard(), self.refresh_buttons()))
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+
+    def _rename_button(self, button):
+        name = tabs.ask_name(self, t("Rename Button"), t("Name"), initial=button["name"])
+        if name and name.strip():
+            buttons.rename(button["id"], name)
+            self.refresh_buttons()
+
+    def _remove_button(self, button):
+        if messagebox.askyesno(t("Remove Button"), t("Remove {name}?", name=button["name"]), parent=self):
+            buttons.remove(button["id"])
+            self.refresh_buttons()
+
+    def on_button(self, button):
+        """Runs a button: from the Search tab's typed seed, or from the Now Playing zone's track."""
+        if self.running:
+            return
+        if button["kind"] == "vibe":
+            return self.on_vibe(button)
+        if self._seed_is_search():
+            seed = self._typed_seed(need_track=buttons.needs_track(button),
+                                    why=engine.SIMILAR_NEEDS_TRACK_TEXT if button["kind"] == "artists" else None)
+            if seed:
+                self._run_typed(lambda **kw: buttons.run(button, **kw), seed, lambda: self.on_button(button))
+            return
+        options = {}
+        if button["kind"] in ("artists", "tracks"):
+            options["playing_now"] = engine.play_seed_is_playing_now()   # the Seed setting
+        self._run_job(lambda: self._seeded(lambda **kw: buttons.run(button, **kw), **options),
+                      needs_playing=False, review=True)
 
     def _toggle_more(self):
         self._show_more(not self.extras_row.winfo_manager())
@@ -576,123 +696,24 @@ class PlayTab(tk.Frame):
         return getattr(self, "behaviour_var", None) is not None and self.behaviour_var.get() == "Review"
 
     def sync_moderator(self):
-        """Shows Windows (Main)'s moderator choice, greyed out until the AI is set up."""
+        """After Settings changed: the AI buttons grey out or come back, and More Options' arrow is redrawn."""
         if self.running:
             return   # a voice build may have a device's settings loaded
         engine.refresh_settings_if_changed()
-        by = engine.AI_MODERATOR_BY
-        levels = {by.get("artists", "off"), by.get("tracks", "off")}
-        self.moderator_var.set(levels.pop().title() if len(levels) == 1 else "Off")   # Off unless both agree
-        self.moderator_cb.state(["!disabled"] if engine.ai_enabled() else ["disabled"])
-        self._moderator_tip.text = (t(NO_KEY_TEXT) if not engine.ai_configured()
-                                    else t("Paused: Use AI is Off under Settings > Keys."))
         self._sync_ai_button()
-        self._sync_play_switches()
         self._update_more_label()
 
     def _sync_ai_button(self):
-        """AI Playlist greys out while Use AI is Off (Settings > Keys) or there's no key."""
-        button = next((b for b in self.buttons if getattr(b, "_name", None) == "AI Playlist"), None)
-        if button is None:
-            return
+        """Every AI Playlist button greys out while Use AI is Off (Settings > Keys) or there's no key."""
         on = engine.ai_enabled()
-        if not self.running:
-            button.config(state="normal" if on else "disabled")
-        if not hasattr(self, "_ai_button_tip"):
-            self._ai_button_tip = Tooltip(button, "", when=lambda: not engine.ai_enabled())
-        self._ai_button_tip.text = (t("AI Playlist needs {what} under Settings > Keys.", what=engine.ai_missing_text())
-                                    if not engine.ai_configured() else
-                                    t("Paused: Use AI is Off under Settings > Keys."))
-
-    def _sync_play_switches(self):
-        """Drift and Non-stop as Settings > Playlist has them for Windows (Main): No unless every option agrees."""
-        drift = {(engine.DRIFT[g].get("from", "spread") if engine.DRIFT[g]["on"] else "off")
-                 for g in DRIFT_GROUPS if g in engine.DRIFT}
-        self.drift_var.set(dict(PLAY_DRIFT).get(drift.pop() if len(drift) == 1 else "off", "Off"))
-        by = engine.NONSTOP_BY
-        states = {(by[g].get("mode", "journey") if by[g]["on"] else "off") for g in NONSTOP_GROUPS if g in by}
-        self.nonstop_var.set(dict(PLAY_NONSTOP).get(states.pop() if len(states) == 1 else "off", "Off"))
-        cuts = {engine.DEEP_CUTS[g]["mode"] for g in engine.DEEP_CUT_GROUPS if g in engine.DEEP_CUTS}
-        self.deepcuts_var.set(dict(PLAY_DEEP_CUTS).get(cuts.pop() if len(cuts) == 1 else "off", "Off"))
-
-    def _save_play_switches(self, updates, apply):
-        """
-        Writes Drift or Non-stop into Settings > Playlist (Windows (Main)): sets the Settings
-        tab's own controls so its next save can't put the old values back, then writes .env.
-        """
-        settings = getattr(self, "settings", None)
-        page = getattr(settings, "_main_playlist", None) if settings else None
-        try:
-            if page is not None:
-                apply(page)
-                settings._save()
-            write_env(updates)
-        except Exception as e:
-            messagebox.showerror(t("Save failed"), str(e), parent=self)
-        engine.refresh_settings_if_changed()
-        self._update_more_label()
-
-    def _on_drift_changed(self, *_):
-        code = {shown: code for code, shown in PLAY_DRIFT}.get(self.drift_var.get(), "off")
-        on = code != "off"
-        updates = {f"DRIFT_{g.upper()}": "1" if on else "0" for g in DRIFT_GROUPS}
-        if on:
-            updates.update({f"DRIFT_{g.upper()}_FROM": code for g in DRIFT_GROUPS})
-
-        def apply(page):
-            from settings_gui import sync_drift
-            for g in DRIFT_GROUPS:
-                if g in getattr(page, "drift", {}):
-                    page.drift[g][0].set(on)
-                    if on and f"DRIFT_{g.upper()}_FROM" in page.vars:
-                        page.vars[f"DRIFT_{g.upper()}_FROM"].set(code)
-                    if g in getattr(page, "drift_modes", {}):
-                        page.drift_modes[g].set(self.drift_var.get())
-            if getattr(page, "drift", None):
-                sync_drift(page)
-        self.drift_cb.selection_clear()
-        self._save_play_switches(updates, apply)
-
-    def _on_deepcuts_changed(self, *_):
-        code = {shown: c for c, shown in PLAY_DEEP_CUTS}.get(self.deepcuts_var.get(), "off")
-        updates = {f"DEEP_CUTS_{g.upper()}": code for g in engine.DEEP_CUT_GROUPS}
-        self.deepcuts_cb.selection_clear()
-        self._save_play_switches(updates, lambda page: None)   # Settings has only the share: nothing to set there
-
-    def _on_nonstop_changed(self, *_):
-        code = {shown: c for c, shown in PLAY_NONSTOP}.get(self.nonstop_var.get(), "off")
-        on = code != "off"
-        updates = {}
-        for g in NONSTOP_GROUPS:
-            updates[f"NONSTOP_{g.upper()}"] = "1" if on else "0"
-            if on:
-                updates[f"NONSTOP_{g.upper()}_MODE"] = code
-
-        def apply(page):
-            from settings_gui import sync_nonstop
-            for g in NONSTOP_GROUPS:
-                G = g.upper()
-                if f"NONSTOP_{G}" in page.vars:
-                    page.vars[f"NONSTOP_{G}"].set(on)
-                if on and f"NONSTOP_{G}_MODE" in page.vars:
-                    page.vars[f"NONSTOP_{G}_MODE"].set(code)
-                if G in getattr(page, "nonstop_modes", {}):
-                    page.nonstop_modes[G].set(self.nonstop_var.get())
-            if getattr(page, "nonstop_parts", None):
-                sync_nonstop(page)
-        self.nonstop_cb.selection_clear()
-        self._save_play_switches(updates, apply)
-
-    def _on_moderator_changed(self, *_):
-        value = self.moderator_var.get().lower()
-        if value != "off":
-            warn_moderator_once(self)
-        try:
-            write_env({"AI_MODERATOR_ARTISTS": value, "AI_MODERATOR_TRACKS": value})
-        except Exception as e:
-            messagebox.showerror(t("Save failed"), str(e), parent=self)
-        self.moderator_cb.selection_clear()
-        self._update_more_label()
+        for button in self.play_buttons:
+            if getattr(button, "_kind", None) != "vibe":
+                continue
+            if not self.running:
+                button.config(state="normal" if on else "disabled")
+            button._ai_tip.text = (t("AI Playlist needs {what} under Settings > Keys.", what=engine.ai_missing_text())
+                                   if not engine.ai_configured() else
+                                   t("Paused: Use AI is Off under Settings > Keys."))
 
     def _build_log(self):
         frame = tk.Frame(self, padx=16, pady=12)
@@ -734,21 +755,19 @@ class PlayTab(tk.Frame):
 
     def _sync_usage_box(self):
         """
-        Shows the AI Usage total pinned to the right edge of Now Playing while it's ticked
-        in Settings > Keys. The track text stops short of it, so the two never overlap.
+        Shows the AI Usage total at the right of the Now Playing and Search tabs' row while
+        it's ticked in Settings > Keys (Output has the right of the Zone line).
         """
         try:
             engine.refresh_settings_if_changed()
             want = os.getenv("AI_USAGE_NOW_PLAYING", "0").strip() == "1"
             if want:
                 self.usage_label.config(text=ai_usage.short(unit=self._usage_unit()))
-                self.usage_box.place(relx=1.0, rely=0.5, anchor="e", x=-12)
+                # on the row with the Now Playing and Search tabs, so it shows on both
+                self.usage_box.place(in_=self.seed_nb._strip, relx=1.0, rely=0.5, anchor="e", x=-26)
                 self.usage_box.lift()
-                self.update_idletasks()
-                self._usage_info.pack_configure(padx=(0, self.usage_box.winfo_reqwidth() + 36))
             elif self._usage_shown:
                 self.usage_box.place_forget()
-                self._usage_info.pack_configure(padx=0)
             self._usage_shown = want
         except Exception as e:
             if not getattr(self, "_usage_error_said", False):
@@ -1670,34 +1689,21 @@ class PlayTab(tk.Frame):
                 return re.sub(r"^\d\d:\d\d  ", "", line.strip()).split("  (")[0]
         return "Review"
 
+    # The standard button of each kind, for Enter on the Search tab and callers from before buttons
     def on_similar(self):
-        if self._seed_is_search():
-            seed = self._typed_seed(need_track=engine.similar_needs_track(),
-                                    why=engine.SIMILAR_NEEDS_TRACK_TEXT)
-            if seed:
-                self._run_typed(engine.create_similar_playlist, seed, self.on_similar)
-            return
-        playing_now = engine.play_seed_is_playing_now()   # the Seed setting: Current Track or Playing Now
-        self._run_job(lambda: self._seeded(engine.create_similar_playlist, playing_now=playing_now),
-                      needs_playing=False, review=True)
+        button = self._standard_button("artists")
+        if button:
+            self.on_button(button)
 
     def on_similar_tracks(self):
-        if self._seed_is_search():
-            seed = self._typed_seed(need_track=True)
-            if seed:
-                self._run_typed(engine.create_similar_tracks_playlist, seed, self.on_similar_tracks)
-            return
-        playing_now = engine.play_seed_is_playing_now()   # the Seed setting: Current Track or Playing Now
-        self._run_job(lambda: self._seeded(engine.create_similar_tracks_playlist, playing_now=playing_now),
-                      needs_playing=False, review=True)
+        button = self._standard_button("tracks")
+        if button:
+            self.on_button(button)
 
     def on_top_tracks(self):
-        if self._seed_is_search():
-            seed = self._typed_seed(need_track=False)
-            if seed:
-                self._run_typed(engine.play_top_n, seed, self.on_top_tracks)
-            return
-        self._run_job(lambda: self._seeded(engine.play_top_n), needs_playing=False, review=True)
+        button = self._standard_button("top")
+        if button:
+            self.on_button(button)
 
     def _run_typed(self, build, seed, again):
         """
@@ -1756,13 +1762,16 @@ class PlayTab(tk.Frame):
     def on_credits(self):
         self._run_job(lambda: engine.explore_credits(report=self.report))
 
-    def on_vibe(self):
+    def on_vibe(self, button=None):
         problem = engine.vibe_blocker()
         if problem:
             self.report(problem)
             return
+        button = button or self._standard_button("vibe")
+        if button is None:
+            return
         AIPlaylistDialog(self.root, play=self, on_create=lambda theme, count, if_short: self._run_job(
-            lambda: engine.create_vibe_playlist(theme, count=count, if_short=if_short, report=self.report),
+            lambda: buttons.run(button, theme=theme, count=count, if_short=if_short, report=self.report),
             needs_playing=False, review=True), on_steer=lambda spec: self._run_job(
             lambda: engine.steer_playlist(engine.steer_seed_pairs(all_tracks=spec["seed_kind"] == "all"),
                                           spec["directions"], spec["own_words"], spec["strength"], spec["tone"],
@@ -1918,7 +1927,7 @@ def main():
     play = PlayTab(nb, root)
     discover = DiscoverTab(nb)
     settings = SettingsTab(nb)
-    play.settings = settings   # the Play tab's Drift and Non-stop change Settings > Playlist
+    play.settings = settings   # the Play tab shows AI usage in step with Settings > Keys
     settings.play = play       # Settings > Keys > Use AI greys the Play tab's AI pieces out or back in
     if loaded_profile:
         root.after(800, lambda: print(t('Profile "{loaded_profile}" loaded.', loaded_profile=loaded_profile)))

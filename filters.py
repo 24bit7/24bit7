@@ -85,6 +85,21 @@ def active_for(device_id):
     return [x for x in load() if applies(x, device_id)]
 
 
+def used_by(filter_id):
+    """([button names], [zone names]) with this filter ticked, for Edit Filters' Used by line."""
+    import buttons
+    import zones
+    names = [b["name"] for b in buttons.load() if filter_id in (b.get("filters") or [])]
+    zone_names = [name for name, z in zones.load().items() if filter_id in (z.get("filters") or [])]
+    return names, zone_names
+
+
+def by_ids(ids):
+    """The filters a button build runs under: the ones named, in the order shown, that are on."""
+    wanted = {str(i) for i in ids}
+    return [x for x in load() if x["id"] in wanted and x.get("on")]
+
+
 def device_for_zone(zone_name):
     """The speaker with its own settings playing to this zone, for shortcuts and non-stop (None: Windows (Main))."""
     try:
@@ -245,13 +260,16 @@ def describe(item):
 
 class Active:
     """
-    The filters for one build. allows(key) is False for a track any of them
-    rules out. Playlists named in Only pick from are read once, here.
+    The filters for one build: the ids a button build runs under (its own and its
+    zone's), or, for a build not run through a button, the device's. allows(key) is
+    False for a track any of them rules out. Playlists named in Only pick from are
+    read once, here.
     """
 
-    def __init__(self, device_id, report=print):
+    def __init__(self, which, report=print):
         self.report, self.left_out, self.missing = report, 0, 0
-        self.items, self.pools = active_for(device_id), []
+        self.items = by_ids(which) if isinstance(which, (list, tuple, set)) else active_for(which)
+        self.pools = []
         self.rule_sets = [(x.get("match", "all"), x["rules"]) for x in self.items if x.get("rules")]
         if self.rule_sets:
             import library

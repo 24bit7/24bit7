@@ -25,8 +25,8 @@ MAIN = "main"   # the Main Window's tab key; a device's is its device ID
 _lock = threading.Lock()
 
 KINDS = {"similar": N_("Similar Artists"), "youtube_queue": N_("Similar Artists"), "similar_tracks": N_("Similar Tracks"),
-         "top_tracks": N_("Artist's Top Tracks"), "vibe": N_("AI Playlist")}
-HEADINGS = (N_("Similar Artists"), N_("Similar Tracks"), N_("Artist's Top Tracks"), N_("AI Playlist"), N_("Show Credits"),
+         "top_tracks": N_("Artist's Top Tracks"), "headliner": N_("Headliner"), "vibe": N_("AI Playlist")}
+HEADINGS = (N_("Similar Artists"), N_("Similar Tracks"), N_("Artist's Top Tracks"), N_("Headliner"), N_("AI Playlist"), N_("Show Credits"),
             N_("Blend"))
 INSTANT = {"songs_by": N_("Artist's Top Tracks"), "music_like": N_("Similar Artists"), "tracks_like": N_("Similar Tracks"),
            "genre": N_("AI Playlist"), "only": N_("Only"), "album": N_("Album"), "song": N_("Song"), "playlist": N_("Playlist"),

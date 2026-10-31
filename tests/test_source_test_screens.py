@@ -14,14 +14,12 @@ def seeds(app):
     return source_test
 
 
-def sources_page(ui):
-    pane = next(c for c in ui.settings.winfo_children() if hasattr(c, "select"))
-    ui.nb.select(ui.settings)
-    ui.pump(0.5)
-    from test_gui import visit_every_page
-    visit_every_page(ui, pane)
-    main = ui.settings._main_sources
-    return main.score_ui
+def sources_page(ui, button="Similar Artists"):
+    """A button's Sources page on screen; returns its score cells, notice and buttons by section."""
+    from test_settings_buttons import inner_page, pick_button
+    p = pick_button(ui, button)
+    inner_page(ui, "Sources")
+    return p.score_ui
 
 
 def test_no_results_yet(app, ui):
@@ -38,10 +36,12 @@ def test_sample_then_own_results(app, ui):
     s._table().execute("DELETE FROM source_tests")
     sc = sources_page(ui)
     ui.settings._refresh_scores()
+    assert "ai" not in sc["artists"]["cells"]   # the AI sits above the scores, unscored
+    sc = sources_page(ui, "Similar Tracks")
+    ui.settings._refresh_scores()
     assert sc["tracks"]["notice"].cget("text").startswith("Sample results from a")
     perf, best, worst = sc["tracks"]["cells"]["lastfm"]
     assert perf.cget("text").endswith("%") and best.cget("text")
-    assert "ai" not in sc["artists"]["cells"]   # the AI sits above the scores, unscored
     s.run(quick=True, wait_for_builds=False)
     ui.settings._refresh_scores()
     assert sc["tracks"]["notice"].cget("text").startswith("Your results, tested")
