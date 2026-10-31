@@ -167,6 +167,54 @@ def test_inner_circle_sits_on_a_matching_page_and_its_dials_keep_in_step(app, ui
     assert not ui.errors, ui.errors[0]
 
 
+def test_a_second_config_has_its_own_block_and_the_mix_section_appears(app, ui):
+    import buttons
+    from tkinter import messagebox
+    p = pick_button(ui, "Similar Tracks")
+    page = inner_page(ui, "Sources")
+    texts = labels(page)
+    assert "Config 1" in texts and "Mix" not in texts and "Config 2" not in texts
+    s = ui.settings
+    s._config_add(p.button, "artists")
+    ui.pump(0.5)
+    page = inner_page(ui, "Sources")
+    texts = labels(page)
+    assert "Config 2" in texts and "Mix" in texts and "Combine" in texts and "Drift from" in texts and "Continue as" in texts
+    assert texts.count("Drift") == 1 and texts.count("Non-stop") == 1, "the whole-playlist sections show once"
+    pages = s._button_pages
+    assert [getattr(q, "config_kind", None) for q in pages] == ["tracks", "artists"]
+    pages[1].vars["SIMILAR_ARTIST_LIMIT"].set("9")
+    ui.pump(0.3)
+    b = buttons.get(p.button["id"])
+    assert b["configs"][0]["settings"]["SIMILAR_ARTIST_LIMIT"] == "9", "config 2's page saves into config 2"
+    assert "SIMILAR_ARTIST_LIMIT" not in b["settings"]
+    combine_cb, pattern_vars, drift_cb, cont_cb = s._mix_controls
+    combine_cb.set("Alternate")
+    combine_cb.event_generate("<<ComboboxSelected>>")
+    ui.pump(0.3)
+    pattern_vars[1].set("3")
+    combine_cb.event_generate("<<ComboboxSelected>>")   # any Mix change saves the lot
+    ui.pump(0.3)
+    b = buttons.get(p.button["id"])
+    assert b["mix"]["combine"] == "alternate" and b["mix"]["pattern"] == [1, 3]
+    cont_cb.set(cont_cb.cget("values")[1])
+    cont_cb.event_generate("<<ComboboxSelected>>")
+    ui.pump(0.5)
+    assert buttons.get(p.button["id"])["mix"]["continue_as"] == 1
+    monkeypatch_yes = lambda *a, **k: True
+    old = messagebox.askyesno
+    messagebox.askyesno = monkeypatch_yes
+    try:
+        s._config_remove(buttons.get(p.button["id"]), 1)
+    finally:
+        messagebox.askyesno = old
+    ui.pump(0.5)
+    b = buttons.get(p.button["id"])
+    assert b["configs"] == [] and b["mix"]["continue_as"] == 0
+    assert "Mix" not in labels(inner_page(ui, "Sources"))
+    assert not ui.errors, ui.errors[0]
+
+
 def test_a_custom_button_saves_into_itself_only(app, ui):
     import buttons
     import settings_gui
@@ -175,7 +223,7 @@ def test_a_custom_button_saves_into_itself_only(app, ui):
     p.vars["TOP_TRACKS_COUNT"].set("15")
     ui.pump(0.3)
     head = next(b for b in buttons.load() if b["name"] == "Headliner")
-    assert head["settings"]["TOP_TRACKS_COUNT"] == "15" and head["settings"]["TOP_GUESTS"] == "third"
+    assert head["settings"]["TOP_TRACKS_COUNT"] == "15" and [c["kind"] for c in head["configs"]] == ["artists"]
     assert buttons.standard("top")["settings"].get("TOP_TRACKS_COUNT", "10") != "15"
     assert settings_gui.read_env().get("TOP_TRACKS_COUNT") == env_before, ".env is the standard button's"
     assert set(head["settings"]) <= set(buttons.KIND_KEYS["top"]), "only its kind's keys are kept"
@@ -273,7 +321,7 @@ def test_add_remove_and_restore_from_settings(app, ui, monkeypatch):
     s._button_add()
     ui.pump(0.3)
     assert s._button_names()[-1] == "Sunday Guests" and s._button_page.button["name"] == "Sunday Guests"
-    assert s._button_page.button["settings"]["TOP_GUESTS"] == "third"
+    assert [c["kind"] for c in s._button_page.button["configs"]] == ["artists"]
     assert [b._name for b in ui.play.play_buttons][-1] == "Sunday Guests", "the Play tab follows"
     s._button_remove()   # the question answered No by the fixture
     assert s._button_names()[-1] == "Sunday Guests"

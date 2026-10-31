@@ -281,6 +281,8 @@ def warn_moderator_once(parent):
 
 
 HEADING_FONT = ("Segoe UI", 10, "bold")
+# the sections for the whole playlist, under its configs, in this order (English titles: see _fill_playlist)
+WHOLE_SECTIONS = ("Drift", "Deep Cuts", "Non-stop", "Hidden Tracks", "If All Else Fails", "Run After Building")
 HELP_FONT = ("Segoe UI", 8)
 HELP_FG = "#666"
 LABEL_FONT = ("Segoe UI", 9, "bold")
@@ -872,8 +874,8 @@ class AddButtonPrompt(NamePrompt):
         self.kind, self.start_from = "artists", buttons.TEMPLATE
         self._choices = [(t("{kind} (template)", kind=t(label)), kind, buttons.TEMPLATE)
                          for kind, label in buttons.KIND_LABELS.items()]
-        self._choices += [(t("{kind} (template)", kind=t(name)), kind, f"{buttons.TEMPLATE}:{key}")
-                          for key, name, kind, _extra in buttons.READY_MADE]
+        self._choices += [(t("{kind} (template)", kind=t(r["name"])), r["kind"], f"{buttons.TEMPLATE}:{r['key']}")
+                          for r in buttons.READY_MADE]
         self._choices += [(b["name"], b["kind"], b["id"]) for b in buttons.load()]
         self._auto = buttons.unique_name(t(buttons.KIND_LABELS["artists"]))
         super().__init__(parent, t("New Playlist"), t("Name"), initial=self._auto)
@@ -901,8 +903,8 @@ class AddButtonPrompt(NamePrompt):
         label, kind, from_id = self._choice()
         typed = self.entry.get().strip()
         if not typed or typed == self._auto:   # the name follows the choice until you type one of your own
-            ready = next((r for r in buttons.READY_MADE if from_id == f"{buttons.TEMPLATE}:{r[0]}"), None)
-            base = (t(ready[1]) if ready else t(buttons.KIND_LABELS[kind]) if from_id == buttons.TEMPLATE else label)
+            ready = next((r for r in buttons.READY_MADE if from_id == f"{buttons.TEMPLATE}:{r['key']}"), None)
+            base = (t(ready["name"]) if ready else t(buttons.KIND_LABELS[kind]) if from_id == buttons.TEMPLATE else label)
             self._auto = buttons.unique_name(base)
             self.entry.delete(0, "end")
             self.entry.insert(0, self._auto)
@@ -1357,27 +1359,186 @@ class SettingsTab(tk.Frame):
             self.refresh_hotkey_notes()
 
         inner = self._button_inner = self._scroll_page(right)
-        env = dict(read_env())
-        env.update(button.get("settings") or {})
-        p = ProfilePage("button", None, env, {}, lambda *_: None)
-        p.button, p.columns = button, bool(button.get("standard"))
-        p.save = lambda *_, p=p: self._save_button_page(p)
-        self._button_page = p
-        config = tk.Frame(inner)
-        config.grid(row=0, column=0, sticky="w", pady=(0, 10))
-        tk.Label(config, text=t("Config 1"), font=HEADING_FONT, fg=PALETTE["section_fg"]).pack(side="left")
-        tk.Label(config, text="\u00b7", fg=PALETTE["help_fg"]).pack(side="left", padx=8)
-        tk.Label(config, text=t(buttons.KIND_LABELS[kind]), font=HEADING_FONT,
-                 fg=PALETTE["ai_purple"] if kind == "vibe" else PALETTE["section_fg"]).pack(side="left")
+        cfgs = buttons.configs(button)
+        mix = buttons.tidy_mix(button.get("mix"), len(cfgs))
+        base_env = dict(read_env())
+        pages = []
+        for n, cfg in enumerate(cfgs):
+            block = self._config_block(inner, button, n, cfg)
+            env = dict(base_env)
+            env.update(cfg["settings"])
+            p = ProfilePage("button", None, env, {}, lambda *_: None)
+            p.button, p.columns = button, bool(button.get("standard")) and n == 0
+            p.config_index, p.config_kind = n, cfg["kind"]
+            p.save = lambda *_, p=p: self._save_button_page(p)
+            pages.append((p, block))
+        self._button_page, self._button_pages = pages[0][0], [p for p, _ in pages]
+        self._add_config_row(inner, button)
+        if len(cfgs) > 1:
+            self._mix_section(inner, button, cfgs, mix)
+        # the sections for the whole playlist sit under the configs, in a fixed order whichever config fills them
+        whole = tk.Frame(inner)
+        whole.grid(row=inner.grid_size()[1], column=0, sticky="ew")
+        whole.grid_columnconfigure(0, weight=1)
+        places = {}
+        for title in WHOLE_SECTIONS:
+            places[title] = tk.Frame(whole)
+            places[title].grid(row=len(places), column=0, sticky="ew")
+            places[title].grid_columnconfigure(0, weight=1)
         resyncs = []
-        if kind != "vibe":   # an AI Playlist's tracks come from the AI, so it has no sources to pick
-            self._fill_sources(inner, p, kind)
+        for n, (p, block) in enumerate(pages):
+            kind = cfgs[n]["kind"]
+            if kind != "vibe":   # an AI Playlist's tracks come from the AI, so it has no sources to pick
+                self._fill_sources(block, p, kind)
+                resyncs.append(p.resync)
+            if len(cfgs) == 1:
+                self._fill_playlist(block, p, kind, where_=places)
+            else:   # the first config's whole-playlist sections, bar Drift and Non-stop, which follow the Mix
+                parts = {"Playlist"} | ({"Deep Cuts", "Hidden Tracks", "If All Else Fails", "Run After Building"}
+                                        if n == 0 else set())
+                if n == mix["drift_from"]:
+                    parts.add("Drift")
+                if n == mix["continue_as"]:
+                    parts.add("Non-stop")
+                self._fill_playlist(block, p, kind, parts=parts, where_=places)
             resyncs.append(p.resync)
-        self._fill_playlist(inner, p, kind)
-        resyncs.append(p.resync)
-        p.resync = lambda: [r() for r in resyncs]
+            self._sync_moderator_box(p)
+        pages[0][0].resync = lambda: [r() for r in resyncs]
         self._refresh_key_marks()
-        self._sync_moderator_box(p)
+
+    def _config_block(self, inner, button, n, cfg):
+        """A config's block: "Config n · Kind" (click to fold it away), Remove on the second and later. Returns its body."""
+        block = tk.Frame(inner)
+        block.grid(row=inner.grid_size()[1], column=0, sticky="ew", pady=(0, 6))
+        block.grid_columnconfigure(0, weight=1)
+        head = tk.Frame(block)
+        head.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        body = tk.Frame(block)
+        body.grid(row=1, column=0, sticky="ew")
+        body.grid_columnconfigure(0, weight=1)
+        kind = cfg["kind"]
+        arrow = tk.Label(head, text="\u25be", font=HEADING_FONT, fg=PALETTE["section_fg"], cursor="hand2")
+        arrow.pack(side="left", padx=(0, 6))
+        title = tk.Label(head, text=t("Config {n}", n=n + 1), font=HEADING_FONT, fg=PALETTE["section_fg"], cursor="hand2")
+        title.pack(side="left")
+        tk.Label(head, text="\u00b7", fg=PALETTE["help_fg"]).pack(side="left", padx=8)
+        tk.Label(head, text=t(buttons.KIND_LABELS[kind]), font=HEADING_FONT,
+                 fg=PALETTE["ai_purple"] if kind == "vibe" else PALETTE["section_fg"]).pack(side="left")
+        shown = {"open": True}
+
+        def toggle(_e=None):
+            shown["open"] = not shown["open"]
+            if shown["open"]:
+                body.grid()
+            else:
+                body.grid_remove()
+            arrow.config(text="\u25be" if shown["open"] else "\u25b8")
+        for w in (arrow, title):
+            w.bind("<Button-1>", toggle)
+        if n > 0:
+            remove = tk.Label(head, text=t("Remove"), fg=PALETTE["help_fg"], font=HELP_FONT, cursor="hand2")
+            remove.pack(side="right")
+            remove.bind("<Button-1>", lambda e: self._config_remove(button, n))
+            Tooltip(remove, t("Takes this config off the playlist. Its settings go with it."))
+        return body
+
+    def _config_remove(self, button, n):
+        cfg = buttons.configs(button)[n]
+        if not messagebox.askyesno(t("Remove Config"),
+                                   t("Remove config {n} ({kind}) from {name}?", n=n + 1,
+                                     kind=t(buttons.KIND_LABELS[cfg["kind"]]), name=button["name"]), parent=self):
+            return
+        buttons.remove_config(button["id"], n)
+        self._buttons = buttons.load()
+        self._button_fill_page()
+        self._buttons_changed()
+
+    def _add_config_row(self, inner, button):
+        """+ Add Another Config: a menu of the four kinds; the new config starts from the standard playlist of its kind."""
+        row = tk.Frame(inner)
+        row.grid(row=inner.grid_size()[1], column=0, sticky="w", pady=(0, 14))
+        add = ttk.Button(row, text=t("+ Add Another Config"), command=lambda: menu.tk_popup(
+            add.winfo_rootx(), add.winfo_rooty() + add.winfo_height()))
+        add.pack(side="left")
+        menu = tk.Menu(row, tearoff=0)
+        for kind, label in buttons.KIND_LABELS.items():
+            menu.add_command(label=t(label), command=lambda k=kind: self._config_add(button, k))
+        Tooltip(add, t("A second config finds tracks its own way (Artist Matching under Artist's Top Tracks, say), "
+                       "and the Mix section that appears says how they come together."))
+        self._config_menu = menu
+
+    def _config_add(self, button, kind):
+        buttons.add_config(button["id"], kind)
+        self._buttons = buttons.load()
+        self._button_fill_page()
+        self._buttons_changed()
+
+    def _mix_section(self, inner, button, cfgs, mix):
+        """Mix: how two or more configs come together, which config Drift runs from and which Non-stop carries on as."""
+        box = section(inner, t("Mix"),
+                      t("How the configs come together. Shuffle mixes every config's tracks in together; Append plays "
+                        "one config's tracks, then the next's; Alternate takes turns, by the pattern. Each config "
+                        "finds its own number of tracks. Drift from names the config Drift carries on from, and "
+                        "Continue as the one Non-stop carries on as."))
+        names = [t("Config {n} \u00b7 {kind}", n=i + 1, kind=t(buttons.KIND_LABELS[c["kind"]])) for i, c in enumerate(cfgs)]
+        row = self._line(box, 0, t("Combine"), pady=(0, 0))
+        combine_var = tk.StringVar(value=t(dict(buttons.COMBINES)[mix["combine"]]))
+        combine_cb = TCombobox(row, textvariable=combine_var, values=[t(label) for _, label in buttons.COMBINES],
+                               state="readonly", width=11)
+        combine_cb.pack(side="left")
+        pattern_row = self._line(box, 1, t("Pattern"), pady=(4, 0))
+        pattern_vars = []
+        for i, _name in enumerate(names):
+            if i:
+                tk.Label(pattern_row, text=t("then"), fg=PALETTE["help_fg"], font=HELP_FONT).pack(side="left", padx=6)
+            var = tk.StringVar(value=str(mix["pattern"][i] if i < len(mix["pattern"]) else 1))
+            pattern_vars.append(var)
+            cb = TCombobox(pattern_row, textvariable=var, values=["1", "2", "3", "4", "5"], state="readonly", width=3)
+            cb.pack(side="left")
+            cb.bind("<<ComboboxSelected>>", lambda e, cb=cb: (cb.selection_clear(), save()))
+            tk.Label(pattern_row, text=t("from config {n}", n=i + 1), fg=PALETTE["help_fg"], font=HELP_FONT).pack(
+                side="left", padx=(6, 0))
+        drift_names = [name for name, c in zip(names, cfgs) if buttons.has_drift(c["kind"])]
+        drift_row = self._line(box, 2, t("Drift from"), pady=(4, 0))
+        drift_var = tk.StringVar(value=names[mix["drift_from"]] if names[mix["drift_from"]] in drift_names
+                                 else (drift_names[0] if drift_names else ""))
+        drift_cb = TCombobox(drift_row, textvariable=drift_var, values=drift_names, state="readonly",
+                             width=max(16, max((len(n) for n in drift_names), default=16) + 2))
+        drift_cb.pack(side="left")
+        if not drift_names:
+            drift_cb.state(["disabled"])
+        cont_row = self._line(box, 3, t("Continue as"), pady=(4, 0))
+        cont_var = tk.StringVar(value=names[mix["continue_as"]])
+        cont_cb = TCombobox(cont_row, textvariable=cont_var, values=names, state="readonly",
+                            width=max(16, max(len(n) for n in names) + 2))
+        cont_cb.pack(side="left")
+
+        def show_pattern():
+            if option_code(buttons.COMBINES, combine_var.get()) == "alternate":
+                pattern_row.grid()
+            else:
+                pattern_row.grid_remove()
+
+        def save(refill=False):
+            fields = dict(combine=option_code(buttons.COMBINES, combine_var.get()),
+                          pattern=[int(v.get() or 1) for v in pattern_vars],
+                          drift_from=names.index(drift_var.get()) if drift_var.get() in names else mix["drift_from"],
+                          continue_as=names.index(cont_var.get()) if cont_var.get() in names else mix["continue_as"])
+            buttons.set_mix(button["id"], **fields)
+            button["mix"] = buttons.get(button["id"])["mix"]
+            self._buttons_changed()
+            if refill:   # Drift or Non-stop now belong to another config: their sections move
+                self._button_fill_page()
+
+        def combine_chosen(_e=None):
+            combine_cb.selection_clear()
+            show_pattern()
+            save()
+        combine_cb.bind("<<ComboboxSelected>>", combine_chosen)
+        drift_cb.bind("<<ComboboxSelected>>", lambda e: (drift_cb.selection_clear(), save(refill=True)))
+        cont_cb.bind("<<ComboboxSelected>>", lambda e: (cont_cb.selection_clear(), save(refill=True)))
+        show_pattern()
+        self._mix_controls = (combine_cb, pattern_vars, drift_cb, cont_cb)
 
     def _button_rename_inline(self, button):
         """The name at the top becomes a box to type in; Enter or clicking away saves, Esc leaves it."""
@@ -1459,18 +1620,23 @@ class SettingsTab(tk.Frame):
         self._refresh_key_marks()
         self._sync_moderator_box(p)
         values = p.values()
-        kind = p.button["kind"]
+        index = getattr(p, "config_index", 0)
+        kind = getattr(p, "config_kind", None) or p.button["kind"]
         sources_key = {"artists": "SIMILAR_SOURCES", "tracks": "SIMILAR_TRACK_SOURCES",
                        "top": "TOP_TRACK_SOURCES"}.get(kind)
         if sources_key in values and not values[sources_key]:
             return   # every source unticked: mid-change, keep the last good set
-        # laid over what the button has: a setting with no control on the page (Headliner's Guests) stays
-        settings = dict(p.button.get("settings") or {})
+        # laid over what the config has: a setting with no control on the page stays as it was
+        cfg = buttons.configs(p.button)[index]
+        settings = dict(cfg.get("settings") or {})
         settings.update({k: v for k, v in values.items() if k in buttons.KIND_KEYS[kind]})
-        buttons.set_settings(p.button["id"], settings)
-        p.button["settings"] = settings
+        buttons.set_config_settings(p.button["id"], index, settings)
+        if index == 0:
+            p.button["settings"] = settings
+        else:
+            p.button["configs"][index - 1]["settings"] = settings
         env = {k: v for k, v in values.items() if k in buttons.GLOBAL_KEYS}   # Say why in the room: one for all
-        if p.button.get("standard"):
+        if p.button.get("standard") and index == 0:
             env.update(settings)
         if env:
             try:
@@ -2732,12 +2898,17 @@ class SettingsTab(tk.Frame):
 
     # --- the Playlist sections ---
 
-    def _fill_playlist(self, tab, p, kind):
+    def _fill_playlist(self, tab, p, kind, parts=None, where_=None):
         """
-        A button's Playlist page, for its kind: the playlist itself, then Drift, Deep Cuts,
-        Non-stop, Hidden Tracks, If All Else Fails and Run After Building, each in its own box.
+        A config's settings for its kind: the playlist itself, then Drift, Deep Cuts, Non-stop,
+        Hidden Tracks, If All Else Fails and Run After Building, each in its own box. parts (English
+        titles) says which boxes to show; the rest are built out of sight, so the page's values stay
+        whole. where_ maps a title to the frame it goes in (the whole-playlist area under the configs).
         """
         p.loading = True
+        void = tk.Frame(tab)   # never gridded: the boxes another config's block shows instead
+        allowed = None if parts is None else {t(x) for x in parts}
+        targets = {t(k): v for k, v in (where_ or {}).items()}
         p.drift = {}           # group -> (on, using, rounds, (dropdowns))
         p.drift_warn = {}      # group -> the Same as Settings > Sources note
         p.drift_src = {}       # group -> (mode, its row, the Custom Sources panel, {kind: frame})
@@ -2750,7 +2921,11 @@ class SettingsTab(tk.Frame):
         where = {}     # the box being filled and its next row
 
         def begin(group, title, help_text=None):
-            where["box"], where["r"] = section(pages[group], title, help_text), 0
+            if allowed is not None and title not in allowed:
+                parent = void
+            else:
+                parent = targets.get(title) or pages[group]
+            where["box"], where["r"] = section(parent, title, help_text), 0
 
         def place(widget, pady=4):
             """Puts a label-less row (a tick box and friends) across the box."""

@@ -58,9 +58,9 @@ def test_plus_offers_the_unticked_playlists_then_new(app, ui, monkeypatch):
     menus[-1].invoke(0)   # New...: the only entry now
     assert names(p)[-1] == "Sunday Guests"
     new = p.play_buttons[-1]._button
-    assert new["kind"] == "top" and new["settings"]["TOP_GUESTS"] == "third" and new["shown"]
+    assert new["kind"] == "top" and [c["kind"] for c in new["configs"]] == ["artists"] and new["shown"]
     assert opened == [new["id"]], "its page opens in Settings"
-    assert p.play_buttons[-1]._tooltip.text.endswith("Artist's Top Tracks, Guests"), "its note says what's on"
+    assert p.play_buttons[-1]._tooltip.text.endswith("Artist's Top Tracks + Artist Matching"), "its note says what's on"
     monkeypatch.setattr(p, "_ask_new_button", lambda: None)
     p._new_playlist()
     assert names(p)[-1] == "Sunday Guests", "Cancel adds nothing"
@@ -92,7 +92,7 @@ def test_right_click_menu_renames_copies_moves_removes_and_restores(app, ui, mon
     p._button_menu(Click(), p.play_buttons[2]._button)
     menus[-1].invoke(1)   # Duplicate
     assert names(p)[2:4] == ["Star Turn", "Star Turn 2"] and opened[-1] == p.play_buttons[3]._button["id"]
-    assert p.play_buttons[3]._button["settings"]["TOP_GUESTS"] == "third", "a copy keeps the settings"
+    assert [c["kind"] for c in p.play_buttons[3]._button["configs"]] == ["artists"], "a copy keeps the configs"
     p._button_menu(Click(), p.play_buttons[0]._button)
     assert menus[-1].entrycget(4, "state") == "disabled", "the first can't move left"
     menus[-1].invoke(2)   # Settings

@@ -74,8 +74,11 @@ def test_first_load_makes_the_standard_four_from_env_then_headliner(app):
     assert by["Similar Tracks"]["settings"]["SIMILAR_TRACK_COUNT"] == "8"
     assert by["Artist's Top Tracks"]["settings"]["TOP_TRACKS_COUNT"] == "12"
     assert by["Artist's Top Tracks"]["standard"] == "top" and by["Headliner"]["standard"] == ""
-    assert by["Headliner"]["settings"]["TOP_GUESTS"] == "third"
+    assert [c["kind"] for c in buttons.configs(by["Headliner"])] == ["top", "artists"]
+    assert by["Headliner"]["mix"] == {"combine": "alternate", "pattern": [2, 1], "drift_from": 1, "continue_as": 0}
     assert by["Headliner"]["settings"]["TOP_TRACKS_COUNT"] == "12", "Headliner starts from the standard Top Tracks"
+    assert by["Headliner"]["configs"][0]["settings"]["SIMILAR_ARTIST_LIMIT"] == "5", "and its guests from Similar Artists"
+    assert by["Headliner"]["configs"][0]["settings"]["TRACKS_PER_ARTIST_PICK"] == "1"
     assert "SIMILAR_TRACK_COUNT" not in by["Similar Artists"]["settings"], "a button only holds its kind's keys"
     circle = by["Inner Circle"]
     assert circle["kind"] == "artists" and circle["standard"] == "" and circle["shown"] is True
@@ -176,10 +179,11 @@ def test_the_ready_made_templates_make_headliner_and_inner_circle_from_the_stand
     app.set_env(SIMILAR_ARTIST_LIMIT="7", TOP_TRACKS_COUNT="12")
     buttons, _, _ = mods()
     buttons.load()
-    assert [r[0] for r in buttons.READY_MADE] == ["headliner", "inner_circle"]
+    assert [r["key"] for r in buttons.READY_MADE] == ["headliner", "inner_circle"]
     head = buttons.add(buttons.unique_name("Headliner"), "artists", "template:headliner")
     assert head["name"] == "Headliner 2" and head["kind"] == "top", "the recipe's kind wins over the one passed"
-    assert head["settings"]["TOP_GUESTS"] == "third" and head["settings"]["TOP_TRACKS_COUNT"] == "12"
+    assert [c["kind"] for c in buttons.configs(head)] == ["top", "artists"] and head["settings"]["TOP_TRACKS_COUNT"] == "12"
+    assert head["configs"][0]["settings"]["SIMILAR_ARTIST_LIMIT"] == "5", "the recipe's figures over the standard's"
     circle = buttons.add("Tight", "artists", "template:inner_circle")
     assert circle["kind"] == "artists" and circle["settings"]["INNER_CIRCLE_ARTISTS"] == "1"
     assert circle["settings"]["SIMILAR_ARTIST_LIMIT"] == "7"
@@ -231,16 +235,17 @@ def test_a_filter_that_is_not_ticked_on_the_button_does_nothing(app):
     assert not r.has("Filters:"), "Applies on no longer decides anything for a button build: " + r.text()
 
 
-def test_top_tracks_button_with_guests_on_is_a_headliner(app):
+def test_headliner_runs_its_two_configs_and_top_tracks_alone_runs_one(app):
+    app.set_env(DRIFT_ARTISTS="0", SKIP_PLAYED_ARTISTS="0", SKIP_PLAYED_TOP="0", AI_MODERATOR="off")
     buttons, _, _ = mods()
     by = {b["name"]: b for b in buttons.load()}
     r = app.Lines()
     buttons.run(by["Headliner"], report=r, seed_info=seed(app, "The Beatles", ""))
-    assert r.has("Headliner: The Beatles"), r.text()
+    assert r.has("Config 1 of 2: Artist's Top Tracks") and r.has("Config 2 of 2: Artist Matching"), r.text()
+    assert r.has("Artist's Top Tracks: The Beatles") and r.has("Similar Artists: The Beatles"), r.text()
     r = app.Lines()
     buttons.run(by["Artist's Top Tracks"], report=r, seed_info=seed(app, "The Beatles", ""))
-    assert r.has("Artist's Top Tracks: The Beatles") and not r.has("Headliner"), r.text()
-    assert app.engine.TOP_GUESTS == "off", "the Guests setting is gone after the build"
+    assert r.has("Artist's Top Tracks: The Beatles") and not r.has("Config"), r.text()
 
 
 def test_describe_says_what_is_on(app):
@@ -251,7 +256,7 @@ def test_describe_says_what_is_on(app):
     assert buttons.describe(b) == "Artist Matching, Drift, Deep Cuts, Non-stop, Filters"
     assert buttons.describe(buttons.blank("Plain", "tracks")) == "Track Matching"
     by = {x["name"]: x for x in buttons.load()}
-    assert buttons.describe(by["Headliner"]).startswith("Artist's Top Tracks, Guests")
+    assert buttons.describe(by["Headliner"]).startswith("Artist's Top Tracks + Artist Matching")
 
 
 def test_a_build_with_no_button_runs_no_filters(app):
@@ -280,7 +285,8 @@ def test_add_starts_from_a_button_of_the_same_kind(app):
     new = buttons.add("Sunday Guests", "top", head["id"])
     items = buttons.load()
     assert items[-1]["name"] == "Sunday Guests" and items[-1]["id"] == new["id"]
-    assert items[-1]["settings"]["TOP_GUESTS"] == "third" and items[-1]["filters"] == ["abc"]
+    assert [c["kind"] for c in buttons.configs(items[-1])] == ["top", "artists"] and items[-1]["filters"] == ["abc"]
+    assert items[-1]["mix"]["combine"] == "alternate", "a copy keeps the configs and the Mix"
     assert not items[-1]["standard"]
     plain = buttons.add("  ", "tracks", "no-such-id")   # no name: the kind's; nothing to copy: the standard one's
     assert plain["name"] == "Track Matching" and plain["settings"] == buttons.standard("tracks")["settings"]
@@ -340,7 +346,7 @@ def test_set_settings_keeps_only_the_kinds_keys_and_filters_say_who_uses_them(ap
     buttons, devices, filters = mods()
     head = buttons.load()[3]
     buttons.set_settings(head["id"], {"TOP_TRACKS_COUNT": "15", "SIMILAR_ARTIST_LIMIT": "9", "TOP_GUESTS": "third"})
-    assert buttons.get(head["id"])["settings"] == {"TOP_TRACKS_COUNT": "15", "TOP_GUESTS": "third"}
+    assert buttons.get(head["id"])["settings"] == {"TOP_TRACKS_COUNT": "15"}
     f = add_filter(app, name="Stereo")
     assert filters.used_by(f["id"]) == []
     buttons.set_filters(head["id"], [f["id"]])

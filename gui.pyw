@@ -78,8 +78,8 @@ PLAY_NOTES = {
     "Similar Artists": N_("Finds artists like the seed's, then plays their best known tracks you own."),
     "Similar Tracks": N_("Finds songs like the seed track, from every source ticked on its Sources page."),
     "Artist's Top Tracks": N_("Plays the seed artist's most popular tracks that you own."),
-    "Headliner": N_("The seed artist's most popular tracks, with every third track a guest spot: one track each "
-                    "from the closest similar artists you own."),
+    "Headliner": N_("The seed artist's most popular tracks, two at a time, with one track from a close similar "
+                    "artist you own between them."),
     "Inner Circle": N_("Artist Matching with Inner Circle on: the seed's three closest artists, then only the artists "
                        "their own lists agree on. Tight, and sometimes short."),
     "AI Playlist": N_("Describe a mood or moment and the AI picks tracks for it, from your library. Uses AI credits."),
@@ -551,7 +551,7 @@ class PlayTab(tk.Frame):
         note = t(PLAY_NOTES.get(button["name"] if button.get("standard") or button["name"] in PLAY_NOTES
                                 else kind_name, PLAY_NOTES[kind_name]))
         extras = buttons.describe(button)
-        if extras != t(buttons.KIND_LABELS[button["kind"]]):   # more than the kind alone: Guests, Drift, Non-stop...
+        if extras != t(buttons.KIND_LABELS[button["kind"]]):   # more than the kind alone: configs, Drift, Non-stop...
             note += "\n" + extras
         return note
 

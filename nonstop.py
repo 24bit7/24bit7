@@ -221,6 +221,8 @@ def _job(zone, zone_name, info):
                 cfg = {"using": "tracks", "reseed": "last", **cfg}
             else:
                 button = origin_button(zone_name, entry)
+                if button is not None:
+                    button = buttons.continue_as(button)   # a mix carries on as the config its Mix says
             tight = (cfg.get("reseed") == "whole") if origin == "saved" else cfg.get("mode") == "tight"
             report("  " + (t("{zone} is on its last track, so adding more, with {button}.", zone=zone_name,
                              button=button["name"])

@@ -10,8 +10,9 @@ def test_headliner_sits_between_top_tracks_and_ai_playlist(app, ui):
     names = [getattr(b, "_name", None) for b in ui.play.buttons]
     i = names.index("Headliner")
     assert names[i - 1] == "Artist's Top Tracks" and names[i + 1] == "AI Playlist", names
-    button = ui.play.play_buttons[i]._button   # a ready-made button: Artist's Top Tracks with Guests on
-    assert button["kind"] == "top" and button["settings"]["TOP_GUESTS"] == "third" and not button["standard"]
+    import buttons
+    button = ui.play.play_buttons[i]._button   # a ready-made playlist: Artist's Top Tracks + Artist Matching, 2:1
+    assert [c["kind"] for c in buttons.configs(button)] == ["top", "artists"] and not button["standard"]
 
 
 def test_output_is_on_the_zone_line_on_both_tabs(app, ui):
