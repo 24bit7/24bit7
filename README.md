@@ -22,22 +22,24 @@ The **[user manual](docs/MANUAL.md)** explains every part of the app, page by pa
 
 ## What it does
 
-Four playlist buttons on the **Play** tab, plus **More Options**. The seed is whichever of the two small tabs is showing when you press a button: **Now Playing** (whatever JRiver is playing right now) or **Search** (any artist and track you type, owned or not).
+A row of playlist buttons on the **Play** tab, five to start with and as many of your own as you like, plus **More Options**. The seed is whichever of the two small tabs is showing when you press a button: **Now Playing** (whatever JRiver is playing right now) or **Search** (any artist and track you type, owned or not).
 
 | Action | What you get |
 |---|---|
 | **Similar Artists** | A playlist built from artists similar to the seed, blended from whichever sources you have enabled. Each artist (the seed included) contributes a random pick from its top tracks, so the same seed gives a different playlist every run. |
 | **Similar Tracks** | A playlist of tracks like the seed track, suggested track by track by Last.fm, ListenBrainz, YouTube Music and, if you tick it, AI, and blended, so a playlist follows the song rather than the artist's reputation. |
 | **Artist's Top Tracks** | The artist's most popular tracks that you actually own, in random or popularity order. From the Search tab it needs only the artist. |
+| **Headliner** | The artist's top tracks, with every third track a guest spot: one track each from the closest similar artists you own, chosen for how often it's played next to the headliner's own hits. If the guests run short, the console says so. |
 | **AI Playlist** | Type a mood or scene, pick More tracks like the song that's playing, or pick one of three AI suggestions, and the AI picks a playlist to match from your library. |
-| **More Options** | Opens a row underneath with the **Moderator**, **Drift** and **Non-stop** (both change Settings > Playlist for every Play option at once), **Show Credits** (producer, engineer and other credits for the current album, from Discogs; not offered from the Search tab, which has no album to look up) and **+ Add Playlist** (see below). It remembers whether it's open. |
+| **+** and right-click | **+** adds a button of your own: a name, a kind and a button to start from, then its page opens under Settings > Buttons. Right-click a button to rename, move or remove it. Each button is a whole recipe: its sources, playlist settings, Moderator, Drift, Deep Cuts, Non-stop, filters and shortcut. |
+| **More Options** | Opens a row underneath with **Seed** (Current Track or Playing Now), **Mode** (Play or Review), **Show Credits** (producer, engineer and other credits for the current album, from Discogs; not offered from the Search tab, which has no album to look up), **+ Add Playlist** (see below) and a **?** that switches the hover notes on. It remembers whether it's open. |
 
-**Output** sits beside the buttons and decides where the finished playlist goes: **Same zone** (the default: the zone you seeded from), any JRiver zone by name, or **YouTube**, which opens it in your browser as an instant playlist. The **Zone** dropdown on the Now Playing tab picks which zone you seed from.
+**Output**, to the right of the Zone line, decides where the finished playlist goes: **Same zone** (the default: the zone you seeded from), any JRiver zone by name, or **YouTube**, which opens it in your browser as an instant playlist. The **Zone** dropdown on the Now Playing tab picks which zone you seed from.
 
 Two supporting tabs:
 
 - **Discover** lists every track a run looked for, whether it was found (hit) or not (miss), filterable by session and searchable across all fields. Select a row and every site you have ticked has its own button along the bottom: one click, one browser tab. Stores (Bandcamp, Qobuz, Bleep, Beatport and more) and YouTube search for the artist and track; reference sites (Wikipedia, Discogs, AllMusic, MusicBrainz) search for the artist, so you can browse the discography. If your favourite site is missing, add up to three of your own under Settings > Discover. Misses are one click from purchase. **Label** finds who released the selected track and opens the label on Bandcamp (see below). Tick any rows (or Select all) and **Create YouTube playlist** opens them in your browser as one playlist, so you can hear the misses before you buy; **Create Tidal Playlist** puts them in your Tidal playlist called 24bit7 instead. **Clear all** empties the history, and **Clear selected** removes just the ticked rows; both ask first.
-- **Settings** holds all keys and preferences, in boxed sections, with each setting's explanation behind a small **?** beside it. Sources and Playlist have a tab for each Play option (Similar Artists, Similar Tracks, Artist's Top Tracks, AI Playlist), so each can be set up its own way. Changes save immediately and the running app picks them up without a restart.
+- **Settings** holds all keys and preferences, in boxed sections; rest the pointer on a setting's title for its explanation. **Buttons** has a page per Play button, with its Sources and Playlist pages, its filters and its shortcut, so each can be set up its own way. **Zones** has a page per JRiver zone: whether it shows on the Play tab, which button each voice phrase runs there, its filters and Non-stop. Changes save immediately and the running app picks them up without a restart.
 
 ---
 
@@ -53,15 +55,15 @@ Two supporting tabs:
 
 Each enabled source returns a ranked list of similar artists. 24bit7 merges them with position weighting: an artist near the top of one list scores well, an artist appearing on several lists scores better. It fetches deeper than it needs and trims the result, so the final list reflects agreement between sources rather than the quirks of any one of them.
 
-With more than one source enabled, **Sources that must agree** (Settings > Sources) sets how many of them have to suggest an artist before it is used: Off, 2, 3 and so on, up to the number of sources ticked. Higher means a smoother playlist with fewer wildcards, but less chance of discovering something new. If too few artists clear the bar, 24bit7 relaxes it one step at a time, never below 2, and says so in the log. Session-based recommenders in particular will offer whatever else their listeners had on that day, and this is what keeps that noise out of the playlist.
+With more than one source enabled, **Sources that must agree** (on a button's Sources page) sets how many of them have to suggest an artist before it is used: Off, 2, 3 and so on, up to the number of sources ticked. Higher means a smoother playlist with fewer wildcards, but less chance of discovering something new. If too few artists clear the bar, 24bit7 relaxes it one step at a time, never below 2, and says so in the log. Session-based recommenders in particular will offer whatever else their listeners had on that day, and this is what keeps that noise out of the playlist.
 
 ### Similar Tracks
 
 Similar Artists asks "who sounds like this artist?". Similar Tracks asks "what sounds like this song?", which follows the mood of the seed far more closely: two songs by the same artist lead to different places.
 
-- **Five sources**, each ticked under Settings > Sources: Last.fm (track similarity from listening data), ListenBrainz (similar recordings, with a choice of all-time or roughly the last six months), Tidal (its similar tracks), YouTube Music (its up next queue) and, optionally, AI (picks from the AI you choose under Settings > Keys > AI, using a little of your credit per build, or nothing with Ollama). ListenBrainz and YouTube Music need no key.
+- **Five sources**, each ticked on a button's Sources page: Last.fm (track similarity from listening data), ListenBrainz (similar recordings, with a choice of all-time or roughly the last six months), Tidal (its similar tracks), YouTube Music (its up next queue) and, optionally, AI (picks from the AI you choose under Settings > Keys > AI, using a little of your credit per build, or nothing with Ollama). ListenBrainz and YouTube Music need no key.
 - **Blended by track.** A track two or three sources agree on ranks above one only a single source suggests. **Sources that must agree** works as it does for artists, and if too few agreed tracks are in your library it is relaxed a step at a time, with a line in the log.
-- **Settings > Playlist > Similar Tracks** sets the length, the most tracks any one artist gets (the seed artist included), the order (shuffled, or most similar first) and Drift, for when the library falls short.
+- **A Similar Tracks button's Playlist page** sets the length, the most tracks any one artist gets (the seed artist included), the order (shuffled, or most similar first) and Drift, for when the library falls short.
 
 ### Fast start
 
@@ -69,15 +71,15 @@ With nothing playing on the output zone, a playlist used to arrive all at once w
 
 ### Drift
 
-Similar Artists, Similar Tracks and AI Playlist each have a target length, and a library doesn't always have enough to reach it. With **Drift** switched on (on each Play option's tab under Settings > Playlist, Off by default), 24bit7 searches again from what it has already found, three seeds a round, looking up either their similar tracks or their similar artists, whichever **Drift using** is set to. **Keep It Tight** seeds only from the first round's tracks, so nothing strays more than two steps from your seed (it can finish short, and says so). **Spread** seeds from across the whole playlist, Drift's own finds included, so it travels further while branching in several directions. **Rounds** sets how many times it tries, from 1 to 6. More rounds fill more gaps but wander further from where you started, which is why it stops at 6 regardless. With JRiver output the first pass is queued straight away and each round is added to the end as it is found, so the music never waits for Drift.
+Similar Artists, Similar Tracks and AI Playlist each have a target length, and a library doesn't always have enough to reach it. With **Drift** switched on (on each button's Playlist page, Off by default), 24bit7 searches again from what it has already found, three seeds a round, looking up either their similar tracks or their similar artists, whichever **Drift using** is set to. **Keep It Tight** seeds only from the first round's tracks, so nothing strays more than two steps from your seed (it can finish short, and says so). **Spread** seeds from across the whole playlist, Drift's own finds included, so it travels further while branching in several directions. **Rounds** sets how many times it tries, from 1 to 6. More rounds fill more gaps but wander further from where you started, which is why it stops at 6 regardless. With JRiver output the first pass is queued straight away and each round is added to the end as it is found, so the music never waits for Drift.
 
-**Drift sources** sets where those rounds look. **Same as Settings > Sources**, the default, uses the sources you picked for that Play option. **Custom Sources** gives Drift its own source ticks and its own **Sources that must agree**, so the first pass can stay steady and the top-up can be more adventurous: Last.fm alone for Similar Artists, say, with Deezer and ListenBrainz agreeing on 2 to fill the gaps. The ticks follow Drift using, similar-artist or similar-track sources, and each set is kept separately. The log names the sources each round used.
+**Drift sources** sets where those rounds look. **Same as the Sources page**, the default, uses the button's own sources. **Custom Sources** gives Drift its own source ticks and its own **Sources that must agree**, so the first pass can stay steady and the top-up can be more adventurous: Last.fm alone for Similar Artists, say, with Deezer and ListenBrainz agreeing on 2 to fill the gaps. The ticks follow Drift using, similar-artist or similar-track sources, and each set is kept separately. The log names the sources each round used.
 
 In an AI Playlist, Drift using similar artists or similar tracks tops up from your music sources, not the AI, and the settings and log say so: "Similar artists (no AI)". It can also drift using **AI**: each round asks the AI again with your description, telling it what has already been found or tried so it suggests something new. That uses a little AI credit per round (nothing with Ollama), so it's never the default; pick it if you want it.
 
 ### Deep Cuts
 
-The sources lean towards the well known, so in a big collection some corners never come up. **Deep Cuts** (Play tab, More Options: Off, Spaced or Shuffled) tops each Similar Artists, Similar Tracks and AI Playlist build up from them, by **Top Up with Deep Cuts by** under Settings > Playlist (10% to start, so three more on a 30-track playlist; 100% is an even mix). The genre is the seed track's own Genre tag. Similar Artists picks from the fifth of that genre's artists you've played least in the last year, across all their tracks, then plays one of their best known tracks; Similar Tracks and AI Playlist pick from the genre's least played fifth of tracks. One per artist, nothing already in the playlist, no short interludes or hidden closers, and your Filters, Skip Played and the Moderator all apply. It uses only your library and its tags, so it works best when your genres are well organised; with no genre to go on, the console says so and nothing is added.
+The sources lean towards the well known, so in a big collection some corners never come up. **Deep Cuts** (Off, Spaced or Shuffled, on each Similar Artists, Similar Tracks and AI Playlist button's Playlist page) tops each build up from them, by **Top Up with Deep Cuts by** on the same page (10% to start, so three more on a 30-track playlist; 100% is an even mix). The genre is the seed track's own Genre tag. Similar Artists picks from the fifth of that genre's artists you've played least in the last year, across all their tracks, then plays one of their best known tracks; Similar Tracks and AI Playlist pick from the genre's least played fifth of tracks. One per artist, nothing already in the playlist, no short interludes or hidden closers, and your Filters, Skip Played and the Moderator all apply. It uses only your library and its tags, so it works best when your genres are well organised; with no genre to go on, the console says so and nothing is added.
 
 ### Moderator
 
@@ -89,13 +91,13 @@ Most playlists are right apart from one track: the stadium anthem in the middle 
 
 It's **Off** by default. A few extra tracks are found up front, more at the stricter levels, so the ones it removes are replaced. The fast start track is never checked, and Artist's Top Tracks isn't moderated, since it's one artist.
 
-It needs the AI set up under Settings > Keys and uses a little credit each time, a fraction of a penny per playlist (nothing with Ollama); the first time you switch it on, 24bit7 says so. Without that the option is greyed out. If the check fails or the credit runs out, the playlist builds as normal and the log says why. Pick the level as you go from **More Options** on the Play tab. It applies to Similar Artists and Similar Tracks. An AI Playlist's own picks are never checked, because the AI has already picked every track against your description, but its Drift section has **Moderator on Drift tracks** for what Drift adds from your sources. It's greyed out unless Drift is on and isn't using the AI. A voice device with settings of its own keeps its own choice under Settings > Sources; one copying Windows (Main) follows the Play tab (see Voice Commands below).
+It needs the AI set up under Settings > Keys and uses a little credit each time, a fraction of a penny per playlist (nothing with Ollama); the first time you switch it on, 24bit7 says so. Without that the option is greyed out. If the check fails or the credit runs out, the playlist builds as normal and the log says why. Pick the level on the button's Sources page. It applies to Similar Artists and Similar Tracks buttons. An AI Playlist's own picks are never checked, because the AI has already picked every track against your description, but its Drift section has **Moderator on Drift tracks** for what Drift adds from your sources. It's greyed out unless Drift is on and isn't using the AI. A voice command follows the button its zone runs (see Voice Commands below).
 
 ### The console
 
 The console on the Play tab shows what each build did, written the same way every time: the time and what was built on the first line, the steps beneath it, `Note:` (amber) for something to know, `Problem:` (red) for something that went wrong, AI lines in magenta, and one closing line: `Done: 30 tracks queued in Speakers, 62 not in library, 14 s.` **Simple** hides the debug lines and **Advanced** shows them; they're always recorded, so switching works on the build already there.
 
-A small green arrow at the top of the console opens its tabs: **All**, **Main Window**, one per Alexa device, and **Log**. Each tab shows its own latest build, so a voice command in the kitchen doesn't wipe a build you're reading at the PC, and a command that fails shows under its device with what Alexa said. The **Log** lists the last 50 builds from each source, newest first, with the zone, Play option, sources, tracks queued and missed, what the Moderator did and any problems. Non-stop top-ups are numbered in their chain (001, 002, 003). Double-click a row, or click **Load to Console**, to open that build, then Copy, Query or Export it.
+A small green arrow at the top of the console opens its tabs: **All**, **Main Window**, one per Alexa device, and **Log**. Each tab shows its own latest build, so a voice command in the kitchen doesn't wipe a build you're reading at the PC, and a command that fails shows under its device with what Alexa said. The **Log** lists the last 50 builds from each source, newest first, with the zone, button, sources, tracks queued and missed, what the Moderator did and any problems. Non-stop top-ups are numbered in their chain (001, 002, 003). Double-click a row, or click **Load to Console**, to open that build, then Copy, Query or Export it.
 
 ### Console Query
 
@@ -111,27 +113,26 @@ Running from source, `py -m pytest tests` runs 24bit7's test suite against a fak
 
 ### Hidden tracks
 
-Some albums end on a track that runs on after a long silence into a hidden bonus track, which feels completely out of place in a playlist. The sources can't help, because they report the long album version too. So the Hidden Tracks section on each Play option's tab under Settings > Playlist skips the last track on an album when it runs longer than a set number of minutes, 6 by default, and each Play option can set its own. Albums, songs and playlists you ask for by name always play in full.
+Some albums end on a track that runs on after a long silence into a hidden bonus track, which feels completely out of place in a playlist. The sources can't help, because they report the long album version too. So the Hidden Tracks section on each button's Playlist page skips the last track on an album when it runs longer than a set number of minutes, 6 by default, and each button can set its own. Albums, songs and playlists you ask for by name always play in full.
 
 ### Skip tracks played recently
 
-Each Play option's tab under Settings > Playlist can leave out anything JRiver has played in the last so many days, 1 by default, so a favourite doesn't come round again the same evening. It reads JRiver's Last Played date from the library 24bit7 holds in memory, so it costs nothing. The seed track is never left out, and Drift, if it's on, fills the gaps. It's off by default.
+Each button's Playlist page can leave out anything JRiver has played in the last so many days, 1 by default, so a favourite doesn't come round again the same evening. It reads JRiver's Last Played date from the library 24bit7 holds in memory, so it costs nothing. The seed track is never left out, and Drift, if it's on, fills the gaps. It's off by default.
 
 ### Non-stop
 
-A playlist used to end. With **Non-stop** switched on for a Play option under Settings > Playlist, 24bit7 watches the zone, and when the last track of a playlist it built starts playing, it adds more to the end. **Keep It Tight** reseeds each top-up from a track of the original playlist, a different one each time, so the evening stays close to where it started; once every track has been used it carries on as **Wander**, which follows the music wherever it leads. Each Play option sets how it carries on:
+A playlist used to end. With **Non-stop** switched on for a button on its Playlist page, 24bit7 watches the zone, and when the last track of a playlist it built starts playing, it adds more to the end. **Keep It Tight** reseeds each top-up from a track of the original playlist, a different one each time, so the evening stays close to where it started; once every track has been used it carries on as **Wander**, which follows the music wherever it leads. Each button sets how it carries on:
 
 - **Similar Artists and Similar Tracks** top up using similar artists or similar tracks (**Play using**). Wander seeds from the **last track**, so the music wanders as the evening goes on, or the **2nd track**, the first pick after the original seed, so it stays closer to how it started.
 - **Artist's Top Tracks** can first play the rest of the artist's songs in your library, shuffled (up to 20 by default, or unlimited), then carries on from their most popular track.
 - **AI Playlist** can ask the AI for more (More from the AI), or carry on with similar artists or similar tracks, which use no credit.
 
-A playlist keeps following the settings of the option it started as, all evening, and every top-up passes through your filters and skips anything the zone already had. Only playlists 24bit7 sent are topped up: an album or playlist you start in JRiver yourself ends as normal. Each last track triggers one top-up, so a paused or repeated track can't set off a pile of builds.
+A playlist keeps following the Non-stop settings of the button that built it, all evening, and every top-up passes through that button's filters and the zone's and skips anything the zone already had. A zone's Non-stop tick under Settings > Zones turns top-ups off for everything played there. Only playlists 24bit7 sent are topped up: an album or playlist you start in JRiver yourself ends as normal. Each last track triggers one top-up, so a paused or repeated track can't set off a pile of builds.
 
 ### Filters
 
-Settings > Filters holds a library of named filters that narrow the playlists 24bit7 builds, their Drift rounds and non-stop top-ups. Each filter has:
+Filters are named and shared, and where one applies is decided by ticking it on buttons and zones (Settings > Buttons and Settings > Zones; **Edit Filters** on either page opens the editor). A build runs under its button's filters plus those of the zone its playlist goes to, Drift rounds and non-stop top-ups included. Where several apply, a track must pass them all. Each filter has:
 
-- **Applies on:** All devices, Windows (Main) (the Play tab, and any speaker without settings of its own), or a speaker with its own settings. Where several filters apply, a track must pass them all.
 - **Only pick from:** a JRiver playlist or smartlist, so only its tracks can be used. Set up any filtering you like in JRiver's smartlist editor and 24bit7 respects it.
 - **Rules**, matching all or any: Rating (any of 0 to 5, where 0 is unrated), Year, Last played, Play count, Date imported, Genre, Artist, Album, Duration, File type, Bit depth, Sample rate and File location. "Sample rate at most 48 kHz" saves JRiver converting on the fly for a Sonos.
 
@@ -139,7 +140,7 @@ A track with no value for a field (no year, say) passes that rule, and the log c
 
 ### Keyboard shortcuts
 
-Settings > Other > Keyboard Shortcuts gives Similar Tracks, Similar Artists, Artist's Top Tracks, Shuffle Songs by Artist, Switch Zones and Keep It Going a key each. They work anywhere in Windows, even with 24bit7 in the tray, so a remote that sends key presses (a Flirc, a Harmony, a phone app) can start a playlist from the sofa. Nothing is assigned until you choose; letters and numbers need Ctrl, Alt, Shift or Win, and F-keys and media keys can be used on their own. If another program already owns a combination, 24bit7 says so beside it.
+Each Play button can have a key of its own, set in the Shortcut box on its page under Settings > Buttons. Settings > Other > Keyboard Shortcuts gives Shuffle Songs by Artist, Switch Zones, Switch Profiles, Keep It Going and each saved profile a key. They work anywhere in Windows, even with 24bit7 in the tray, so a remote that sends key presses (a Flirc, a Harmony, a phone app) can start a playlist from the sofa. Nothing is assigned until you choose; letters and numbers need Ctrl, Alt, Shift or Win, and F-keys and media keys can be used on their own. If another program already owns a combination, 24bit7 says so beside it.
 
 Shortcuts act on one zone (**Shortcuts apply to which zone**: the zone shown in Now Playing, or one you pick) and seed from its current track. If its Playing Now is empty, they seed from the last track JRiver played, and so do the Play tab buttons.
 
@@ -207,22 +208,22 @@ Added playlists are for the Play tab only, and only with JRiver output. Voice, k
 
 ### Run after building
 
-Each Play option under Settings > Playlist can run a file of your choice once its playlist is in JRiver: a .bat, an .exe, or a PowerShell or Python script. It runs in the background after every build, whether or not anything matched, and isn't told anything about the playlist, so it can do whatever you like. Device tabs have their own, so a voice build can run something different. Non-stop top-ups don't run it.
+Each button's Playlist page can run a file of your choice once its playlist is in JRiver: a .bat, an .exe, or a PowerShell or Python script. It runs in the background after every build, whether or not anything matched, and isn't told anything about the playlist, so it can do whatever you like. A button of your own has its own, so a voice command's button can run something different. Non-stop top-ups don't run it.
 
 ### Voice Commands (optional, advanced)
 
 24bit7 can take commands from an Alexa skill you host yourself. This is not a one-click setup: you need your own Amazon developer account and Alexa-hosted skill, a Tailscale Funnel (or similar) to let Amazon reach 24bit7 on your PC, and 24bit7 left running, which Start with Windows and the tray take care of. The skill's code and interaction model are in the `alexa` folder of this repository. The user manual's **[Voice Commands](docs/MANUAL.md#voice-commands)** chapter explains what it does, and **[Setting up the Alexa skill](docs/MANUAL.md#setting-up-the-alexa-skill)** takes you through every step. Both are linked from Settings > Voice Commands and Settings > About too.
 
-Settings > Voice Commands holds the key the skill sends and assigns each Alexa device to a zone. Tick **Own settings** for a device and it gets its own tab under Settings > Sources, Playlist and JRiver Playlists, copying the Windows app's settings until you untick Copy Windows (Main) and change them, and it can be named in a filter. Two speakers can then run two sets of settings side by side, for A/B testing or for different people.
+Settings > Voice Commands holds the key the skill sends and assigns each Alexa device to a zone. The zone's page under Settings > Zones decides which button each phrase runs there (the standard button of that kind unless you pick another), the filters every playlist sent there must pass, and whether Non-stop tops up. Two rooms can run two sets of settings side by side, for A/B testing or for different people.
 
-Once it is set up, each device plays to its own zone:
+Once it is set up, each device plays to its zone:
 
 | Say | You get |
 |---|---|
-| "songs by *artist*" | Artist's Top Tracks |
-| "music like *artist*" | Similar Artists, seeded from the artist's most popular track |
-| "tracks like *song*" (or "*song* by *artist*") | Similar Tracks |
-| "genre *anything*" | AI Playlist |
+| "songs by *artist*" | The zone's Songs By button (Artist's Top Tracks to start with) |
+| "music like *artist*" | The zone's Music Like button (Similar Artists), seeded from the artist's most popular track |
+| "tracks like *song*" (or "*song* by *artist*") | The zone's Tracks Like This button (Similar Tracks) |
+| "genre *anything*" | The zone's Play Something button (AI Playlist) |
 | "album *name*", "song *title*" | Plays it now, replacing what's playing |
 | "playlist *name*" | Plays one of your JRiver playlists or smartlists now, with its settings from Settings > JRiver Playlists |
 | "shuffle songs by *artist*" | Every track by the artist in your library, shuffled |
@@ -289,7 +290,7 @@ JRiver is only needed for the Now Playing seed and for JRiver output. The Search
 3. Windows will most likely show a blue **"Windows protected your PC"** box the first time, because the exe isn't code-signed. Click **More info**, then **Run anyway**. It only asks once.
 4. On first run the app opens on Settings. Add keys for the sources you want; each field has a **?** button with instructions for getting that key. Deezer and YouTube Music work with no key at all, and they are the two sources a fresh install has ticked.
 
-Your keys and history live in two files next to the exe: `.env` (settings and keys) and `24bit7.db` (cache and discoveries). When you upgrade to a new version, copy those two files into the new folder and you'll carry everything over. Settings from older versions are migrated automatically: the single digital store from 1.0.x becomes the first ticked store, the on/off agreement setting from 1.1.0 becomes 2 or Off, Similar Tracks' "Top up from Similar Artists" from 1.3.0 becomes Drift, using similar artists, one round, and the single Moderator, Hidden Tracks and Non-stop settings become the starting value on every Play option's tab.
+Your keys and history live in two files next to the exe: `.env` (settings and keys) and `24bit7.db` (cache and discoveries). When you upgrade to a new version, copy those two files into the new folder and you'll carry everything over. Settings from older versions are migrated automatically: the single digital store from 1.0.x becomes the first ticked store, the on/off agreement setting from 1.1.0 becomes 2 or Off, Similar Tracks' "Top up from Similar Artists" from 1.3.0 becomes Drift, using similar artists, one round, and the single Moderator, Hidden Tracks and Non-stop settings become the starting value on every button.
 
 ### Path B: run from source
 
@@ -304,9 +305,13 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ## What's new in 1.29.0
 
-- **Headliner**: a new Play button. The artist's top tracks, with every third track a guest spot from the closest similar artists you own, one track each, chosen for how often it's played next to the headliner's own hits. If the guests run short, the console says so.
-- **Output moves up** to the right of the Zone line, so there's room for the new button. The AI usage figure, if you show it, sits on the row with the Now Playing and Search tabs.
-- **Off reads lighter**: More Options switches that are Off, and ones you can't click, are a lighter grey, so what's on stands out.
+- **Your own Play buttons**: the buttons are a list you own. Each is a whole recipe (kind, sources, playlist settings, filters, shortcut). Press **+** to add one, right-click to rename, move or remove. **Headliner** comes ready-made: an artist's top tracks with every third track a guest spot from the closest similar artists you own.
+- **Settings > Buttons** replaces Sources, Playlist and Filters: one page per button, with Edit Filters as a window. Filters are ticked on buttons and zones instead of naming devices.
+- **Settings > Zones**: a page per JRiver zone, with Show and Default (from Other), the button each voice phrase runs there, its filters and a Non-stop tick. Alexa devices keep only a name and a zone.
+- **Non-stop follows the button** that built the playlist; a zone's Non-stop tick turns top-ups off for everything played there.
+- **Shortcuts** are set on each button's page; the rest stay under Settings > Other.
+- **Profiles** carry your buttons and zones; an older profile loads into the standard buttons.
+- **Output moves up** to the right of the Zone line, and the AI usage figure sits on the row with the Now Playing and Search tabs. Switches that are Off, and ones you can't click, are a lighter grey.
 
 ### Earlier: 1.28.0
 

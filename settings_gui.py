@@ -39,7 +39,7 @@ ENV_FILE = engine.ENV_FILE   # single source of truth for where .env lives
 # The Voice Commands guides, on GitHub (linked from the bottom of Settings > Voice Commands)
 DOCS_URL = "https://github.com/24bit7/24bit7/blob/main/docs/"
 VOICE_DOCS = [(N_("How Voice Commands work"), DOCS_URL + "MANUAL.md#voice-commands",
-               N_("What it does, what you can say, and settings per device.")),
+               N_("What it does, what you can say, and how zones and devices fit together.")),
               (N_("Setting up the Alexa skill"), DOCS_URL + "MANUAL.md#setting-up-the-alexa-skill",
                N_("Step by step, from an Amazon developer account to your first command."))]
 
@@ -579,7 +579,7 @@ DRIFT_USING_OPTIONS = [("artists", N_("Similar artists")), ("tracks", N_("Simila
 # AI Playlist's Drift choices say plainly which ones use the AI
 VIBE_DRIFT_USING_OPTIONS = [("artists", N_("Similar artists (no AI)")), ("tracks", N_("Similar tracks (no AI)")),
                             ("ai", N_("AI (uses credits)"))]
-DRIFT_SOURCE_MODES = [("same", N_("Same as Settings > Sources")), ("custom", N_("Custom Sources"))]
+DRIFT_SOURCE_MODES = [("same", N_("Same as the Sources page")), ("custom", N_("Custom Sources"))]
 # If All Else Fails: what happens when a build finds nothing at all
 FALLBACK_MODE_OPTIONS = [("shuffle", N_("Shuffle Genre")), ("file", N_("Run File")), ("playlist", N_("Play Playlist"))]
 FALLBACK_HELP = (N_("When a build finds nothing at all. Shuffle Genre plays songs from your library in the seed "
@@ -664,7 +664,7 @@ DRIFT_MODE_HELP = (N_("When a playlist comes up short, Drift searches again usin
 DRIFT_MODERATOR_OPTIONS = [("same", N_("Same as build")), ("off", N_("Off")), ("relaxed", N_("Relaxed")),
                            ("balanced", N_("Balanced")), ("strict", N_("Strict"))]
 DRIFT_ARTIST_SOURCE_NAMES = [s for s in SOURCE_NAMES if s[0] != "ai"]   # Drift from the sources never uses the AI
-DRIFT_SOURCES_HELP = (N_("Same as Settings > Sources uses the sources you picked for this Play option. Custom "
+DRIFT_SOURCES_HELP = (N_("Same as the Sources page uses the sources ticked on this button's Sources page. Custom "
                       "Sources lets the top-up rounds use different ones, for example steadier sources first "
                       "and more adventurous ones to fill the gaps."))
 DRIFT_SAME_WARNING = (N_("Same sources keep Drift's picks closest to the seed. Custom Sources give Drift a "
@@ -1476,6 +1476,11 @@ class SettingsTab(tk.Frame):
         if name not in self._zone_names:
             tk.Label(head, text=t("JRiver can't see this zone right now (a speaker that's off, say). Its settings are kept."),
                      fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=1, column=0, sticky="w")
+        asking = [d[1] or t("Device") for d in voice.devices() if d[2] == name]   # the Alexa devices on this zone
+        if asking:
+            tk.Label(head, text=(t("{name} asks here.", name=asking[0]) if len(asking) == 1
+                                 else t("{names} ask here.", names=", ".join(asking))),
+                     fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=2, column=0, sticky="w")
         holder = tk.Frame(right)
         holder.pack(fill="x")
 
@@ -1817,7 +1822,8 @@ class SettingsTab(tk.Frame):
             item.setdefault("rules", []).append(filters.blank_rule())
             self._filter_save()
             self._filter_fill_editor()
-        tk.Button(box, text=t("Add rule"), width=10, command=add_rule).grid(row=2, column=0, sticky="w", pady=(8, 0))
+        tk.Button(box, text=t("Add rule"), width=max(10, len(t("Add rule")) + 2), command=add_rule).grid(
+            row=2, column=0, sticky="w", pady=(8, 0))
         right.keep = keep   # hold the variables while the page shows
 
     def _filter_new(self):
@@ -2255,8 +2261,8 @@ class SettingsTab(tk.Frame):
             if int(float(str(notice.cget("wraplength")) or 0)) != width:
                 notice.config(wraplength=width)
         frame.bind("<Configure>", fit_notice, add="+")
-        for c, title in enumerate(("Source", "Score", "Best At", "Worst At")):
-            lab = tk.Label(frame, text=title, font=LABEL_FONT, fg=PALETTE["text_secondary"], anchor="w")
+        for c, title in enumerate((N_("Source"), N_("Score"), N_("Best At"), N_("Worst At"))):
+            lab = tk.Label(frame, text=t(title), font=LABEL_FONT, fg=PALETTE["text_secondary"], anchor="w")
             lab.grid(row=row + 1, column=c, sticky="w", padx=(0 if c == 0 else 18, 0))
             if title == "Score":
                 Tooltip(lab, t(source_test.PERFORMANCE_HELP), click=False)
@@ -2490,7 +2496,8 @@ class SettingsTab(tk.Frame):
             cb.selection_clear()
             p.save()
         row = self._line(box, 0, t("Level"), pady=(0, 0))
-        cb = TCombobox(row, textvariable=p.vars[key], values=MODERATOR_CHOICES, state="readonly", width=9)
+        cb = TCombobox(row, textvariable=p.vars[key], values=MODERATOR_CHOICES, state="readonly",
+                       width=max(9, max(len(t(c)) for c in MODERATOR_CHOICES) + 2))
         cb.pack(side="left")
         cb.bind("<<ComboboxSelected>>", chosen)
         help_mark(row, t(MODERATOR_LEVELS_HELP)).pack(side="left", padx=(8, 0))
@@ -2869,7 +2876,8 @@ class SettingsTab(tk.Frame):
             tk.Label(row, text=t("Drift using")).pack(side="left")
             choices = drift_using_options(group)
             using_cb = TCombobox(row, textvariable=using, values=[shown for _, shown in choices],
-                                    state="readonly", width=22 if group == "vibe" else 14)
+                                    state="readonly", width=max(22 if group == "vibe" else 14,
+                                                                max(len(t(shown)) for _, shown in choices) + 1))
             using_cb.pack(side="left", padx=(6, 18))
             tk.Label(row, text=t("Rounds")).pack(side="left")
             rounds_cb = TCombobox(row, textvariable=rounds, values=[str(n) for n in range(1, 7)],
@@ -3870,12 +3878,12 @@ class SettingsTab(tk.Frame):
         import profiles
         box = section(tab, t("Profiles"),
                       t("Save your settings as a profile, such as DJ, Explore or No AI, and switch between them. "
-                      "A profile holds the Play tab options, Sources, Playlist settings, Filters, JRiver "
-                      "Playlists, Add Playlist rows, the Preview zone, the Default zone and the shortcut zone, "
-                      "cache and console settings for Windows (Main). Keys, the JRiver connection, which zones "
-                      "are shown, Alexa devices with their own settings, keyboard shortcuts and appearance stay "
-                      "as they are. Loading restarts 24bit7; JRiver keeps playing. Each profile can have a "
-                      "shortcut of its own under Keyboard Shortcuts."))
+                      "A profile holds your buttons and their settings, the zones' choices, Filters, JRiver "
+                      "Playlists, the Play tab options and Add Playlist rows, the Preview zone, the Default zone "
+                      "and the shortcut zone, cache and console settings. Keys, the JRiver connection, which "
+                      "zones are shown, Alexa devices, keyboard shortcuts and appearance stay as they are. "
+                      "Loading restarts 24bit7; JRiver keeps playing. Each profile can have a shortcut of its "
+                      "own under Keyboard Shortcuts."))
         row = tk.Frame(box)
         row.grid(row=0, column=0, sticky="w", pady=4)
         tk.Label(row, text=t("Profile"), anchor="w").pack(side="left", padx=(0, 12))
@@ -4268,7 +4276,7 @@ class SettingsTab(tk.Frame):
         tk.Label(box, text=t("No command starts with \"play\": Alexa hands those to a music service instead."),
                  fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=r, column=0, columnspan=2, sticky="w", pady=(6, 2))
         self._about_link(box, t("How Voice Commands work"), f"{REPO_URL}/blob/{ref}/docs/MANUAL.md#voice-commands",
-                         r + 1, t("Every command, what you hear back, and settings per device."))
+                         r + 1, t("Every command, what you hear back, and how zones and devices fit together."))
 
         # --- Credits ---
         box = section(tab, t("Credits"))

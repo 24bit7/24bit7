@@ -64,8 +64,8 @@ WELCOME_TEXT = N_(
     "A starter settings file has been created. Playlists work out of the box "
     "using Deezer and YouTube, which need no keys.\n\n"
     "For richer blends, add free keys for Last.fm and ListenBrainz under "
-    "Settings > Keys (the ? buttons explain how), then tick them under "
-    "Settings > Sources.\n\n"
+    "Settings > Keys (the ? buttons explain how), then tick them on a button's "
+    "Sources page under Settings > Buttons.\n\n"
     "JRiver needs Media Network enabled: Tools > Options > Media Network."
 )
 
@@ -76,7 +76,7 @@ PLAY_BEHAVIOUR = [("instant", N_("Play")), ("review", "Review")]   # every build
 # A button of your own gets its kind's note, and every button adds a line saying what it has on.
 PLAY_NOTES = {
     "Similar Artists": N_("Finds artists like the seed's, then plays their best known tracks you own."),
-    "Similar Tracks": N_("Finds songs like the seed track, from every source ticked in Settings > Sources."),
+    "Similar Tracks": N_("Finds songs like the seed track, from every source ticked on its Sources page."),
     "Artist's Top Tracks": N_("Plays the seed artist's most popular tracks that you own."),
     "Headliner": N_("The seed artist's most popular tracks, with every third track a guest spot: one track each "
                     "from the closest similar artists you own."),
@@ -1621,7 +1621,7 @@ class PlayTab(tk.Frame):
                     overrides = engine.review_overrides()   # Settings > Playlist's Review column
                     if overrides:
                         engine.use_profile(overrides)
-                        self.log_queue.put("  " + t("Review settings in use (Settings > Playlist, the Review column)."))
+                        self.log_queue.put("  " + t("Review settings in use (the standard button's Playlist page, the Review column)."))
                 target()
                 if review:
                     engine.REVIEW_ROWS = engine.review_rows(engine.REVIEW_KEYS)

@@ -40,7 +40,7 @@ Um stattdessen aus dem Quellcode zu starten, brauchst du Python 3.10 oder neuer.
 
 ### Der erste Start
 
-24bit7 öffnet mit den Einstellungen und sagt einmal Hallo. Es bringt einen Last.fm-Schlüssel mit, daher beginnt Ähnliche Künstler mit Last.fm und Ähnliche Titel mit Last.fm und YouTube Music, ohne dass du etwas einrichten musst. Für mehr Quellen trag unter **Einstellungen > Schlüssel** ein kostenloses ListenBrainz-Token ein und hake es dann unter **Einstellungen > Quellen** an. Jeder Schlüssel hat einen **?**-Knopf mit den Schritten, wie du ihn bekommst.
+24bit7 öffnet mit den Einstellungen und sagt einmal Hallo. Es bringt einen Last.fm-Schlüssel mit, daher beginnt Ähnliche Künstler mit Last.fm und Ähnliche Titel mit Last.fm und YouTube Music, ohne dass du etwas einrichten musst. Für mehr Quellen trag unter **Einstellungen > Schlüssel** ein kostenloses ListenBrainz-Token ein und hake es dann auf der Quellen-Seite eines Buttons unter **Einstellungen > Buttons** an. Jeder Schlüssel hat einen **?**-Knopf mit den Schritten, wie du ihn bekommst.
 
 Die Sprache stellst du unter **Einstellungen > Sonstiges > Sprache** ein. Beim Wechsel startet 24bit7 neu.
 
@@ -63,7 +63,7 @@ Jede Playlist beginnt mit einem Seed, dem Ausgangspunkt. Der Seed ist der der be
 - **Läuft gerade** zeigt, was JRiver spielt. **Zone** wählt, aus welcher JRiver-Zone der Seed kommt. Ist Playing Now dieser Zone leer, nehmen die Knöpfe den zuletzt von JRiver gespielten Titel als Seed.
 - **Suche** lässt dich jeden Künstler und Titel eintippen, ob du ihn besitzt oder nicht. Ähnliche Künstler, Top-Titel des Künstlers und Headliner brauchen nur den Künstler. Enter startet Ähnliche Künstler. Ist der eingetippte Künstler nicht in deiner Bibliothek, aber einer, der ihm nahekommt, etwa Finger Eleven für "eleven finger", fragt die Konsole am Ende der Playlist **Meintest du Finger Eleven?**: Ein Klick darauf erstellt die Playlist noch einmal mit diesem Künstler.
 
-**Seed** unter **Mehr Optionen** steht für Ähnliche Künstler und Ähnliche Titel im Tab Läuft gerade auf **Aktueller Titel** oder **Playing Now**. Aktueller Titel geht vom laufenden Titel aus. Playing Now geht von deiner ganzen Playing-Now-Liste aus: Ein paar Künstler (bei Ähnliche Titel: Titel verschiedener Künstler) werden zufällig gewählt, und jeder bringt der Reihe nach seinen Anteil ähnlicher mit, oben aus seiner eigenen Liste gelesen, sodass kein Künstler doppelt vorkommt. Titel, die schon in Playing Now sind, bleiben draußen, und die neue Playlist ersetzt Playing Now wie gewohnt (mit dem Review-Modus kannst du stattdessen hinzufügen). Solange es an ist, werden die Balken unter den beiden Knöpfen türkis. Mit weniger als zwei Titeln in Playing Now ist der aktuelle Titel der Seed. Top-Titel des Künstlers, KI-Playlist, Suche, Sprachbefehle, Tastenkürzel und Non-stop verwenden immer den aktuellen (oder eingetippten) Titel. Die Werte stehen unter Einstellungen > Playlist, in der Spalte Playing Now.
+**Seed** unter **Mehr Optionen** steht für Ähnliche Künstler und Ähnliche Titel im Tab Läuft gerade auf **Aktueller Titel** oder **Playing Now**. Aktueller Titel geht vom laufenden Titel aus. Playing Now geht von deiner ganzen Playing-Now-Liste aus: Ein paar Künstler (bei Ähnliche Titel: Titel verschiedener Künstler) werden zufällig gewählt, und jeder bringt der Reihe nach seinen Anteil ähnlicher mit, oben aus seiner eigenen Liste gelesen, sodass kein Künstler doppelt vorkommt. Titel, die schon in Playing Now sind, bleiben draußen, und die neue Playlist ersetzt Playing Now wie gewohnt (mit dem Review-Modus kannst du stattdessen hinzufügen). Solange es an ist, werden die Balken unter den beiden Knöpfen türkis. Mit weniger als zwei Titeln in Playing Now ist der aktuelle Titel der Seed. Top-Titel des Künstlers, KI-Playlist, Suche, Sprachbefehle, Tastenkürzel und Non-stop verwenden immer den aktuellen (oder eingetippten) Titel. Die Werte stehen auf der Playlist-Seite des Standard-Buttons, in der Spalte Playing Now.
 
 **Abspielmodus** oder **Review-Modus**, ebenfalls unter Mehr Optionen, gilt für jede Playlist aus dem Abspielen-Tab. Der Abspielmodus schickt die Playlist an JRiver, während sie gefunden wird. Der Review-Modus schickt nichts: Die Titel werden stattdessen in 24bit7 aufgelistet, im Bereich der Konsole, mit einem Schalter **Konsole | Review**, um zwischen beiden zu wechseln. Sprachbefehle, Tastenkürzel und Non-stop spielen immer sofort.
 
@@ -87,15 +87,19 @@ Die Aktionen gehen dorthin, wo **Ausgabe** gerade hinzeigt, wenn du sie drückst
 
 ![Der Suche-Tab](images/de/play_search.png)
 
-### Die fünf Knöpfe
+### Die Buttons
 
-| Knopf | Was du bekommst |
+Die Buttons im Abspielen-Tab sind eine Liste, die dir gehört. Fünf sind von Anfang an da:
+
+| Button | Was du bekommst |
 |---|---|
 | **Ähnliche Künstler** | Eine Playlist aus Künstlern, die dem Seed ähneln. Jeder Künstler, der Seed eingeschlossen, steuert eine zufällige Auswahl seiner Top-Titel bei, derselbe Seed ergibt also jedes Mal eine andere Playlist. |
 | **Ähnliche Titel** | Titel wie der Seed-Titel, Song für Song vorgeschlagen, sodass die Playlist dem Song folgt und nicht dem Ruf des Künstlers. |
 | **Top-Titel des Künstlers** | Die beliebtesten Titel des Künstlers, die du besitzt, gemischt oder nach Beliebtheit. Aus der Suche braucht es nur den Künstler. |
-| **Headliner** | Die Top-Titel des Künstlers, und jeder dritte Titel ist ein Gastauftritt: je ein Titel der ähnlichsten Künstler aus deiner Bibliothek. Für jeden Gast nimmt es den Titel, den die Quellen für Ähnliche Titel am häufigsten neben die Hits des Headliners stellen, die Konsole sagt dann etwa "läuft oft neben In the Waiting Line"; sonst seinen beliebtesten Titel, den du besitzt. Kommen weniger Gäste zusammen, als es Plätze gibt, sagt die Konsole das, und der Headliner füllt den Rest. Es folgt den Einstellungen von Top-Titel des Künstlers (wie viele, Reihenfolge, Kürzlich gespielte auslassen) und verbraucht nie KI-Guthaben. |
+| **Headliner** | Die Top-Titel des Künstlers, und jeder dritte Titel ist ein Gastauftritt: je ein Titel der ähnlichsten Künstler aus deiner Bibliothek. Für jeden Gast nimmt es den Titel, den die Quellen für Ähnliche Titel am häufigsten neben die Hits des Headliners stellen, die Konsole sagt dann etwa "läuft oft neben In the Waiting Line"; sonst seinen beliebtesten Titel, den du besitzt. Kommen weniger Gäste zusammen, als es Plätze gibt, sagt die Konsole das, und der Headliner füllt den Rest. Es ist ein Button Top-Titel des Künstlers mit eingeschalteten **Gästen** und verbraucht nie KI-Guthaben. |
 | **KI-Playlist** | Öffnet das Fenster KI-Playlist mit zwei Modi. **Erstellen**: Beschreib eine Stimmung oder Szene oder klick auf eine Idee (Mehr Titel wie der laufende Song, dann die Vorschläge der KI), und die KI wählt eine Playlist aus deiner Bibliothek. **Steer**: Lenk die laufende Musik in eine Richtung. Die KI muss unter Einstellungen > Schlüssel eingerichtet sein. Siehe unten. |
+
+Jeder Button ist ein ganzes Rezept: eine Art von Playlist (eine der vier oben), seine Quellen, seine Playlist-Einstellungen (Moderator, Drift, Deep Cuts, Non-stop und der Rest), die Filter, unter denen er läuft, und ein Tastenkürzel. **+** am Ende der Reihe legt einen eigenen Button an: Gib ihm einen Namen, wähl seine Art und einen Button, von dem er ausgeht, und seine Seite öffnet unter [Einstellungen > Buttons](#buttons). Mit einem Rechtsklick auf einen Button kannst du ihn umbenennen, nach links oder rechts schieben oder entfernen. Lass den Mauszeiger auf einem Button ruhen, und er sagt, was er eingeschaltet hat. Der Standard-Button jeder Art ist das, was die Sprachbefehle einer Zone starten, sofern [Einstellungen > Zonen](#zonen) nichts anderes sagt.
 
 Jede Playlist außer Top-Titel des Künstlers und Headliner wird so verteilt, dass derselbe Künstler nie zweimal hintereinander läuft, und die Titel werden dabei so wenig wie möglich verschoben. Bleibt gegen Ende nur ein Künstler übrig, laufen seine Titel direkt nacheinander.
 
@@ -122,14 +126,13 @@ YouTube und Tidal erscheinen hier nur, solange sie unter Einstellungen > Sonstig
 
 ### Mehr Optionen
 
-**Mehr Optionen** öffnet eine zweite Zeile unter einer dünnen Linie. Es merkt sich, ob sie offen war. Die ersten fünf sind Knöpfe, die ihre Einstellung zeigen und mit einem Klick durch die Möglichkeiten gehen; ein Rechtsklick geht zurück. Aus wirkt schlicht, alles andere ist hervorgehoben.
+**Mehr Optionen** öffnet eine zweite Zeile unter einer dünnen Linie. Es merkt sich, ob sie offen war. Die ersten zwei sind Knöpfe, die ihre Einstellung zeigen und mit einem Klick durch die Möglichkeiten gehen; ein Rechtsklick geht zurück.
 
 ![Mehr Optionen offen](images/de/play_more_options.png)
 
 - **Seed: Aktueller Titel** oder **Seed: Playing Now** (türkis). Siehe [Der Seed](#der-seed).
 - **Abspielmodus** oder **Review-Modus** (orange). Siehe [Der Seed](#der-seed) und [Review](#review).
-- **Moderator: Aus, Locker, Ausgewogen oder Streng** (magenta, solange an, da er die KI nutzt) prüft jede Playlist auf Titel, die nicht zur Stimmung des Seeds passen. Siehe [Moderator](#moderator).
-- **Drift** (Aus, Keep It Tight oder Weit), **Deep Cuts** (Aus, Verteilt oder Gemischt) und **∞**, also Non-stop (Aus, Keep It Tight oder Wander), stellen diese Einstellungen für alle Abspieloptionen auf einmal ein. Jeder zeigt nur dann einen Modus, wenn alle Optionen übereinstimmen. Siehe [Drift](#drift), [Deep Cuts](#deep-cuts) und [Non-stop](#non-stop).
+- Moderator, Drift, Deep Cuts und Non-stop gehören jedem Button selbst und werden auf seinen Seiten unter [Einstellungen > Buttons](#buttons) eingestellt. Siehe [Moderator](#moderator), [Drift](#drift), [Deep Cuts](#deep-cuts) und [Non-stop](#non-stop).
 - **Mitwirkende** zeigt Produzent, Toningenieur, Musiker und weitere Mitwirkende des laufenden Titels von Discogs, in zwei Listen: die eigenen Mitwirkenden des laufenden Titels (oder aller Titel, unter Nummer und Titel) und die des Albums. Mitwirkende, die Discogs nur für einige Titel vermerkt, etwa ein Schlagzeuger auf den Titeln 2 bis 4, kommen zu diesen Titeln. Einstellungen > Sonstiges > Mitwirkende zeigen wählt den aktuellen Titel oder alle Titel und welche Liste zuerst kommt. Es braucht ein Discogs-Token.
 - **+ Playlist hinzufügen** nimmt eine deiner JRiver-Playlists in die nächste Playlist auf. Siehe [Eigene Playlists hinzufügen](#eigene-playlists-hinzufügen).
 - **?** am rechten Ende der Zeile schaltet die Hinweise des Abspielen-Tabs an und aus. An erklärt alles im Abspielen-Tab, wenn du den Mauszeiger darauf ruhen lässt; aus, die Voreinstellung, zeigt nichts. Hinweise, warum etwas ausgegraut ist (zum Beispiel kein KI-Schlüssel), erscheinen immer. Es merkt sich seine Einstellung.
@@ -140,7 +143,7 @@ Das schwarze Feld zeigt, was jede Playlist gemacht hat: welche Quellen geantwort
 
 - Die erste Zeile hat die Uhrzeit und was erstellt wurde, etwa `21:14  Ähnliche Titel: The Beatles - Here Comes The Sun`.
 - Die Schritte stehen eingerückt darunter, in Grün.
-- Zeilen mit `Hinweis:`, in Bernstein, sind etwas, das man wissen sollte. Zeilen mit `Problem:`, in Rot, sind etwas, das schiefgegangen ist. Wo eine Einstellung helfen würde, steht sie am Ende, etwa `Einstellungen > Playlist > Drift`.
+- Zeilen mit `Hinweis:`, in Bernstein, sind etwas, das man wissen sollte. Zeilen mit `Problem:`, in Rot, sind etwas, das schiefgegangen ist. Wo eine Einstellung helfen würde, steht sie am Ende, etwa `die Playlist-Seite des Buttons`.
 - KI-Zeilen, etwa die des Moderators, sind magenta.
 - Jede Playlist endet mit einer Zeile: `Fertig: 30 Titel in Speakers eingereiht, 62 nicht in der Bibliothek, 14 s.`
 
@@ -171,7 +174,7 @@ Eine Playlist leert die Anzeige nur, wenn ihr eigener Tab oder Alle zu sehen ist
 
 ![Das Log der Konsole](images/de/console_log.png)
 
-Das Log listet die letzten 50 Playlists jeder Quelle, die neuesten zuerst: wann, wer gefragt hat (Hauptfenster, Tastenkürzel, ein Alexa-Gerät oder Non-stop), die Zone, die Abspieloption, die verwendeten Quellen (mit der Maus darüber für die ganze Liste), eingereihte Titel und solche, die nicht in der Bibliothek sind, was der Moderator gemacht hat und wie viele Probleme und Hinweise es gab.
+Das Log listet die letzten 50 Playlists jeder Quelle, die neuesten zuerst: wann, wer gefragt hat (Hauptfenster, Tastenkürzel, ein Alexa-Gerät oder Non-stop), die Zone, der Button, die verwendeten Quellen (mit der Maus darüber für die ganze Liste), eingereihte Titel und solche, die nicht in der Bibliothek sind, was der Moderator gemacht hat und wie viele Probleme und Hinweise es gab.
 
 Eine Non-stop-Playlist erscheint als Kette. Die Playlist, die sie begonnen hat, wird zu Non-stop 001, und jeder Nachschub bekommt die nächste Nummer, sodass du siehst, wie lange ein Abend lief, und erkennst, welcher Nachschub danebenging.
 
@@ -215,52 +218,66 @@ Entdecken listet jeden Titel, nach dem eine Playlist gesucht hat, und ob du ihn 
 
 Die Einstellungen sind in Seiten gegliedert, jede aus umrandeten Abschnitten. Lass den Mauszeiger auf dem Titel einer Einstellung ruhen, um die Erklärung zu sehen (wo es eine gibt, wird der Zeiger zum Fragezeichen). Alles wird gespeichert, sobald du es änderst, und die laufende App übernimmt es ohne Neustart.
 
-### Quellen
+### Buttons
 
-Welche Dienste Musik vorschlagen, getrennt eingestellt für Ähnliche Künstler, Ähnliche Titel und Top-Titel des Künstlers. Die KI-Playlist verwendet immer die KI und hat daher hier keinen Tab.
+![Einstellungen, Buttons](images/de/settings_buttons.png)
 
-![Einstellungen, Quellen](images/de/settings_sources_similar_artists.png)
+Die Buttons des Abspielen-Tabs, links aufgelistet; klick einen an, und seine Seite steht rechts. **Hinzufügen** legt einen eigenen Button an (ein Name, eine Art und ein Button, von dem er ausgeht), **Entfernen** nimmt einen weg, und **Standard-Buttons wiederherstellen** bringt jeden fehlenden Standard-Button zurück. Umbenennen und umsortieren geht über das Rechtsklick-Menü im Abspielen-Tab. Jede Seite beginnt mit den **Filtern** des Buttons (hak beliebige an; **Filter bearbeiten...** öffnet den Editor, siehe unten) und seinem **Tastenkürzel**, dann folgen zwei Seiten, **Quellen** und **Playlist**. Eine KI-Playlist hat keine Quellen zur Auswahl und daher nur die Seite Playlist. Alles wird gespeichert, sobald du es änderst, und der Abspielen-Tab folgt.
+
+#### Quellen
+
+Welche Dienste für diesen Button Musik vorschlagen.
 
 - **Quellen**: Hake jede beliebige Kombination an. Eine reicht; mehrere sind besser. Bei einer Quelle ohne Schlüssel steht "(noch kein Schlüssel)".
 - **Quellen, die übereinstimmen müssen**: wie viele angehakte Quellen einen Künstler oder Titel vorschlagen müssen, bevor er verwendet wird. Höher heißt eine gleichmäßigere Playlist mit weniger Überraschungen. Siehe [Mischen der Quellen](#mischen-der-quellen).
 - **ListenBrainz-Verfahren**: alle Zeiten oder kürzliches Hören.
 - **Tidal** braucht seine beiden kostenlosen Schlüssel (Einstellungen > Schlüssel). Bei Ähnliche Künstler ist es mit **!!** markiert: Seine Künstlervorschläge sind schwächer als seine Titelvorschläge, und wenn du den Mauszeiger darauf ruhen lässt, steht das da.
 - **Quellen testen** rechts in der Leiste Quellen fragt jede Quelle, was einer festen Auswahl von Seed-Titeln aus 17 Genres ähnelt, und zählt, wie viele Antworten in deiner Bibliothek sind. Wähl **Vollständig** oder **Schnell** (das Fenster sagt ungefähr, wie lange jedes dauert), und hake **KI einbeziehen** an, um auch die KI zu testen, was ein paar Cent kostet. Es läuft im Hintergrund und pausiert, während eine Playlist erstellt wird, du kannst 24bit7 also weiter benutzen, und die Konsole sagt, wann es fertig ist. Jede Quelle zeigt dann **Wertung** (wie viele ihrer Vorschläge in deiner Bibliothek sind, verglichen mit der besten Quelle in jedem Genre; gemessen wird die Reichweite, nicht der Geschmack), **Am besten bei** und **Am schwächsten bei** (ihre drei besten und schwächsten Genres), und **Alle Ergebnisse** zeigt jedes Genre gegen jede Quelle. Bis du es laufen lässt, stammen die Werte aus der Bibliothek des Entwicklers, mit dem Hinweis, dass deine abweichen werden. Das Genre ist nur die Beschriftung jedes Test-Seeds: Nichts wird nach deinen Genre-Tags beurteilt.
-- **Moderator**, für Ähnliche Künstler und Ähnliche Titel: Aus, Locker, Ausgewogen oder Streng. Siehe [Moderator](#moderator).
+- **Moderator**, für Buttons Ähnliche Künstler und Ähnliche Titel: Aus, Locker, Ausgewogen oder Streng (magenta, da er die KI nutzt). Siehe [Moderator](#moderator).
 
-![Einstellungen, Quellen, Ähnliche Titel](images/de/settings_sources_similar_tracks.png)
+#### Playlist
 
-### Playlist
+Wie dieser Button seine Playlist erstellt.
 
-Wie jede Abspieloption ihre Playlist erstellt, mit einem Tab für jede Option.
-
-![Einstellungen, Playlist](images/de/settings_playlist_similar_artists.png)
+![Einstellungen, Buttons, Playlist](images/de/settings_buttons_playlist.png)
 
 - **Playlist**: Ähnliche Künstler stellt **Titel insgesamt begrenzen auf** ein, wie viele Künstler, aus wie vielen Top-Titeln jedes Künstlers gewählt wird und wie viele pro Künstler genommen werden. Ein ähnlicher Künstler zählt erst, wenn er einen Titel aus deiner Bibliothek liefert; einer, der das nicht tut, wird übersprungen und der nächste gelesen. Nimm den Haken bei der Grenze weg, um jeden gefundenen Titel zu behalten; sind dazu die letzten beiden Werte gleich (etwa 5 von 5), gibt es gar keine Zufallsauswahl. Ähnliche Titel stellt ein, wie viele Titel, wie viele ein einzelner Künstler höchstens bekommt und, für jede Spalte, die Reihenfolge und **Abwechslung**. Top-Titel des Künstlers stellt gemischt oder nach Beliebtheit ein. KI-Playlist stellt ein, wie viele Titel und wie viele ein einzelner Künstler höchstens bekommt, damit eine Stimmung, die die KI mit einer Band verbindet, nicht nur aus dieser Band besteht.
-  Unter Windows (Haupt) haben Ähnliche Künstler und Ähnliche Titel vier Spalten: **Seed** (Aktueller Titel und Playing Now) und **Review-Modus** (Aktueller Titel und Playing Now). Playing Now fügt **Zufällige Künstler aus Playing Now** oder **Zufällige Titel aus Playing Now** hinzu, und seine Anzahl Künstler oder Titel gilt pro zufällig gewähltem Künstler oder Titel; die Voreinstellungen (5 Künstler mit je 4 ähnlichen oder 5 Titel mit je 6 ähnlichen) ergeben ungefähr so lange Playlists wie Aktueller Titel. Die Spalten des Review-Modus folgen ihrem Seed, solange **Wie Aktueller Titel** oder **Wie Playing Now** angehakt ist; nimm einen Haken weg, um dem Review-Modus eine eigene kurze Auswahl zu geben. Top-Titel des Künstlers hat Aktueller Titel und Review-Modus. Alles andere im Abschnitt gilt für beide, und Sprachbefehle gehen nie in Review oder verwenden Playing Now, Geräte haben daher nur die Spalte Aktueller Titel.
+  Auf den Standard-Buttons Ähnliche Künstler und Ähnliche Titel gibt es vier Spalten: **Seed** (Aktueller Titel und Playing Now) und **Review-Modus** (Aktueller Titel und Playing Now). Playing Now fügt **Zufällige Künstler aus Playing Now** oder **Zufällige Titel aus Playing Now** hinzu, und seine Anzahl Künstler oder Titel gilt pro zufällig gewähltem Künstler oder Titel; die Voreinstellungen (5 Künstler mit je 4 ähnlichen oder 5 Titel mit je 6 ähnlichen) ergeben ungefähr so lange Playlists wie Aktueller Titel. Die Spalten des Review-Modus folgen ihrem Seed, solange **Wie Aktueller Titel** oder **Wie Playing Now** angehakt ist; nimm einen Haken weg, um dem Review-Modus eine eigene kurze Auswahl zu geben. Top-Titel des Künstlers hat Aktueller Titel und Review-Modus. Alles andere im Abschnitt gilt für beide, und Sprachbefehle gehen nie in Review oder verwenden Playing Now, ein eigener Button hat daher nur die Spalte Aktueller Titel.
 - **Titel auslassen, die gespielt wurden in den letzten ... Tagen** lässt alles weg, was JRiver kürzlich gespielt hat, damit ein Lieblingstitel nicht am selben Abend wiederkommt. Der Seed-Titel wird nie weggelassen. Anfangs aus.
 - **Drift** (Aus, Keep It Tight oder Weit) sucht erneut, wenn deine Bibliothek die angestrebte Länge nicht erreicht. Ähnliche Künstler und Ähnliche Titel haben außerdem **Moderator für Drift-Titel**. Siehe [Drift](#drift).
-- **Deep Cuts**: **Mit Deep Cuts auffüllen um**, 10% bis 100%, für Ähnliche Künstler, Ähnliche Titel und KI-Playlist. Eingeschaltet wird es, Verteilt oder Gemischt, unter Mehr Optionen im Abspielen-Tab. Siehe [Deep Cuts](#deep-cuts).
+- **Deep Cuts**: Aus, **Verteilt** oder **Gemischt**, und **Mit Deep Cuts auffüllen um**, 10% bis 100%, für Buttons Ähnliche Künstler, Ähnliche Titel und KI-Playlist. Siehe [Deep Cuts](#deep-cuts).
 - **Non-stop** (Aus, Keep It Tight oder Wander) hält eine Playlist am Laufen, wenn sie ihren letzten Titel erreicht. Siehe [Non-stop](#non-stop).
 - **Versteckte Titel** lässt den letzten Titel eines Albums aus, wenn er länger als eine eingestellte Anzahl Minuten ist (anfangs 6). Das sind oft eine lange Stille und ein versteckter Bonustitel, die in einer Playlist fehl am Platz wirken. Alben, Songs und Playlists, die du beim Namen nennst, laufen immer vollständig.
 - **Wenn gar nichts klappt**, anfangs aus: Hake **Wenn nichts gefunden wird** an und wähl, was passiert, wenn eine Playlist nichts findet oder nichts außer dem Seed-Titel selbst. **Genre mischen** mischt Songs aus deiner Bibliothek im Genre des Seeds: das Genre-Tag des Seed-Titels oder das häufigste Genre des Künstlers in deiner Bibliothek, in ähnlichem Tempo, wenn der Seed ein BPM-Tag hat und genug Titel innerhalb von 10% davon liegen. Es spielt die übliche Anzahl Titel dieser Playlist-Art, mit Kürzlich gespielte auslassen, Filtern und der Grenze pro Künstler, und ohne den Seed-Künstler. **Datei ausführen** startet eine eigene Datei, etwa eine .bat, und Nach dem Erstellen ausführen entfällt dann. **Playlist spielen** spielt eine deiner JRiver-Playlists oder Smartlists, gewählt mit **Wählen...**, so, wie JRiver sie liefert. Hake **Erst im Raum sagen, warum** an (anfangs aus, eine Einstellung für alle Playlist-Arten), und ein Sprachbefehl oder Tastenkürzel hört vor der Musik, warum: die Stimme von Windows, als kurze WAV-Datei gespeichert und in dieser Zone abgespielt, sie steht also in Playing Now. Die Ansage ist auf Englisch und braucht JRiver auf demselben PC. Ohne Haken bei Wenn gar nichts klappt sagt die Konsole "Nichts Passendes gefunden. Bitte versuch einen anderen Seed.", und eine Playlist aus der App zeigt dasselbe in einer Meldung. Es läuft nicht, wenn schon eine hinzugefügte Playlist gespielt hat.
 - **Nach dem Erstellen ausführen** führt eine Datei deiner Wahl aus, sobald eine Playlist in JRiver ist: eine .bat, eine .exe oder ein PowerShell- oder Python-Skript. Es erfährt nichts über die Playlist und kann also tun, was du willst. Non-stop-Nachschub führt sie nicht aus.
 
-![Einstellungen, Playlist, KI-Playlist](images/de/settings_playlist_ai_playlist.png)
+![Einstellungen, Buttons, KI-Playlist](images/de/settings_buttons_ai_playlist.png)
 
-Der Tab KI-Playlist hat eigene Drift-Möglichkeiten, auch Drift mit der KI, und **Moderator für Drift-Titel** für das, was Drift aus deinen Musikquellen hinzufügt.
+Die Playlist-Seite eines KI-Playlist-Buttons hat eigene Drift-Möglichkeiten, auch Drift mit der KI, und **Moderator für Drift-Titel** für das, was Drift aus deinen Musikquellen hinzufügt.
 
-### Filter
+#### Filter bearbeiten
 
-![Einstellungen, Filter](images/de/settings_filters.png)
+![Filter bearbeiten](images/de/edit_filters.png)
 
-Eine Sammlung benannter Filter, die eingrenzen, was 24bit7 wählt, einschließlich Drift-Runden und Non-stop-Nachschub. Jeder Filter hat:
+Ein Fenster mit benannten Filtern, die eingrenzen, was 24bit7 wählt, einschließlich Drift-Runden und Non-stop-Nachschub. Wo ein Filter gilt, entscheidest du durch Anhaken: auf der Seite eines Buttons für jede Playlist, die dieser Button erstellt, und auf der Seite einer Zone für jede Playlist, die in diese Zone geschickt wird. Eine Playlist läuft unter beiden. **Verwendet von** sagt bei jedem Filter, welche Buttons und Zonen ihn angehakt haben. Jeder Filter hat:
 
-- **Gilt für**: Alle Geräte, Windows (Haupt) (der Abspielen-Tab und jeder Lautsprecher ohne eigene Einstellungen) oder einen Lautsprecher mit eigenen Einstellungen. Gelten mehrere Filter, muss ein Titel alle bestehen.
 - **Nur auswählen aus**: eine JRiver-Playlist oder Smartlist, sodass nur ihre Titel verwendet werden können. Alles, was du im Smartlist-Editor von JRiver einrichten kannst, beachtet 24bit7.
 - **Regeln**, alle oder eine erfüllt: Bewertung, Jahr, Zuletzt gespielt, Anzahl Wiedergaben, Importiert am, Genre, Künstler, Album, Dauer, Dateityp, Bittiefe, Abtastrate und Speicherort. Zum Beispiel erspart "Abtastrate höchstens 48 kHz" JRiver das Umrechnen in Echtzeit für einen Sonos.
 
-Ein Titel ohne Wert für ein Feld besteht diese Regel. Der Seed-Titel wird nie herausgefiltert. Die Konsole jeder Playlist sagt, welche Filter galten und wie viele Titel sie weggelassen haben. Alben, Songs, gemischte Wiedergabe und JRiver-Playlists, die per Sprache gewünscht werden, laufen wie gewünscht.
+Ein Titel ohne Wert für ein Feld besteht diese Regel. Der Seed-Titel wird nie herausgefiltert. Die Konsole jeder Playlist sagt, welche Filter galten und wie viele Titel sie weggelassen haben. Gelten mehrere, muss ein Titel alle bestehen. Alben, Songs, gemischte Wiedergabe und JRiver-Playlists, die per Sprache gewünscht werden, laufen wie gewünscht.
+
+### Zonen
+
+![Einstellungen, Zonen](images/de/settings_zones.png)
+
+Eine Seite pro JRiver-Zone, links aufgelistet. **Neu einlesen** fragt JRiver erneut nach seinen Zonen (ein DLNA-Lautsprecher wie Sonos erscheint erst, wenn in JRiver DLNA Controller angehakt ist, unter Tools > Options > Media Network > Advanced). **Der aktiven Zone von JRiver folgen** lässt Läuft gerade der Zone folgen, die JRiver gerade aktiv hat, daher ist dann keine Zone die Standardzone. Die Seite jeder Zone sagt, welche Alexa-Geräte dort fragen, und hat dann:
+
+- **In den Listen Zone und Ausgabe zeigen**: Nimm den Haken weg, um eine Zone im Abspielen-Tab zu verstecken. **Standardzone**: die Zone, mit der Läuft gerade beim Start von 24bit7 öffnet; eine von Hand gewählte Zone gewinnt immer. Beides bleibt auf diesem PC, nicht in Profilen.
+- **Sprachbefehle**: welchen Button jeder Satz startet, wenn ein Alexa-Gerät in dieser Zone fragt: **Musik wie**, **Songs von**, **Titel wie dieser** und **Spiel etwas**. Ohne Auswahl ist es der Standard-Button dieser Art, sodass ein Echo in der Küche einen Button "Küchen-Titel" starten kann, während das Wohnzimmer den Standard-Button nimmt.
+- **Filter**: Jede Playlist, die in diese Zone geschickt wird, ob vom Abspielen-Tab, per Sprachbefehl, Tastenkürzel oder Non-stop-Nachschub, muss jeden angehakten Filter bestehen, zusätzlich zu denen ihres Buttons. "Abtastrate höchstens 48 kHz" auf einer Sonos-Zone erspart JRiver das Umrechnen in Echtzeit.
+- **Non-stop darf Playlists in dieser Zone nachfüllen**: Ohne Haken wird hier nichts nachgefüllt, Keep It Going eingeschlossen.
+
+Eine Zone, die JRiver gerade nicht sieht (ein ausgeschalteter Lautsprecher), steht weiter in der Liste, mit "(nicht gefunden)", und behält ihre Einstellungen.
 
 ### Entdecken
 
@@ -299,12 +316,11 @@ Wie deine eigenen JRiver-Playlists und Smartlists laufen, wenn du sie per Sprach
 
 ![Einstellungen, Sonstiges](images/de/settings_other.png)
 
-- **Profile**: Speicher deine Einstellungen mit **Speichern unter...** als Profil (DJ, Entdecken, Ohne KI...) und wechsle mit **Laden** zwischen ihnen, was 24bit7 neu startet, um das Profil anzuwenden; JRiver spielt weiter. Hake **Umschalten erlauben** neben den Profilen an, die das Tastenkürzel **Profil wechseln** durchgehen soll (neue Profile sind anfangs angehakt). Ein Profil enthält die Optionen im Abspielen-Tab, Quellen, Playlist-Einstellungen, Filter, JRiver-Playlists, hinzugefügte Playlists, die Vorhör-Zone, Standardzone und Folgen unter Zonen, die Zone der Tastenkürzel, die Wahl im Fenster KI-Playlist, KI verwenden sowie Cache- und Konsolen-Einstellungen für Windows (Haupt). Schlüssel, die JRiver-Verbindung, welche Zonen angezeigt werden, Alexa-Geräte mit eigenen Einstellungen, Tastenkürzel, Sprache und Aussehen bleiben, wie sie sind. Ein Profil, das vor 1.23.0 gespeichert wurde, lässt die Zonen, wie sie sind, bis du es erneut speicherst. **Aktuell** nennt das verwendete Profil, mit "(geändert)", sobald etwas davon abweicht. Profile sind kleine Dateien in einem Ordner `profiles` neben 24bit7, sie überstehen also Updates und lassen sich auf einen anderen PC kopieren.
+- **Profile**: Speicher deine Einstellungen mit **Speichern unter...** als Profil (DJ, Entdecken, Ohne KI...) und wechsle mit **Laden** zwischen ihnen, was 24bit7 neu startet, um das Profil anzuwenden; JRiver spielt weiter. Hake **Umschalten erlauben** neben den Profilen an, die das Tastenkürzel **Profil wechseln** durchgehen soll (neue Profile sind anfangs angehakt). Ein Profil enthält deine Buttons mit ihren Einstellungen und Filtern, die Auswahl jeder Zone (ihre Sprach-Buttons, Filter und Non-stop), die Filter, JRiver-Playlists, die Optionen im Abspielen-Tab und hinzugefügte Playlists, die Vorhör-Zone, Standardzone und Folgen, die Zone der Tastenkürzel, die Wahl im Fenster KI-Playlist, KI verwenden sowie Cache- und Konsolen-Einstellungen. Schlüssel, die JRiver-Verbindung, welche Zonen angezeigt werden, Alexa-Geräte, Tastenkürzel (auch die der Buttons), Sprache und Aussehen bleiben, wie sie sind. Ein Profil, das vor 1.29.0 gespeichert wurde, lädt in die Standard-Buttons und lässt deine eigenen Buttons und die Zonen, wie sie sind. **Aktuell** nennt das verwendete Profil, mit "(geändert)", sobald etwas davon abweicht. Profile sind kleine Dateien in einem Ordner `profiles` neben 24bit7, sie überstehen also Updates und lassen sich auf einen anderen PC kopieren.
 - **Allgemein**: **Cache behalten für** (1 Monat, 1 Jahr oder Dauerhaft) mit **Cache leeren...** (älter als ein Monat, älter als ein Jahr oder alles), der JRiver-Host, falls JRiver auf einem anderen PC läuft, **Sprache** (Englisch oder Deutsch, mit Neustart; darunter, wo du nach einer anderen Sprache fragen kannst), das **Design** (Hell oder Dunkel, beim Neustart angewendet), **Akzentfarbe** (die Farbe der Reiter, Schaltflächen und Überschriften im dunklen Design und die der Konsole in beiden Designs: **Farbe wählen** öffnet die Farbauswahl von Windows, **Standard verwenden** kehrt zum Grün zurück, und eine Vorschau darunter zeigt Logo, zwei Schaltflächen und die Konsole in deiner Farbe, bevor du neu startest; eine Farbe, die zu dunkel zum Lesen ist, wird heller gemacht, eine Farbe nahe Magenta wird davon weggerückt, denn Magenta kennzeichnet alles, was KI-Guthaben verbraucht, und sie wird in Profilen gespeichert), **Titelleiste von Windows verwenden** (ohne Haken reichen die Tabs bis oben ins Fenster, mit eigenem Minimieren, Maximieren und Schließen), **Mitwirkende zeigen** (Album/Aktueller Titel oder Album/Alle Titel, mit **Zuerst zeigen** auf Titel oder Album) und **Konsolen-Frage einschalten**.
 - **Weitere Ausgaben**: die Dienste, die die Ausgabe-Liste im Abspielen-Tab neben deinen Zonen anbietet. **YouTube**, anfangs angehakt, hat darunter seine **Länge der YouTube-Playlist** (bis zu 50) und **Offizielle Musikvideos bevorzugen**. **Tidal** sagt, ob du angemeldet bist, und **Öffnen in** wählt, wo eine gefüllte Playlist öffnet: in der Tidal-App (Voreinstellung) oder auf der Tidal-Website. Nimmst du den Haken bei dem weg, auf das Ausgabe gerade steht, geht Ausgabe zurück auf Gleiche Zone. Die Playlist-Knöpfe von Entdecken stellst du separat ein, unter Einstellungen > Entdecken.
-- **Zonen**: welche JRiver-Zonen in den Listen Zone und Ausgabe erscheinen, mit welcher Zone Läuft gerade öffnet und ob es der aktiven Zone von JRiver folgt. Ein DLNA-Lautsprecher wie Sonos erscheint erst, wenn in JRiver DLNA Controller angehakt ist (Tools > Options > Media Network > Advanced); drück danach auf **Neu einlesen**.
 - **Windows**: **Mit Windows starten** startet 24bit7 bei der Anmeldung. **Im Infobereich starten** hält es versteckt, wenn Windows es startet. **Ins Infobereich schließen** lässt den Schließen-Knopf des Fensters 24bit7 verstecken statt beenden, sodass Sprache weiter zuhört; beenden über das Symbol im Infobereich.
-- **Tastenkürzel**: je eine Taste für Ähnliche Titel, Ähnliche Künstler, Top-Titel des Künstlers, Songs des Künstlers mischen, **Zone wechseln** (bringt das Laufende in die nächste unter Umschalten erlauben angehakte Zone), **Profil wechseln** (lädt das nächste unter Umschalten erlauben in Profile angehakte Profil, von A bis Z, und startet 24bit7 neu, während JRiver weiterspielt; während des Erstellens gedrückt, sagt die Konsole, dass gewechselt wird, sobald die Playlist fertig ist), **Weiterlaufen lassen** (Non-stop, einmalig, für das, was in der Kürzel-Zone läuft) und ein Feld **Laden** für jedes gespeicherte Profil, das dieses Profil genauso lädt oder nichts tut, wenn es schon geladen ist, sodass eine Fernbedienung oder Automatisierung immer beim gemeinten Profil landet. Sie funktionieren überall in Windows, auch mit 24bit7 im Infobereich, sodass eine Fernbedienung, die Tastendrücke sendet (ein Flirc, eine Harmony, eine Handy-App), vom Sofa aus eine Playlist starten kann. Klick in ein Feld und drück die Tasten; Esc bricht ab. Buchstaben und Zahlen brauchen Strg, Alt, Umschalt oder Win; F-Tasten und Medientasten gehen auch allein. Gehört eine Kombination schon einem anderen Programm, sagt 24bit7 es.
+- **Tastenkürzel**: je eine Taste für Songs des Künstlers mischen, **Zone wechseln** (bringt das Laufende in die nächste unter Umschalten erlauben angehakte Zone), **Profil wechseln** (lädt das nächste unter Umschalten erlauben in Profile angehakte Profil, von A bis Z, und startet 24bit7 neu, während JRiver weiterspielt; während des Erstellens gedrückt, sagt die Konsole, dass gewechselt wird, sobald die Playlist fertig ist), **Weiterlaufen lassen** (Non-stop, einmalig, für das, was in der Kürzel-Zone läuft) und ein Feld **Laden** für jedes gespeicherte Profil, das dieses Profil genauso lädt oder nichts tut, wenn es schon geladen ist, sodass eine Fernbedienung oder Automatisierung immer beim gemeinten Profil landet. Das eigene Kürzel eines Buttons stellst du im Feld **Tastenkürzel** auf seiner Seite unter Buttons ein. Sie funktionieren überall in Windows, auch mit 24bit7 im Infobereich, sodass eine Fernbedienung, die Tastendrücke sendet (ein Flirc, eine Harmony, eine Handy-App), vom Sofa aus eine Playlist starten kann. Klick in ein Feld und drück die Tasten; Esc bricht ab. Buchstaben und Zahlen brauchen Strg, Alt, Umschalt oder Win; F-Tasten und Medientasten gehen auch allein. Gehört eine Kombination schon einem anderen Programm, sagt 24bit7 es.
 
 ### Info
 
@@ -356,7 +372,7 @@ Eine Bibliothek hat nicht immer genug, um die angestrebte Länge zu erreichen. M
 - **Keep It Tight** nimmt nur Titel der ersten Runde als Seeds, sodass sich nichts mehr als zwei Schritte von deinem Seed entfernt. War die erste Runde kurz, gehen womöglich die Seeds aus, und die Playlist bleibt kurz; die Konsole sagt es dann.
 - **Weit** nimmt Seeds aus der ganzen Playlist, auch aus dem, was Drift selbst gefunden hat, kann also weiter wandern und sich dabei in mehrere Richtungen verzweigen. **Runden** legt fest, wie oft es versucht, von 1 bis 6. Mehr Runden füllen mehr Lücken, wandern aber weiter vom Seed weg. Mit Ausgabe an JRiver wird der erste Durchgang sofort eingereiht, und jede Runde kommt dazu, sobald sie gefunden ist.
 
-**Drift-Quellen** können Einstellungen > Quellen folgen oder **Eigene Quellen** mit eigenem **Quellen, die übereinstimmen müssen** verwenden, sodass der erste Durchgang beständig bleibt und das Auffüllen abenteuerlicher wird. Dieselben Quellen halten die Vorschläge von Drift am nächsten am Seed; Eigene Quellen geben Drift einen anderen Weg.
+**Drift-Quellen** können der Quellen-Seite des Buttons folgen oder **Eigene Quellen** mit eigenem **Quellen, die übereinstimmen müssen** verwenden, sodass der erste Durchgang beständig bleibt und das Auffüllen abenteuerlicher wird. Dieselben Quellen halten die Vorschläge von Drift am nächsten am Seed; Eigene Quellen geben Drift einen anderen Weg.
 
 Findet die erste Runde gar nichts, beginnt Drift mit **Eigene Quellen** noch einmal beim Seed selbst, mit seinen eigenen Quellen, und macht mit dem weiter, was das findet. Mit denselben Quellen wie die Playlist würde es nur die gerade gescheiterte Suche wiederholen, daher sagt die Konsole das stattdessen.
 
@@ -366,8 +382,8 @@ In einer KI-Playlist kann Drift aus deinen Musikquellen auffüllen, was kein Gut
 
 So gut die Quellen auch sind, sie neigen zum Bekannten: Last.fm und ListenBrainz beruhen auf dem, was Millionen Menschen hören, und die Top-Titel eines Künstlers sind seine Hits. In einer großen Sammlung bleiben so Ecken, die nie drankommen. **Deep Cuts** füllt jede Playlist aus diesen Ecken auf, nur mit deiner Bibliothek und ihren eigenen Tags, ohne KI und ohne Daten von außen.
 
-- **Einschalten:** **Deep Cuts** unter Mehr Optionen im Abspielen-Tab: **Aus**, **Verteilt** (gleichmäßig über die Playlist, damit der Anfang das Gefühl des Seeds behält) oder **Gemischt** (zufällig dazwischen). Der erste Titel bleibt immer vorn. Es gilt für Ähnliche Künstler, Ähnliche Titel und KI-Playlist und deren Non-stop-Nachschub; Top-Titel des Künstlers und Headliner drehen sich um einen Künstler und bekommen daher nie Deep Cuts.
-- **Wie viele:** **Mit Deep Cuts auffüllen um** unter Einstellungen > Playlist, für jede Abspieloption: anfangs 10%, bis zu 100%. Sie kommen obendrauf: 10% von 30 Titeln ergibt 3, und 100% verdoppelt die Playlist, eine gleichmäßige Mischung.
+- **Einschalten:** **Deep Cuts** auf der Playlist-Seite jedes Buttons: **Aus**, **Verteilt** (gleichmäßig über die Playlist, damit der Anfang das Gefühl des Seeds behält) oder **Gemischt** (zufällig dazwischen). Der erste Titel bleibt immer vorn. Es gilt für Ähnliche Künstler, Ähnliche Titel und KI-Playlist und deren Non-stop-Nachschub; Top-Titel des Künstlers und Headliner drehen sich um einen Künstler und bekommen daher nie Deep Cuts.
+- **Wie viele:** **Mit Deep Cuts auffüllen um** auf der Playlist-Seite jedes Buttons: anfangs 10%, bis zu 100%. Sie kommen obendrauf: 10% von 30 Titeln ergibt 3, und 100% verdoppelt die Playlist, eine gleichmäßige Mischung.
 - **Das Genre** ist das eigene Genre-Tag des Seed-Titels (ein Tag wie "Dub; Reggae" zählt als beides). Für einen gesuchten Titel, den du nicht besitzt, ist es das häufigste Genre des Künstlers in deiner Bibliothek; für eine KI-Playlist, die keinen Seed-Titel hat, das Genre, das die meisten Vorschläge der KI teilen. Ohne Genre sagt es die Konsole, und es kommt nichts dazu. Am besten funktioniert es, wenn deine Genres gut gepflegt sind: Ein breites Genre wie "Rock/Pop" ergibt lockerere Deep Cuts als ein sauberes "Trip-Hop".
 - **Ähnliche Künstler** nimmt die Künstler dieses Genres, deren Titel im letzten Jahr am wenigsten gespielt wurden, über alle ihre Titel betrachtet, sodass ein letzte Woche gespielter Song einen Künstler nicht "aktuell" macht. Aus dem am wenigsten gespielten Fünftel wählt es zufällig und spielt dann einen ihrer bekanntesten Titel, die du besitzt.
 - **Ähnliche Titel und KI-Playlist** nehmen die am wenigsten gespielten Titel des Genres: die wenigsten Wiedergaben, dann am längsten nicht gespielt, nie gespielte zuerst. Aus dem am wenigsten gespielten Fünftel wählen sie zufällig.
@@ -396,7 +412,7 @@ Mit **Non-stop** beobachtet 24bit7 die Zone, und wenn der letzte Titel einer Pla
 - **Top-Titel des Künstlers** kann zuerst die übrigen Songs des Künstlers aus deiner Bibliothek spielen, gemischt, und dann bei seinem beliebtesten Titel weitermachen. Headliner macht genauso weiter.
 - **KI-Playlist** kann die KI um mehr bitten oder mit ähnlichen Künstlern oder ähnlichen Titeln weitermachen, was kein Guthaben verbraucht.
 
-Jeder Nachschub geht durch deine Filter und überspringt alles, was die Zone schon hatte. Nur Playlists, die 24bit7 geschickt hat, werden aufgefüllt: Ein Album, das du selbst in JRiver startest, endet ganz normal. Hast du die Wiedergabe gestoppt oder pausiert, kommt nichts dazu; drück wieder auf Play, und Non-stop macht weiter.
+Eine Playlist folgt den ganzen Abend den Non-stop-Einstellungen des Buttons, der sie erstellt hat. Ein Nachschub einer anderen Art (eine Playlist Ähnliche Künstler, die mit ähnlichen Titeln weitermacht) startet den Button dieser Art, den die Zone nennt, auch unter den Filtern des ursprünglichen Buttons. Jeder Nachschub geht durch diese Filter und die der Zone und überspringt alles, was die Zone schon hatte. Der Haken **Non-stop darf Playlists in dieser Zone nachfüllen** unter Einstellungen > Zonen schaltet den Nachschub für alles ab, was dort läuft. Nur Playlists, die 24bit7 geschickt hat, werden aufgefüllt: Ein Album, das du selbst in JRiver startest, endet ganz normal. Hast du die Wiedergabe gestoppt oder pausiert, kommt nichts dazu; drück wieder auf Play, und Non-stop macht weiter.
 
 ### Abgleich mit der Bibliothek
 
@@ -429,7 +445,7 @@ Das läuft über einen eigenen Alexa-Skill, den du einmal einrichtest. Das geht 
 1. Du sprichst mit einem **Alexa-Gerät**.
 2. **Dein Alexa-Skill**, den Amazon betreibt, hört den Befehl und schickt ihn mit einem geheimen Schlüssel und der ID des Geräts an die Adresse deines PCs im Internet.
 3. **Tailscale Funnel** gibt deinem PC diese Adresse und reicht die Anfrage an 24bit7 weiter. An deinem Router musst du nichts ändern.
-4. **24bit7** prüft den Schlüssel, schaut nach, in welcher Zone das Gerät spielt und welche Einstellungen es verwendet, und erstellt oder spielt dann die Musik dort.
+4. **24bit7** prüft den Schlüssel, schaut nach, in welcher Zone das Gerät spielt und welchen Button diese Zone für den Satz startet, und erstellt oder spielt dann die Musik dort.
 
 ### Was du sagen kannst
 
@@ -486,23 +502,17 @@ Das Abzeichen nimmt nie den Fokus, und Klicks gehen einfach hindurch, sodass Fer
 
 ### Weiterlaufen lassen
 
-Ist **Non-stop** für eine Abspieloption angehakt, läuft eine per Sprachbefehl erstellte Playlist weiter, wenn sie ihren letzten Titel erreicht. "Shuffle songs by" läuft genauso weiter, wenn die gemischte Liste zu Ende ist. Auch deine eigenen JRiver-Playlists können weiterlaufen, eingestellt pro Playlist unter Einstellungen > JRiver-Playlists. Alben und Songs enden ganz normal, außer du sagst **"keep it going"**: Das schaltet Non-stop einmalig für das ein, was in der Zone läuft, auch für ein Album, das du in JRiver gestartet hast, mit den Non-stop-Einstellungen von Ähnliche Titel für diese Zone: Wander, wenn Non-stop dort aus ist, sonst der dort gewählte Modus. Es endet, wenn etwas anderes die Musik ersetzt.
+Ist **Non-stop** beim Button an, der sie erstellt hat, läuft eine per Sprachbefehl erstellte Playlist weiter, wenn sie ihren letzten Titel erreicht. "Shuffle songs by" läuft genauso weiter, wenn die gemischte Liste zu Ende ist, so wie es der Button Songs von dieser Zone sagt. Auch deine eigenen JRiver-Playlists können weiterlaufen, eingestellt pro Playlist unter Einstellungen > JRiver-Playlists. Alben und Songs enden ganz normal, außer du sagst **"keep it going"**: Das schaltet Non-stop einmalig für das ein, was in der Zone läuft, auch für ein Album, das du in JRiver gestartet hast, mit den Non-stop-Einstellungen des Buttons Titel wie dieser dieser Zone: Wander, wenn Non-stop dort aus ist, sonst der dort gewählte Modus. Es endet, wenn etwas anderes die Musik ersetzt. Eine Zone, deren Non-stop-Haken unter Einstellungen > Zonen fehlt, sagt das stattdessen.
 
 Eine JRiver-Playlist mit **Blend** wartet nicht auf ihr Ende: Neue Songs werden von Anfang an eingewoben, einer von deinen, dann ein neuer, bis zu 50 neue Songs ausgehen.
 
-### Geräte und ihre Einstellungen
+### Geräte und Zonen
 
-Jedes Alexa-Gerät, das mit 24bit7 spricht, erscheint beim ersten Mal unter **Einstellungen > Sprachbefehle > Geräte**. Gib ihm einen Namen und wähl seine JRiver-Zone, und von da an spielen seine Befehle dort.
+Jedes Alexa-Gerät, das mit 24bit7 spricht, erscheint beim ersten Mal unter **Einstellungen > Sprachbefehle > Geräte**. Gib ihm einen Namen und wähl seine JRiver-Zone, und von da an spielen seine Befehle dort. Mehr hat ein Gerät nicht: Die Einstellungen wohnen bei der Zone.
 
-Standardmäßig verwendet jedes Gerät dieselben Einstellungen wie die Windows-App, genannt **Windows (Haupt)**. So gibst du einem Gerät eigene:
+Die Seite jeder Zone unter **Einstellungen > Zonen** sagt, welche Geräte dort fragen, und entscheidet, was sie bekommen: welchen Button jeder Satz startet (Musik wie, Songs von, Titel wie dieser, Spiel etwas), welche Filter jede dorthin geschickte Playlist bestehen muss und ob Non-stop Playlists nachfüllen darf. Zwei Geräte in derselben Zone verhalten sich gleich, und auch der Abspielen-Tab, die Tastenkürzel und Non-stop folgen der Auswahl der Zone, denn sie schicken ebenfalls in eine Zone.
 
-1. Hake unter **Einstellungen > Sprachbefehle > Geräte** für das Gerät **Eigene Einstellungen** an.
-2. **Einstellungen > Quellen**, **Playlist** und **JRiver-Playlists** zeigen jetzt eine Reihe von Tabs: Windows (Haupt), dann einen pro angehaktem Gerät.
-3. Jeder Geräte-Tab beginnt mit angehaktem **Wie Windows (Haupt)** und folgt der Windows-App. Nimm den Haken weg, um die Einstellungen dieses Geräts zu ändern. Jede Seite ist getrennt, ein Gerät kann also eigene Quellen haben, während seine Playlist weiter Windows (Haupt) folgt.
-
-Ein Gerät mit eigenen Einstellungen kann außerdem unter **Gilt für** in einem Filter stehen, etwa um die Küche auf eine Playlist "Küchen-Favoriten" zu beschränken. Schlüssel, Suchseiten und Zonen bleiben gemeinsam.
-
-Mit zwei Lautsprechern lassen sich leicht zwei Einstellungen vergleichen: derselbe Befehl in Küche und Wohnzimmer, einmal mit Moderator und einmal ohne. Nimm den Haken bei **Eigene Einstellungen** weg, und das Gerät geht zurück zu Windows (Haupt); seine eigenen Einstellungen bleiben fürs nächste Mal erhalten.
+Um der Küche einen eigenen Klang zu geben, legst du also unter Einstellungen > Buttons einen Button an (etwa "Küchen-Titel", ausgehend von Ähnliche Titel, mit eigenem Moderator und eigenem Filter) und stellst dann auf der Seite der Zone Küche **Titel wie dieser** darauf. Mit zwei Räumen lassen sich leicht zwei Einstellungen vergleichen: derselbe Befehl in Küche und Wohnzimmer, einmal mit Moderator und einmal ohne. Schlüssel, Suchseiten und JRiver-Playlists bleiben gemeinsam.
 
 ### Gut zu wissen
 
@@ -653,14 +663,14 @@ Eine Antwort mit `ok: True` und der Version von 24bit7 heißt, dass auf der Seit
 | Was passiert | Was du versuchen kannst |
 |---|---|
 | Läuft gerade sagt, dass nichts läuft, oder die Liste Zone ist leer | Prüf, ob JRiver mit eingeschaltetem Media Network läuft. Läuft JRiver auf einem anderen PC, trag seine Adresse unter Einstellungen > Sonstiges > JRiver-Host ein. Hast du in JRiver Benutzername und Passwort festgelegt, trag sie unter Einstellungen > Schlüssel ein. |
-| Eine Quelle wird übersprungen, mit "keinen Schlüssel" in der Konsole | Trag ihren Schlüssel unter Einstellungen > Schlüssel ein oder nimm den Haken unter Einstellungen > Quellen weg. |
+| Eine Quelle wird übersprungen, mit "keinen Schlüssel" in der Konsole | Trag ihren Schlüssel unter Einstellungen > Schlüssel ein oder nimm den Haken auf der Quellen-Seite des Buttons weg. |
 | KI-Optionen sind ausgegraut | Sie brauchen den gewählten Anbieter, eingerichtet unter Einstellungen > Schlüssel > KI: seinen Schlüssel und Guthaben auf dem Konto oder bei Ollama ein Modell. |
 | YouTube Music liefert nichts mehr | YouTube hat wahrscheinlich etwas geändert. Meist geht es mit dem nächsten Update der Bibliothek ytmusicapi wieder; nimm den Haken solange weg. |
 | Eine Playlist fällt zu kurz aus | Deine Bibliothek hat womöglich zu wenig von dem, was die Quellen vorschlagen. Senk **Quellen, die übereinstimmen müssen**, hake mehr Quellen an oder schalt **Drift** ein. |
-| "Nichts Passendes gefunden" | Nichts, was die Quellen vorgeschlagen haben, ist in deiner Bibliothek, und es gab kein Genre zum Ausweichen (oder Wenn gar nichts klappt ist aus). Versuch einen anderen Seed, gib den Titeln des Seeds ein Genre-Tag oder hake **Wenn gar nichts klappt** unter Einstellungen > Playlist an. |
+| "Nichts Passendes gefunden" | Nichts, was die Quellen vorgeschlagen haben, ist in deiner Bibliothek, und es gab kein Genre zum Ausweichen (oder Wenn gar nichts klappt ist aus). Versuch einen anderen Seed, gib den Titeln des Seeds ein Genre-Tag oder hake **Wenn gar nichts klappt** auf der Playlist-Seite des Buttons an. |
 | Ein Titel passt nicht dazu | Probier den **Moderator** auf Locker oder Ausgewogen. |
 | **Als Playlist speichern** in Review ergibt eine leere Playlist | JRiver hat die Playlist angelegt, aber die Titel ohne Anmeldung nicht hinzugefügt. Leg in JRiver einen Benutzernamen und ein Passwort fest (Tools > Options > Media Network > Authentication) und trag sie unter Einstellungen > Schlüssel ein. |
-| Ein Lautsprecher wie Sonos fehlt bei den Zonen | Hake in JRiver DLNA Controller an (Tools > Options > Media Network > Advanced) und drück dann **Neu einlesen** unter Einstellungen > Sonstiges > Zonen. |
+| Ein Lautsprecher wie Sonos fehlt bei den Zonen | Hake in JRiver DLNA Controller an (Tools > Options > Media Network > Advanced) und drück dann **Neu einlesen** unter Einstellungen > Zonen. |
 | Windows sagt "Der Computer wurde durch Windows geschützt" | Klick auf **Weitere Informationen** und dann auf **Trotzdem ausführen**. Die App ist nicht signiert. |
 
 ### Konsolen-Frage

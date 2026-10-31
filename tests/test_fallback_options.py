@@ -88,7 +88,7 @@ def test_settings_rows_follow_the_choice(app, ui):
     from tkinter import ttk
     import settings_gui
     from test_settings_seed_columns import option_page, walk
-    page = option_page(ui, option="Similar Tracks")
+    page = option_page(ui, "Similar Tracks")
     tick = next(w for w in walk(page) if isinstance(w, ttk.Checkbutton) and w.cget("text") == "If nothing is found")
     box = next(w for w in walk(page) if isinstance(w, ttk.Combobox) and "Run File" in w.cget("values"))
     browse = next(w for w in walk(page) if isinstance(w, ttk.Button) and w.cget("text") == "Browse..."

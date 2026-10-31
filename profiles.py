@@ -1,12 +1,14 @@
 """
 profiles.py - saved sets of settings for different ways of listening (Settings > Other > Profiles).
 
-A profile holds Windows (Main)'s listening settings: the Play tab options, Sources,
-Playlist settings, Filters, the JRiver Playlists rows, the Play tab's Add Playlist rows,
-the Preview zone, the Default zone and the zone the shortcuts apply to, cache length and
-the console. It leaves out anything tied to the PC or the person: keys, the JRiver
-connection, Alexa devices (those with Own Settings keep theirs), keyboard shortcuts, the
-tray, the title bar, the theme and Discover's sites.
+A profile holds the listening settings: the buttons (each one's settings and filters),
+the zones (which button each voice phrase runs, their filters and Non-stop switches),
+the Filters, the JRiver Playlists rows, the Play tab's options and Add Playlist rows, the
+Preview zone, the Default zone and the zone the shortcuts apply to, cache length and the
+console. It leaves out anything tied to the PC or the person: keys, the JRiver
+connection, Alexa devices, which zones show, keyboard shortcuts (a button's included),
+the tray, the title bar, the theme and Discover's sites. A profile saved before buttons
+loads into the standard buttons and leaves your own buttons and the zones alone.
 
 Each profile can have a keyboard shortcut of its own that loads it (Settings > Other >
 Keyboard Shortcuts). Those live in .env as HOTKEY_PROFILE_<name>, with the other
@@ -50,8 +52,9 @@ EXTRA_ENV_KEYS = ["PLAY_BEHAVIOUR", "OUTPUT_TARGET", "YOUTUBE_PLAYLIST_LENGTH", 
                   *engine.PLAYING_NOW_ARTIST_FIGURES, *engine.PLAYING_NOW_TRACK_FIGURES,
                   "REVIEW_SAME_ARTISTS_PN", "REVIEW_SAME_TRACKS_PN", "REVIEW_PN_SIMILAR_ARTIST_TRACK_LIMIT",
                   *[f"REVIEW_{k}" for k in (*engine.PLAYING_NOW_ARTIST_FIGURES, *engine.PLAYING_NOW_TRACK_FIGURES)]]
-# kept in the database's meta table: Filters, JRiver Playlists (Windows Main), Add Playlist rows
-META_KEYS = ["filters", "saved_playlists", "play_mix"]
+# kept in the database's meta table: Filters, JRiver Playlists, Add Playlist rows, the buttons and the zones
+META_KEYS = ["filters", "saved_playlists", "play_mix", "buttons", "zones"]
+KEEP_IF_MISSING = ("buttons", "zones")   # an older profile has no say over these: they're left as they are
 
 
 def env_keys():
@@ -74,13 +77,30 @@ def _write_env(updates):
 
 def snapshot():
     """The current settings a profile holds. A setting that isn't set is None (its default)."""
+    import buttons
+    buttons.load()   # the first load ever makes the buttons and zones, so the profile has them
     env = _read_env()
     data = {"env": {k: env.get(k) for k in env_keys()}, "meta": {}}
     con = engine.db()
     for key in META_KEYS:
         row = con.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
         data["meta"][key] = row[0] if row else None
+    data["meta"]["buttons"] = _without_shortcuts(data["meta"]["buttons"])
     return data
+
+
+def _without_shortcuts(raw):
+    """The buttons as saved, with their shortcuts blanked: a shortcut stays with the PC, like the others."""
+    if raw is None:
+        return None
+    try:
+        items = json.loads(raw)
+    except ValueError:
+        return raw
+    for b in items:
+        if isinstance(b, dict):
+            b["shortcut"] = ""
+    return json.dumps(items)
 
 
 def _stem(name):
@@ -146,9 +166,11 @@ def changed(name=None):
         return True
     now = snapshot()
     saved_env = saved.get("env") or {}
+    saved_meta = saved.get("meta") or {}
     # only the settings the file holds: a profile saved before a setting joined profiles
     # (the zones, say) isn't "changed" by that setting, and loading it leaves that setting alone
-    return {k: now["env"].get(k) for k in saved_env} != saved_env or now["meta"] != saved.get("meta")
+    return ({k: now["env"].get(k) for k in saved_env} != saved_env
+            or {k: now["meta"].get(k) for k in saved_meta} != saved_meta)
 
 
 def save(name):
@@ -232,16 +254,31 @@ def apply(data):
             os.environ.pop(k, None)
             continue
         os.environ[k] = str(v)
+    import buttons
+    meta = data.get("meta") or {}
+    shortcuts = {b["id"]: b.get("shortcut") or "" for b in buttons.load()}   # the PC's, kept through a load
+    by_kind = {b["standard"]: b.get("shortcut") or "" for b in buttons.load() if b.get("standard")}
     con = engine.db()
-    for key, value in (data.get("meta") or {}).items():
+    for key, value in meta.items():
         if key not in META_KEYS:
             continue
         if value is None:
-            con.execute("DELETE FROM meta WHERE key=?", (key,))
+            if key not in KEEP_IF_MISSING:
+                con.execute("DELETE FROM meta WHERE key=?", (key,))
         else:
             con.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (key, value))
     con.commit()
     engine.load_settings()
+    items = buttons.load()
+    if meta.get("buttons") is None:
+        # saved before buttons: its settings are what the standard buttons were, so they take them
+        saved_env = buttons._env_values()
+        for b in items:
+            if b.get("standard"):
+                b["settings"] = buttons.settings_from(saved_env.get, b["kind"])
+    for b in items:
+        b["shortcut"] = shortcuts.get(b["id"], by_kind.get(b.get("standard") or None, "")) or ""
+    buttons.save(items)
 
 
 def apply_pending():

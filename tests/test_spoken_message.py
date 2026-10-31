@@ -48,7 +48,7 @@ def test_in_profiles():
 def test_settings_tick_follows_if_all_else_fails(app, ui):
     from tkinter import ttk
     from test_settings_seed_columns import option_page, walk
-    page = option_page(ui, option="Similar Tracks")
+    page = option_page(ui, "Similar Tracks")
     ticks = [w for w in walk(page) if isinstance(w, ttk.Checkbutton)]
     main = next(w for w in ticks if w.cget("text") == "If nothing is found")
     spoken = next(w for w in ticks if w.cget("text") == "Say why in the room first")

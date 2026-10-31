@@ -50,7 +50,15 @@ SHOTS = [
     ("console_tabs", ["Play", "Now Playing"], ["gui.pyw", "buildlog.py"], "tabs_kitchen"),
     ("console_log", ["Play", "Now Playing"], ["gui.pyw", "buildlog.py"], "tabs_log"),
     ("discover", ["Discover"], ["discover_gui.py", "tabs.py"], None),
-    ("settings_buttons", ["Settings", "Buttons"], ["settings_gui.py", "buttons.py"], None),
+    # Settings > Buttons: a button of your own with a filter and a shortcut, the standard Similar Artists'
+    # Playlist page with its columns, an AI Playlist's page, the Edit Filters window, and the Kitchen zone
+    ("settings_buttons", ["Settings", "Buttons"], ["settings_gui.py", "buttons.py"], "button:Kitchen Tracks:Sources"),
+    ("settings_buttons_playlist", ["Settings", "Buttons"], ["settings_gui.py", "buttons.py"],
+     "button:Similar Artists:Playlist"),
+    ("settings_buttons_ai_playlist", ["Settings", "Buttons"], ["settings_gui.py", "buttons.py"],
+     "button:AI Playlist:Playlist"),
+    ("edit_filters", ["Settings", "Buttons"], ["settings_gui.py", "filters.py"], "edit_filters"),
+    ("settings_zones", ["Settings", "Zones"], ["settings_gui.py", "zones.py"], "zone:Kitchen"),
     ("settings_discover_sites", ["Settings", "Discover"], ["settings_gui.py"], None),
     ("settings_keys", ["Settings", "Keys"], ["settings_gui.py"], None),
     ("settings_voice_commands", ["Settings", "Voice Commands"], ["settings_gui.py", "voice.py"], None),
@@ -165,6 +173,7 @@ Similar Tracks: The Beatles - Here Comes The Sun  (target 30, at most 2 per arti
 Done: 30 tracks queued in Kitchen, 62 not in library, 14 s."""
 # The demo console's lines in German (--lang de), as 24bit7 writes them; a line not here stays as it is
 DEMO_GERMAN = {
+    "Kitchen Tracks": "Küchen-Titel", "Stereo only": "Nur Stereo",   # the demo button and filter
     "Similar Tracks: The Beatles - Here Comes The Sun  (target 30, at most 2 per artist)":
         "Ähnliche Titel: The Beatles - Here Comes The Sun  (Ziel 30, höchstens 2 pro Künstler)",
     "Last.fm: 50 similar tracks": "Last.fm: 50 ähnliche Titel",
@@ -373,6 +382,22 @@ def start_demo(gui, temp):
                     (device_id, name, zone, heard, own))
     con.commit()
     saved_playlists.set_main_settings({"rows": {pid: dict(row) for pid, row in DEMO_SAVED_ROWS.items()}})
+    # Buttons and zones: the standard five from the demo .env, a Kitchen Tracks button of your own with a
+    # Stereo only filter and a shortcut, and the Kitchen zone running it for "tracks like this"
+    import buttons
+    import filters
+    import zones
+    stereo = filters.blank(in_language("Stereo only"))
+    stereo["rules"] = [{"field": "sample_rate", "op": "at_most", "value": "48", "value2": ""}]
+    filters.save([stereo])
+    buttons.load()
+    kitchen = buttons.add(in_language("Kitchen Tracks"), "tracks")
+    buttons.set_settings(kitchen["id"], dict(kitchen["settings"], AI_MODERATOR_TRACKS="balanced", SIMILAR_TRACK_COUNT="20"))
+    buttons.set_filters(kitchen["id"], [stereo["id"]])
+    buttons.set_shortcut(kitchen["id"], "Ctrl+Alt+2")
+    record = zones.for_zone("Kitchen")
+    record["buttons"]["tracks_like"] = kitchen["id"]
+    zones.update("Kitchen", buttons=record["buttons"], filters=[stereo["id"]])
     try:   # the console's Log (1.11.0 and later)
         import buildlog
         buildlog._table(con)
@@ -574,6 +599,11 @@ def capture(root, page):
     top = canvas.winfo_rooty() - root.winfo_rooty()
     view = canvas.winfo_height()
     total = canvas.bbox("all")[3]
+    # Only the scrolling part moves: a page with a list beside its canvas (Settings > Buttons) keeps the
+    # list as the first shot had it, over a background taken from the bottom row of the first view
+    holder = canvas.master
+    left = holder.winfo_rootx() - root.winfo_rootx()
+    right = left + holder.winfo_width()
     pieces, y = [], 0
     while y < total:
         canvas.yview_moveto(y / total)
@@ -581,24 +611,30 @@ def capture(root, page):
         shown = int(canvas.canvasy(0))
         shot = grab(root)
         end = min(shown + view, total)
-        pieces.append(shot.crop((0, top + (y - shown), width, top + (end - shown))))
+        pieces.append(shot.crop((left, top + (y - shown), right, top + (end - shown))))
         if end <= y:
             break
         y = end
     canvas.yview_moveto(0)
     head = first.crop((0, 0, width, top))
     foot = first.crop((0, top + view, width, first.height))
-    out = Image.new("RGB", (width, head.height + sum(p.height for p in pieces) + foot.height))
-    at = 0
-    for part in [head] + pieces + [foot]:
-        out.paste(part, (0, at))
+    body_height = sum(p.height for p in pieces)
+    out = Image.new("RGB", (width, head.height + body_height + foot.height))
+    out.paste(head, (0, 0))
+    backdrop = first.crop((0, top + view - 1, width, top + view)).resize((width, body_height))
+    out.paste(backdrop, (0, head.height))
+    out.paste(first.crop((0, top, width, top + view)), (0, head.height))   # the first view, list included
+    at = head.height
+    for part in pieces:
+        out.paste(part, (left, at))
         at += part.height
+    out.paste(foot, (0, at))
     # The scrollbar shows a different position in every piece, so it's painted out
     for bar in canvas.master.winfo_children():
         if bar.winfo_class() == "TScrollbar" and bar.winfo_ismapped():
             x = bar.winfo_rootx() - root.winfo_rootx()
             r, g, b = (v // 256 for v in root.winfo_rgb(canvas.cget("bg")))
-            out.paste((r, g, b), (x, top, x + bar.winfo_width(), top + sum(p.height for p in pieces)))
+            out.paste((r, g, b), (x, top, x + bar.winfo_width(), top + body_height))
     return out
 
 
@@ -673,6 +709,20 @@ def main():
                     import buildlog
                     play._load_build(next(r for r in buildlog.recent("demo-kitchen") if r["chain_pos"] == 1))
             dialog = None
+            if action and action.startswith("button:"):   # a button's page, on one of its inner tabs
+                _, which, tab = action.split(":")
+                import buttons
+                wanted = in_language(which) if which in DEMO_GERMAN else i18n.t(which)
+                target = next(b for b in buttons.load() if b["name"] == wanted)
+                play.settings._button_id = target["id"]
+                play.settings._buttons_refresh()
+                settle(root, 0.5)
+                go_to(play.settings._button_right, [tab], gui.TabbedPane)
+            elif action and action.startswith("zone:"):
+                play.settings._zone_name = action.split(":")[1]
+                play.settings._zones_refresh()
+            elif action == "edit_filters":
+                dialog = play.settings._open_filters()
             if action == "review":
                 show_review(play)
             elif action in ("ai_create", "ai_steer"):

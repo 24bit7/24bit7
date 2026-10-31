@@ -98,7 +98,7 @@ def test_settings_note_follows_the_sources_choice(app, ui):
     import settings_gui
     from test_settings_seed_columns import option_page, walk
     for option in ("Similar Artists", "Similar Tracks"):
-        page = option_page(ui, option=option)
+        page = option_page(ui, option)
         warn = next(w for w in walk(page) if w.winfo_class() == "Label"
                     and str(w.cget("text")) == settings_gui.DRIFT_SAME_WARNING)
         box = next(w for w in walk(page) if isinstance(w, ttk.Combobox)
@@ -107,10 +107,10 @@ def test_settings_note_follows_the_sources_choice(app, ui):
         box.event_generate("<<ComboboxSelected>>")
         ui.pump(0.2)
         assert warn.winfo_manager() == "", option
-        box.set("Same as Settings > Sources")
+        box.set("Same as the Sources page")
         box.event_generate("<<ComboboxSelected>>")
         ui.pump(0.2)
         assert warn.winfo_manager() == "grid", option
-    page = option_page(ui, option="AI Playlist")
+    page = option_page(ui, "AI Playlist")
     assert not [w for w in walk(page) if w.winfo_class() == "Label"
                 and str(w.cget("text")) == settings_gui.DRIFT_SAME_WARNING]

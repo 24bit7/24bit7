@@ -147,17 +147,19 @@ def test_setting_on_every_playlist_tab(app, ui):
     import settings_gui
     from test_settings_seed_columns import option_page, walk
     for option in ("Similar Artists", "Similar Tracks", "Artist's Top Tracks", "AI Playlist"):
-        page = option_page(ui, option=option)
+        page = option_page(ui, option)
         ticks = [w for w in walk(page) if isinstance(w, ttk.Checkbutton)
                  and w.cget("text") == "If nothing is found"]
         assert len(ticks) == 1, option
-    page = option_page(ui, option="Similar Artists")
+    page = option_page(ui, "Similar Artists")
     tick = next(w for w in walk(page) if isinstance(w, ttk.Checkbutton)
                 and w.cget("text") == "If nothing is found")
     tick.invoke()
     ui.pump(0.3)
     assert settings_gui.read_env().get("IF_ALL_ELSE_FAILS_ARTISTS") == "1"   # off to start, so one click turns it on
-    device = option_page(ui, device="Kitchen Echo", option="Similar Artists")
+    import buttons
+    buttons.add("Kitchen Artists", "artists")   # a button of your own has the setting too
+    own = option_page(ui, "Kitchen Artists")
     assert any(isinstance(w, ttk.Checkbutton) and w.cget("text") == "If nothing is found"
-               for w in walk(device))
+               for w in walk(own))
     assert "IF_ALL_ELSE_FAILS_ARTISTS" in app.engine.PROFILE_KEYS["playlist"]

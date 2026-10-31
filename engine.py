@@ -4239,7 +4239,7 @@ def typed_seed_info(artist, track=""):
 
 SIMILAR_NEEDS_TRACK_TEXT = ("YouTube is the only Similar Artists source ticked, and it plays YouTube's "
                             "up next queue for a track, so type a track too. Or tick another source "
-                            "in Settings > Sources to search by artist alone.")
+                            "on the button's Sources page (Settings > Buttons) to search by artist alone.")
 
 
 def similar_needs_track():
@@ -5415,7 +5415,7 @@ class Drift:
                 or self.using not in ("artists", "tracks")):
             return False
         if not drift_custom_sources(self.cfg, self.using):
-            self.report("  " + t("Drift: nothing to start from, and it uses the same sources as the playlist, so there was nothing new to try. Custom Sources (Settings > Playlist) gives Drift a different route."))
+            self.report("  " + t("Drift: nothing to start from, and it uses the same sources as the playlist, so there was nothing new to try. Custom Sources (the button's Playlist page) gives Drift a different route."))
             return False
         seeds, idents = [], set()
         for artist, title in self.seed_pairs:
@@ -6015,7 +6015,7 @@ def if_all_else_fails(kind, seed_info, report=print, why=N_("nothing suggested i
     check_cancelled()
     FALLBACK_RAN_FILE = FALLBACK_HANDLED = False
     if not fallback_on(kind):
-        report(t("I couldn't find a match. Please try another seed. The build was empty because {why}, and If All Else Fails is off for this playlist type (Settings > Playlist).", why=t(why)))
+        report(t("I couldn't find a match. Please try another seed. The build was empty because {why}, and If All Else Fails is off for this playlist type (the button's Playlist page).", why=t(why)))
         LAST_NO_MATCH = True
         return 0
     mode, setting = fallback_mode(kind), FALLBACK_SETTINGS.get(kind, "")
@@ -6029,7 +6029,7 @@ def if_all_else_fails(kind, seed_info, report=print, why=N_("nothing suggested i
             report(t("I couldn't find a match. Please try another seed. The build was empty because {why}, and If All "
                      "Else Fails' file {path} wasn't found.", why=t(why), path=path) if path else
                    t("I couldn't find a match. Please try another seed. The build was empty because {why}, and If All "
-                     "Else Fails' file hasn't been chosen (Settings > Playlist).", why=t(why)))
+                     "Else Fails' file hasn't been chosen (the button's Playlist page).", why=t(why)))
             LAST_NO_MATCH = True
             return 0
         spoken = f"I couldn't find a match, running {os.path.splitext(os.path.basename(path))[0]}"   # said in the room
@@ -6045,7 +6045,7 @@ def if_all_else_fails(kind, seed_info, report=print, why=N_("nothing suggested i
         pid = os.getenv(f"{setting}_PLAYLIST", "").strip()
         name = os.getenv(f"{setting}_PLAYLIST_NAME", "").strip() or "the chosen playlist"
         if not pid:
-            report(t("I couldn't find a match. Please try another seed. The build was empty because {why}, and no playlist has been chosen for If All Else Fails (Settings > Playlist).", why=t(why)))
+            report(t("I couldn't find a match. Please try another seed. The build was empty because {why}, and no playlist has been chosen for If All Else Fails (the button's Playlist page).", why=t(why)))
             LAST_NO_MATCH = True
             return 0
         try:
@@ -7133,9 +7133,9 @@ def create_vibe_playlist(vibe, report=print, count=None, prompt=None, if_short=N
         played.done()   # says what the filters and the recently played check left out
         if left_out:   # found in the library, but none of them allowed in
             report(tn("Problem: the {count} track the AI picked from your library was left out by your filters "
-                      "or the recently played check (Settings > Filters, Settings > Playlist).",
+                      "or the recently played check (the button's filters and Playlist page).",
                       "Problem: the {count} tracks the AI picked from your library were all left out by your filters "
-                      "or the recently played check (Settings > Filters, Settings > Playlist).", left_out))
+                      "or the recently played check (the button's filters and Playlist page).", left_out))
             why = N_("what the AI picked from your library was left out by your filters")
         else:
             report(t("Problem: nothing the AI picked is {where_found}. Try a different description.", where_found=where_found(True)))
@@ -7305,7 +7305,7 @@ def play_top_n(report=print, seed_info=None):
     if not ordered_keys:
         report(t("Problem: none of the top tracks are {where}.", where=where_found(True)) if not played.skipped else
                t("Note: every top track in your library was played recently, so there's nothing to play. "
-                 "Settings > Playlist > Artist's Top Tracks"))
+                 "The button's Playlist page has the setting."))
         queued = send_mix_only(fast, seed_info, report)
         if not queued:
             queued = if_all_else_fails("top", seed_info, report, why=N_("none of the top tracks could be used"))
