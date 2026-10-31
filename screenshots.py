@@ -709,15 +709,14 @@ def main():
                     import buildlog
                     play._load_build(next(r for r in buildlog.recent("demo-kitchen") if r["chain_pos"] == 1))
             dialog = None
-            if action and action.startswith("button:"):   # a button's page, on one of its inner tabs
-                _, which, tab = action.split(":")
+            if action and action.startswith("button:"):   # a playlist's page (the third part, an old inner tab, is ignored)
+                _, which, _tab = action.split(":")
                 import buttons
                 wanted = in_language(which) if which in DEMO_GERMAN else i18n.t(which)
                 target = next(b for b in buttons.load() if b["name"] == wanted)
                 play.settings._button_id = target["id"]
                 play.settings._buttons_refresh()
                 settle(root, 0.5)
-                go_to(play.settings._button_right, [tab], gui.TabbedPane)
             elif action and action.startswith("device:"):
                 play.settings._device_id = action.split(":")[1]
                 play.settings._devices_refresh()
