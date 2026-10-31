@@ -25,10 +25,14 @@ def _stereo_copies(app, rows):
 
 
 def _stereo_filter():
+    """A Stereo filter, ticked on the AI Playlist button (filters apply through a button)."""
+    import buttons
     import filters
     f = filters.blank("Stereo")
     f.update(pick_from="299", pick_name="AutoPlay Stereo")
     filters.save(filters.load() + [f])
+    vibe = buttons.standard("vibe")
+    buttons.set_filters(vibe["id"], (vibe.get("filters") or []) + [f["id"]])
 
 
 def _ai_picks(app, rows):
@@ -48,7 +52,8 @@ def test_the_copy_the_filter_allows_is_used(app):
     _stereo_filter()
     _ai_picks(app, rows)
     r = app.Lines()
-    app.engine.create_vibe_playlist("singer songwriter duos", report=r)
+    import buttons
+    buttons.run(buttons.standard("vibe"), report=r, theme="singer songwriter duos")
     assert sorted(app.jriver.zone("Speakers").playlist) == sorted(mp3), r.text()
     assert not r.has("left out by your filters"), r.text()
 

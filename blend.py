@@ -14,7 +14,7 @@ carries on as normal (and Non-stop takes over at its end if that's on).
              the Similar Artists sources (a few per artist, as a Similar Artists
              build picks them); Similar tracks: songs like the seed tracks, from the
              Similar Tracks sources. Either way, what several seeds suggest ranks
-             first, and a device's own settings are used if it has them
+             first, as the zone's Music Like or Tracks Like This button has it
   Rules      never a track already in the playlist; Skip recent, Filters, the
              hidden-track check and "at most N per artist" all apply
 """
@@ -130,22 +130,25 @@ def find(keys, report, quiet=None, mode="tracks"):
 
 
 def job(zone, keys, name, device_id=None, mode="tracks"):
-    """The blend as a Play tab job: runs after the playlist has started."""
+    """The blend as a Play tab job: runs after the playlist has started, as the zone's button of the blend's kind."""
     def run(report):
-        import hotkeys
-        import filters
+        import buttons
+        import zones
         zone_name = engine.zone_label(zone)
-        _, _, profile = hotkeys._device_for_zone(zone_name)
+        button = zones.button_for(zone_name, "music_like" if mode == "artists" else "tracks_like")
         started = time.time()
         try:
             engine.refresh_settings_if_changed()
-            engine.use_profile(profile)
-            engine.FILTER_DEVICE = filters.device_for_zone(zone_name)
             engine.LAST_OUTPUT, engine.LAST_OUTPUT_ID = zone_name, zone
             report("  " + (t("Blending in similar artists, one new track for each of yours, up to {cap}.", cap=CAP)
                            if mode == "artists" else
                            t("Blending in similar tracks, one new track for each of yours, up to {cap}.", cap=CAP)))
-            new = find(keys, report, quiet=report, mode=mode)
+            if button is None:
+                report("  " + t("Problem: there's no {kind} button to build with. Restore Default Buttons under Settings > Buttons.",
+                                kind=t(buttons.KIND_NAMES["artists" if mode == "artists" else "tracks"])))
+                return
+            new = buttons.run(button, report=report, zone=zone_name,
+                              build=lambda report, **kw: find(keys, report, quiet=report, mode=mode))
             if not new:
                 report(t("Problem: nothing new was found to blend in, so the playlist plays as saved."))
                 return
@@ -166,6 +169,5 @@ def job(zone, keys, name, device_id=None, mode="tracks"):
                       "Done: {count} new tracks blended into {name} in {zone}, {seconds} s.", len(new), name=name,
                       zone=zone_name, seconds=max(0, round(time.time() - started))))
         finally:
-            engine.use_profile(None)
-            engine.FILTER_DEVICE = None
+            pass
     return run

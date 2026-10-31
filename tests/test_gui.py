@@ -46,7 +46,6 @@ def ui(app, monkeypatch):
     for device, name, zone in ((KITCHEN, "Kitchen Echo", "Kitchen"), (LOUNGE, "Lounge Dot", "Speakers")):
         v._hear_device(device)
         v.update_device(device, name=name, zone=zone)
-    v.set_own_settings(KITCHEN, True)
 
     gui = load_gui(app.folder)
     errors = []
@@ -192,8 +191,10 @@ def test_voice_build_gets_device_tab_and_log_row(app, ui):
 
 def test_nonstop_top_up_numbers_the_chain(app, ui):
     import buildlog
+    import buttons
     import nonstop
-    app.set_env(NONSTOP_TRACKS="1")
+    tracks = buttons.standard("tracks")   # Non-stop follows the button that built the playlist
+    buttons.set_settings(tracks["id"], dict(tracks["settings"], NONSTOP_TRACKS="1"))
     j = app.jriver
     j.play("Speakers", [j.key_of("The Beatles", "Something")])
     ui.pump(until=lambda: ui.play.last_playing, timeout=10)
@@ -250,22 +251,14 @@ def find_saved_global_combos(widget):
     return out
 
 
-@pytest.mark.parametrize("where", ["main", "device"])
-def test_saved_playlists_global_rows_stick_after_rescan(app, ui, where):
+def test_saved_playlists_global_rows_stick_after_rescan(app, ui):
     s = ui.settings
-    if where == "device":
-        app.voice.set_device_page(KITCHEN, "saved", app.saved_playlists.main_settings())
-        s._layout_device_pane("saved")
-        info = s._panes["saved"]
-        page = info["devices"][KITCHEN]
-        info["pane"].select(page["outer"])
-        s._fill_device_page("saved", KITCHEN)
-        ui.pump(1.0)
-        holder = page["inner"]
-    else:
-        s._layout_device_pane("saved")
-        holder = s._panes["saved"]["outer"]
-        ui.pump(1.0)
+    pane = next(c for c in s.winfo_children() if hasattr(c, "select"))
+    page = pane._pages[[tab.cget("text") for tab in pane._tabs].index("JRiver Playlists")]
+    ui.nb.select(s)
+    pane.select(page)
+    holder = page
+    ui.pump(1.0)
     ui.pump(0.6)   # the rescan runs 200 ms after the page opens
     combos = [c for c in find_saved_global_combos(holder) if c.winfo_ismapped() or True]
     skip_global = combos[-1]   # the last of the global rows' four dropdowns... found below more precisely
@@ -275,8 +268,7 @@ def test_saved_playlists_global_rows_stick_after_rescan(app, ui, where):
     target.set("7 days")
     target.event_generate("<<ComboboxSelected>>")
     ui.pump(0.5)
-    data = (app.saved_playlists.main_settings() if where == "main"
-            else app.voice.device_page(KITCHEN, "saved"))
+    data = app.saved_playlists.main_settings()
     assert data["all_row"]["skip"] == "7", data["all_row"]
 
 
@@ -457,8 +449,10 @@ def test_set_as_default_copies_to_smartlists_shown(app, ui, monkeypatch):
     asked = []
     monkeypatch.setattr(messagebox, "askyesno", lambda title, text, **k: asked.append(text) or True)
     s = ui.settings
-    s._layout_device_pane("saved")
-    holder = s._panes["saved"]["outer"]
+    pane = next(c for c in s.winfo_children() if hasattr(c, "select"))
+    holder = pane._pages[[tab.cget("text") for tab in pane._tabs].index("JRiver Playlists")]
+    ui.nb.select(s)
+    pane.select(holder)
     ui.pump(1.6)   # the page fills, then the rescan 200 ms later
     skips = [c for c in find_saved_global_combos(holder) if "1 day" in c.cget("values")]
     skips[1].set("14 days")   # the All smartlists row

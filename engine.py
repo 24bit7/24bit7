@@ -37,7 +37,7 @@ ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
 OUTPUT_OVERRIDE = None  # a zone name that beats the Output setting for one run (voice commands)
 MODERATOR_OVERRIDE = None  # True/False beats the AI_MODERATOR setting for one run
-PROFILE = {}               # a device's own Sources/Playlist settings, laid over .env for its voice commands
+PROFILE = {}               # a button's settings (buttons.run), laid over .env for the build in progress
 RELEASES_API = "https://api.github.com/repos/24bit7/24bit7/releases/latest"
 RELEASES_PAGE = "https://github.com/24bit7/24bit7/releases/"
 
@@ -74,7 +74,7 @@ def say_if_newer(report=print):
         report(t("Note: 24bit7 {latest} is out (you have {version}). Download: {link}",
                  latest=found[0], version=VERSION, link=found[1]))
 
-# The settings a device can have its own copy of (Settings > Sources and Playlist, device tabs)
+# The settings a button carries its own copy of (Settings > Buttons), laid over .env by buttons.run
 PROFILE_KEYS = {
     "sources": ["SIMILAR_SOURCES", "SIMILAR_MIN_AGREEMENT", "LISTENBRAINZ_ALGORITHM", "SIMILAR_TRACK_SOURCES",
                 "SIMILAR_TRACK_MIN_AGREEMENT", "LISTENBRAINZ_TRACK_ALGORITHM", "TOP_TRACK_SOURCES", "AI_MODERATOR",
@@ -339,7 +339,7 @@ def load_settings():
     global CONSOLE_QUERY, USE_AI, CREDITS_SCOPE, CREDITS_FIRST
 
     load_dotenv(ENV_FILE, override=True)
-    os.environ.update(PROFILE)   # a device's own settings, for the voice command being built
+    os.environ.update(PROFILE)   # the button's settings, for the build in progress
 
     AUTH = (os.getenv("JRIVER_USER"), os.getenv("JRIVER_PASS"))
     JRIVER_HOST = os.getenv("JRIVER_HOST", "127.0.0.1:52199")
@@ -548,9 +548,9 @@ def load_settings():
 
 def use_profile(values=None):
     """
-    Lays a device's own settings over .env until called again with None: the
-    voice command's build then reads them like any other setting. Builds run
-    one at a time on the Play tab's worker, so only one profile is ever in use.
+    Lays a button's settings over .env until called again with None: the build
+    then reads them like any other setting. Builds run one at a time on the Play
+    tab's worker, so only one profile is ever in use.
     """
     global PROFILE
     for key in PROFILE:
@@ -1021,8 +1021,8 @@ NONSTOP_CONTEXT = {}     # the build in progress (set by session_start)
 # RUN_AFTER: group -> (on, path), from Settings > Playlist > Run After Building. Set only by load_settings():
 # a default here would undo the startup load.
 NONSTOP_APPEND = False   # True while a non-stop top-up builds: it only ever adds, never repeats
-FILTER_DEVICE = None     # the Alexa device a build is for (None: Windows (Main)), for Settings > Filters
-FILTER_IDS = None        # the filters a button build runs under (its own plus the zone's); None: by device, as before buttons
+FILTER_IDS = None        # the filters a build runs under (the button's plus the zone's, set by buttons.run); None: no filters
+BUILD_BUTTON = None      # the id of the button whose build is running (buttons.run), kept with its playlist for Non-stop
 NONSTOP_ZONES = {}       # zone ID -> {"keys", "build", "kind", "vibe", "top_artist", "top_first", "stage", "fired"}
 _nonstop_lock = _threading.Lock()
 _nonstop_ids = _itertools.count(1)
@@ -1033,6 +1033,7 @@ def nonstop_begin(mode, seed_info=None):
     global NONSTOP_CONTEXT
     seed_info = seed_info or {}
     NONSTOP_CONTEXT = {"build": next(_nonstop_ids), "kind": NONSTOP_KINDS.get(mode, "artists"),
+                       "button": BUILD_BUTTON,
                        "vibe": seed_info.get("Name") if mode == "vibe" else None,
                        "top_artist": seed_artists(seed_info)[0] if mode in ("top_tracks", "headliner") else None}
 
@@ -1050,10 +1051,10 @@ def nonstop_record(zone, keys, append=False, **fields):
                  or (not NONSTOP_APPEND and entry.get("build") != ctx.get("build")))
         if fresh:
             entry = {"keys": set(), "build": ctx.get("build"), "kind": ctx.get("kind"), "vibe": ctx.get("vibe"),
-                     "top_artist": ctx.get("top_artist"), "top_first": ctx.get("top_first"),
+                     "button": ctx.get("button"), "top_artist": ctx.get("top_artist"), "top_first": ctx.get("top_first"),
                      "stage": "first", "fired": None, "original": set(), "seeded": set()}
             entry.update(fields)
-            entry["origin"] = entry.get("kind")   # its Non-stop settings come from the option it started as
+            entry["origin"] = entry.get("kind")   # its Non-stop settings come from the button it started as
             NONSTOP_ZONES[zone] = entry
         elif NONSTOP_APPEND and ctx.get("kind") and entry.get("build") != ctx.get("build"):
             # a top-up build: from here on the zone carries on as that kind of playlist
@@ -5007,11 +5008,10 @@ class PlayedFilter:
                     self.closer_library, self.closer_limit = library, minutes * 60
                 except Exception as e:
                     report("  " + t("Note: the hidden track check didn't run, as the library couldn't be read ({e}).", e=e))
-        if filters:   # Settings > Filters, for the playlists 24bit7 builds
+        if filters:   # the filters ticked on the button and its zone, for the playlists 24bit7 builds
             try:
                 import filters as filter_settings
-                self.filters = filter_settings.Active(FILTER_IDS if FILTER_IDS is not None else FILTER_DEVICE,
-                                                      report) or None
+                self.filters = filter_settings.Active(FILTER_IDS or [], report) or None
             except Exception as e:
                 report("  " + t("Problem: the filters didn't run ({e}).", e=e))
         if not self.on:
@@ -5863,7 +5863,7 @@ LAST_NO_MATCH = False        # this build ended with nothing at all and no fallb
 
 
 def fallback_on(kind):
-    """If All Else Fails for this playlist type, as set (a device's own settings included). Off to start."""
+    """If All Else Fails for this playlist type, as set (the button's settings included). Off to start."""
     return os.getenv(FALLBACK_SETTINGS.get(kind, ""), "0").strip().lower() in ("1", "true", "yes")
 
 

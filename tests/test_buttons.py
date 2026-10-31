@@ -17,21 +17,34 @@ def seed(app, artist="The Beatles", title="Here Comes The Sun"):
 
 
 def add_filter(app, **kw):
+    """A filter. devices= writes an old Applies on list, as the database held it before buttons."""
+    import json
     import filters
+    devices = kw.pop("devices", None)
     f = filters.blank(kw.pop("name", "Test"))
     f.update(kw)
-    filters.save(filters.load() + [f])
+    stored = dict(f, **({"devices": devices} if devices is not None else {}))
+    con = app.engine.db()
+    con.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+                (filters.META_KEY, json.dumps(filters.stored_raw() + [stored])))
+    con.commit()
     return f
 
 
-def kitchen(app, page=None, zone="Kitchen"):
-    """An Alexa device in the kitchen with settings of its own (a playlist page, if given)."""
+def kitchen(app, page=None, zone="Kitchen", saved=None):
+    """
+    An Alexa device in the kitchen as the database held it before buttons: Own settings ticked,
+    with a playlist page (and JRiver Playlists settings) of its own if given.
+    """
+    import json
     v = app.voice
     v._hear_device(KITCHEN)
     v.update_device(KITCHEN, name="Kitchen Echo", zone=zone)
-    v.set_own_settings(KITCHEN, True)
-    if page is not None:
-        v.set_device_page(KITCHEN, "playlist", page)
+    con = app.engine.db()
+    con.execute("UPDATE voice_devices SET own_settings=1, playlist=?, saved=? WHERE device_id=?",
+                (json.dumps(page) if page is not None else None, json.dumps(saved) if saved is not None else None,
+                 KITCHEN))
+    con.commit()
 
 
 # --- the upgrade -------------------------------------------------------------------------
@@ -113,16 +126,17 @@ def test_device_with_its_own_settings_gets_a_button_its_zone_points_to(app):
 
 def test_device_whose_settings_match_main_gets_no_button(app):
     buttons, zones, _ = mods()
-    kitchen(app, page=dict(app.engine.profile_values("playlist")))
+    kitchen(app, page=dict(app.engine.profile_values("playlist")), saved=app.saved_playlists.blank())
     assert len(buttons.load()) == 5
     assert all(v is None for v in zones.load().get("Kitchen", zones.blank("Kitchen"))["buttons"].values())
+    assert app.printed.has("Kitchen Echo's own JRiver Playlists settings are no longer used"), app.printed.text()
 
 
 def test_upgrade_moves_filters_onto_buttons_and_zones(app):
     buttons, zones, filters = mods()
     kitchen(app)
-    everyone = add_filter(app, name="Everyone", devices=[filters.ALL])
-    main_only = add_filter(app, name="Main", devices=[filters.MAIN])
+    everyone = add_filter(app, name="Everyone", devices=["all"])
+    main_only = add_filter(app, name="Main", devices=["main"])
     kitchen_only = add_filter(app, name="Kitchen", devices=[KITCHEN])
     items = buttons.load()
     for b in items:
@@ -165,7 +179,7 @@ def test_run_uses_the_buttons_settings_and_filters_then_puts_everything_back(app
 
 def test_a_filter_that_is_not_ticked_on_the_button_does_nothing(app):
     buttons, _, filters = mods()
-    add_filter(app, name="Nothing", devices=[filters.ALL],
+    add_filter(app, name="Nothing", devices=["all"],
                rules=[{"field": "year", "op": "before", "value": "1900", "value2": ""}])
     b = buttons.blank("Plain", "tracks")
     r = app.Lines()
@@ -228,23 +242,19 @@ def test_describe_says_what_is_on(app):
     assert buttons.describe(by["Headliner"]).startswith("Artist's Top Tracks, Guests")
 
 
-def test_old_device_path_still_filters_by_device(app):
-    """Until voice and shortcuts run by button, a build with no button keeps today's device rule."""
+def test_a_build_with_no_button_runs_no_filters(app):
+    """Filters only ever apply through a button (its own and its zone's): a plain engine build has none."""
     buttons, _, filters = mods()
-    kitchen(app)
-    add_filter(app, name="Main only", devices=[filters.MAIN],
-               rules=[{"field": "year", "op": "before", "value": "1900", "value2": ""}])
+    f = add_filter(app, name="Everywhere", rules=[{"field": "year", "op": "before", "value": "1900", "value2": ""}])
+    for b in buttons.load():
+        buttons.set_filters(b["id"], [f["id"]])
     e = app.engine
-    e.FILTER_DEVICE = KITCHEN
-    try:
-        r = app.Lines()
-        e.create_similar_tracks_playlist(report=r, seed_info=seed(app))
-    finally:
-        e.FILTER_DEVICE = None
-    assert not r.has("Filters:"), r.text()
     r = app.Lines()
     e.create_similar_tracks_playlist(report=r, seed_info=seed(app))
-    assert r.has("Filters: Main only"), r.text()
+    assert not r.has("Filters:") and len(app.jriver.zone("Speakers").playlist) > 10, r.text()
+    r = app.Lines()
+    buttons.run(buttons.standard("tracks"), report=r, seed_info=seed(app))
+    assert r.has("Filters: Everywhere"), r.text()
 
 
 # --- the Play tab's + and right-click (stage two) --------------------------------------------

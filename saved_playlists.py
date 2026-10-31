@@ -10,9 +10,9 @@ How your own JRiver playlists and smartlists play when you ask for one by voice
   Skip         leave out tracks played in the last n days (never leaving the playlist empty)
 
 Either global rows ("Use global playlist settings"), one for every playlist
-and one for every smartlist, or a row each. Windows (Main) is kept in the database's meta table; a device
-with Own settings can have its own copy (voice_devices.saved). Playlists you
-start in JRiver itself aren't touched: 24bit7 never sees them start.
+and one for every smartlist, or a row each, kept in the database's meta table
+and shared by every device. Playlists you start in JRiver itself aren't
+touched: 24bit7 never sees them start.
 """
 
 import json
@@ -69,20 +69,6 @@ def set_main_settings(data):
     con = engine.db()
     con.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (META_KEY, json.dumps(tidy(data))))
     con.commit()
-
-
-def settings_for(device_id=None):
-    """A device's own settings if it has Own settings ticked and its own copy, else Windows (Main)'s."""
-    if device_id:
-        try:
-            import voice
-            own = voice.device_page(device_id, "saved") if any(
-                d[0] == device_id and d[4] for d in voice.devices()) else None
-            if own is not None:
-                return tidy(own)
-        except Exception:
-            pass
-    return main_settings()
 
 
 def row_for(data, playlist_id, kind=None):
@@ -236,10 +222,11 @@ def _send(keys, zone):
 def play(found, zone, device_id=None, report=print):
     """
     Plays a playlist (found: {"ID", "Name"} from library.find_playlist) on a zone
-    with its Saved Playlists settings. Returns (ok, what was started, for Alexa to say).
+    with its Saved Playlists settings. device_id only names the Alexa device in the
+    log. Returns (ok, what was started, for Alexa to say).
     """
     pid, name = str(found.get("ID")), found.get("Name") or "playlist"
-    row = row_for(settings_for(device_id), pid, type_of(found))
+    row = row_for(main_settings(), pid, type_of(found))
     shuffle = row.get("shuffle") == "1"
     days = int(row["skip"]) if str(row.get("skip", "0")).isdigit() else 0
     nonstop = row.get("nonstop", "no") if row.get("nonstop") in ("artists", "tracks") else "no"

@@ -96,9 +96,10 @@ def test_pressed_during_a_build_says_it_will_wait(app):
     notes, queued = [], []
     hotkeys.attach(lambda job, heading, origin=None: queued.append(heading), busy=lambda: True,
                    note=notes.append)
+    import buttons
     try:
         hotkeys._pressed("SWITCH_PROFILES")
-        hotkeys._pressed("SIMILAR_TRACKS")
+        hotkeys._pressed(hotkeys.button_code(buttons.standard("tracks")["id"]))   # a button's shortcut: its name
     finally:
         hotkeys.attach(None)
     assert notes == ["Switch Profiles requested: it will switch once the current build has finished."]

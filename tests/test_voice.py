@@ -451,18 +451,17 @@ def test_playlist_global_shuffle_applies(app, alexa):
     assert not app.jriver.calls_to("Playback/PlayPlaylist"), "shuffled lists are sent by key, not played as saved"
 
 
-def test_playlist_device_own_settings(app, alexa):
-    sp, v = app.saved_playlists, app.voice
-    own = sp.blank()
-    own["all"] = "1"
-    own["all_row"]["nonstop"] = "tracks"
-    v.set_own_settings(KITCHEN, True)
-    v.set_device_page(KITCHEN, "saved", own)
+def test_playlists_play_the_same_from_every_device(app, alexa):
+    sp = app.saved_playlists
+    data = sp.main_settings()
+    data["all"] = "1"
+    data["all_row"]["nonstop"] = "tracks"
+    sp.set_main_settings(data)
     alexa.say("PlaylistIntent", "sunday morning")
-    entry = app.engine.NONSTOP_ZONES.get("10002")
-    assert entry and entry.get("saved_cfg", {}).get("using") == "tracks"
     alexa.say("PlaylistIntent", "sunday morning", device=LOUNGE)
-    assert "10001" not in app.engine.NONSTOP_ZONES, "Lounge copies Windows (Main), which has Non-stop off"
+    for zone in ("10002", "10001"):
+        entry = app.engine.NONSTOP_ZONES.get(zone)
+        assert entry and entry.get("saved_cfg", {}).get("using") == "tracks", zone
 
 
 # --- builds -------------------------------------------------------------------------------

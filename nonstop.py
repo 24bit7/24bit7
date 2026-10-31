@@ -2,9 +2,10 @@
 24bit7 - non-stop.
 
 Keeps a playlist 24bit7 built going: when the last of its tracks starts playing
-in a zone, more are added to the end, so the music never stops. Set per Play
-option under Settings > Playlist (Windows (Main), or a device's own tab). A
-playlist follows the Non-stop settings of the option it started as, all evening.
+in a zone, more are added to the end, so the music never stops. Set per button
+under Settings > Buttons; a zone's Non-stop switch (Settings > Zones) can turn
+it off for everything played there. A playlist follows the Non-stop settings
+of the button that built it, all evening.
 
   Similar Artists, Similar Tracks: top up using the Play using choice, seeded
       from the last track or the second track (Reseed from).
@@ -19,18 +20,20 @@ been used. A JRiver playlist row set to Reseed from "Whole playlist" does the sa
 
 Only playlists 24bit7 sent are topped up (engine.NONSTOP_ZONES remembers them);
 anything you start in JRiver yourself ends as normal. Each last track triggers
-one top-up. Top-ups are queued on the Play tab like voice commands, with the
-settings of the Alexa device mapped to the zone if it has its own.
+one top-up. Top-ups are queued on the Play tab like voice commands. A top-up
+that builds another kind (a Similar Artists playlist topped up with Similar
+Tracks) runs the zone's button of that kind, under the original button's
+filters as well.
 """
 
 import random
 import threading
 
-from dotenv import dotenv_values
-
 import engine
 from i18n import t, tn
-import filters
+
+# The voice phrase a kind of build answers to: for the zone's button of a kind
+PHRASE_OF = {"artists": "music_like", "tracks": "tracks_like", "top": "songs_by", "vibe": "play_something"}
 
 POLL_SECONDS = 15   # a top-up only has to land while the last track plays
 YES = ("1", "true", "yes")
@@ -59,19 +62,29 @@ def stop():
     _stop.set()
 
 
-def _device_for_zone(zone_name):
-    try:
-        import hotkeys
-        return hotkeys._device_for_zone(zone_name)
-    except Exception:
-        return None, None, {}
+def origin_button(zone_name, entry):
+    """
+    The button whose Non-stop settings a playlist follows: the one that built it, or, if that's
+    gone (or it was a voice shuffle), the zone's button of the kind it started as.
+    """
+    import buttons
+    import zones
+    b = buttons.get(entry["button"]) if entry.get("button") else None
+    if b is None:
+        kind = entry.get("origin") or entry.get("kind") or "artists"
+        b = zones.button_for(zone_name, PHRASE_OF.get(kind, "music_like"))
+    return b
 
 
-def _settings_for(profile):
-    """The zone's settings without touching the ones a running build is using: .env with the device's own on top."""
-    values = {k: (v or "") for k, v in dotenv_values(engine.ENV_FILE).items()}
-    values.update(profile or {})
-    return values
+def config_for(zone_name, entry):
+    """Non-stop's {"on", "using", "reseed", "mode"} for a playlist: its saved row's, or its button's."""
+    import buttons
+    origin = entry.get("origin") or entry.get("kind") or "artists"
+    if origin == "saved":
+        cfg = entry.get("saved_cfg")
+        return dict(cfg, on=True) if cfg else {"on": False}
+    button = origin_button(zone_name, entry)
+    return buttons.nonstop_config(button) if button else {"on": False}
 
 
 def _watch():
@@ -102,18 +115,15 @@ def _check_zones():
         if entry.get("fired") == marker:
             continue   # this last track has had its top-up
         zone_name = engine.zone_label(zone)
-        device_id, device_name, profile = _device_for_zone(zone_name)
-        origin = entry.get("origin") or entry.get("kind") or "artists"
-        if origin == "saved":   # a saved playlist: its row in Settings > Saved Playlists said Non-stop
-            on = bool(entry.get("saved_cfg"))
-        else:
-            on = engine.nonstop_settings(_settings_for(profile).get).get(origin, {}).get("on")
-        if not on:
+        import zones
+        if not zones.nonstop_on(zone_name):   # the zone's switch: nothing played there tops up
+            continue
+        if not config_for(zone_name, entry).get("on"):
             continue
         entry["fired"] = marker
         entry["ends_at"] = engine.nonstop_track_ends(info)
         if _submit is not None:
-            _submit(_job(zone, zone_name, profile, info), t("Non-stop: {zone} reached its last track", zone=zone_name),
+            _submit(_job(zone, zone_name, info), t("Non-stop: {zone} reached its last track", zone=zone_name),
                     {"from": "nonstop", "zone": zone})
 
 
@@ -125,11 +135,21 @@ def _second_track_seed(zone, info):
     return dict(info, ZoneID=zone)
 
 
-def _build(mode, seed, report):
-    if mode == "artists":
-        engine.create_similar_playlist(report=report, seed_info=seed, topup=True)
-    else:
-        engine.create_similar_tracks_playlist(report=report, seed_info=seed)
+def _build(mode, seed, zone_name, origin, report):
+    """
+    A top-up as Similar Artists or Similar Tracks: the button that built the playlist if it's
+    that kind, else the zone's button of that kind, under the original button's filters too.
+    """
+    import buttons
+    import zones
+    button = origin if origin is not None and origin["kind"] == mode else zones.button_for(zone_name, PHRASE_OF[mode])
+    if button is None:
+        report("  " + t("Problem: there's no {kind} button to build with. Restore Default Buttons under Settings > Buttons.",
+                        kind=t(buttons.KIND_NAMES[mode])))
+        return
+    extra = list((origin or {}).get("filters") or [])
+    options = {"topup": True} if mode == "artists" else {}
+    buttons.run(button, report=report, seed_info=seed, zone=zone_name, extra_filters=extra, **options)
 
 
 def _rest_of_artist(zone, entry, info, report):
@@ -189,14 +209,13 @@ def _tight_seed(zone, entry, report):
     return None
 
 
-def _job(zone, zone_name, profile, info):
+def _job(zone, zone_name, info):
     def run(report):
+        import buttons
         try:
             engine.refresh_settings_if_changed()
             engine.OUTPUT_OVERRIDE = zone_name
-            engine.use_profile(profile)
             engine.NONSTOP_APPEND = True
-            engine.FILTER_DEVICE = filters.device_for_zone(zone_name)
             engine.NONSTOP_CONTEXT = {}   # adding the rest of an artist isn't a new build
             with engine._nonstop_lock:
                 entry = engine.NONSTOP_ZONES.get(zone)
@@ -204,27 +223,33 @@ def _job(zone, zone_name, profile, info):
                 return
             kind = entry.get("kind")
             origin = entry.get("origin") or kind
+            cfg = config_for(zone_name, entry)
             if origin == "saved":
-                cfg = entry.get("saved_cfg") or {"using": "tracks", "reseed": "last"}
+                button = None
+                cfg = {"using": "tracks", "reseed": "last", **cfg}
             else:
-                cfg = engine.NONSTOP_BY.get(origin) or engine.NONSTOP_BY["artists"]
+                button = origin_button(zone_name, entry)
             tight = (cfg.get("reseed") == "whole") if origin == "saved" else cfg.get("mode") == "tight"
-            report("  " + (t("{zone} is on its last track, so adding more. (with its device's own settings)", zone=zone_name)
-                           if profile else t("{zone} is on its last track, so adding more.", zone=zone_name)))
-            if kind == "top" and entry.get("stage") == "first":
+            report("  " + (t("{zone} is on its last track, so adding more, with {button}.", zone=zone_name,
+                             button=button["name"])
+                           if button is not None and not button.get("standard")
+                           else t("{zone} is on its last track, so adding more.", zone=zone_name)))
+            if kind == "top" and entry.get("stage") == "first" and button is not None:
                 entry["stage"] = "rest"
-                if engine.NONSTOP_TOP_REST and _rest_of_artist(zone, entry, info, report):
+                # the rest of the artist's songs, as the button's Non-stop settings say (NONSTOP_TOP_REST)
+                if buttons.run(button, report=report, zone=zone_name,
+                               build=lambda report, **kw: engine.NONSTOP_TOP_REST and _rest_of_artist(zone, entry, info, report)):
                     return
             if kind == "top":
                 entry["stage"] = "after"
                 seed = (_tight_seed(zone, entry, report) if tight else None) or _top_seed(zone, entry, info)
                 report("  " + t("Carrying on from {artist}, {name}.", artist=seed['Artist'], name=seed['Name']))
-                _build(cfg["using"], seed, report)
+                _build(cfg["using"], seed, zone_name, button, report)
                 return
             if origin == "vibe":
-                if cfg.get("with") == "vibe" and entry.get("vibe"):
+                if cfg.get("with") == "vibe" and entry.get("vibe") and button is not None:
                     report("  " + t("More of the same vibe: {vibe}", vibe=entry['vibe']))
-                    engine.create_vibe_playlist(entry["vibe"], report=report)
+                    buttons.run(button, report=report, zone=zone_name, theme=entry["vibe"])
                     return
                 mode = cfg.get("with") if cfg.get("with") in ("artists", "tracks") else "artists"
             else:
@@ -233,10 +258,8 @@ def _job(zone, zone_name, profile, info):
             if seed is None:
                 seed = _second_track_seed(zone, info) if cfg.get("reseed") == "second" else dict(info, ZoneID=zone)
             report("  " + t("Reseeding from {artist}, {name}.", artist=seed['Artist'], name=seed['Name']))
-            _build(mode, seed, report)
+            _build(mode, seed, zone_name, button, report)
         finally:
             engine.OUTPUT_OVERRIDE = None
             engine.NONSTOP_APPEND = False
-            engine.FILTER_DEVICE = None
-            engine.use_profile(None)
     return run

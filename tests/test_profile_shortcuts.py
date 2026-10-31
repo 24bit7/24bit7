@@ -31,8 +31,8 @@ def test_each_profile_has_a_shortcut_of_its_own(app):
 
 def test_a_profile_shortcut_is_registered_with_the_others(app):
     p, hotkeys = setup(app, "DJ")
-    app.set_env(HOTKEY_PROFILE_DJ="Ctrl+Alt+7", HOTKEY_SIMILAR_TRACKS="Ctrl+Alt+1")
-    assert hotkeys.assigned() == {"SIMILAR_TRACKS": "Ctrl+Alt+1", "PROFILE_DJ": "Ctrl+Alt+7"}
+    app.set_env(HOTKEY_PROFILE_DJ="Ctrl+Alt+7", HOTKEY_SHUFFLE_ARTIST="Ctrl+Alt+1")
+    assert hotkeys.assigned() == {"SHUFFLE_ARTIST": "Ctrl+Alt+1", "PROFILE_DJ": "Ctrl+Alt+7"}
 
 
 def test_the_shortcut_loads_that_profile_and_asks_for_a_restart(app):

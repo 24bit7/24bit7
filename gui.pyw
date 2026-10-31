@@ -698,7 +698,7 @@ class PlayTab(tk.Frame):
     def sync_moderator(self):
         """After Settings changed: the AI buttons grey out or come back, and More Options' arrow is redrawn."""
         if self.running:
-            return   # a voice build may have a device's settings loaded
+            return   # a build may have a button's settings loaded
         engine.refresh_settings_if_changed()
         self._sync_ai_button()
         self._update_more_label()
@@ -1995,7 +1995,7 @@ def main():
     nonstop.start()
     settings.refresh_hotkey_notes(problems)
     if problems:
-        names = ", ".join(hotkeys.LABELS[c] for c in problems)
+        names = ", ".join(hotkeys.shown(c) for c in problems)
         root.after(13000, lambda: play.report(t("Some keyboard shortcuts didn't register ({names}). See Settings > Other > Keyboard Shortcuts.", names=names)))
     if closed_other:
         root.after(13000, lambda: play.report(t("Closed the copy of 24bit7 that was already running.")))

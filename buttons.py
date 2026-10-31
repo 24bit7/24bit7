@@ -7,6 +7,9 @@ sources and its playlist settings, Drift, Deep Cuts, Non-stop and the rest), the
 ticked for it and an optional keyboard shortcut. The engine runs a button by laying its
 settings over .env (engine.use_profile), the way an Alexa device's own settings were
 laid before buttons, under its filters plus the filters of the zone the playlist goes to.
+Voice commands run the button a zone names for the phrase (zones.py), Non-stop tops a
+playlist up with the Non-stop settings of the button that built it, and a button's
+shortcut runs it from the keyboard.
 
 Buttons are kept as JSON in the database's meta table, in the order shown. The first
 load with none makes the standard four from .env, so day one changes nothing, then
@@ -96,7 +99,7 @@ def load():
     if items is None:
         upgrade()
         items = _stored() or []
-    return items
+    return _adopt_env_shortcuts(items)
 
 
 def save(items):
@@ -173,6 +176,65 @@ def set_filters(button_id, ids):
         if b["id"] == button_id:
             b["filters"] = [str(i) for i in ids]
     save(items)
+
+
+def set_shortcut(button_id, combo):
+    """The keyboard shortcut set on a button's page ('Ctrl+Alt+1', or blank for none)."""
+    items = load()
+    for b in items:
+        if b["id"] == button_id:
+            b["shortcut"] = (combo or "").strip()
+    save(items)
+
+
+def with_shortcuts():
+    """The buttons with a shortcut set, in the order shown."""
+    return [b for b in load() if b.get("shortcut")]
+
+
+def nonstop_config(button):
+    """
+    Non-stop as a button has it, its settings over .env: {"on", "using", "reseed", "mode"},
+    plus "with" for an AI Playlist. A playlist is topped up as the button that built it says.
+    """
+    merged = dict(_env_values(), **(button.get("settings") or {}))
+    return engine.nonstop_settings(lambda name, default="": merged.get(name, default))[button["kind"]]
+
+
+# The three build shortcuts lived in .env before buttons (Settings > Other > Keyboard Shortcuts)
+OLD_SHORTCUT_KEYS = {"HOTKEY_SIMILAR_TRACKS": "tracks", "HOTKEY_SIMILAR_ARTISTS": "artists", "HOTKEY_TOP_TRACKS": "top"}
+
+
+def _adopt_env_shortcuts(items):
+    """Each old build shortcut moves onto the standard button of its kind, once, and leaves .env."""
+    import os
+    present = [k for k in OLD_SHORTCUT_KEYS if os.environ.get(k) is not None]
+    if not present:
+        return items
+    for key in present:
+        combo = os.environ.get(key, "").strip()
+        b = next((x for x in items if x.get("standard") == OLD_SHORTCUT_KEYS[key]), None)
+        if combo and b is not None and not b.get("shortcut"):
+            b["shortcut"] = combo
+    save(items)
+    _drop_env_keys(present)
+    for key in present:
+        os.environ.pop(key, None)
+    return items
+
+
+def _drop_env_keys(keys):
+    """Removes keys from .env, keeping every other line as it is."""
+    try:
+        with open(engine.ENV_FILE, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return
+    kept = [line for line in lines
+            if not ("=" in line and not line.lstrip().startswith("#") and line.split("=", 1)[0].strip() in keys)]
+    if kept != lines:
+        with open(engine.ENV_FILE, "w", encoding="utf-8") as f:
+            f.write("\n".join(kept) + ("\n" if kept else ""))
 
 
 def needs_track(button):
@@ -263,6 +325,38 @@ def restore_standard():
 
 # --- the upgrade from Settings > Sources and Playlist ------------------------------------------
 
+_OLD_ALL, _OLD_MAIN = "all", "main"   # a filter's old Applies on list: every device, and Windows (Main)
+
+
+def _old_devices():
+    """
+    Alexa devices as they were before buttons: [(device_id, name, zone, own settings, had own
+    JRiver Playlists settings)] for those with Own settings ticked, read straight from the
+    voice_devices table's own_settings, sources, playlist and saved columns, which nothing else
+    reads now.
+    """
+    try:
+        con = engine.db()
+        columns = {row[1] for row in con.execute("PRAGMA table_info(voice_devices)")}
+        if not {"own_settings", "sources", "playlist"} <= columns:
+            return []
+        saved = "saved" if "saved" in columns else "NULL"
+        rows = con.execute(f"SELECT device_id, name, zone, sources, playlist, {saved} FROM voice_devices "
+                           "WHERE COALESCE(own_settings, 0) = 1").fetchall()
+    except Exception:
+        return []
+    out = []
+    for device_id, name, zone, sources, playlist, saved_own in rows:
+        own = {}
+        for raw in (sources, playlist):
+            try:
+                own.update(json.loads(raw) if raw else {})
+            except ValueError:
+                pass
+        out.append((device_id, name, zone, own, bool(saved_own)))
+    return out
+
+
 def upgrade():
     """
     The first run with buttons: the standard four from .env, Headliner, then a button per
@@ -276,25 +370,19 @@ def upgrade():
     items = standard_buttons(env)
     by_kind = {b["kind"]: b for b in items}
     items.insert(items.index(by_kind["vibe"]), headliner_button(by_kind["top"]))   # before AI Playlist (Ben, 30 Oct)
-    all_filters = filters.load()
+    all_filters = filters.stored_raw()   # with their old Applies on lists
     shared = [f["id"] for f in all_filters
-              if filters.ALL in f.get("devices", []) or filters.MAIN in f.get("devices", [])]
+              if _OLD_ALL in f.get("devices", []) or _OLD_MAIN in f.get("devices", [])]
     for b in items:
         b["filters"] = list(shared)
 
     zone_data = zones.load_raw()
-    try:
-        import voice
-        devices = voice.devices()
-    except Exception:
-        devices = []
-    for device_id, name, zone, _heard, own in devices:
-        if not own or not zone:
+    for device_id, name, zone, profile, saved_own in _old_devices():
+        if saved_own:
+            engine.print(t("Note: {name}'s own JRiver Playlists settings are no longer used; every device follows "
+                           "Settings > JRiver Playlists.", name=name or t("Device")))
+        if not zone:
             continue
-        try:
-            profile = voice.device_profile(device_id)
-        except Exception:
-            profile = {}
         record = zone_data.setdefault(zone, zones.blank(zone))
         for f in all_filters:
             if device_id in f.get("devices", []) and f["id"] not in record["filters"]:
@@ -343,27 +431,37 @@ def zone_for_build(seed_info=None, zone=None):
         return None
 
 
-def run(button, report=print, seed_info=None, zone=None, **options):
+def run(button, report=print, seed_info=None, zone=None, build=None, extra_filters=(), **options):
     """
     Builds a button's playlist: its settings laid over .env, under its filters plus the
     zone's. Extra options go to the engine's build (AI Playlist's theme and count). A
     profile already in use (Review Mode's column) stays on top and comes back afterwards.
+    build: another engine call to run under the button in place of its kind's (voice's
+    "only", a Non-stop top-up's steps, Blend's search); it gets report=, seed_info= and the
+    options. extra_filters: more filter ids (a top-up keeps the filters of the button that
+    built the playlist). The button is remembered with what it sends, for Non-stop.
     """
     import zones
     zone_name = zone_for_build(seed_info, zone)
     ids = list(button.get("filters") or [])
+    ids += [i for i in extra_filters if i not in ids]
     if zone_name:
         ids += [i for i in zones.filter_ids(zone_name) if i not in ids]
     previous = dict(engine.PROFILE)
+    before = engine.BUILD_BUTTON
     engine.use_profile(dict(button.get("settings") or {}, **previous))
     engine.FILTER_IDS = ids
+    engine.BUILD_BUTTON = button["id"]
     try:
-        build = getattr(engine, BUILDERS[button["kind"]])
+        if build is not None:
+            return build(report=report, seed_info=seed_info, **options)
+        builder = getattr(engine, BUILDERS[button["kind"]])
         if button["kind"] == "vibe":
-            return build(options.pop("theme", ""), report=report, **options)
-        return build(report=report, seed_info=seed_info, **options)
+            return builder(options.pop("theme", ""), report=report, **options)
+        return builder(report=report, seed_info=seed_info, **options)
     finally:
         engine.FILTER_IDS = None
+        engine.BUILD_BUTTON = before
         engine.use_profile(previous or None)
 
 

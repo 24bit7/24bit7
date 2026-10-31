@@ -1,21 +1,20 @@
 """
 24bit7 - filters.
 
-Named filters (Settings > Filters) that narrow the playlists 24bit7 builds:
-Similar Artists, Similar Tracks, Artist's Top Tracks and Vibe, their Drift
-rounds and non-stop top-ups. Albums, songs, shuffles and JRiver playlists asked
-for by voice play as asked.
+Named filters (Edit Filters, from a button's or a zone's page) that narrow the
+playlists 24bit7 builds: every button's, their Drift rounds and Non-stop top-ups.
+Albums, songs, shuffles and JRiver playlists asked for by voice play as asked.
 
-Each filter: a name, On, Applies on (All devices, Windows (Main) for the Play
-tab, and speakers with their own settings; any other speaker follows Windows
-(Main)), Only pick from (a JRiver playlist or smartlist: only its tracks can be
-used), and rules on library fields, matching all or any. Where several filters
-apply, a track must pass them all. The seed track is never filtered out. A
-track with no value for a rule's field passes it (an unrated track counts as
-rating 0, an unplayed one as played 0 times and never played).
+Each filter: a name, On, Only pick from (a JRiver playlist or smartlist: only its
+tracks can be used), and rules on library fields, matching all or any. Where a
+filter applies is decided by ticking it on buttons and zones: a build runs under
+its button's filters plus those of the zone its playlist goes to. Where several
+apply, a track must pass them all. The seed track is never filtered out. A track
+with no value for a rule's field passes it (an unrated track counts as rating 0,
+an unplayed one as played 0 times and never played).
 
-Kept in the database's meta table as JSON. The build in progress says which
-device it's for through engine.FILTER_DEVICE (None for Windows (Main)).
+Kept in the database's meta table as JSON. The build in progress gets its filter
+ids through engine.FILTER_IDS (buttons.run sets them).
 """
 
 import json
@@ -27,20 +26,28 @@ from i18n import N_, t, tn
 import engine
 
 META_KEY = "filters"
-ALL, MAIN = "all", "main"   # Applies on: every device, and the Windows app's Play tab
 
 
 def blank(name="New filter"):
-    return {"id": uuid.uuid4().hex[:8], "name": name, "on": True, "devices": [ALL],
+    return {"id": uuid.uuid4().hex[:8], "name": name, "on": True,
             "pick_from": "", "pick_name": "", "match": "all", "rules": []}
 
 
 def tidy(item):
     out = blank(item.get("name") or "New filter")
     out.update({k: v for k, v in item.items() if k in out})
-    out["devices"] = [str(d) for d in (out.get("devices") or [])]
     out["rules"] = list(out.get("rules") or [])
     return out
+
+
+def stored_raw():
+    """The saved list as it is in the database, old Applies on lists included, for the buttons upgrade."""
+    try:
+        row = engine.db().execute("SELECT value FROM meta WHERE key=?", (META_KEY,)).fetchone()
+        items = json.loads(row[0]) if row and row[0] else []
+        return [x for x in items if isinstance(x, dict) and x.get("id")]
+    except Exception:
+        return []
 
 
 def load():
@@ -60,31 +67,6 @@ def save(items):
     con.commit()
 
 
-def applies(item, device_id):
-    """Whether a filter applies to builds for this device (None: Windows (Main))."""
-    devices = item.get("devices") or []
-    return bool(item.get("on")) and (ALL in devices or (device_id or MAIN) in devices)
-
-
-def own_devices():
-    """[(device_id, name)] for speakers with Own settings ticked: the only ones filters can name."""
-    try:
-        import voice
-        return [(d[0], d[1] or "Unnamed device") for d in voice.devices() if d[4]]
-    except Exception:
-        return []
-
-
-def effective(device_id):
-    """A speaker without its own settings follows Windows (Main), here as everywhere else."""
-    return device_id if device_id and device_id in dict(own_devices()) else None
-
-
-def active_for(device_id):
-    device_id = effective(device_id)
-    return [x for x in load() if applies(x, device_id)]
-
-
 def used_by(filter_id):
     """([button names], [zone names]) with this filter ticked, for Edit Filters' Used by line."""
     import buttons
@@ -98,18 +80,6 @@ def by_ids(ids):
     """The filters a button build runs under: the ones named, in the order shown, that are on."""
     wanted = {str(i) for i in ids}
     return [x for x in load() if x["id"] in wanted and x.get("on")]
-
-
-def device_for_zone(zone_name):
-    """The speaker with its own settings playing to this zone, for shortcuts and non-stop (None: Windows (Main))."""
-    try:
-        import voice
-        for device_id, _, zone, _, own in voice.devices():
-            if zone == zone_name and own:
-                return device_id
-    except Exception:
-        pass
-    return None
 
 
 # --- rules ------------------------------------------------------------------------
@@ -260,15 +230,14 @@ def describe(item):
 
 class Active:
     """
-    The filters for one build: the ids a button build runs under (its own and its
-    zone's), or, for a build not run through a button, the device's. allows(key) is
-    False for a track any of them rules out. Playlists named in Only pick from are
-    read once, here.
+    The filters for one build: the ids it runs under (its button's and its zone's).
+    allows(key) is False for a track any of them rules out. Playlists named in Only
+    pick from are read once, here.
     """
 
-    def __init__(self, which, report=print):
+    def __init__(self, ids, report=print):
         self.report, self.left_out, self.missing = report, 0, 0
-        self.items = by_ids(which) if isinstance(which, (list, tuple, set)) else active_for(which)
+        self.items = by_ids(ids or [])
         self.pools = []
         self.rule_sets = [(x.get("match", "all"), x["rules"]) for x in self.items if x.get("rules")]
         if self.rule_sets:

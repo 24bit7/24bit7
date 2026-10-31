@@ -1,5 +1,5 @@
 """
-Add Playlist rows (Play tab), Settings > Filters, and how JRiver playlists play by voice.
+Add Playlist rows (Play tab), filters ticked on a button or a zone, and how JRiver playlists play by voice.
 """
 
 import time
@@ -10,14 +10,14 @@ def seed(app, artist, title):
 
 
 def build_with_rows(app, rows, builder="tracks"):
+    """A Play tab build (the standard button of that kind) with Add Playlist rows set."""
+    import buttons
     e = app.engine
     e.MIX_ROWS, e.MIX_KEEP, e.MIX_FAST_KEY, e.MIX_NOTED = rows, set(), None, False
     r = app.Lines()
     try:
-        if builder == "tracks":
-            e.create_similar_tracks_playlist(report=r, seed_info=seed(app, "The Beatles", "Here Comes The Sun"))
-        else:
-            e.create_similar_playlist(report=r, seed_info=seed(app, "The Beatles", "Here Comes The Sun"))
+        buttons.run(buttons.standard("tracks" if builder == "tracks" else "artists"), report=r,
+                    seed_info=seed(app, "The Beatles", "Here Comes The Sun"))
     finally:
         e.MIX_ROWS, e.MIX_KEEP, e.MIX_FAST_KEY = None, set(), None
     return r
@@ -112,11 +112,16 @@ def test_rows_saved_and_counted(app):
 
 # --- Filters -------------------------------------------------------------------------------
 
-def add_filter(app, **kw):
+def add_filter(app, tick=True, **kw):
+    """A filter, ticked on every button unless tick=False."""
+    import buttons
     import filters
     f = filters.blank(kw.pop("name", "Test"))
     f.update(kw)
     filters.save(filters.load() + [f])
+    if tick:
+        for b in buttons.load():
+            buttons.set_filters(b["id"], (b.get("filters") or []) + [f["id"]])
     return f
 
 
@@ -147,17 +152,17 @@ def test_filter_off_does_nothing(app):
     assert len(app.jriver.zone("Speakers").playlist) > 10, r.text()
 
 
-def test_filter_for_main_only_skips_device(app):
-    import filters
-    app.voice._hear_device("amzn1.ask.device.KITCHEN")
-    app.voice.set_own_settings("amzn1.ask.device.KITCHEN", True)   # a speaker with its own settings
-    add_filter(app, devices=[filters.MAIN], rules=[{"field": "year", "op": "before", "value": "1900", "value2": ""}])
-    app.engine.FILTER_DEVICE = "amzn1.ask.device.KITCHEN"
-    try:
-        r = build_with_rows(app, None)
-    finally:
-        app.engine.FILTER_DEVICE = None
-    assert not r.has("Filters:"), "a Windows (Main) filter shouldn't apply to a speaker with its own settings " + r.text()
+def test_filter_ticked_on_a_zone_applies_to_builds_sent_there(app):
+    import zones
+    f = add_filter(app, tick=False, rules=[{"field": "year", "op": "before", "value": "1968", "value2": ""}])
+    r = build_with_rows(app, None)
+    assert not r.has("Filters:"), "ticked nowhere, it applies nowhere: " + r.text()
+    zones.update("Speakers", filters=[f["id"]])
+    r = build_with_rows(app, None)   # Output: Same zone, so Speakers
+    assert r.has("Filters:") and r.has("left out"), r.text()
+    app.set_env(OUTPUT_TARGET="zone:Kitchen")
+    r = build_with_rows(app, None)
+    assert not r.has("Filters:"), "the Kitchen has no filters: " + r.text()
 
 
 # --- JRiver playlists by voice ------------------------------------------------------------

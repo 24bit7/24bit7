@@ -19,7 +19,8 @@ Albums, songs, playlists and shuffles need no building: they replace what's play
 on the zone straight away, matched against the library held in library.py.
 Skip, who is this and more like this need no value: they work on what the
 device's zone is playing.
-Each Alexa device is remembered in the database with the zone it plays to.
+Each Alexa device is remembered in the database with the zone it plays to. A
+build runs as the button that zone names for the phrase (Settings > Zones).
 """
 
 import hmac
@@ -102,20 +103,12 @@ def _devices_table():
 
 
 def devices():
-    """[(device_id, name, zone, last_heard, own_settings)], most recently heard first."""
+    """[(device_id, name, zone, last_heard)], most recently heard first."""
     with _lock:
         _devices_table()
         return engine.db().execute(
-            "SELECT device_id, name, zone, last_heard, COALESCE(own_settings, 0) FROM voice_devices "
+            "SELECT device_id, name, zone, last_heard FROM voice_devices "
             "WHERE device_id != ? ORDER BY last_heard DESC", (TEST_DEVICE,)).fetchall()
-
-
-def set_own_settings(device_id, on):
-    """The Own settings tick. Unticked, the device uses Windows (Main); what it had is kept for next time."""
-    with _lock:
-        _devices_table()
-        engine.db().execute("UPDATE voice_devices SET own_settings=? WHERE device_id=?", (1 if on else 0, device_id))
-        engine.db().commit()
 
 
 def update_device(device_id, name=None, zone=None):
@@ -126,46 +119,6 @@ def update_device(device_id, name=None, zone=None):
         if zone is not None:
             engine.db().execute("UPDATE voice_devices SET zone=? WHERE device_id=?", (zone, device_id))
         engine.db().commit()
-
-
-def device_page(device_id, kind):
-    """A device's own "sources", "playlist" or "saved" settings as a dict, or None when it copies Windows (Main)."""
-    if kind not in ("sources", "playlist", "saved") or not device_id:
-        return None
-    with _lock:
-        _devices_table()
-        row = engine.db().execute(f"SELECT {kind} FROM voice_devices WHERE device_id=?", (device_id,)).fetchone()
-    try:
-        return json.loads(row[0]) if row and row[0] else None
-    except ValueError:
-        return None
-
-
-def set_device_page(device_id, kind, values):
-    """Saves a device's own settings of one kind; None goes back to copying Windows (Main)."""
-    if kind not in ("sources", "playlist", "saved"):
-        return
-    with _lock:
-        _devices_table()
-        engine.db().execute(f"UPDATE voice_devices SET {kind}=? WHERE device_id=?",
-                            (json.dumps(values) if values is not None else None, device_id))
-        engine.db().commit()
-
-
-def device_profile(device_id):
-    """
-    Everything a device has of its own (Sources and Playlist), for engine.use_profile.
-    Empty when its Own settings tick is off, or both its tabs copy Windows (Main).
-    """
-    with _lock:
-        _devices_table()
-        row = engine.db().execute("SELECT own_settings FROM voice_devices WHERE device_id=?", (device_id,)).fetchone()
-    if not (row and row[0]):
-        return {}
-    profile = {}
-    for kind in ("sources", "playlist"):
-        profile.update(device_page(device_id, kind) or {})
-    return profile
 
 
 def remove_device(device_id):
@@ -195,9 +148,17 @@ def _hear_device(device_id):
 
 # --- commands -----------------------------------------------------------------
 
-def _job(intent, value, zone, profile=None, device=None):
+def _zone_button(zone, intent):
+    """(the button a zone runs for a phrase, what the console heading says about it: the name unless it's the standard one)."""
+    import zones
+    button = zones.button_for(zone, intent)
+    own = t(", with {button}", button=button["name"]) if button and not button.get("standard") else ""
+    return button, own
+
+
+def _job(intent, value, zone, button, device=None):
     """
-    The build itself, run on the Play tab's worker thread, with the device's own settings if it has any.
+    The build itself, run on the Play tab's worker thread, as the button the zone names for the phrase.
     Takeover: a newer voice command for the same zone stops this build at its next step (or skips it
     if it hasn't started yet), and a paused zone counts as free, so after "Alexa, stop" the next command plays.
     """
@@ -223,54 +184,55 @@ def _job(intent, value, zone, profile=None, device=None):
                 _running[0] = zone
             engine.refresh_settings_if_changed()
             engine.OUTPUT_OVERRIDE = zone
-            engine.use_profile(profile)
             # More like this and more artists like this keep the current track playing and replace what's
             # queued after it, so they use the Play tab's rule (queue after a busy zone), not a takeover
             engine.VOICE_TAKEOVER = intent not in MORE
             engine.VOICE_WAIT = engine.VOICE_NEW_PLAYLISTS == "after"   # Settings > Voice Commands > New Playlists
             engine.CANCEL_CHECK = superseded
-            engine.FILTER_DEVICE = device   # Settings > Filters ticked for this device apply
-            _build(intent, value, guarded)
+            _build(intent, value, button, zone, guarded)
         except engine.BuildCancelled:
             if engine.CANCEL_REQUESTED.is_set():
                 raise   # Cancel: the console worker says what had already gone out
             report("  " + t("Stopped: a newer voice command for {zone} took over.", zone=zone))
         finally:
             engine.OUTPUT_OVERRIDE = None
-            engine.use_profile(None)
             engine.VOICE_TAKEOVER = False
             engine.VOICE_WAIT = False
             engine.CANCEL_CHECK = None
-            engine.FILTER_DEVICE = None
             with _take_lock:
                 _running[0] = None
                 _open[zone] = max(0, _open.get(zone, 1) - 1)
     return run
 
 
-def _build(intent, value, report):
-    """The playlist build for a voice command (report stops it if a newer command took over)."""
+def _build(intent, value, button, zone, report):
+    """The playlist build for a voice command, as the zone's button (report stops it if a newer command took over)."""
+    import buttons
+    import zones
+    if button is None:
+        kind = zones.PHRASE_KINDS[zones.INTENT_PHRASES.get(intent, intent)]
+        report("  " + t("Problem: there's no {kind} button to build with. Restore Default Buttons under Settings > Buttons.",
+                        kind=t(buttons.KIND_NAMES[kind])))
+        return
     if intent == "songs_by":
-        engine.play_top_n(report=report, seed_info=engine.typed_seed_info(value))
+        buttons.run(button, report=report, seed_info=engine.typed_seed_info(value), zone=zone)
     elif intent == "music_like":
         tracks, _ = engine.blended_top_tracks(value, limit=1)
         if not tracks:
             report(t("Couldn't find top tracks for '{value}', so there's nothing to seed from.", value=value))
             return
         report("  " + t("Seed track: {value} (the artist's most popular track)", value=tracks[0][0]))
-        engine.create_similar_playlist(report=report, seed_info=engine.typed_seed_info(value, tracks[0][0]))
+        buttons.run(button, report=report, seed_info=engine.typed_seed_info(value, tracks[0][0]), zone=zone)
     elif intent == "tracks_like":
         artist, title = value
-        engine.create_similar_tracks_playlist(report=report,
-                                              seed_info=engine.typed_seed_info(artist, title))
-    elif intent == "more_like":   # value: the zone's track when the command was heard
-        engine.create_similar_tracks_playlist(report=report, seed_info=value)
-    elif intent == "more_artists":
-        engine.create_similar_playlist(report=report, seed_info=value)
-    elif intent == "only":   # value: the words as heard, artist and mood together
-        engine.create_only_playlist(value, report=report)
+        buttons.run(button, report=report, seed_info=engine.typed_seed_info(artist, title), zone=zone)
+    elif intent in MORE:   # value: the zone's track when the command was heard
+        buttons.run(button, report=report, seed_info=value, zone=zone)
+    elif intent == "only":   # value: the words as heard, artist and mood together: the AI Playlist button's settings
+        buttons.run(button, report=report, zone=zone,
+                    build=lambda report, **kw: engine.create_only_playlist(value, report=report))
     else:
-        engine.create_vibe_playlist(value, report=report)
+        buttons.run(button, report=report, zone=zone, theme=value)
 
 
 def _play_keys(keys, zone_id):
@@ -330,8 +292,9 @@ def _play_now(intent, value, zone, device=None):
         if not keys:
             return "problem", f"I couldn't find any songs by {value}.", {}
         keys = engine.drop_long_closers(keys, report=print, group="top")
-        # Recently played: the Artist's Top Tracks setting, the device's own if it has one
-        own = device_profile(device) if device else {}
+        # Recently played: as the zone's Songs By button has it
+        import zones
+        own = (zones.button_for(zone, "songs_by") or {}).get("settings") or {}
         main_on, main_days = engine.SKIP_PLAYED["top"]
         on = own.get("SKIP_PLAYED_TOP", "1" if main_on else "0") in ("1", "true", "yes")
         days = own.get("SKIP_PLAYED_TOP_DAYS", str(main_days))
@@ -470,8 +433,7 @@ def _zone_command(intent, device, body):
         return "problem", "24bit7 isn't ready yet. Try again in a moment.", {}
     seed = dict(info)
     seed["ZoneID"] = zid
-    profile = device_profile(device or "unknown device")
-    own = t(", with its own settings") if profile else ""
+    button, own = _zone_button(zone, intent)
     if intent == "more_artists":
         shown = artist or title
         heading = t("Voice, {name}: more artists like {shown}, to {zone}{own}", name=name, shown=shown, zone=zone,
@@ -483,7 +445,7 @@ def _zone_command(intent, device, body):
         heading = t("Voice, {name}: more like {shown}, to {zone}{own}", name=name, shown=shown, zone=zone, own=own)
         asked = t("More like {shown}", shown=shown)
         speech = f"More like {f'{title} by {artist}' if artist else title}, coming up on {zone}."
-    _submit(_job(intent, seed, zone, profile, device or "unknown device"), heading,
+    _submit(_job(intent, seed, zone, button, device or "unknown device"), heading,
             {"from": "voice", "device": device or "unknown device", "badge": (asked, zone, False)})
     if _is_busy() and not _takes_over(zone):
         return "pending", "Please wait, request pending.", {}
@@ -518,7 +480,7 @@ def set_switch_enabled(zone, on):
 def switch_targets():
     """Zones that can be switched to, in JRiver's order: zones a device plays to, minus those unticked."""
     off = switch_unticked()
-    with_device = {zone for _, _, zone, _, _ in devices() if zone}
+    with_device = {zone for _, _, zone, _ in devices() if zone}
     return [z for z in engine.zone_names(include_hidden=True) if z in with_device and z not in off]
 
 
@@ -748,31 +710,33 @@ def _switch(device, value, body):
 def keep_going(zone):
     """
     Keep It Going: Non-stop, once, for whatever is playing on a zone, even music
-    started in JRiver itself. It tops up with the zone's Similar Tracks Non-stop
-    settings (Using, Reseed from; a device's own if it has them), whether or not
-    Non-stop is switched on there, and ends when something else replaces the music.
+    started in JRiver itself. It tops up with the Non-stop settings of the zone's
+    Tracks Like This button (Using, Reseed from), whether or not that button has
+    Non-stop on, and ends when something else replaces the music. A zone whose
+    Non-stop switch is off (Settings > Zones) says so instead.
     Returns (status, speech, extra) like the other voice commands.
     """
-    import hotkeys
+    import buttons
     import nonstop
+    import zones
     zid = engine.zone_id(zone)
     if zid is None:
         return "problem", f"I can't find the {zone} zone in JRiver.", {}
     if not _playing(zid):
         return "problem", f"Nothing's playing on {zone}.", {}
-    _, _, profile = hotkeys._device_for_zone(zone)
-    settings = engine.nonstop_settings(nonstop._settings_for(profile).get)
+    if not zones.nonstop_on(zone):
+        return "problem", f"Non-stop is switched off for {zone} in 24bit7's Zones settings.", {}
     with engine._nonstop_lock:
         entry = engine.NONSTOP_ZONES.get(zid)
-    if entry:
-        origin = entry.get("origin") or entry.get("kind")
-        on = bool(entry.get("saved_cfg")) if origin == "saved" else settings.get(origin, {}).get("on")
-        if on:
-            return "said", f"Non-stop is already on for {zone}.", {}
+    if entry and nonstop.config_for(zone, entry).get("on"):
+        return "said", f"Non-stop is already on for {zone}.", {}
     keys = [r["Key"] for r in engine.playing_now_rows(zid) if r.get("Key")]
     if not keys:
         return "problem", f"Nothing's playing on {zone}.", {}
-    cfg = settings["tracks"]
+    button = zones.button_for(zone, "tracks_like")
+    if button is None:
+        return "problem", "There's no Similar Tracks button to top up with. Restore the default buttons in 24bit7's settings.", {}
+    cfg = buttons.nonstop_config(button)
     engine.nonstop_record(zid, keys, kind="saved", stage="after", vibe=None,
                           # Off there means Wander; otherwise the mode chosen there
                           saved_cfg={"using": cfg["using"],
@@ -900,12 +864,11 @@ def handle_command(body, busy=False):
                "genre": N_("Voice, {name}: genre {shown}{heard}, to {zone}{own}"),
                "only": N_("Voice, {name}: only {shown}{heard}, to {zone}{own}"),
                "tracks_like": N_("Voice, {name}: tracks like {shown}{heard}, to {zone}{own}")}[intent]
-    profile = device_profile(device or "unknown device")
+    button, own = _zone_button(zone, intent)
     if intent == "tracks_like":   # the console's version; the spoken reply keeps its English
         shown = t("{title} by {artist}", title=value[1], artist=library.spoken(value[0]))
-    _submit(_job(intent, value, zone, profile, device or "unknown device"),
-            t(heading, name=name, shown=shown, heard=corrected, zone=zone,
-              own=t(", with its own settings") if profile else ""),
+    _submit(_job(intent, value, zone, button, device or "unknown device"),
+            t(heading, name=name, shown=shown, heard=corrected, zone=zone, own=own),
             {"from": "voice", "device": device or "unknown device",
              "badge": (t(BADGE_ASKED[intent], shown=shown), zone, intent in ("genre", "only"))})
     if busy and not _takes_over(zone):

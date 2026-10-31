@@ -3,19 +3,22 @@
 
 Global shortcuts that work while 24bit7 is minimised or in the tray, so a
 remote that sends key presses (a Flirc, a Harmony, a phone app) can start a
-playlist from the sofa. Set under Settings > Other > Keyboard Shortcuts.
+playlist from the sofa. A button's shortcut is set on its page under Settings >
+Buttons and kept with the button; the rest (Shuffle Songs by Artist, Switch
+Zones, Switch Profiles, Keep It Going, Load <profile>) under Settings > Other >
+Keyboard Shortcuts, in .env.
 
 Each shortcut acts on one zone: "Zone shown in Now Playing", or a zone named in
 HOTKEY_ZONE. It seeds from that zone's current track (paused or stopped counts),
 or, when Playing Now is empty, from the most recently played track in the
-library. The build runs through the Play tab like a voice command, with the
-settings of the Alexa device mapped to that zone if it has its own.
+library. A button's shortcut runs that button through the Play tab like a voice
+command, under its settings and filters plus the zone's.
 
 Uses Windows' own RegisterHotKey on a small thread of its own, so there's
 nothing to install and no admin rights needed. On other systems it does nothing.
 
   .env: HOTKEY_ZONE=<zone name, blank for the Now Playing zone>
-        HOTKEY_SIMILAR_TRACKS=Ctrl+Alt+1   (and _SIMILAR_ARTISTS, _TOP_TRACKS, _SHUFFLE_ARTIST)
+        HOTKEY_SHUFFLE_ARTIST=Ctrl+Alt+4   (and _SWITCH_ZONES, _SWITCH_PROFILES, _KEEP_GOING)
 """
 
 import os
@@ -26,9 +29,6 @@ import engine
 from i18n import N_, t, tn
 
 ACTIONS = [   # (code, label): the order they appear in Settings
-    ("SIMILAR_TRACKS", N_("Similar Tracks")),
-    ("SIMILAR_ARTISTS", N_("Similar Artists")),
-    ("TOP_TRACKS", N_("Artist's Top Tracks")),
     ("SHUFFLE_ARTIST", N_("Shuffle Songs by Artist")),
     ("SWITCH_ZONES", N_("Switch Zones")),
     ("SWITCH_PROFILES", N_("Switch Profiles")),
@@ -37,16 +37,41 @@ ACTIONS = [   # (code, label): the order they appear in Settings
 LABELS = dict(ACTIONS)
 
 
+BUTTON_PREFIX = "BUTTON_"   # a button's shortcut code: BUTTON_<button id>
+
+
 def profile_actions():
     """(code, label, profile name) for each saved profile: a shortcut of its own that loads it."""
     import profiles
     return [(profiles.shortcut_code(n), f"Load {n}", n) for n in profiles.names()]
 
 
+def button_actions():
+    """(code, button) for each button with a shortcut set: pressing it runs that button on the shortcut zone."""
+    import buttons
+    return [(BUTTON_PREFIX + b["id"], b) for b in buttons.with_shortcuts()]
+
+
+def button_code(button_id):
+    return BUTTON_PREFIX + button_id
+
+
+def is_button(code):
+    return code.startswith(BUTTON_PREFIX)
+
+
+def _button_name(code):
+    import buttons
+    b = buttons.get(code[len(BUTTON_PREFIX):])
+    return b["name"] if b else None
+
+
 def shown(code):
     """label() in the chosen language, for the console."""
     if code in LABELS:
         return t(LABELS[code])
+    if is_button(code):
+        return _button_name(code) or code
     return next((t("Load {name}", name=n) for c, _, n in profile_actions() if c == code), code)
 
 
@@ -56,9 +81,11 @@ def is_profile(code):
 
 
 def label(code):
-    """The label shown in Settings and the console, for a fixed action or a profile's shortcut."""
+    """The label shown in Settings and the console, for a fixed action, a button's or a profile's shortcut."""
     if code in LABELS:
         return LABELS[code]
+    if is_button(code):
+        return _button_name(code) or code
     return next((text for c, text, _ in profile_actions() if c == code), code)
 NOW_PLAYING_ZONE = N_("Zone shown in Now Playing")
 
@@ -126,9 +153,11 @@ def parse(text):
 
 
 def assigned():
-    """{action code: 'Ctrl+Alt+1'} for every shortcut set in .env."""
+    """{action code: 'Ctrl+Alt+1'} for every shortcut set: the buttons' first, then the ones in .env."""
     engine.refresh_settings_if_changed()
     out = {}
+    for code, b in button_actions():
+        out[code] = b["shortcut"]
     for code, _ in ACTIONS + [(c, tval) for c, tval, _ in profile_actions()]:
         value = os.getenv(f"HOTKEY_{code}", "").strip()
         if value:
@@ -274,18 +303,6 @@ def _pressed(code):
     _submit(_job(code), t("Shortcut: {name}", name=shown(code)), {"from": "shortcut"})
 
 
-def _device_for_zone(zone_name):
-    """(device ID, name, own settings) for the Alexa device on this zone with Own settings ticked, else (None, None, {})."""
-    try:
-        import voice
-        for device_id, name, zone, _, own in voice.devices():
-            if zone == zone_name and own:
-                return device_id, name, voice.device_profile(device_id)
-    except Exception:
-        pass
-    return None, None, {}
-
-
 def _switch_profiles(report):
     """Loads the next profile ticked under Enable Switch To; 24bit7 restarts once this job is done."""
     import profiles
@@ -332,6 +349,16 @@ def _job(code):
         if is_profile(code):
             _load_profile(code, report)
             return
+        import buttons
+        button = None
+        if is_button(code):
+            button = buttons.get(code[len(BUTTON_PREFIX):])
+            if button is None:
+                report("  " + t("Problem: that button has been removed, so its shortcut does nothing now."))
+                return
+            if button["kind"] == "vibe":
+                report("  " + t("Problem: an AI Playlist button needs a theme, so a shortcut can't run it."))
+                return
         engine.refresh_settings_if_changed()
         wanted = target_zone_setting()
         if wanted:
@@ -359,31 +386,21 @@ def _job(code):
         seed = engine.seed_or_last_played(zid, report)
         if not seed:
             return
-        device_id, device_name, profile = _device_for_zone(zone_name)
-        report("  " + (t("Zone: {zone}, with {device}'s own settings", zone=zone_name, device=device_name) if profile
-                       else t("Zone: {zone}", zone=zone_name)))
+        report("  " + t("Zone: {zone}", zone=zone_name))
         if code == "SHUFFLE_ARTIST":
             import voice
             artist = (engine.split_values(seed.get("Artist")) or [""])[0]
             if not artist or artist == "Unknown":
                 report("  " + t("The seed track has no artist, so there's nothing to shuffle."))
                 return
-            status, speech, _ = voice._play_now("shuffle", artist, zone_name, device_id)
+            status, speech, _ = voice._play_now("shuffle", artist, zone_name)
             report(f"  {speech}")
+            return
+        if button is None:
             return
         try:
             engine.OUTPUT_OVERRIDE = zone_name
-            engine.use_profile(profile)
-            import filters
-            engine.FILTER_DEVICE = filters.device_for_zone(zone_name)
-            if code == "SIMILAR_TRACKS":
-                engine.create_similar_tracks_playlist(report=report, seed_info=seed)
-            elif code == "SIMILAR_ARTISTS":
-                engine.create_similar_playlist(report=report, seed_info=seed)
-            elif code == "TOP_TRACKS":
-                engine.play_top_n(report=report, seed_info=seed)
+            buttons.run(button, report=report, seed_info=seed, zone=zone_name)
         finally:
             engine.OUTPUT_OVERRIDE = None
-            engine.use_profile(None)
-            engine.FILTER_DEVICE = None
     return run
