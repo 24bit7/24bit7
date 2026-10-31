@@ -1,14 +1,13 @@
 """
 profiles.py - saved sets of settings for different ways of listening (Settings > Other > Profiles).
 
-A profile holds the listening settings: the buttons (each one's settings and filters),
-the zones (which button each voice phrase runs, their filters and Non-stop switches),
-the Filters, the JRiver Playlists rows, the Play tab's options and Add Playlist rows, the
+A profile holds the listening settings: the playlists (each one's settings, filters and
+tick), the devices' choices (which playlist each voice phrase runs), the Filters, the JRiver Playlists rows, the Play tab's options and Add Playlist rows, the
 Preview zone, the Default zone and the zone the shortcuts apply to, cache length and the
 console. It leaves out anything tied to the PC or the person: keys, the JRiver
-connection, Alexa devices, which zones show, keyboard shortcuts (a button's included),
-the tray, the title bar, the theme and Discover's sites. A profile saved before buttons
-loads into the standard buttons and leaves your own buttons and the zones alone.
+connection, Alexa devices, which zones show, keyboard shortcuts (a playlist's included),
+the tray, the title bar, the theme and Discover's sites. A profile saved before playlists
+loads into the standard playlists and leaves your own playlists and the devices alone.
 
 Each profile can have a keyboard shortcut of its own that loads it (Settings > Other >
 Keyboard Shortcuts). Those live in .env as HOTKEY_PROFILE_<name>, with the other
@@ -52,9 +51,9 @@ EXTRA_ENV_KEYS = ["PLAY_BEHAVIOUR", "OUTPUT_TARGET", "YOUTUBE_PLAYLIST_LENGTH", 
                   *engine.PLAYING_NOW_ARTIST_FIGURES, *engine.PLAYING_NOW_TRACK_FIGURES,
                   "REVIEW_SAME_ARTISTS_PN", "REVIEW_SAME_TRACKS_PN", "REVIEW_PN_SIMILAR_ARTIST_TRACK_LIMIT",
                   *[f"REVIEW_{k}" for k in (*engine.PLAYING_NOW_ARTIST_FIGURES, *engine.PLAYING_NOW_TRACK_FIGURES)]]
-# kept in the database's meta table: Filters, JRiver Playlists, Add Playlist rows, the buttons and the zones
-META_KEYS = ["filters", "saved_playlists", "play_mix", "buttons", "zones"]
-KEEP_IF_MISSING = ("buttons", "zones")   # an older profile has no say over these: they're left as they are
+# kept in the database's meta table: Filters, JRiver Playlists, Add Playlist rows, the playlists and the devices
+META_KEYS = ["filters", "saved_playlists", "play_mix", "buttons", "devices"]
+KEEP_IF_MISSING = ("buttons", "devices")   # an older profile has no say over these: they're left as they are
 
 
 def env_keys():

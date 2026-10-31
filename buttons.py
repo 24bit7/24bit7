@@ -1,23 +1,22 @@
 """
-24bit7 - buttons.
+24bit7 - playlists (buttons, in the code).
 
-A button on the Play tab is a whole recipe: a kind of build (Similar Artists, Similar
-Tracks, Artist's Top Tracks or AI Playlist), that kind's settings as .env strings (its
+A playlist on the Play tab is a whole recipe: a kind of build (Artist Matching, Track
+Matching, Artist's Top Tracks or AI Playlist), that kind's settings as .env strings (its
 sources and its playlist settings, Drift, Deep Cuts, Non-stop and the rest), the filters
-ticked for it and an optional keyboard shortcut. The engine runs a button by laying its
-settings over .env (engine.use_profile), the way an Alexa device's own settings were
-laid before buttons, under its filters plus the filters of the zone the playlist goes to.
-Voice commands run the button a zone names for the phrase (zones.py), Non-stop tops a
-playlist up with the Non-stop settings of the button that built it, and a button's
+ticked for it, an optional keyboard shortcut, and whether it's shown on the Play tab. The
+engine runs one by laying its settings over .env (engine.use_profile) under its filters.
+Voice commands run the playlist a device names for the phrase (devices.py), Non-stop tops
+a playlist up with the Non-stop settings of the playlist that built it, and a playlist's
 shortcut runs it from the keyboard.
 
-Buttons are kept as JSON in the database's meta table, in the order shown. The first
-load with none makes the standard four from .env, so day one changes nothing, then
-Headliner (Artist's Top Tracks with Guests on). An Alexa device with settings of its
-own gets a button for each kind whose values differ from Windows (Main)'s ("Kitchen
-Similar Tracks"), which that device's zone points to (zones.py). Filters that applied
-to all devices or to Windows (Main) are ticked on the standard buttons; a device's own
-go on its zone.
+Playlists are kept as JSON in the database's meta table, in the order shown. The first load
+with none makes the standard four from .env, so day one changes nothing, then Headliner. An
+Alexa device with settings of its own gets a playlist for each kind whose values differ from
+the main ones ("Kitchen Echo Similar Tracks"), kept off the Play tab, which that device's
+phrases run. Filters that applied to all devices or to Windows (Main) are ticked on the
+standard playlists; a filter that applied to one device only is ticked nowhere, and the
+console says so once.
 """
 
 import json
@@ -31,7 +30,11 @@ META_KEY = "buttons"
 
 KINDS = [("artists", N_("Similar Artists")), ("tracks", N_("Similar Tracks")),
          ("top", N_("Artist's Top Tracks")), ("vibe", N_("AI Playlist"))]
-KIND_NAMES = dict(KINDS)
+KIND_NAMES = dict(KINDS)   # the standard playlists' names, as they always were
+# What each kind of build is called on a playlist's page and in the New Playlist window
+KIND_LABELS = {"artists": N_("Artist Matching"), "tracks": N_("Track Matching"),
+               "top": N_("Artist's Top Tracks"), "vibe": N_("AI Playlist")}
+TEMPLATE = "template"   # New Playlist's "from": the kind's shipped defaults rather than one of your playlists
 
 # The settings each kind carries. Every key under Settings > Sources and Playlist
 # belongs to one kind, or stays in .env for every build (GLOBAL_KEYS); tests check that.
@@ -66,7 +69,7 @@ BUILDERS = {"artists": "create_similar_playlist", "tracks": "create_similar_trac
 
 def blank(name, kind):
     return {"id": uuid.uuid4().hex[:8], "name": name, "kind": kind, "settings": {}, "filters": [],
-            "shortcut": "", "standard": ""}
+            "shortcut": "", "standard": "", "shown": True}
 
 
 def tidy(item):
@@ -75,6 +78,7 @@ def tidy(item):
     out.update({k: v for k, v in item.items() if k in out})
     out["settings"] = {str(k): str(v) for k, v in (out.get("settings") or {}).items() if k in KIND_KEYS[kind]}
     out["filters"] = [str(f) for f in (out.get("filters") or [])]
+    out["shown"] = bool(out.get("shown", True))
     return out
 
 
@@ -118,22 +122,64 @@ def of_kind(kind):
 
 
 def standard(kind):
-    """The standard button of a kind (the one made at the upgrade), else the first of that kind, else None."""
+    """The standard playlist of a kind (the one made at the upgrade), else the first of that kind, else None."""
     items = of_kind(kind)
     return next((b for b in items if b.get("standard") == kind), items[0] if items else None)
+
+
+def has_kind(button, kind):
+    """Whether a playlist builds this kind (its config's kind; a playlist with several configs, any of them)."""
+    return button.get("kind") == kind
+
+
+def shown():
+    """The playlists ticked for the Play tab, in the order shown."""
+    return [b for b in load() if b.get("shown", True)]
+
+
+def set_shown(button_id, on):
+    """The tick beside a playlist under Settings > Playlists: on the Play tab, or kept for voice and shortcuts only."""
+    items = load()
+    for b in items:
+        if b["id"] == button_id:
+            b["shown"] = bool(on)
+    save(items)
 
 
 # --- the Play tab's + and right-click ---------------------------------------------------------
 
 def add(name, kind, from_id=None):
-    """A new button at the end of the row, with the settings and filters of the one it starts from."""
+    """
+    A new playlist at the end of the list, ticked, with the settings and filters of the one it starts
+    from: one of yours by id, the standard one of its kind by default, or the kind's shipped defaults
+    (from_id TEMPLATE).
+    """
     items = load()
-    source = next((b for b in items if b["id"] == from_id and b["kind"] == kind), None) or standard(kind)
-    new = blank(name.strip() or t(KIND_NAMES[kind]), kind)
-    if source:
-        new["settings"], new["filters"] = dict(source["settings"]), list(source["filters"])
+    new = blank(name.strip() or t(KIND_LABELS[kind]), kind)
+    if from_id == TEMPLATE:
+        new["settings"] = template_settings(kind)
+    else:
+        source = next((b for b in items if b["id"] == from_id and b["kind"] == kind), None) or standard(kind)
+        if source:
+            new["settings"], new["filters"] = dict(source["settings"]), list(source["filters"])
     save(items + [new])
     return new
+
+
+def template_settings(kind):
+    """A kind's settings as 24bit7 ships them: every key at its default."""
+    return settings_from(lambda key, default=None: default, kind)
+
+
+def unique_name(base):
+    """base, or "base 2", "base 3"... the first not already a playlist's name."""
+    names = {b["name"] for b in load()}
+    if base not in names:
+        return base
+    n = 2
+    while f"{base} {n}" in names:
+        n += 1
+    return f"{base} {n}"
 
 
 def rename(button_id, name):
@@ -158,6 +204,52 @@ def move(button_id, by):
 
 def remove(button_id):
     save([b for b in load() if b["id"] != button_id])
+
+
+def move_shown(button_id, by):
+    """Moves a playlist along the Play tab's row: by -1 one place left, +1 one place right, past hidden ones."""
+    items = load()
+    row = [b["id"] for b in items if b.get("shown", True)]
+    if button_id not in row:
+        return
+    i = row.index(button_id)
+    j = i + by
+    if j < 0 or j >= len(row):
+        return
+    moving = next(b for b in items if b["id"] == button_id)
+    items.remove(moving)
+    anchor = next(k for k, b in enumerate(items) if b["id"] == row[j])
+    items.insert(anchor + (1 if by > 0 else 0), moving)
+    save(items)
+
+
+def move_to(button_id, before_id):
+    """Drops a playlist in front of another on the Play tab's row (before_id None: at the end)."""
+    items = load()
+    moving = next((b for b in items if b["id"] == button_id), None)
+    if moving is None or button_id == before_id:
+        return
+    items.remove(moving)
+    if before_id is None:
+        items.append(moving)
+    else:
+        anchor = next((k for k, b in enumerate(items) if b["id"] == before_id), len(items))
+        items.insert(anchor, moving)
+    save(items)
+
+
+def duplicate(button_id):
+    """A copy of a playlist, named "<name> 2" (or the next free number), ticked, right after it on the row."""
+    source = get(button_id)
+    if source is None:
+        return None
+    new = add(unique_name(source["name"]), source["kind"], button_id)
+    items = load()
+    moving = next(b for b in items if b["id"] == new["id"])
+    items.remove(moving)
+    items.insert(next(k for k, b in enumerate(items) if b["id"] == button_id) + 1, moving)
+    save(items)
+    return get(new["id"])
 
 
 def set_settings(button_id, settings):
@@ -359,13 +451,13 @@ def _old_devices():
 
 def upgrade():
     """
-    The first run with buttons: the standard four from .env, Headliner, then a button per
-    kind an Alexa device with its own settings changed, pointed to by its zone. Filters
-    for all devices or Windows (Main) go on the standard buttons; a device's on its zone.
-    Runs once: saving an empty list counts as done.
+    The first run with playlists: the standard four from .env, Headliner, then a playlist per
+    kind an Alexa device with its own settings changed, which that device's phrases run and
+    which stays off the Play tab. Filters for all devices or Windows (Main) go on the standard
+    playlists; a device-only filter goes nowhere, said once. Runs once: saving an empty list
+    counts as done.
     """
     import filters
-    import zones
     env = _env_values()
     items = standard_buttons(env)
     by_kind = {b["kind"]: b for b in items}
@@ -376,77 +468,56 @@ def upgrade():
     for b in items:
         b["filters"] = list(shared)
 
-    zone_data = zones.load_raw()
+    import devices
+    device_data = devices.load_raw()
     for device_id, name, zone, profile, saved_own in _old_devices():
+        shown_name = name or t("Device")
         if saved_own:
             engine.print(t("Note: {name}'s own JRiver Playlists settings are no longer used; every device follows "
-                           "Settings > JRiver Playlists.", name=name or t("Device")))
-        if not zone:
-            continue
-        record = zone_data.setdefault(zone, zones.blank(zone))
+                           "Settings > JRiver Playlists.", name=shown_name))
         for f in all_filters:
-            if device_id in f.get("devices", []) and f["id"] not in record["filters"]:
-                record["filters"].append(f["id"])
+            if device_id in f.get("devices", []) and f["id"] not in shared:
+                engine.print(t("Note: the filter {filter} applied to {name} only. Filters belong to playlists now: "
+                               "tick it on a playlist under Settings > Playlists if you still want it.",
+                               filter=f.get("name", ""), name=shown_name))
         if not profile:
             continue
+        record = device_data.setdefault(device_id, devices.blank())
         merged = dict(env, **profile)
+        made = []
         for kind, label in KINDS:
             own_settings = settings_from(merged.get, kind)
             if own_settings == by_kind[kind]["settings"]:
                 continue
-            b = blank(f"{name or t('Device')} {t(label)}", kind)
-            b["settings"], b["filters"] = own_settings, list(shared)
+            b = blank(f"{shown_name} {t(label)}", kind)
+            b["settings"], b["filters"], b["shown"] = own_settings, list(shared), False
             items.append(b)
-            for phrase, phrase_kind in zones.PHRASE_KINDS.items():
+            made.append(b)
+            for phrase, phrase_kind in devices.PHRASE_KINDS.items():
                 if phrase_kind == kind:
                     record["buttons"][phrase] = b["id"]
+        if made:
+            engine.print(t("Note: {name} had settings of its own. They're now playlists of its own under Settings > "
+                           "Playlists ({names}), which its voice commands run; they're kept off the Play tab.",
+                           name=shown_name, names=", ".join(x["name"] for x in made)))
     save(items)
-    zones.save(zone_data)
+    devices.save(device_data)
 
 
 # --- running one ------------------------------------------------------------------------------
 
-def zone_for_build(seed_info=None, zone=None):
+def run(button, report=print, seed_info=None, build=None, extra_filters=(), **options):
     """
-    The JRiver zone a build's playlist goes to, by name, for the zone's filters: the zone
-    asked for (voice, a shortcut), else the Output setting, else the seed's zone. None
-    for YouTube or Tidal, which have no zone.
+    Builds a playlist: its settings laid over .env, under its filters. Extra options go to
+    the engine's build (AI Playlist's theme and count). A profile already in use (Review
+    Mode's column) stays on top and comes back afterwards. build: another engine call to run
+    under the playlist in place of its kind's (voice's "only", a Non-stop top-up's steps,
+    Blend's search); it gets report=, seed_info= and the options. extra_filters: more filter
+    ids (a top-up keeps the filters of the playlist that built the music). The playlist is
+    remembered with what it sends, for Non-stop.
     """
-    if zone:
-        return zone
-    if engine.OUTPUT_OVERRIDE:
-        return engine.OUTPUT_OVERRIDE
-    if engine.OUTPUT_TARGET in ("youtube", "tidal"):
-        return None
-    if engine.OUTPUT_TARGET.startswith("zone:"):
-        return engine.OUTPUT_TARGET[5:]
-    try:   # Same zone: the seed's zone, as engine.output_zone reads it (the active zone for a typed seed)
-        zid = (seed_info or {}).get("ZoneID") or (engine.zone_id() if (seed_info or {}).get("Typed")
-                                                   else engine.seed_zone())
-        if zid == engine.ACTIVE_ZONE:
-            zid = engine.zone_id()
-        name = engine.zone_label(zid) if zid else None
-        return None if not name or name == f"zone {zid}" else name
-    except Exception:
-        return None
-
-
-def run(button, report=print, seed_info=None, zone=None, build=None, extra_filters=(), **options):
-    """
-    Builds a button's playlist: its settings laid over .env, under its filters plus the
-    zone's. Extra options go to the engine's build (AI Playlist's theme and count). A
-    profile already in use (Review Mode's column) stays on top and comes back afterwards.
-    build: another engine call to run under the button in place of its kind's (voice's
-    "only", a Non-stop top-up's steps, Blend's search); it gets report=, seed_info= and the
-    options. extra_filters: more filter ids (a top-up keeps the filters of the button that
-    built the playlist). The button is remembered with what it sends, for Non-stop.
-    """
-    import zones
-    zone_name = zone_for_build(seed_info, zone)
     ids = list(button.get("filters") or [])
     ids += [i for i in extra_filters if i not in ids]
-    if zone_name:
-        ids += [i for i in zones.filter_ids(zone_name) if i not in ids]
     previous = dict(engine.PROFILE)
     before = engine.BUILD_BUTTON
     engine.use_profile(dict(button.get("settings") or {}, **previous))
@@ -469,7 +540,7 @@ def describe(button):
     """A short line for a hover note: the kind, then what's on."""
     s = button.get("settings") or {}
     g = button["kind"].upper()
-    bits = [t(KIND_NAMES[button["kind"]])]
+    bits = [t(KIND_LABELS[button["kind"]])]
     if button["kind"] == "top" and s.get("TOP_GUESTS") == "third":
         bits.append(t("Guests"))
     if s.get(f"DRIFT_{g}", "0") in engine.YES:

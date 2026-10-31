@@ -1,7 +1,8 @@
 """
-The Play tab draws its buttons from the button list (stage two, 31 Oct 2026): + adds one, right-click
-renames, moves or removes one, a click runs that button's settings, the notes say what each has on,
-and the row wraps when the window is narrow.
+The Play tab draws its buttons from the ticked playlists (stage two, 31 Oct 2026, then the tick and the
++ menu that evening): + offers the unticked ones and New..., right-click renames, copies, moves or takes
+one off the row, a click runs that playlist's settings, the notes say what each has on, and the row
+wraps when the window is narrow.
 """
 
 import tkinter as tk
@@ -17,9 +18,15 @@ class Click:
     x_root = y_root = 0
 
 
-def test_row_comes_from_the_button_list_then_more_options_and_plus(app, ui):
+def test_row_comes_from_the_ticked_playlists_then_more_options_and_plus(app, ui):
+    import buttons
     p = ui.play
     assert names(p) == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Headliner", "AI Playlist"]
+    buttons.set_shown(buttons.standard("vibe")["id"], False)
+    p.refresh_buttons()
+    assert names(p) == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Headliner"], "unticked: off the row"
+    buttons.set_shown(buttons.standard("vibe")["id"], True)
+    p.refresh_buttons()
     ui.pump(0.3)
     row = p.play_buttons + [p.more_button, p.add_button]
     xs = [b.winfo_x() for b in row]
@@ -29,53 +36,106 @@ def test_row_comes_from_the_button_list_then_more_options_and_plus(app, ui):
     assert p.buttons[-1] is p.credits_button, "Show Credits still greys out with the rest"
 
 
-def test_plus_adds_a_button_starting_from_one_of_its_kind(app, ui, monkeypatch):
+def test_plus_offers_the_unticked_playlists_then_new(app, ui, monkeypatch):
     import buttons
-    p = ui.play
-    head = next(b for b in buttons.load() if b["name"] == "Headliner")
-    monkeypatch.setattr(p, "_ask_new_button", lambda: ("Sunday Guests", "top", head["id"]))
-    p.on_add_button()
-    assert names(p)[-1] == "Sunday Guests"
-    new = p.play_buttons[-1]._button
-    assert new["kind"] == "top" and new["settings"]["TOP_GUESTS"] == "third"
-    assert p.play_buttons[-1]._tooltip.text.endswith("Artist's Top Tracks, Guests"), "its note says what's on"
-    monkeypatch.setattr(p, "_ask_new_button", lambda: None)
-    p.on_add_button()
-    assert names(p)[-1] == "Sunday Guests", "Cancel adds nothing"
-
-
-def test_right_click_menu_moves_renames_removes_and_restores(app, ui, monkeypatch):
-    import tabs
-    from tkinter import messagebox
     p = ui.play
     menus = []
     monkeypatch.setattr(tk.Menu, "tk_popup", lambda self, *a, **k: menus.append(self))
+    opened = []
+    monkeypatch.setattr(p, "open_playlist_settings", lambda bid: opened.append(bid))
+    head = next(b for b in buttons.load() if b["name"] == "Headliner")
+    buttons.set_shown(head["id"], False)
+    p.refresh_buttons()
+    assert "Headliner" not in names(p)
+    p.on_add_button()
+    menu = menus[-1]
+    labels = [menu.entrycget(i, "label") for i in range(menu.index("end") + 1) if menu.type(i) == "command"]
+    assert labels == ["Headliner", "New..."]
+    menu.invoke(0)
+    assert names(p)[-1] == "Headliner", "ticked again, it comes back at its place in the list"
+    monkeypatch.setattr(p, "_ask_new_button", lambda: ("Sunday Guests", "top", head["id"]))
+    p.on_add_button()
+    menus[-1].invoke(0)   # New...: the only entry now
+    assert names(p)[-1] == "Sunday Guests"
+    new = p.play_buttons[-1]._button
+    assert new["kind"] == "top" and new["settings"]["TOP_GUESTS"] == "third" and new["shown"]
+    assert opened == [new["id"]], "its page opens in Settings"
+    assert p.play_buttons[-1]._tooltip.text.endswith("Artist's Top Tracks, Guests"), "its note says what's on"
+    monkeypatch.setattr(p, "_ask_new_button", lambda: None)
+    p._new_playlist()
+    assert names(p)[-1] == "Sunday Guests", "Cancel adds nothing"
+
+
+def test_right_click_menu_renames_copies_moves_removes_and_restores(app, ui, monkeypatch):
+    import buttons
+    import tabs
+    p = ui.play
+    menus = []
+    monkeypatch.setattr(tk.Menu, "tk_popup", lambda self, *a, **k: menus.append(self))
+    opened = []
+    monkeypatch.setattr(p, "open_playlist_settings", lambda bid: opened.append(bid))
 
     def labels(menu):
         return [menu.entrycget(i, "label") for i in range(menu.index("end") + 1) if menu.type(i) == "command"]
 
     p._button_menu(Click(), p.play_buttons[3]._button)   # Headliner
     menu = menus[-1]
-    assert labels(menu) == ["Rename", "Move Left", "Move Right", "Remove", "Restore Default Buttons"]
-    assert menu.entrycget(5, "state") == "disabled", "nothing to restore while the four are there"
-    menu.invoke(1)   # Move Left
+    assert labels(menu) == ["Rename", "Duplicate", "Settings", "Move Left", "Move Right", "Remove from the Play Tab",
+                            "Restore Default Playlists"]
+    assert menu.entrycget(8, "state") == "disabled", "nothing to restore while the four are there"
+    menu.invoke(4)   # Move Left
     assert names(p)[2:4] == ["Headliner", "Artist's Top Tracks"]
     monkeypatch.setattr(tabs, "ask_name", lambda *a, **k: "Star Turn")
     p._button_menu(Click(), p.play_buttons[2]._button)
     menus[-1].invoke(0)   # Rename
     assert names(p)[2] == "Star Turn"
+    p._button_menu(Click(), p.play_buttons[2]._button)
+    menus[-1].invoke(1)   # Duplicate
+    assert names(p)[2:4] == ["Star Turn", "Star Turn 2"] and opened[-1] == p.play_buttons[3]._button["id"]
+    assert p.play_buttons[3]._button["settings"]["TOP_GUESTS"] == "third", "a copy keeps the settings"
     p._button_menu(Click(), p.play_buttons[0]._button)
-    assert menus[-1].entrycget(1, "state") == "disabled", "the first can't move left"
-    menus[-1].invoke(3)   # Remove: the question answered No by the fixture
-    assert names(p)[0] == "Similar Artists"
-    monkeypatch.setattr(messagebox, "askyesno", lambda *a, **k: True)
-    p._button_menu(Click(), p.play_buttons[0]._button)
-    menus[-1].invoke(3)
-    assert names(p) == ["Similar Tracks", "Star Turn", "Artist's Top Tracks", "AI Playlist"]
+    assert menus[-1].entrycget(4, "state") == "disabled", "the first can't move left"
+    menus[-1].invoke(2)   # Settings
+    assert opened[-1] == p.play_buttons[0]._button["id"]
+    menus[-1].invoke(6)   # Remove from the Play Tab: no question, nothing deleted
+    assert names(p) == ["Similar Tracks", "Star Turn", "Star Turn 2", "Artist's Top Tracks", "AI Playlist"]
+    assert buttons.standard("artists")["shown"] is False and len(buttons.load()) == 6
     p._button_menu(Click(), None)   # right-click on +
-    assert labels(menus[-1]) == ["Restore Default Buttons"] and menus[-1].entrycget(0, "state") == "normal"
+    assert labels(menus[-1]) == ["Restore Default Playlists"] and menus[-1].entrycget(0, "state") == "disabled", \
+        "off the row isn't missing"
+    buttons.remove(buttons.standard("artists")["id"])
+    p._button_menu(Click(), None)
+    assert menus[-1].entrycget(0, "state") == "normal"
     menus[-1].invoke(0)
-    assert names(p)[-1] == "Similar Artists", "the missing standard button comes back at the end"
+    assert names(p)[-1] == "Similar Artists", "the missing standard playlist comes back at the end"
+    assert not ui.errors, ui.errors[0]
+
+
+def test_more_options_dials_show_and_change_the_armed_playlist(app, ui):
+    import buttons
+    import settings_gui
+    p = ui.play
+    p._show_more(True, save=False)
+    ui.pump(0.3)
+    assert p._armed == p.play_buttons[0]._button["id"], "the first on the row, until one is used"
+    assert [b._dim for b in p.play_buttons] == [False, True, True, True, True]
+    assert p._dial_vars["moderator"].get() == "Off" and p._dial_vars["nonstop"].get() == "Off"
+    p.play_buttons[1]._command()   # a dimmed playlist arms, no build
+    ui.pump(0.2)
+    assert p._armed == p.play_buttons[1]._button["id"] and not p.running
+    assert [b._dim for b in p.play_buttons] == [True, False, True, True, True]
+    p._dial_vars["nonstop"].set("Keep It Tight")
+    p._dial_changed("nonstop")
+    ui.pump(0.2)
+    tracks = buttons.standard("tracks")
+    assert tracks["settings"]["NONSTOP_TRACKS"] == "1" and tracks["settings"]["NONSTOP_TRACKS_MODE"] == "tight"
+    assert settings_gui.read_env().get("NONSTOP_TRACKS") == "1", "the standard playlist keeps .env in step"
+    p.play_buttons[2]._command()   # Artist's Top Tracks: no Moderator, Drift or Deep Cuts dial
+    ui.pump(0.2)
+    assert not p.moderator_cb.winfo_manager() and not p.drift_cb.winfo_manager() and p.nonstop_cb.winfo_manager()
+    p._show_more(False, save=False)
+    ui.pump(0.2)
+    assert not any(b._dim for b in p.play_buttons), "closed: one click builds, nothing dimmed"
     assert not ui.errors, ui.errors[0]
 
 

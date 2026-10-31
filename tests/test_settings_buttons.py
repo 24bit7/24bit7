@@ -1,13 +1,14 @@
 """
-Settings > Buttons (stage three, 31 Oct 2026): one page per button in place of the Sources, Playlist
-and Filters tabs. A page shows only its kind's sections, saves into the button (the standard button
-of each kind also writes .env), ticks filters, and opens Edit Filters as a window.
+Settings > Playlists (stage three, 31 Oct 2026, then the tick list and one page that evening): a page per
+playlist in place of the Sources, Playlist and Filters tabs. A page shows only its kind's sections, saves
+into the playlist (the standard one of each kind also writes .env), ticks filters, and opens Edit Filters
+as a window. A tick beside each name says whether it's on the Play tab.
 """
 
 import tkinter as tk
 from tkinter import ttk
 
-from test_gui import ui, visit_every_page  # noqa: F401  (the GUI fixture)
+from test_gui import ui  # noqa: F401  (the GUI fixture)
 
 
 def walk(widget):
@@ -28,51 +29,93 @@ def tab_titles(pane):
     return [t.cget("text") for t in pane._tabs]
 
 
+def page_named(ui, title):
+    s = ui.settings
+    pane = settings_pane(ui)
+    page = pane._pages[tab_titles(pane).index(title)]
+    ui.nb.select(s)
+    pane.select(page)
+    ui.pump(0.4)
+    return page
+
+
 def buttons_page(ui):
-    """Settings > Buttons on screen. Returns the SettingsTab."""
+    """Settings > Playlists on screen. Returns the SettingsTab."""
     s = ui.settings
     pane = settings_pane(ui)
     ui.nb.select(s)
-    pane.select(pane._pages[tab_titles(pane).index("Buttons")])
+    pane.select(pane._pages[tab_titles(pane).index("Playlists")])
     ui.pump(0.3)
     return s
 
 
 def pick_button(ui, name):
-    """Clicks a button in the list; returns its ProfilePage."""
+    """Clicks a playlist in the list; returns its ProfilePage."""
     s = buttons_page(ui)
-    s._buttons_refresh()   # as opening the page does: a button added behind its back is listed
-    names = [b["name"] for b in s._buttons]
-    s._button_list.selection_clear(0, "end")
-    s._button_list.selection_set(names.index(name))
-    s._button_picked()
+    s._buttons_refresh()   # as opening the page does: a playlist added behind its back is listed
+    s._pick_button(next(b["id"] for b in s._buttons if b["name"] == name))
     ui.pump(0.4)
     return s._button_page
 
 
-def inner_pane(ui):
-    """The Sources | Playlist pane on the right of Settings > Buttons."""
-    return [p for p in walk(ui.settings._button_right) if hasattr(p, "_tabs") and hasattr(p, "select")][0]
-
-
 def inner_page(ui, title):
-    pane = inner_pane(ui)
-    page = pane._pages[tab_titles(pane).index(title)]
-    pane.select(page)
+    """The playlist's one page: its sources and its settings together (title kept for older callers)."""
     ui.pump(0.3)
-    return page
+    return ui.settings._button_inner
 
 
-def test_buttons_tab_replaces_sources_playlist_and_filters(app, ui):
+def test_playlists_tab_replaces_sources_playlist_and_filters(app, ui):
     s = buttons_page(ui)
     titles = tab_titles(settings_pane(ui))
-    assert "Buttons" in titles and not {"Sources", "Playlist", "Filters"} & set(titles), titles
-    assert s._button_list.get(0, "end") == ("Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Headliner",
-                                            "AI Playlist")
-    assert s._button_list.curselection() == (0,) and s._button_page.button["name"] == "Similar Artists"
-    assert tab_titles(inner_pane(ui)) == ["Sources", "Playlist"]
+    assert "Playlists" in titles and not {"Sources", "Playlist", "Filters", "Buttons", "Zones"} & set(titles), titles
+    assert "Devices" in titles
+    assert s._button_names() == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Headliner", "AI Playlist"]
+    assert s._button_id == s._buttons[0]["id"] and s._button_page.button["name"] == "Similar Artists"
+    assert not [w for w in walk(s._button_right) if hasattr(w, "_tabs")], "one page, no inner tabs"
+    texts = labels(s._button_inner)
+    assert "Config 1" in texts and "Similar Artists" in texts and "SOURCES" in texts and "PLAYLIST" in texts, texts[:12]
     pick_button(ui, "AI Playlist")
-    assert tab_titles(inner_pane(ui)) == ["Playlist"], "an AI Playlist has no sources to pick"
+    assert "SOURCES" not in labels(s._button_inner), "an AI Playlist has no sources to pick"
+    assert not ui.errors, ui.errors[0]
+
+
+def test_the_tick_puts_a_playlist_on_the_play_tab_and_move_up_and_down_reorder(app, ui):
+    import buttons
+    s = buttons_page(ui)
+    _id, _row, tick, _label, var = s._button_rows[3]   # Headliner
+    assert var.get() is True
+    tick.invoke()
+    ui.pump(0.3)
+    assert buttons.get(s._buttons[3]["id"])["shown"] is False
+    assert "Headliner" not in [b._name for b in ui.play.play_buttons], "the Play tab follows"
+    tick.invoke()
+    ui.pump(0.3)
+    assert "Headliner" in [b._name for b in ui.play.play_buttons]
+    pick_button(ui, "Headliner")
+    s._button_move(-1)
+    ui.pump(0.3)
+    assert s._button_names()[2:4] == ["Headliner", "Artist's Top Tracks"]
+    assert [b._name for b in ui.play.play_buttons][2] == "Headliner"
+    s._button_move(1)
+    ui.pump(0.3)
+    assert s._button_names()[2:4] == ["Artist's Top Tracks", "Headliner"]
+    assert not ui.errors, ui.errors[0]
+
+
+def test_the_name_at_the_top_renames_in_place(app, ui):
+    import buttons
+    pick_button(ui, "Headliner")
+    s = ui.settings
+    s._button_title.event_generate("<Button-1>")
+    ui.pump(0.3)
+    entry = next(w for w in walk(s._button_right) if isinstance(w, tk.Entry) and w.get() == "Headliner")
+    entry.delete(0, "end")
+    entry.insert(0, "Star Turn")
+    entry.event_generate("<Return>")
+    ui.pump(0.3)
+    assert s._button_title.cget("text") == "Star Turn" and s._button_names()[3] == "Star Turn"
+    assert buttons.get(s._button_id)["name"] == "Star Turn"
+    assert [b._name for b in ui.play.play_buttons][3] == "Star Turn", "the Play tab follows"
     assert not ui.errors, ui.errors[0]
 
 
@@ -84,7 +127,7 @@ def test_a_page_shows_only_its_kind_with_its_switches(app, ui):
     p = pick_button(ui, "Similar Artists")
     assert "SIMILAR_ARTIST_LIMIT" in p.vars and "DRIFT_ARTISTS_FROM" in p.vars and "SIMILAR_SOURCES" in p.vars
     assert "AI_MODERATOR_ARTISTS" in p.vars, "the Moderator is on every button's Sources page"
-    assert "DEEP_CUTS_ARTISTS" in p.vars and "DEEP_CUTS_ARTISTS_SHARE" in p.vars, "and the Deep Cuts switch on its Playlist page"
+    assert "DEEP_CUTS_ARTISTS" in p.vars and "DEEP_CUTS_ARTISTS_SHARE" in p.vars, "and the Deep Cuts switch further down the page"
     assert "TOP_TRACKS_COUNT" not in p.vars
     assert not ui.errors, ui.errors[0]
 
@@ -194,15 +237,15 @@ def test_add_remove_and_restore_from_settings(app, ui, monkeypatch):
     monkeypatch.setattr(settings_gui, "ask_new_button", lambda parent: ("Sunday Guests", "top", head["id"]))
     s._button_add()
     ui.pump(0.3)
-    assert s._button_list.get("end") == "Sunday Guests" and s._button_page.button["name"] == "Sunday Guests"
+    assert s._button_names()[-1] == "Sunday Guests" and s._button_page.button["name"] == "Sunday Guests"
     assert s._button_page.button["settings"]["TOP_GUESTS"] == "third"
     assert [b._name for b in ui.play.play_buttons][-1] == "Sunday Guests", "the Play tab follows"
     s._button_remove()   # the question answered No by the fixture
-    assert s._button_list.get("end") == "Sunday Guests"
+    assert s._button_names()[-1] == "Sunday Guests"
     monkeypatch.setattr(messagebox, "askyesno", lambda *a, **k: True)
     s._button_remove()
     ui.pump(0.3)
-    assert "Sunday Guests" not in s._button_list.get(0, "end")
+    assert "Sunday Guests" not in s._button_names()
     assert s._button_page.button["name"] == "Similar Artists", "back to the first"
     assert "Sunday Guests" not in [b._name for b in ui.play.play_buttons]
     s._button_restore()
@@ -211,7 +254,7 @@ def test_add_remove_and_restore_from_settings(app, ui, monkeypatch):
     s._buttons_refresh()
     s._button_restore()
     ui.pump(0.3)
-    assert s._button_list.get("end") == "Similar Tracks" and s._button_page.button["kind"] == "tracks"
+    assert s._button_names()[-1] == "Similar Tracks" and s._button_page.button["kind"] == "tracks"
     assert not ui.errors, ui.errors[0]
 
 
@@ -223,7 +266,7 @@ def test_the_list_follows_the_play_tab(app, ui, monkeypatch):
     monkeypatch.setattr(tabs, "ask_name", lambda *a, **k: "Star Turn")
     ui.play._rename_button(buttons.get(s._button_id))
     s._buttons_refresh()   # as opening the page does
-    assert s._button_list.get(3) == "Star Turn" and s._button_title.cget("text") == "Star Turn"
+    assert s._button_names()[3] == "Star Turn" and s._button_title.cget("text") == "Star Turn"
     assert s._button_page.button["id"] == s._button_id, "the page wasn't rebuilt for a rename"
 
 
@@ -233,4 +276,5 @@ def test_voice_tab_has_no_own_settings_column(app, ui):
     pane.select(pane._pages[tab_titles(pane).index("Voice Commands")])
     ui.pump(0.5)
     texts = labels(pane._pages[tab_titles(pane).index("Voice Commands")])
-    assert "Own settings" not in texts and "Enable Switch To" in texts
+    assert "Own settings" not in texts and "Switch Timing Adjustment" in texts
+    assert "Enable Switch To" not in texts, "the devices live under Settings > Devices now"

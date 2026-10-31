@@ -1,15 +1,15 @@
 """
 24bit7 - filters.
 
-Named filters (Edit Filters, from a button's or a zone's page) that narrow the
-playlists 24bit7 builds: every button's, their Drift rounds and Non-stop top-ups.
+Named filters (Edit Filters, from a playlist's page) that narrow the playlists
+24bit7 builds: every playlist's, their Drift rounds and Non-stop top-ups.
 Albums, songs, shuffles and JRiver playlists asked for by voice play as asked.
 
 Each filter: a name, On, Only pick from (a JRiver playlist or smartlist: only its
 tracks can be used), and rules on library fields, matching all or any. Where a
-filter applies is decided by ticking it on buttons and zones: a build runs under
-its button's filters plus those of the zone its playlist goes to. Where several
-apply, a track must pass them all. The seed track is never filtered out. A track
+filter applies is decided by ticking it on playlists: a build runs under its
+playlist's filters, wherever it's sent. Where several apply, a track must pass
+them all. The seed track is never filtered out. A track
 with no value for a rule's field passes it (an unrated track counts as rating 0,
 an unplayed one as played 0 times and never played).
 
@@ -68,12 +68,9 @@ def save(items):
 
 
 def used_by(filter_id):
-    """([button names], [zone names]) with this filter ticked, for Edit Filters' Used by line."""
+    """[playlist names] with this filter ticked, for Edit Filters' Used by line."""
     import buttons
-    import zones
-    names = [b["name"] for b in buttons.load() if filter_id in (b.get("filters") or [])]
-    zone_names = [name for name, z in zones.load().items() if filter_id in (z.get("filters") or [])]
-    return names, zone_names
+    return [b["name"] for b in buttons.load() if filter_id in (b.get("filters") or [])]
 
 
 def by_ids(ids):
@@ -230,7 +227,7 @@ def describe(item):
 
 class Active:
     """
-    The filters for one build: the ids it runs under (its button's and its zone's).
+    The filters for one build: the ids it runs under (its playlist's).
     allows(key) is False for a track any of them rules out. Playlists named in Only
     pick from are read once, here.
     """

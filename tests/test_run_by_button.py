@@ -1,18 +1,19 @@
 """
-Stage four (31 Oct 2026): voice commands, Non-stop, keyboard shortcuts and Blend run through
-buttons. A voice command runs the button its zone names for the phrase; Non-stop tops a playlist
-up as the button that built it says, under the zone's switch; a button's shortcut lives on the
-button; the old per-device settings path is gone.
+Voice commands, Non-stop, keyboard shortcuts and Blend run through playlists (stage four, 31 Oct
+2026, then devices in place of zones that evening). A voice command runs the playlist its device
+names for the phrase; Non-stop tops the music up as the playlist that built it says; a playlist's
+shortcut lives on the playlist; the old per-device settings path is gone.
 """
 
 import importlib
+import importlib.util
 import os
 
 from test_voice import alexa, KITCHEN, LOUNGE  # noqa: F401  (the mock Alexa fixture)
 
 
 def mods():
-    return (importlib.import_module("buttons"), importlib.import_module("zones"), importlib.import_module("filters"),
+    return (importlib.import_module("buttons"), importlib.import_module("devices"), importlib.import_module("filters"),
             importlib.import_module("nonstop"), importlib.import_module("hotkeys"))
 
 
@@ -36,12 +37,12 @@ def year_filter(name="Sixties", before="1968"):
     return f
 
 
-def point(zone, phrase, button):
-    """Settings > Zones: this zone's phrase runs that button."""
-    zones = importlib.import_module("zones")
-    record = zones.for_zone(zone)
+def point(device, phrase, button):
+    """Settings > Devices: this device's phrase runs that playlist."""
+    devices = importlib.import_module("devices")
+    record = devices.for_device(device)
     record["buttons"][phrase] = button["id"]
-    zones.update(zone, buttons=record["buttons"])
+    devices.update(device, buttons=record["buttons"])
 
 
 def last_track(app, zone_name):
@@ -64,16 +65,16 @@ def years_of(app, keys):
 
 # --- voice -------------------------------------------------------------------------------
 
-def test_a_voice_command_runs_the_zones_button(app, alexa):
+def test_a_voice_command_runs_the_devices_playlist(app, alexa):
     b = short_tracks_button()
-    point("Kitchen", "tracks_like", b)
+    point(KITCHEN, "tracks_like", b)
     r = alexa.say("TracksLikeIntent", "here comes the sun")
     assert r.started, r
     assert alexa.jobs[0][1].endswith(", with Kitchen Tracks"), alexa.jobs[0][1]
     log = alexa.run_jobs()[0]
     assert log.has("Done:"), log.text()
     assert 1 < len(app.jriver.zone("Kitchen").playlist) <= 6, log.text()
-    r = alexa.say("TracksLikeIntent", "here comes the sun", device=LOUNGE)   # Speakers: no record, the standard button
+    r = alexa.say("TracksLikeIntent", "here comes the sun", device=LOUNGE)   # no record: the standard playlist
     assert ", with" not in alexa.jobs[0][1], alexa.jobs[0][1]
     alexa.run_jobs()
     assert len(app.jriver.zone("Speakers").playlist) > 6
@@ -96,7 +97,7 @@ def test_only_runs_under_the_ai_playlist_button(app, alexa, monkeypatch):
     assert seen["value"] == "chilled the beatles" and seen["ids"] == [f["id"]] and seen["count"] == 7, seen
 
 
-def test_a_zone_with_no_button_of_the_kind_says_so(app, alexa):
+def test_a_device_with_no_playlist_of_the_kind_says_so(app, alexa):
     buttons, _, _, _, _ = mods()
     for b in buttons.of_kind("tracks"):
         buttons.remove(b["id"])
@@ -134,18 +135,7 @@ def test_non_stop_follows_the_button_that_built_the_playlist(app):
     assert len(topup_jobs(app)) == 0
 
 
-def test_the_zones_switch_turns_non_stop_off_for_everything_there(app):
-    buttons, zones, _, _, _ = mods()
-    evening = short_tracks_button("Evening", NONSTOP_TRACKS="1")
-    buttons.run(evening, report=app.Lines(), seed_info=seed(app))
-    last_track(app, "Speakers")
-    zones.update("Speakers", nonstop=False)
-    assert topup_jobs(app) == []
-    zones.update("Speakers", nonstop=True)
-    assert len(topup_jobs(app)) == 1
-
-
-def test_a_deleted_button_falls_back_to_the_zones_button_of_that_kind(app):
+def test_a_deleted_playlist_falls_back_to_the_standard_one_of_that_kind(app):
     app.set_env(NONSTOP_TRACKS="0")
     buttons, _, _, _, _ = mods()
     evening = short_tracks_button("Evening", NONSTOP_TRACKS="1")
@@ -162,7 +152,7 @@ def test_a_deleted_button_falls_back_to_the_zones_button_of_that_kind(app):
     assert lines.has("so adding more.") and not lines.has(", with "), lines.text()
 
 
-def test_a_top_up_of_another_kind_runs_the_zones_button_under_the_original_filters(app):
+def test_a_top_up_of_another_kind_runs_the_standard_playlist_under_the_original_filters(app):
     buttons, _, filters, _, _ = mods()
     no_jazz = filters.blank("No Jazz")   # broad, so the top-up has tracks left to add
     no_jazz["rules"] = [{"field": "genre", "op": "not_contains", "value": "jazz", "value2": ""}]
@@ -170,8 +160,8 @@ def test_a_top_up_of_another_kind_runs_the_zones_button_under_the_original_filte
     artists = buttons.add("Rock Artists", "artists")
     buttons.set_settings(artists["id"], dict(artists["settings"], NONSTOP_ARTISTS="1", NONSTOP_ARTISTS_USING="tracks"))
     buttons.set_filters(artists["id"], [no_jazz["id"]])
-    short = short_tracks_button("Short Tracks", count="4")
-    point("Speakers", "tracks_like", short)
+    std = buttons.standard("tracks")
+    buttons.set_settings(std["id"], dict(std["settings"], SIMILAR_TRACK_COUNT="4"))
     buttons.run(buttons.get(artists["id"]), report=app.Lines(), seed_info=seed(app))
     z = last_track(app, "Speakers")
     before = len(z.playlist)
@@ -183,16 +173,6 @@ def test_a_top_up_of_another_kind_runs_the_zones_button_under_the_original_filte
     assert 0 < len(added) <= 4, lines.text()
     assert lines.has("Filters: No Jazz") and lines.has("with Rock Artists."), lines.text()
     assert all("jazz" not in str(app.jriver.by_key[k].get("Genre", "")).lower() for k in added), lines.text()
-
-
-def test_keep_going_respects_the_zones_switch(app, alexa):
-    _, zones, _, _, _ = mods()
-    j = app.jriver
-    j.play("Kitchen", j.playlists[0]["keys"])
-    zones.update("Kitchen", nonstop=False)
-    r = alexa.say("KeepGoingIntent")
-    assert "switched off for Kitchen" in r.ssml, r
-    assert "10002" not in app.engine.NONSTOP_ZONES
 
 
 # --- keyboard shortcuts ------------------------------------------------------------------
@@ -245,13 +225,13 @@ def test_a_removed_or_ai_buttons_shortcut_says_so(app):
 
 # --- Blend, filters, devices -------------------------------------------------------------
 
-def test_blend_runs_as_the_zones_tracks_button(app, alexa):
+def test_blend_runs_as_the_devices_tracks_playlist(app, alexa):
     from test_blend import blend_on
     buttons, _, _, _, _ = mods()
     sixties = year_filter()
     b = short_tracks_button()
     buttons.set_filters(b["id"], [sixties["id"]])
-    point("Kitchen", "tracks_like", buttons.get(b["id"]))
+    point(KITCHEN, "tracks_like", buttons.get(b["id"]))
     blend_on(app)
     alexa.say("PlaylistIntent", "sunday morning")
     log = alexa.run_jobs()[0]
@@ -264,6 +244,7 @@ def test_filters_have_no_applies_on_list(app):
     f = year_filter()
     assert "devices" not in f and "devices" not in filters.load()[0]
     assert not hasattr(filters, "ALL") and not hasattr(filters, "device_for_zone")
+    assert "devices" not in f and importlib.util.find_spec("zones") is None, "filters belong to playlists only"
     assert not filters.Active([]) and not filters.Active(None)
     assert [x["id"] for x in filters.Active([f["id"]]).items] == [f["id"]]
 

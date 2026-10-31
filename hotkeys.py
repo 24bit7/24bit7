@@ -400,7 +400,7 @@ def _job(code):
             return
         try:
             engine.OUTPUT_OVERRIDE = zone_name
-            buttons.run(button, report=report, seed_info=seed, zone=zone_name)
+            buttons.run(button, report=report, seed_info=seed)
         finally:
             engine.OUTPUT_OVERRIDE = None
     return run

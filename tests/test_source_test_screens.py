@@ -15,11 +15,10 @@ def seeds(app):
 
 
 def sources_page(ui, button="Similar Artists"):
-    """A button's Sources page on screen; returns its score cells, notice and buttons by section."""
-    from test_settings_buttons import inner_page, pick_button
-    p = pick_button(ui, button)
-    inner_page(ui, "Sources")
-    return p.score_ui
+    """Settings > Other on screen; returns the Sources section's score cells, notice and buttons by section."""
+    from test_settings_buttons import page_named
+    page_named(ui, "Other")
+    return ui.settings._other_scores.score_ui
 
 
 def test_no_results_yet(app, ui):

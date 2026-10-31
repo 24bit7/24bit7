@@ -14,7 +14,7 @@ carries on as normal (and Non-stop takes over at its end if that's on).
              the Similar Artists sources (a few per artist, as a Similar Artists
              build picks them); Similar tracks: songs like the seed tracks, from the
              Similar Tracks sources. Either way, what several seeds suggest ranks
-             first, as the zone's Music Like or Tracks Like This button has it
+             first, as the device's Music Like or Tracks Like This playlist has it
   Rules      never a track already in the playlist; Skip recent, Filters, the
              hidden-track check and "at most N per artist" all apply
 """
@@ -130,12 +130,14 @@ def find(keys, report, quiet=None, mode="tracks"):
 
 
 def job(zone, keys, name, device_id=None, mode="tracks"):
-    """The blend as a Play tab job: runs after the playlist has started, as the zone's button of the blend's kind."""
+    """The blend as a Play tab job: runs after the playlist has started, as the device's playlist of the blend's kind."""
     def run(report):
         import buttons
-        import zones
+        import devices
         zone_name = engine.zone_label(zone)
-        button = zones.button_for(zone_name, "music_like" if mode == "artists" else "tracks_like")
+        kind = "artists" if mode == "artists" else "tracks"
+        button = (devices.playlist_for(device_id, "music_like" if mode == "artists" else "tracks_like") if device_id
+                  else buttons.standard(kind))
         started = time.time()
         try:
             engine.refresh_settings_if_changed()
@@ -147,7 +149,7 @@ def job(zone, keys, name, device_id=None, mode="tracks"):
                 report("  " + t("Problem: there's no {kind} button to build with. Restore Default Buttons under Settings > Buttons.",
                                 kind=t(buttons.KIND_NAMES["artists" if mode == "artists" else "tracks"])))
                 return
-            new = buttons.run(button, report=report, zone=zone_name,
+            new = buttons.run(button, report=report,
                               build=lambda report, **kw: find(keys, report, quiet=report, mode=mode))
             if not new:
                 report(t("Problem: nothing new was found to blend in, so the playlist plays as saved."))

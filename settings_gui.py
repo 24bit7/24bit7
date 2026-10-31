@@ -26,7 +26,7 @@ import hotkeys
 import saved_playlists
 import filters
 import buttons
-import zones
+import devices
 import ai_usage
 import i18n
 import tabs
@@ -858,45 +858,55 @@ def sync_pick_limit(p):
 
 
 class AddButtonPrompt(NamePrompt):
-    """The Add Button window: a name, the kind of build, and a button of that kind to start from."""
+    """
+    The New Playlist window: one dropdown, Like, listing the templates (each kind with 24bit7's
+    defaults, and the ready-made ones) then your playlists, and a name filled in from the choice.
+    """
 
     def __init__(self, parent):
-        self.kind, self.start_from = "artists", None
-        super().__init__(parent, t("Add Button"), t("Name"), initial="")
+        self.kind, self.start_from = "artists", buttons.TEMPLATE
+        self._choices = [(t("{kind} (template)", kind=t(label)), kind, buttons.TEMPLATE)
+                         for kind, label in buttons.KIND_LABELS.items()]
+        self._choices += [(b["name"], b["kind"], b["id"]) for b in buttons.load()]
+        self._auto = buttons.unique_name(t(buttons.KIND_LABELS["artists"]))
+        super().__init__(parent, t("New Playlist"), t("Name"), initial=self._auto)
 
     def _extra(self, inner, bg, fg):
-        self.kind_var = tk.StringVar(inner, value="Similar Artists")   # English: TCombobox shows it through t()
-        self.from_var = tk.StringVar(inner)
-        for label, var in ((t("Kind"), self.kind_var), (t("Start From"), self.from_var)):
-            row = tk.Frame(inner, bg=bg)
-            row.pack(anchor="w", pady=(self._px(10), 0))
-            tk.Label(row, text=label, font=("Segoe UI", 10), bg=bg, fg=fg, width=10, anchor="w").pack(side="left")
-            box = (TCombobox if var is self.kind_var else ttk.Combobox)(row, textvariable=var, state="readonly", width=26)
-            box.pack(side="left")
-            if var is self.kind_var:
-                box.config(values=[name for _, name in buttons.KINDS])
-                box.bind("<<ComboboxSelected>>", lambda e: self._fill_from())
-            else:
-                self.from_box = box
-        self._fill_from()
+        first = inner.winfo_children()[0]   # the Name label: Like goes above it
+        row = tk.Frame(inner, bg=bg)
+        row.pack(anchor="w", pady=(0, self._px(12)), before=first)
+        tk.Label(row, text=t("Like"), font=("Segoe UI", 10), bg=bg, fg=fg, width=6, anchor="w").pack(side="left")
+        self.like_var = tk.StringVar(inner, value=self._choices[0][0])
+        self.like_box = ttk.Combobox(row, textvariable=self.like_var, state="readonly", width=30,
+                                     values=[label for label, _, _ in self._choices])
+        self.like_box.pack(side="left")
+        self.like_box.bind("<<ComboboxSelected>>", lambda e: self._like_changed())
+        tk.Label(inner, text=t("Starts with that one's settings and filters. OK opens its page under Settings > "
+                               "Playlists, where you change what you like."), font=HELP_FONT, bg=bg,
+                 fg=PALETTE["help_fg"], wraplength=self._px(360), justify="left", anchor="w").pack(anchor="w",
+                                                                                                    pady=(self._px(8), 0))
 
-    def _fill_from(self):
-        kind = next((k for k, name in buttons.KINDS if name == self.kind_var.get()), "artists")
-        self.kind = kind
-        self._from = buttons.of_kind(kind)
-        names = [b["name"] for b in self._from]
-        self.from_box.config(values=names or [t("Default settings")])
-        std = buttons.standard(kind)
-        self.from_var.set(std["name"] if std else (names[0] if names else t("Default settings")))
+    def _choice(self):
+        i = self.like_box.current()
+        return self._choices[i] if 0 <= i < len(self._choices) else self._choices[0]
+
+    def _like_changed(self):
+        label, kind, from_id = self._choice()
+        typed = self.entry.get().strip()
+        if not typed or typed == self._auto:   # the name follows the choice until you type one of your own
+            base = t(buttons.KIND_LABELS[kind]) if from_id == buttons.TEMPLATE else label
+            self._auto = buttons.unique_name(base)
+            self.entry.delete(0, "end")
+            self.entry.insert(0, self._auto)
+            self.entry.select_range(0, "end")
 
     def ok(self):
-        chosen = next((b for b in self._from if b["name"] == self.from_var.get()), None)
-        self.start_from = chosen["id"] if chosen else None
+        _label, self.kind, self.start_from = self._choice()
         super().ok()
 
 
 def ask_new_button(parent):
-    """Opens the Add Button window and waits. (name, kind, the id to start from), or None for Cancel."""
+    """Opens the New Playlist window and waits. (name, kind, the id to start from or TEMPLATE), or None for Cancel."""
     win = AddButtonPrompt(parent)
     try:
         win.grab_set()
@@ -921,8 +931,9 @@ class SettingsTab(tk.Frame):
 
         nb = TabbedPane(self, font=("Segoe UI", 10, "bold"), pad=(16, 6))
         nb.pack(fill="both", expand=True, padx=8, pady=8)
+        self._pane = nb
         self._build_buttons(nb)
-        self._build_zones(nb)
+        self._build_devices(nb)
         self._build_search_sites(nb)
         self._build_keys(nb)
         self._build_voice(nb)
@@ -1146,55 +1157,63 @@ class SettingsTab(tk.Frame):
 
     def _build_buttons(self, nb):
         """
-        Settings > Buttons: the Play tab's buttons listed on the left; the chosen one's filters,
-        then its Sources and Playlist pages, on the right. Each button carries one kind's
-        settings. The standard button of each kind also writes .env, which voice commands,
-        Non-stop and keyboard shortcuts read.
+        Settings > Playlists: the playlists listed on the left, a tick beside each for the Play tab;
+        the chosen one's page on the right, one scrolling page: its name (click to rename), its
+        filters and shortcut, then its config's sources and settings. Each playlist carries one
+        kind's settings. The standard playlist of each kind also writes .env.
         """
         ttk.Style(self).configure("Big.TCheckbutton", font=("Segoe UI", 11))
         outer = tk.Frame(nb)
-        nb.add(outer, text=t("Buttons"))
+        nb.add(outer, text=t("Playlists"))
+        self._buttons_outer = outer
         self._button_id = None
-        self._button_tab = "sources"   # the inner tab last looked at
         left = tk.Frame(outer, padx=12, pady=12)
         left.pack(side="left", fill="y")
-        box = section(left, t("Your buttons"),
-                      t("Each button on the Play tab is a recipe of its own: a kind of build, its sources and "
-                        "playlist settings, the filters it runs under and a keyboard shortcut. Click one to "
-                        "change it. A voice command runs the button its zone names for the phrase (Settings > "
-                        "Zones), or the standard button of that kind."))
-        self._button_list = tk.Listbox(box, height=10, width=26, activestyle="none", exportselection=False,
-                                       font=("Segoe UI", 10))
-        self._button_list.grid(row=0, column=0, sticky="w")
-        self._button_list.bind("<<ListboxSelect>>", self._button_picked)
+        box = section(left, t("Your playlists"),
+                      t("Each playlist is a recipe of its own: a kind of build, its sources and settings, the "
+                        "filters it runs under and a keyboard shortcut. Ticked, it's a button on the Play tab; "
+                        "unticked, it's kept here for voice commands and shortcuts. Click a name to change it. A "
+                        "voice command runs the playlist its device names for the phrase (Settings > Devices), or "
+                        "the standard playlist of that kind."))
+        self._button_list = tk.Frame(box, bd=1, relief="solid", bg=PALETTE.get("entry_bg") or box.cget("bg"))
+        self._button_list.grid(row=0, column=0, sticky="we")
+        self._button_rows = []
         row = tk.Frame(box)
         row.grid(row=1, column=0, sticky="w", pady=(8, 0))
         tk.Button(row, text=t("Add"), width=9, command=self._button_add).pack(side="left", padx=(0, 3))
         tk.Button(row, text=t("Remove"), width=9, command=self._button_remove).pack(side="left", padx=(0, 3))
-        tk.Button(box, text=t("Restore Default Buttons"), command=self._button_restore).grid(
-            row=2, column=0, sticky="w", pady=(4, 0))
-        tk.Label(box, text=t("Rename, reorder: right-click the button on the Play tab."), fg=PALETTE["help_fg"],
-                 font=HELP_FONT, wraplength=scaled(box, 220), justify="left").grid(row=3, column=0, sticky="w",
-                                                                                     pady=(8, 0))
+        row = tk.Frame(box)
+        row.grid(row=2, column=0, sticky="w", pady=(4, 0))
+        tk.Button(row, text=t("Move Up"), width=9, command=lambda: self._button_move(-1)).pack(side="left", padx=(0, 3))
+        tk.Button(row, text=t("Move Down"), width=9, command=lambda: self._button_move(1)).pack(side="left", padx=(0, 3))
+        tk.Button(box, text=t("Restore Default Playlists"), command=self._button_restore).grid(
+            row=3, column=0, sticky="w", pady=(4, 0))
+        tk.Label(box, text=t("Ticked: on the Play tab. Rename: click the name at the top of its page."),
+                 fg=PALETTE["help_fg"], font=HELP_FONT, wraplength=scaled(box, 220), justify="left").grid(
+            row=4, column=0, sticky="w", pady=(8, 0))
         self._button_right = tk.Frame(outer, pady=12)
         self._button_right.pack(side="left", fill="both", expand=True, padx=(0, 12))
         outer.bind("<Map>", lambda e: self._buttons_refresh())
         self._buttons_refresh()
 
+    def show_playlist(self, button_id):
+        """Opens Settings on this playlist's page (the Play tab's cog, right-click Settings, a new playlist)."""
+        self._button_id = button_id
+        self._pane.select(self._buttons_outer)
+        self._buttons_refresh()
+
+    def _button_names(self):
+        return [b["name"] for b in self._buttons]
+
     def _buttons_refresh(self):
-        """Lists the buttons as the Play tab has them; rebuilds the right side when the chosen one has gone."""
+        """Lists the playlists as the Play tab has them; rebuilds the right side when the chosen one changed."""
         self._buttons = buttons.load()
         ids = [b["id"] for b in self._buttons]
         if self._button_id not in ids:
             self._button_id = ids[0] if ids else None
         page = self._button_page
         rebuild = page is None or page.button is None or page.button["id"] != self._button_id
-        lb = self._button_list
-        lb.delete(0, "end")
-        for b in self._buttons:
-            lb.insert("end", b["name"])
-        if self._button_id is not None:
-            lb.selection_set(ids.index(self._button_id))
+        self._fill_button_list()
         if rebuild:
             self._button_fill_page()
         elif self._button_id is not None:   # the name may have changed on the Play tab
@@ -1202,14 +1221,50 @@ class SettingsTab(tk.Frame):
             if title is not None and title.winfo_exists():
                 title.config(text=buttons.get(self._button_id)["name"])
 
-    def _button_picked(self, _e=None):
-        chosen = self._button_list.curselection()
-        if chosen and chosen[0] < len(self._buttons) and self._buttons[chosen[0]]["id"] != self._button_id:
-            self._button_id = self._buttons[chosen[0]]["id"]
+    def _fill_button_list(self):
+        """One row per playlist: its tick (on the Play tab) and its name; the chosen one highlighted."""
+        for child in self._button_list.winfo_children():
+            child.destroy()
+        self._button_rows = []
+        bg = self._button_list.cget("bg")
+        chosen_bg = PALETTE.get("row_on") or PALETTE["button_hover"]
+        for b in self._buttons:
+            on = b["id"] == self._button_id
+            row = tk.Frame(self._button_list, bg=chosen_bg if on else bg)
+            row.pack(fill="x")
+            var = tk.BooleanVar(value=b.get("shown", True))
+            tick = ttk.Checkbutton(row, variable=var, command=lambda bt=b, v=var: self._button_tick_changed(bt, v.get()))
+            tick.pack(side="left", padx=(6, 0))
+            label = tk.Label(row, text=b["name"], anchor="w", bg=row.cget("bg"), font=("Segoe UI", 10),
+                             fg=PALETTE["ai_purple"] if b["kind"] == "vibe" else None, cursor="hand2", padx=4)
+            label.pack(side="left", fill="x", expand=True)
+            for w in (row, label):
+                w.bind("<Button-1>", lambda e, bt=b: self._pick_button(bt["id"]))
+            self._button_rows.append((b["id"], row, tick, label, var))
+        if not self._buttons:
+            tk.Label(self._button_list, text=t("No playlists yet."), fg=PALETTE["help_fg"], font=HELP_FONT, bg=bg).pack(
+                anchor="w", padx=8, pady=6)
+
+    def _pick_button(self, button_id):
+        if button_id != self._button_id and any(b["id"] == button_id for b in self._buttons):
+            self._button_id = button_id
+            self._fill_button_list()
             self._button_fill_page()
 
+    def _button_tick_changed(self, button, on):
+        buttons.set_shown(button["id"], on)
+        self._buttons = buttons.load()
+        self._buttons_changed()
+
+    def _button_move(self, by):
+        if self._button_id is None:
+            return
+        buttons.move(self._button_id, by)
+        self._buttons_refresh()
+        self._buttons_changed()
+
     def _buttons_changed(self):
-        """Tells the Play tab to redraw its row: names, notes and which buttons are greyed out."""
+        """Tells the Play tab to redraw its row: names, ticks, notes and which playlists are greyed out."""
         try:
             self.winfo_toplevel().event_generate("<<ButtonsChanged>>")
         except tk.TclError:
@@ -1228,7 +1283,9 @@ class SettingsTab(tk.Frame):
         button = buttons.get(self._button_id) if self._button_id else None
         if button is None:
             return
-        if not messagebox.askyesno(t("Remove Button"), t("Remove {name}?", name=button["name"]), parent=self):
+        if not messagebox.askyesno(t("Remove Playlist"),
+                                   t("Delete {name}? To take it off the Play tab and keep it, untick it instead.",
+                                     name=button["name"]), parent=self):
             return
         buttons.remove(button["id"])
         self._button_id = None
@@ -1238,7 +1295,7 @@ class SettingsTab(tk.Frame):
     def _button_restore(self):
         missing = buttons.restore_standard()
         if not missing:
-            messagebox.showinfo(t("Restore Default Buttons"), t("Every standard button is there already."),
+            messagebox.showinfo(t("Restore Default Playlists"), t("Every standard playlist is there already."),
                                 parent=self)
             return
         self._button_id = missing[0]["id"]
@@ -1246,7 +1303,7 @@ class SettingsTab(tk.Frame):
         self._buttons_changed()
 
     def _button_fill_page(self):
-        """The right side: the button's name and kind, its filters, then Sources | Playlist for its kind."""
+        """The right side: the playlist's name (click to rename), its filters and shortcut, then its config."""
         right = self._button_right
         for child in right.winfo_children():
             child.destroy()
@@ -1255,20 +1312,24 @@ class SettingsTab(tk.Frame):
         if button is None:
             holder = tk.Frame(right)
             holder.pack(fill="x")
-            box = section(holder, t("No button chosen"))
-            tk.Label(box, text=t("Click Add to make a button."), fg=PALETTE["help_fg"],
+            box = section(holder, t("No playlist chosen"))
+            tk.Label(box, text=t("Click Add to make a playlist."), fg=PALETTE["help_fg"],
                      font=HELP_FONT).grid(row=0, column=0, sticky="w")
             return
         kind = button["kind"]
         head = tk.Frame(right)
         head.pack(fill="x", padx=(0, 0), pady=(0, 8))
-        self._button_title = tk.Label(head, text=button["name"], font=("Segoe UI", 12, "bold"))
+        title_row = tk.Frame(head)
+        title_row.grid(row=0, column=0, sticky="w")
+        self._button_title = tk.Label(title_row, text=button["name"], font=("Segoe UI", 12, "bold"), cursor="hand2")
         if kind == "vibe":   # magenta: uses AI credit
             self._button_title.config(fg=PALETTE["ai_purple"])
-        self._button_title.grid(row=0, column=0, sticky="w")
-        about = t(buttons.KIND_NAMES[kind])
+        self._button_title.pack(side="left")
+        tk.Label(title_row, text=t("click to rename"), fg=PALETTE["help_fg"], font=HELP_FONT).pack(side="left", padx=(10, 0))
+        self._button_title.bind("<Button-1>", lambda e: self._button_rename_inline(button))
+        about = t(buttons.KIND_LABELS[kind])
         if button.get("standard"):
-            about = t("Standard {kind} button: what a zone's voice commands run unless Settings > Zones says otherwise.",
+            about = t("Standard {kind} playlist: what a device's voice commands run unless Settings > Devices says otherwise.",
                       kind=about)
         tk.Label(head, text=about, fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=1, column=0, sticky="w")
         self._button_filter_row = tk.Frame(head)
@@ -1281,40 +1342,64 @@ class SettingsTab(tk.Frame):
             short.grid(row=3, column=0, sticky="w", pady=(8, 0))
             widgets = self._shortcut_row(short, 0, hotkeys.button_code(button["id"]), N_("Shortcut"),
                                          button.get("shortcut") or "")
-            help_mark(short, t("Keys that run this button from anywhere in Windows, even with 24bit7 in the tray, "
+            help_mark(short, t("Keys that run this playlist from anywhere in Windows, even with 24bit7 in the tray, "
                                "on the zone chosen under Settings > Other > Keyboard Shortcuts. Click the box and "
                                "press the keys; Esc cancels."), on=widgets[0]).grid(row=0, column=4, sticky="w",
                                                                                      padx=(8, 0))
             self.refresh_hotkey_notes()
 
-        pane = TabbedPane(right, font=("Segoe UI", 9, "bold"), pad=(12, 4))
-        pane.pack(fill="both", expand=True)
+        inner = self._button_inner = self._scroll_page(right)
         env = dict(read_env())
         env.update(button.get("settings") or {})
         p = ProfilePage("button", None, env, {}, lambda *_: None)
         p.button, p.columns = button, bool(button.get("standard"))
         p.save = lambda *_, p=p: self._save_button_page(p)
         self._button_page = p
-        pages = {}
+        config = tk.Frame(inner)
+        config.grid(row=0, column=0, sticky="w", pady=(0, 10))
+        tk.Label(config, text=t("Config 1"), font=HEADING_FONT, fg=PALETTE["section_fg"]).pack(side="left")
+        tk.Label(config, text="\u00b7", fg=PALETTE["help_fg"]).pack(side="left", padx=8)
+        tk.Label(config, text=t(buttons.KIND_LABELS[kind]), font=HEADING_FONT,
+                 fg=PALETTE["ai_purple"] if kind == "vibe" else PALETTE["section_fg"]).pack(side="left")
         resyncs = []
         if kind != "vibe":   # an AI Playlist's tracks come from the AI, so it has no sources to pick
-            pages["sources"] = self._scroll_tab(pane, N_("Sources"))
-            self._fill_sources(pages["sources"], p, kind)
+            self._fill_sources(inner, p, kind)
             resyncs.append(p.resync)
-        pages["playlist"] = self._scroll_tab(pane, N_("Playlist"))
-        self._fill_playlist(pages["playlist"], p, kind)
+        self._fill_playlist(inner, p, kind)
         resyncs.append(p.resync)
         p.resync = lambda: [r() for r in resyncs]
         self._refresh_key_marks()
         self._sync_moderator_box(p)
-        chosen = pages.get(self._button_tab) or pages["playlist"]
-        pane.select(chosen.master.master)
 
-        def remember(_e=None):
-            for name, inner in pages.items():
-                if pane.select() == str(inner.master.master):
-                    self._button_tab = name
-        pane.bind("<<NotebookTabChanged>>", remember, add="+")
+    def _button_rename_inline(self, button):
+        """The name at the top becomes a box to type in; Enter or clicking away saves, Esc leaves it."""
+        title = self._button_title
+        if not title.winfo_exists():
+            return
+        parent = title.master
+        var = tk.StringVar(value=button["name"])
+        entry = tk.Entry(parent, textvariable=var, font=("Segoe UI", 12, "bold"), width=max(12, len(button["name"]) + 2))
+        title.pack_forget()
+        entry.pack(side="left", before=parent.winfo_children()[1])
+        entry.focus_set()
+        entry.selection_range(0, "end")
+
+        def finish(save):
+            if not entry.winfo_exists():
+                return
+            name = var.get().strip()
+            entry.destroy()
+            title.pack(side="left", before=parent.winfo_children()[0])
+            if save and name and name != button["name"]:
+                buttons.rename(button["id"], name)
+                button["name"] = name
+                title.config(text=name)
+                self._buttons = buttons.load()
+                self._fill_button_list()
+                self._buttons_changed()
+        entry.bind("<Return>", lambda e: finish(True))
+        entry.bind("<FocusOut>", lambda e: finish(True))
+        entry.bind("<Escape>", lambda e: finish(False))
 
     def _filter_ticks(self, row, ticked, command, title=None, help_text=None):
         """A tick per filter in a row, then Edit Filters. Returns {filter id: BooleanVar}."""
@@ -1338,12 +1423,11 @@ class SettingsTab(tk.Frame):
         return out
 
     def _filter_ticks_refresh(self):
-        """After Edit Filters closes or saves: the ticks on the open button's and zone's pages follow."""
+        """After Edit Filters closes or saves: the ticks on the open playlist's page follow."""
         self._button_filters_refresh()
-        self._zone_filters_refresh()
 
     def _button_filters_refresh(self):
-        """The Filters row on a button's page: a tick per filter, then Edit Filters."""
+        """The Filters row on a playlist's page: a tick per filter, then Edit Filters."""
         row = getattr(self, "_button_filter_row", None)
         if row is None or not row.winfo_exists():
             return
@@ -1387,200 +1471,167 @@ class SettingsTab(tk.Frame):
                 messagebox.showerror(t("Save failed"), str(e), parent=self)
         self._buttons_changed()
 
-    # --- the Zones page ----------------------------------------------------------------------
+    # --- the Devices page --------------------------------------------------------------------
 
-    def _build_zones(self, nb):
+    def _build_devices(self, nb):
         """
-        Settings > Zones: JRiver's zones listed on the left; the chosen zone's page on the right:
-        whether it shows on the Play tab and is the default, which button each voice phrase runs
-        there, the filters every playlist sent to it must pass, and whether Non-stop may top up
-        playlists in it. JRiver is asked for its zones when the page first opens, and on Rescan.
+        Settings > Devices: every Alexa device that has spoken to 24bit7, listed on the left; the
+        chosen one's page on the right: its name, the zone it plays to, whether "switch" can move
+        the music there, and which playlist each voice phrase runs on it.
         """
         outer = tk.Frame(nb)
-        nb.add(outer, text=t("Zones"))
-        self._zone_name, self._zone_rows, self._zone_names = None, [], []
-        self._zones_filled = False
-        self._zone_hidden, self._zone_default = set(engine.HIDDEN_ZONES), engine.DEFAULT_ZONE
+        nb.add(outer, text=t("Devices"))
+        self._device_id, self._device_rows = None, []
         left = tk.Frame(outer, padx=12, pady=12)
         left.pack(side="left", fill="y")
-        box = section(left, t("Your zones"),
-                      t("Each JRiver zone has a page of its own: whether it shows on the Play tab, which button "
-                        "each voice phrase runs there, the filters every playlist sent to it must pass, and "
-                        "whether Non-stop may top up playlists in it. An Alexa device plays to a zone (Voice "
-                        "Commands), so a device has no settings of its own.\n"
-                        "A DLNA speaker such as a Sonos only appears once DLNA Controller is ticked in JRiver "
-                        "(Tools > Options > Media Network > Advanced). Press Rescan after ticking it."))
-        self._zone_list = tk.Listbox(box, height=10, width=26, activestyle="none", exportselection=False,
-                                     font=("Segoe UI", 10))
-        self._zone_list.grid(row=0, column=0, columnspan=2, sticky="w")
-        self._zone_list.bind("<<ListboxSelect>>", self._zone_picked)
-        tk.Button(box, text=t("Rescan"), width=10, command=lambda: self._zones_refresh(rescan=True)).grid(
-            row=1, column=0, sticky="w", pady=(8, 0))
-        self.follow_var = tk.BooleanVar(value=engine.FOLLOW_ACTIVE_ZONE)
-        follow = ttk.Checkbutton(box, text=t("Follow JRiver's active zone"), variable=self.follow_var,
-                                 command=self._zone_save_env)
-        follow.grid(row=2, column=0, sticky="w", pady=(12, 0))
-        help_mark(box, t("Ticked, Now Playing tracks whichever zone JRiver has active, so no zone is the default."),
-                  on=follow).grid(row=2, column=1, sticky="w", padx=(6, 0), pady=(12, 0))
-        self._zone_right = tk.Frame(outer, pady=12)
-        self._zone_right.pack(side="left", fill="both", expand=True, padx=(0, 12))
-        outer.bind("<Map>", lambda e: self._zones_refresh())
+        box = section(left, t("Your devices"),
+                      t("Say a command on an Alexa device that isn't set up and it appears here. Give it a name "
+                        "and the zone it plays to, then pick which playlist each phrase runs there. Filters and "
+                        "Non-stop belong to the playlists."))
+        self._device_list = tk.Listbox(box, height=10, width=26, activestyle="none", exportselection=False,
+                                       font=("Segoe UI", 10))
+        self._device_list.grid(row=0, column=0, sticky="w")
+        self._device_list.bind("<<ListboxSelect>>", self._device_picked)
+        tk.Button(box, text=t("Remove"), width=10, command=self._device_remove).grid(row=1, column=0, sticky="w",
+                                                                                      pady=(8, 0))
+        self._device_right = tk.Frame(outer, pady=12)
+        self._device_right.pack(side="left", fill="both", expand=True, padx=(0, 12))
+        outer.bind("<Map>", lambda e: self._devices_refresh())
 
-    def _zones_refresh(self, rescan=False):
-        """Lists JRiver's zones, plus any zone with settings that JRiver can't see right now."""
-        if rescan or not self._zones_filled:
-            engine.refresh_settings_if_changed()
-            self._zone_names = engine.zone_names(include_hidden=True)
-            self._zones_filled = True
-        known = list(self._zone_names)
-        extra = sorted({n for n in list(zones.load()) + [self._zone_default] if n and n not in known})
-        rows = known + extra
-        if self._zone_name not in rows:
-            self._zone_name = rows[0] if rows else None
-        lb = self._zone_list
+    def _devices_refresh(self):
+        """Lists the devices as Voice Commands has heard them; rebuilds the page for the chosen one."""
+        self._device_rows = voice.devices()
+        ids = [r[0] for r in self._device_rows]
+        if self._device_id not in ids:
+            self._device_id = ids[0] if ids else None
+        lb = self._device_list
         lb.delete(0, "end")
-        for name in rows:
-            lb.insert("end", name if name in known else t("{name} (not found)", name=name))
-        if self._zone_name is not None:
-            lb.selection_set(rows.index(self._zone_name))
-        self._zone_rows = rows
-        self._zone_fill_page()
+        for _id, name, zone, _heard in self._device_rows:
+            lb.insert("end", name or t("Unnamed device"))
+        if self._device_id is not None:
+            lb.selection_set(ids.index(self._device_id))
+        self._device_fill_page()
 
-    def _zone_picked(self, _e=None):
-        chosen = self._zone_list.curselection()
-        if chosen and chosen[0] < len(self._zone_rows) and self._zone_rows[chosen[0]] != self._zone_name:
-            self._zone_name = self._zone_rows[chosen[0]]
-            self._zone_fill_page()
+    def _device_picked(self, _e=None):
+        chosen = self._device_list.curselection()
+        if chosen and chosen[0] < len(self._device_rows) and self._device_rows[chosen[0]][0] != self._device_id:
+            self._device_id = self._device_rows[chosen[0]][0]
+            self._device_fill_page()
 
-    def _zone_fill_page(self):
-        """The right side: the zone's Play tab ticks, its voice phrases' buttons, its filters and Non-stop."""
-        right = self._zone_right
+    def _device_remove(self):
+        row = next((r for r in self._device_rows if r[0] == self._device_id), None)
+        if row is None:
+            return
+        if not messagebox.askyesno(t("Remove Device"), t("Remove {name}? It comes back the next time it speaks to 24bit7.",
+                                                          name=row[1] or t("Unnamed device")), parent=self):
+            return
+        voice.remove_device(row[0])
+        devices.forget(row[0])
+        self._device_id = None
+        self._devices_refresh()
+
+    def _device_fill_page(self):
+        """The right side: the device's name and zone, its Switch tick, then a playlist per voice phrase."""
+        right = self._device_right
         for child in right.winfo_children():
             child.destroy()
-        name = self._zone_name
-        if name is None:
+        row = next((r for r in self._device_rows if r[0] == self._device_id), None)
+        if row is None:
             holder = tk.Frame(right)
             holder.pack(fill="x")
-            box = section(holder, t("No zones found"))
-            tk.Label(box, text=t("No zones found: JRiver turned 24bit7 away. Set a login under "
-                                 "Tools > Options > Media Network > Authentication in JRiver, "
-                                 "and the same in Settings > Keys.") if engine.JRIVER_REFUSED[0] else
-                     t("No zones found. Is JRiver running, with Media Network on?"),
-                     fg=PALETTE["help_fg"], font=HELP_FONT, wraplength=scaled(box, 420),
-                     justify="left").grid(row=0, column=0, sticky="w")
+            box = section(holder, t("No devices yet"))
+            tk.Label(box, text=t("Say a command on an Alexa device and it appears here."), fg=PALETTE["help_fg"],
+                     font=HELP_FONT).grid(row=0, column=0, sticky="w")
             return
-        record = zones.for_zone(name)
+        device_id, name, zone, heard = row
         head = tk.Frame(right)
         head.pack(fill="x", pady=(0, 8))
-        tk.Label(head, text=name, font=("Segoe UI", 12, "bold")).grid(row=0, column=0, sticky="w")
-        if name not in self._zone_names:
-            tk.Label(head, text=t("JRiver can't see this zone right now (a speaker that's off, say). Its settings are kept."),
-                     fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=1, column=0, sticky="w")
-        asking = [d[1] or t("Device") for d in voice.devices() if d[2] == name]   # the Alexa devices on this zone
-        if asking:
-            tk.Label(head, text=(t("{name} asks here.", name=asking[0]) if len(asking) == 1
-                                 else t("{names} ask here.", names=", ".join(asking))),
-                     fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=2, column=0, sticky="w")
+        self._device_title = tk.Label(head, text=name or t("Unnamed device"), font=("Segoe UI", 12, "bold"))
+        self._device_title.grid(row=0, column=0, sticky="w")
+        if heard:
+            tk.Label(head, text=t("Last heard {when}.", when=heard), fg=PALETTE["help_fg"], font=HELP_FONT).grid(
+                row=1, column=0, sticky="w")
         holder = tk.Frame(right)
         holder.pack(fill="x")
 
-        box = section(holder, t("Play Tab"))
-        self._zone_show_var = tk.BooleanVar(value=name not in self._zone_hidden)
-        show = ttk.Checkbutton(box, text=t("Show in the Zone and Output lists"), variable=self._zone_show_var,
-                               command=self._zone_save_env)
-        show.grid(row=0, column=0, sticky="w")
-        self._zone_default_var = tk.StringVar(value=name if self._zone_default == name else "")
-        default = ttk.Checkbutton(box, text=t("Default zone"), variable=self._zone_default_var, onvalue=name,
-                                  offvalue="", command=self._zone_save_env)
-        default.grid(row=0, column=1, sticky="w", padx=(24, 0))
-        self._zone_default_tick = default
-        help_mark(box, t("The zone Now Playing opens on when 24bit7 starts. Picking a zone by hand always wins. "
-                         "Greyed out while Follow JRiver's active zone is ticked, and for a hidden zone."),
-                  on=default).grid(row=0, column=2, sticky="w", padx=(8, 0))
-        self._zone_sync_default()
+        box = section(holder, t("Device"))
+        tk.Label(box, text=t("Name"), font=LABEL_FONT).grid(row=0, column=0, sticky="w", pady=4)
+        name_var = tk.StringVar(value=name or "")
+        entry = tk.Entry(box, textvariable=name_var, width=26)
+        entry.grid(row=0, column=1, sticky="w", padx=(12, 0), pady=4)
+
+        def save_name(_e=None):
+            new = name_var.get().strip() or t("Device")
+            voice.update_device(device_id, name=new)
+            self._device_title.config(text=new)
+            self._devices_refresh_list_only()
+        entry.bind("<FocusOut>", save_name)
+        entry.bind("<Return>", save_name)
+        zone_title = tk.Label(box, text=t("Plays to"), font=LABEL_FONT)
+        zone_title.grid(row=1, column=0, sticky="w", pady=4)
+        zones = engine.zone_names()
+        zone_var = tk.StringVar(value=zone or "Not set")
+        zone_cb = TCombobox(box, textvariable=zone_var, state="readonly", width=24,
+                            values=[N_("Not set")] + zones + ([zone] if zone and zone not in zones else []))
+        zone_cb.grid(row=1, column=1, sticky="w", padx=(12, 0), pady=4)
+        help_mark(box, t("The JRiver zone this device's commands play in."), on=zone_title)
+
+        def zone_changed(_e=None):
+            zone_cb.selection_clear()
+            picked = "" if zone_var.get() == t("Not set") else zone_var.get()
+            voice.update_device(device_id, zone=picked)
+            self._devices_refresh()   # the Switch tick depends on the zone
+        zone_cb.bind("<<ComboboxSelected>>", zone_changed)
+        switch_var = tk.BooleanVar(value=bool(zone) and zone not in voice.switch_unticked())
+        switch = ttk.Checkbutton(box, text=t("Enable Switch To"), variable=switch_var,
+                                 command=lambda: voice.set_switch_enabled(zone, switch_var.get()))
+        switch.grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        help_mark(box, t("Ticked, this device's zone is one you can switch the music to, with \"Alexa, ask "
+                         "needle drop to switch\" or the Switch Zones keyboard shortcut. With two zones "
+                         "ticked, switching moves the music straight to the other one. With three or more, "
+                         "Alexa asks which zone, or you can say \"switch to\" and the zone name; the "
+                         "shortcut steps through them in turn. The music carries on from the same track, "
+                         "and the zone it left stops. Two devices on the same zone share one tick."), on=switch)
+        if not zone:
+            switch.state(["disabled"])
 
         box = section(holder, t("Voice Commands"),
-                      t("Which button each phrase runs when an Alexa device on this zone asks. Unset, it's the "
-                        "standard button of that kind."))
-        self._zone_phrase_vars = {}
-        for r, (phrase, label) in enumerate(zones.PHRASES):
-            kind = zones.PHRASE_KINDS[phrase]
+                      t("Which playlist each phrase runs when this device asks. Unset, it's the standard playlist "
+                        "of that kind."))
+        for r, (phrase, label) in enumerate(devices.PHRASES):
+            kind = devices.PHRASE_KINDS[phrase]
             options = buttons.of_kind(kind)
             title = tk.Label(box, text=t(label), anchor="w")
             title.grid(row=r, column=0, sticky="w", pady=3)
             if kind == "vibe":
                 title.config(fg=PALETTE["ai_purple"])
-            chosen = zones.button_for(name, phrase)
+            chosen = devices.playlist_for(device_id, phrase)
             var = tk.StringVar(value=chosen["name"] if chosen else "")
             cb = TCombobox(box, textvariable=var, values=[b["name"] for b in options], state="readonly", width=28)
             cb.grid(row=r, column=1, sticky="w", padx=(12, 0), pady=3)
-            cb.bind("<<ComboboxSelected>>", lambda e, p=phrase, c=cb, o=options: self._zone_phrase_changed(p, c, o))
+            cb.bind("<<ComboboxSelected>>", lambda e, p=phrase, c=cb, o=options: self._device_phrase_changed(p, c, o))
             if not options:
                 cb.state(["disabled"])
-            self._zone_phrase_vars[phrase] = var
 
-        box = section(holder, t("Filters"),
-                      t("Every playlist sent to this zone, from the Play tab, a voice command, a shortcut or a "
-                        "Non-stop top-up, must pass each ticked filter, as well as its button's own."))
-        self._zone_filter_row = tk.Frame(box)
-        self._zone_filter_row.grid(row=0, column=0, sticky="w")
-        self._zone_filters_refresh()
+    def _devices_refresh_list_only(self):
+        """A rename: the list follows without rebuilding the page (the entry keeps focus)."""
+        self._device_rows = voice.devices()
+        lb = self._device_list
+        lb.delete(0, "end")
+        for _id, name, _zone, _heard in self._device_rows:
+            lb.insert("end", name or t("Unnamed device"))
+        ids = [r[0] for r in self._device_rows]
+        if self._device_id in ids:
+            lb.selection_set(ids.index(self._device_id))
 
-        box = section(holder, t("Non-stop"))
-        self._zone_nonstop_var = tk.BooleanVar(value=record["nonstop"])
-        tick = ttk.Checkbutton(box, text=t("Non-stop may top up playlists in this zone"), variable=self._zone_nonstop_var,
-                               command=lambda: zones.update(name, nonstop=self._zone_nonstop_var.get()))
-        tick.grid(row=0, column=0, sticky="w")
-        help_mark(box, t("Ticked, a playlist here tops up as its button's Non-stop settings say. Unticked, nothing "
-                         "played in this zone tops up, Keep It Going included."), on=tick).grid(
-            row=0, column=1, sticky="w", padx=(8, 0))
-
-    def _zone_filters_refresh(self):
-        row = getattr(self, "_zone_filter_row", None)
-        if row is None or not row.winfo_exists() or self._zone_name is None:
-            return
-        self._zone_filter_vars = self._filter_ticks(row, zones.for_zone(self._zone_name)["filters"],
-                                                    self._zone_filters_changed)
-
-    def _zone_filters_changed(self):
-        if self._zone_name is not None:
-            zones.update(self._zone_name, filters=[fid for fid, var in self._zone_filter_vars.items() if var.get()])
-
-    def _zone_phrase_changed(self, phrase, combo, options):
-        """A phrase's button: the standard button of the kind is kept as unset, so Restore Default Buttons finds it."""
+    def _device_phrase_changed(self, phrase, combo, options):
+        """A phrase's playlist: the standard one of the kind is kept as unset, so Restore Default Playlists finds it."""
         combo.selection_clear()
         i = combo.current()
         chosen = options[i] if 0 <= i < len(options) else None
-        record = zones.for_zone(self._zone_name)
+        record = devices.for_device(self._device_id)
         record["buttons"][phrase] = None if chosen is None or chosen.get("standard") else chosen["id"]
-        zones.update(self._zone_name, buttons=record["buttons"])
-
-    def _zone_sync_default(self):
-        """Default greys out while Follow is ticked, and for a hidden zone."""
-        tick = getattr(self, "_zone_default_tick", None)
-        if tick is not None and tick.winfo_exists():
-            tick.state(["disabled"] if self.follow_var.get() or not self._zone_show_var.get() else ["!disabled"])
-
-    def _zone_save_env(self):
-        """Show, Default and Follow: kept in .env, as before the Zones page."""
-        name = self._zone_name
-        if name is not None and getattr(self, "_zone_show_var", None) is not None:
-            if self._zone_show_var.get():
-                self._zone_hidden.discard(name)
-            else:
-                self._zone_hidden.add(name)
-            if self._zone_default_var.get() == name and name not in self._zone_hidden:
-                self._zone_default = name
-            elif self._zone_default == name:   # unticked, or hidden: back to JRiver's active zone
-                self._zone_default = ""
-                self._zone_default_var.set("")
-        try:
-            write_env({"HIDDEN_ZONES": "|".join(sorted(self._zone_hidden)),
-                       "DEFAULT_ZONE": self._zone_default,
-                       "FOLLOW_ACTIVE_ZONE": "1" if self.follow_var.get() else "0"})
-        except Exception as e:
-            messagebox.showerror(t("Save failed"), str(e), parent=self)
-        self._zone_sync_default()
+        devices.update(self._device_id, buttons=record["buttons"])
 
     # --- Edit Filters, a window ---
 
@@ -1688,8 +1739,7 @@ class SettingsTab(tk.Frame):
             self._filter_save()
         ttk.Checkbutton(row, text=t("On"), variable=on, command=on_toggled).pack(side="left")
         help_mark(row, t("Off keeps the filter for later without it applying anywhere.")).pack(side="left", padx=(8, 0))
-        names, zone_names = filters.used_by(item["id"])
-        parts = names + [t("the {zone} zone", zone=z) for z in zone_names]
+        parts = filters.used_by(item["id"])
         tk.Label(box, text=(t("Used by: {names}", names=", ".join(parts)) if parts else
                             t("Not ticked on any button yet. Tick it under Filters on a button's page.")),
                  fg=PALETTE["help_fg"], font=HELP_FONT, wraplength=scaled(box, 560), justify="left").grid(
@@ -2188,11 +2238,12 @@ class SettingsTab(tk.Frame):
         return r + 1
 
     def _source_ticks(self, p, box, r, group, names, default, command, purpose, help_text=None,
-                      lb_key=None, lb_notes=None, scores=None):
+                      lb_key=None, lb_notes=None, scores=None, hint=None):
         """
-        The sources for one Play option, one per line, with an optional ? beside
-        the first. lb_key: the ListenBrainz algorithm dropdown, on its line.
-        scores: "artists" or "tracks", for Test My Sources' columns beside each source.
+        The sources for one kind, one per line, with an optional ? beside the first.
+        lb_key: the ListenBrainz algorithm dropdown, on its line. scores: "artists" or
+        "tracks", for Test My Sources' columns beside each source (Settings > Other).
+        hint: "artists" or "tracks", for a quiet score figure beside each source instead.
         """
         frame = tk.Frame(box)
         frame.grid(row=r, column=0, columnspan=6, sticky="w", pady=(2, 4))
@@ -2225,6 +2276,13 @@ class SettingsTab(tk.Frame):
                                           foreground=PALETTE["ai_purple"])
             tick.pack(side="left")
             self._source_boxes.append((tick, code, label, purpose))
+            if hint and code != "ai":   # its score from the last Test My Sources, quietly
+                ui = p.__dict__.setdefault("score_ui", {}).setdefault(hint, {"cells": {}})
+                hint_label = tk.Label(line, text="", font=HELP_FONT, fg=PALETTE["help_fg"])
+                hint_label.pack(side="left", padx=(10, 0))
+                ui.setdefault("hints", {})[code] = hint_label
+                if p not in self.__dict__.setdefault("_score_pages", []):
+                    self._score_pages.append(p)
             if help_text and n == 0:
                 help_mark(line, help_text).pack(side="left", padx=(10, 0))
             if code == "listenbrainz" and lb_key:
@@ -2301,6 +2359,13 @@ class SettingsTab(tk.Frame):
         for p in [p for p in self.__dict__.get("_score_pages", []) if p.__dict__.get("score_ui")]:
             for section, ui in p.score_ui.items():
                 notice = ui.get("notice")
+                scores = (result or {}).get("scores", {}).get(section, {}).get("sources", {})
+                for code, hint_label in ui.get("hints", {}).items():
+                    s = scores.get(code)
+                    try:
+                        hint_label.config(text=f"{s['performance']}%" if s else "")
+                    except tk.TclError:
+                        pass
                 try:
                     if notice is None or not notice.winfo_exists():
                         continue
@@ -2317,7 +2382,6 @@ class SettingsTab(tk.Frame):
                 else:
                     notice.config(text=t("No results yet. Test My Sources shows how each source does with your "
                                        "library."), bg=notice.master.cget("bg"), fg=PALETTE["help_fg"])
-                scores = (result or {}).get("scores", {}).get(section, {}).get("sources", {})
                 for code, cells in ui["cells"].items():
                     s = scores.get(code)
                     if code not in names_ok:
@@ -2526,9 +2590,8 @@ class SettingsTab(tk.Frame):
                                    "No key needed. Ticked on its own, it plays YouTube's queue as is, matched against "
                                    "your library. Ticked with other sources, its artists join the blend. It's an "
                                    "unofficial route, so it may break now and then."))
-            self._score_buttons(p, box, "artists")
             r = self._source_ticks(p, box, 0, "SIMILAR_SOURCES", SOURCE_NAMES, "lastfm", similar_changed, "similar",
-                                   scores="artists", lb_key="LISTENBRAINZ_ALGORITHM",
+                                   hint="artists", lb_key="LISTENBRAINZ_ALGORITHM",
                                    lb_notes=N_("alltime: from all listening history; leans toward well-known artists.\n"
                                             "recent: what people are playing alongside this artist right now."))
             # How many sources must agree. Replaced the old on/off tick box; an old
@@ -2550,9 +2613,8 @@ class SettingsTab(tk.Frame):
             box = section(pages["tracks"], t("Sources"),
                           t("Tracks like the seed track, for the Similar Tracks button. No key needed for "
                           "ListenBrainz or YouTube."))
-            self._score_buttons(p, box, "tracks")
             r = self._source_ticks(p, box, 0, "SIMILAR_TRACK_SOURCES", TRACK_SOURCE_NAMES, "lastfm,listenbrainz,youtube",
-                                   tracks_changed, "similar", scores="tracks", lb_key="LISTENBRAINZ_TRACK_ALGORITHM",
+                                   tracks_changed, "similar", hint="tracks", lb_key="LISTENBRAINZ_TRACK_ALGORITHM",
                                    lb_notes=N_("alltime: from all listening history.\n"
                                             "recent: roughly the last six months; older songs may find fewer matches."))
             start = p.env.get("SIMILAR_TRACK_MIN_AGREEMENT", "2").strip() or "2"
@@ -4148,7 +4210,29 @@ class SettingsTab(tk.Frame):
                         "include album credits marked for that track, such as a drummer on tracks 2 to 4. "
                         "Show First picks which list comes first.")).pack(side="left", padx=(8, 0))
 
+        self._build_sources_section(tab)
         self._build_additional_outputs(tab)
+
+        # --- Zones: which JRiver zones appear in the Play tab's Zone and Output lists ---
+        # Filled when the tab is first shown, so a slow JRiver never delays startup.
+        box = section(tab, t("Zones"),
+                      t("Show: untick a zone to hide it from the Zone and Output lists on the Play tab.\n"
+                      "Default: the zone Now Playing opens on when 24bit7 starts. Picking a zone by hand "
+                      "always wins.\n"
+                      "Follow: Now Playing tracks whichever zone JRiver has active, so Default is greyed out.\n"
+                      "A DLNA speaker such as a Sonos only appears once DLNA Controller is ticked in JRiver "
+                      "(Tools > Options > Media Network > Advanced). Press Rescan after ticking it."))
+        self.zone_frame = tk.Frame(box)
+        self.zone_frame.grid(row=0, column=0, sticky="w")
+        tk.Button(box, text=t("Rescan"), width=10, command=self._fill_zone_boxes).grid(
+            row=0, column=1, sticky="nw", padx=(24, 0))
+        self.follow_var = tk.BooleanVar(value=engine.FOLLOW_ACTIVE_ZONE)
+        ttk.Checkbutton(box, text=t("Follow JRiver's active zone"), variable=self.follow_var,
+                        command=self._save_zone_settings).grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        self.zone_vars, self.zone_radios = {}, {}
+        self.default_zone_var = tk.StringVar(value=engine.DEFAULT_ZONE)
+        self._zones_filled = False
+        tab.bind("<<Shown>>", lambda e: None if self._zones_filled else self._fill_zone_boxes())
 
         # --- Windows: start with Windows, start hidden in the tray, and close to the tray ---
         box = section(tab, t("Windows"),
@@ -4476,8 +4560,96 @@ class SettingsTab(tk.Frame):
         else:
             self.startup_note.grid_remove()
 
+    def _build_sources_section(self, tab):
+        """
+        Other > Sources: Test My Sources and Full Results, with the artist and track score tables.
+        It's about the sources themselves, so it sits here rather than on every playlist's page,
+        which shows each source's score as a figure beside its name.
+        """
+        import types
+        box = section(tab, t("Sources"),
+                      t("Test My Sources asks every source what's similar to a fixed set of seed tracks across "
+                        "17 genres and counts how many answers are in your library, so you can see which sources "
+                        "suit your collection. Each playlist's page shows the scores beside its sources."))
+        p = self._other_scores = types.SimpleNamespace(score_ui={})
+        self._score_buttons(p, box, "artists")
+        for r, (section_key, title, names) in enumerate((("artists", N_("Artist sources"), SOURCE_NAMES),
+                                                           ("tracks", N_("Track sources"), TRACK_SOURCE_NAMES))):
+            frame = tk.Frame(box)
+            frame.grid(row=r, column=0, sticky="w", pady=(0, 10))
+            tk.Label(frame, text=t(title), font=LABEL_FONT).grid(row=0, column=0, sticky="w")
+            row = self._score_header(p, frame, section_key, 1)
+            for code, label in names:
+                name = tk.Label(frame, text=label, anchor="w", fg=PALETTE["ai_purple"] if code == "ai" else None)
+                name.grid(row=row, column=0, sticky="w", pady=1)
+                self._score_cells(p, frame, section_key, code, row)
+                row += 1
+        self._watch_source_test()
+
+    def _fill_zone_boxes(self):
+        """Per zone: a Show tick (hidden zones drop off the Play tab) and a Default button."""
+        self._zones_filled = True
+        for child in self.zone_frame.winfo_children():
+            child.destroy()
+        engine.refresh_settings_if_changed()
+        names = engine.zone_names(include_hidden=True)
+        self.zone_vars, self.zone_radios = {}, {}
+        if not names:
+            tk.Label(self.zone_frame, text=t("No zones found: JRiver turned 24bit7 away. Set a login under "
+                                             "Tools > Options > Media Network > Authentication in JRiver, "
+                                             "and the same in Settings > Keys.") if engine.JRIVER_REFUSED[0] else
+                     t("No zones found. Is JRiver running, with Media Network on?"),
+                     fg=PALETTE["help_fg"], font=HELP_FONT, wraplength=scaled(self.zone_frame, 420),
+                     justify="left").grid(row=0, column=0, sticky="w")
+            return
+        tk.Label(self.zone_frame, text=t("Show"), fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=0, column=0, sticky="w")
+        tk.Label(self.zone_frame, text=t("Default"), fg=PALETTE["help_fg"], font=HELP_FONT).grid(
+            row=0, column=1, sticky="w", padx=(24, 0))
+        rb = ttk.Radiobutton(self.zone_frame, text=t("JRiver's active zone"), value="",
+                             variable=self.default_zone_var, command=self._save_zone_settings)
+        rb.grid(row=1, column=1, sticky="w", padx=(24, 0))
+        self.zone_radios[""] = rb
+        # A default zone JRiver can't see right now (speaker unplugged) still gets a row
+        missing = [engine.DEFAULT_ZONE] if engine.DEFAULT_ZONE and engine.DEFAULT_ZONE not in names else []
+        for r, name in enumerate(names + missing, start=2):
+            if name in names:
+                v = tk.BooleanVar(value=name not in engine.HIDDEN_ZONES)
+                ttk.Checkbutton(self.zone_frame, text=name, variable=v,
+                                command=self._save_zone_settings).grid(row=r, column=0, sticky="w")
+                self.zone_vars[name] = v
+            else:
+                tk.Label(self.zone_frame, text=t("{name} (not found)", name=name), fg=PALETTE["help_fg"]).grid(row=r, column=0, sticky="w")
+            rb = ttk.Radiobutton(self.zone_frame, value=name, variable=self.default_zone_var,
+                                 command=self._save_zone_settings)
+            rb.grid(row=r, column=1, sticky="w", padx=(24, 0))
+            self.zone_radios[name] = rb
+        self._sync_zone_controls()
+
+    def _sync_zone_controls(self):
+        """Default greys out while Follow is ticked, and for any hidden zone."""
+        follow = self.follow_var.get()
+        for name, rb in self.zone_radios.items():
+            hidden = name in self.zone_vars and not self.zone_vars[name].get()
+            rb.state(["disabled"] if follow or hidden else ["!disabled"])
+
+    def _save_zone_settings(self):
+        # Hiding the default zone puts the default back to JRiver's active zone
+        default = self.default_zone_var.get()
+        if default in self.zone_vars and not self.zone_vars[default].get():
+            self.default_zone_var.set("")
+        self._sync_zone_controls()
+        # Zones hidden earlier but not in JRiver right now stay hidden
+        hidden = {n for n, v in self.zone_vars.items() if not v.get()}
+        hidden |= {n for n in engine.HIDDEN_ZONES if n not in self.zone_vars}
+        try:
+            write_env({"HIDDEN_ZONES": "|".join(sorted(hidden)),
+                       "DEFAULT_ZONE": self.default_zone_var.get(),
+                       "FOLLOW_ACTIVE_ZONE": "1" if self.follow_var.get() else "0"})
+        except Exception as e:
+            messagebox.showerror(t("Save failed"), str(e), parent=self)
+
     def _build_voice(self, nb):
-        """Voice Commands: the listener switch, its key, the devices heard, and a test."""
+        """Voice Commands: the listener switch, its key, New Playlists, the switch timing, and a test."""
         tab = self._scroll_tab(nb, N_("Voice Commands"))
 
         # --- Voice Commands: the switch and the key ---
@@ -4522,16 +4694,12 @@ class SettingsTab(tk.Frame):
                          "playlists and shuffles always play at once, and \"more like this\" always waits."),
                   on=new_title)
 
-        # --- Devices ---
-        box = section(tab, t("Devices"),
-                      t("Say a command on a device that isn't set up and it appears here. Pick the zone it "
-                      "plays to."))
-        self.voice_dev_frame = tk.Frame(box)
-        self.voice_dev_frame.grid(row=0, column=0, sticky="w")
-        tk.Button(box, text=t("Refresh"), width=10, command=self._fill_voice_devices).grid(
-            row=1, column=0, sticky="w", pady=(8, 0))
+        # --- Switching: the devices themselves are under Settings > Devices ---
+        box = section(tab, t("Switching"),
+                      t("Each Alexa device, the zone it plays to and whether \"switch\" can move the music there "
+                        "are set under Settings > Devices."))
         timing = tk.Frame(box)
-        timing.grid(row=2, column=0, sticky="w", pady=(12, 0))
+        timing.grid(row=0, column=0, sticky="w")
         tk.Label(timing, text=t("Switch Timing Adjustment")).pack(side="left")
         self.switch_timing_var = tk.StringVar()
         spin = tk.Spinbox(timing, from_=-3.0, to=3.0, increment=0.25, format="%.2f", width=6,
@@ -4571,7 +4739,7 @@ class SettingsTab(tk.Frame):
             link.bind("<Button-1>", lambda e, u=url: webbrowser.open_new_tab(u))
             tk.Label(box, text=t(blurb), fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=r, column=1, sticky="w", padx=(12, 0))
 
-        tab.bind("<<Shown>>", lambda e: (self.voice_status.config(text=voice.status_shown()), self._fill_voice_devices()))
+        tab.bind("<<Shown>>", lambda e: self.voice_status.config(text=voice.status_shown()))
 
     def _voice_toggled(self):
         updates = {"VOICE_ENABLED": "1" if self.voice_on.get() else "0"}
@@ -4613,55 +4781,6 @@ class SettingsTab(tk.Frame):
             write_env({"SWITCH_TIMING": f"{value:.2f}"})
         except Exception as e:
             messagebox.showerror(t("Save failed"), str(e), parent=self)
-
-    def _fill_voice_devices(self):
-        """One row per Alexa device heard: its name, the zone it plays to, when it was last heard."""
-        for child in self.voice_dev_frame.winfo_children():
-            child.destroy()
-        rows = voice.devices()
-        if not rows:
-            tk.Label(self.voice_dev_frame, text=t("No devices heard yet."), fg=PALETTE["help_fg"], font=HELP_FONT).grid(
-                row=0, column=0, sticky="w")
-            return
-        zones = engine.zone_names()
-        for c, heading in enumerate((t("Name"), t("Zone"), t("Last heard"), "")):
-            tk.Label(self.voice_dev_frame, text=heading, fg=PALETTE["help_fg"], font=HELP_FONT).grid(
-                row=0, column=c, sticky="w", padx=(0, 12))
-        switch_head = tk.Frame(self.voice_dev_frame)
-        switch_head.grid(row=0, column=5, sticky="w", padx=(12, 0))
-        tk.Label(switch_head, text=t("Enable Switch To"), fg=PALETTE["help_fg"], font=HELP_FONT).pack(side="left")
-        help_mark(switch_head, t("Ticked, this device's zone is one you can switch the music to, with \"Alexa, ask "
-                               "needle drop to switch\" or the Switch Zones keyboard shortcut. With two zones "
-                               "ticked, switching moves the music straight to the other one. With three or more, "
-                               "Alexa asks which zone, or you can say \"switch to\" and the zone name; the "
-                               "shortcut steps through them in turn. The music carries on from the same track, "
-                               "and the zone it left stops. Two devices on the same zone share one tick.")).pack(
-            side="left", padx=(6, 0))
-        switch_off = voice.switch_unticked()
-        for r, (device_id, name, zone, heard) in enumerate(rows, start=1):
-            name_var = tk.StringVar(value=name)
-            entry = tk.Entry(self.voice_dev_frame, textvariable=name_var, width=22)
-            entry.grid(row=r, column=0, sticky="w", padx=(0, 12), pady=2)
-            save_name = lambda e, d=device_id, v=name_var: voice.update_device(d, name=v.get().strip() or "Device")
-            entry.bind("<FocusOut>", save_name)
-            entry.bind("<Return>", save_name)
-            zone_var = tk.StringVar(value=zone or "Not set")
-            cb = TCombobox(self.voice_dev_frame, textvariable=zone_var, state="readonly", width=22,
-                              values=[N_("Not set")] + zones + ([zone] if zone and zone not in zones else []))
-            cb.grid(row=r, column=1, sticky="w", padx=(0, 12), pady=2)
-            cb.bind("<<ComboboxSelected>>", lambda e, d=device_id, v=zone_var: voice.update_device(
-                d, zone="" if v.get() == "Not set" else v.get()))
-            tk.Label(self.voice_dev_frame, text=heard or "").grid(row=r, column=2, sticky="w", padx=(0, 12))
-            tk.Button(self.voice_dev_frame, text=t("Remove"), width=8,
-                      command=lambda d=device_id: (voice.remove_device(d), self._fill_voice_devices())).grid(
-                row=r, column=3, sticky="w", pady=2)
-            switch_var = tk.BooleanVar(value=bool(zone) and zone not in switch_off)
-            box = ttk.Checkbutton(self.voice_dev_frame, variable=switch_var,
-                                  command=lambda z=zone, v=switch_var: (voice.set_switch_enabled(z, v.get()),
-                                                                       self._fill_voice_devices()))
-            box.grid(row=r, column=5, sticky="w", padx=(12, 0))
-            if not zone:   # no zone yet: nothing to switch to
-                box.state(["disabled"])
 
     def _voice_test(self):
         if not voice.status().startswith("Listening"):

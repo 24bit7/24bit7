@@ -1,5 +1,5 @@
 """
-Add Playlist rows (Play tab), filters ticked on a button or a zone, and how JRiver playlists play by voice.
+Add Playlist rows (Play tab), filters ticked on a playlist, and how JRiver playlists play by voice.
 """
 
 import time
@@ -152,17 +152,18 @@ def test_filter_off_does_nothing(app):
     assert len(app.jriver.zone("Speakers").playlist) > 10, r.text()
 
 
-def test_filter_ticked_on_a_zone_applies_to_builds_sent_there(app):
-    import zones
+def test_a_filter_ticked_nowhere_applies_nowhere(app):
+    import buttons
     f = add_filter(app, tick=False, rules=[{"field": "year", "op": "before", "value": "1968", "value2": ""}])
     r = build_with_rows(app, None)
     assert not r.has("Filters:"), "ticked nowhere, it applies nowhere: " + r.text()
-    zones.update("Speakers", filters=[f["id"]])
-    r = build_with_rows(app, None)   # Output: Same zone, so Speakers
+    std = buttons.standard("tracks")
+    buttons.set_filters(std["id"], [f["id"]])
+    r = build_with_rows(app, None)
     assert r.has("Filters:") and r.has("left out"), r.text()
     app.set_env(OUTPUT_TARGET="zone:Kitchen")
     r = build_with_rows(app, None)
-    assert not r.has("Filters:"), "the Kitchen has no filters: " + r.text()
+    assert r.has("Filters:"), "a playlist's filters go wherever it's sent: " + r.text()
 
 
 # --- JRiver playlists by voice ------------------------------------------------------------

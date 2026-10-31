@@ -20,7 +20,7 @@ on the zone straight away, matched against the library held in library.py.
 Skip, who is this and more like this need no value: they work on what the
 device's zone is playing.
 Each Alexa device is remembered in the database with the zone it plays to. A
-build runs as the button that zone names for the phrase (Settings > Zones).
+build runs as the playlist that device names for the phrase (Settings > Devices).
 """
 
 import hmac
@@ -148,10 +148,10 @@ def _hear_device(device_id):
 
 # --- commands -----------------------------------------------------------------
 
-def _zone_button(zone, intent):
-    """(the button a zone runs for a phrase, what the console heading says about it: the name unless it's the standard one)."""
-    import zones
-    button = zones.button_for(zone, intent)
+def _device_playlist(device, intent):
+    """(the playlist a device runs for a phrase, what the console heading says about it: its name unless it's the standard one)."""
+    import devices
+    button = devices.playlist_for(device, intent)
     own = t(", with {button}", button=button["name"]) if button and not button.get("standard") else ""
     return button, own
 
@@ -208,31 +208,31 @@ def _job(intent, value, zone, button, device=None):
 def _build(intent, value, button, zone, report):
     """The playlist build for a voice command, as the zone's button (report stops it if a newer command took over)."""
     import buttons
-    import zones
+    import devices
     if button is None:
-        kind = zones.PHRASE_KINDS[zones.INTENT_PHRASES.get(intent, intent)]
+        kind = devices.PHRASE_KINDS[devices.INTENT_PHRASES.get(intent, intent)]
         report("  " + t("Problem: there's no {kind} button to build with. Restore Default Buttons under Settings > Buttons.",
                         kind=t(buttons.KIND_NAMES[kind])))
         return
     if intent == "songs_by":
-        buttons.run(button, report=report, seed_info=engine.typed_seed_info(value), zone=zone)
+        buttons.run(button, report=report, seed_info=engine.typed_seed_info(value))
     elif intent == "music_like":
         tracks, _ = engine.blended_top_tracks(value, limit=1)
         if not tracks:
             report(t("Couldn't find top tracks for '{value}', so there's nothing to seed from.", value=value))
             return
         report("  " + t("Seed track: {value} (the artist's most popular track)", value=tracks[0][0]))
-        buttons.run(button, report=report, seed_info=engine.typed_seed_info(value, tracks[0][0]), zone=zone)
+        buttons.run(button, report=report, seed_info=engine.typed_seed_info(value, tracks[0][0]))
     elif intent == "tracks_like":
         artist, title = value
-        buttons.run(button, report=report, seed_info=engine.typed_seed_info(artist, title), zone=zone)
+        buttons.run(button, report=report, seed_info=engine.typed_seed_info(artist, title))
     elif intent in MORE:   # value: the zone's track when the command was heard
-        buttons.run(button, report=report, seed_info=value, zone=zone)
+        buttons.run(button, report=report, seed_info=value)
     elif intent == "only":   # value: the words as heard, artist and mood together: the AI Playlist button's settings
-        buttons.run(button, report=report, zone=zone,
+        buttons.run(button, report=report,
                     build=lambda report, **kw: engine.create_only_playlist(value, report=report))
     else:
-        buttons.run(button, report=report, zone=zone, theme=value)
+        buttons.run(button, report=report, theme=value)
 
 
 def _play_keys(keys, zone_id):
@@ -292,9 +292,9 @@ def _play_now(intent, value, zone, device=None):
         if not keys:
             return "problem", f"I couldn't find any songs by {value}.", {}
         keys = engine.drop_long_closers(keys, report=print, group="top")
-        # Recently played: as the zone's Songs By button has it
-        import zones
-        own = (zones.button_for(zone, "songs_by") or {}).get("settings") or {}
+        # Recently played: as the device's Songs By playlist has it
+        import devices
+        own = (devices.playlist_for(device or "unknown device", "songs_by") or {}).get("settings") or {}
         main_on, main_days = engine.SKIP_PLAYED["top"]
         on = own.get("SKIP_PLAYED_TOP", "1" if main_on else "0") in ("1", "true", "yes")
         days = own.get("SKIP_PLAYED_TOP_DAYS", str(main_days))
@@ -387,7 +387,7 @@ def _zone_command(intent, device, body):
         return "problem", f"Nothing's playing on {zone}.", {}
 
     if intent == "keep_going":
-        return keep_going(zone)
+        return keep_going(zone, device or "unknown device")
 
     if intent in ("stop", "pause", "resume"):
         if intent == "pause" and state == 1:
@@ -433,7 +433,7 @@ def _zone_command(intent, device, body):
         return "problem", "24bit7 isn't ready yet. Try again in a moment.", {}
     seed = dict(info)
     seed["ZoneID"] = zid
-    button, own = _zone_button(zone, intent)
+    button, own = _device_playlist(device or "unknown device", intent)
     if intent == "more_artists":
         shown = artist or title
         heading = t("Voice, {name}: more artists like {shown}, to {zone}{own}", name=name, shown=shown, zone=zone,
@@ -707,25 +707,22 @@ def _switch(device, value, body):
     return "started", f"Switching to {target}.", {}
 
 
-def keep_going(zone):
+def keep_going(zone, device=None):
     """
     Keep It Going: Non-stop, once, for whatever is playing on a zone, even music
-    started in JRiver itself. It tops up with the Non-stop settings of the zone's
-    Tracks Like This button (Using, Reseed from), whether or not that button has
-    Non-stop on, and ends when something else replaces the music. A zone whose
-    Non-stop switch is off (Settings > Zones) says so instead.
+    started in JRiver itself. It tops up with the Non-stop settings of the device's
+    Tracks Like This playlist (the standard one from a shortcut), whether or not
+    that playlist has Non-stop on, and ends when something else replaces the music.
     Returns (status, speech, extra) like the other voice commands.
     """
     import buttons
+    import devices
     import nonstop
-    import zones
     zid = engine.zone_id(zone)
     if zid is None:
         return "problem", f"I can't find the {zone} zone in JRiver.", {}
     if not _playing(zid):
         return "problem", f"Nothing's playing on {zone}.", {}
-    if not zones.nonstop_on(zone):
-        return "problem", f"Non-stop is switched off for {zone} in 24bit7's Zones settings.", {}
     with engine._nonstop_lock:
         entry = engine.NONSTOP_ZONES.get(zid)
     if entry and nonstop.config_for(zone, entry).get("on"):
@@ -733,9 +730,9 @@ def keep_going(zone):
     keys = [r["Key"] for r in engine.playing_now_rows(zid) if r.get("Key")]
     if not keys:
         return "problem", f"Nothing's playing on {zone}.", {}
-    button = zones.button_for(zone, "tracks_like")
+    button = devices.playlist_for(device, "tracks_like") if device else buttons.standard("tracks")
     if button is None:
-        return "problem", "There's no Similar Tracks button to top up with. Restore the default buttons in 24bit7's settings.", {}
+        return "problem", "There's no Track Matching playlist to top up with. Restore the default playlists in 24bit7's settings.", {}
     cfg = buttons.nonstop_config(button)
     engine.nonstop_record(zid, keys, kind="saved", stage="after", vibe=None,
                           # Off there means Wander; otherwise the mode chosen there
@@ -864,7 +861,7 @@ def handle_command(body, busy=False):
                "genre": N_("Voice, {name}: genre {shown}{heard}, to {zone}{own}"),
                "only": N_("Voice, {name}: only {shown}{heard}, to {zone}{own}"),
                "tracks_like": N_("Voice, {name}: tracks like {shown}{heard}, to {zone}{own}")}[intent]
-    button, own = _zone_button(zone, intent)
+    button, own = _device_playlist(device or "unknown device", intent)
     if intent == "tracks_like":   # the console's version; the spoken reply keeps its English
         shown = t("{title} by {artist}", title=value[1], artist=library.spoken(value[0]))
     _submit(_job(intent, value, zone, button, device or "unknown device"),

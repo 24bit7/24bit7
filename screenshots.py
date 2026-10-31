@@ -58,7 +58,7 @@ SHOTS = [
     ("settings_buttons_ai_playlist", ["Settings", "Buttons"], ["settings_gui.py", "buttons.py"],
      "button:AI Playlist:Playlist"),
     ("edit_filters", ["Settings", "Buttons"], ["settings_gui.py", "filters.py"], "edit_filters"),
-    ("settings_zones", ["Settings", "Zones"], ["settings_gui.py", "zones.py"], "zone:Kitchen"),
+    ("settings_devices", ["Settings", "Devices"], ["settings_gui.py", "devices.py"], "device:demo-kitchen"),
     ("settings_discover_sites", ["Settings", "Discover"], ["settings_gui.py"], None),
     ("settings_keys", ["Settings", "Keys"], ["settings_gui.py"], None),
     ("settings_voice_commands", ["Settings", "Voice Commands"], ["settings_gui.py", "voice.py"], None),
@@ -382,11 +382,11 @@ def start_demo(gui, temp):
                     (device_id, name, zone, heard, own))
     con.commit()
     saved_playlists.set_main_settings({"rows": {pid: dict(row) for pid, row in DEMO_SAVED_ROWS.items()}})
-    # Buttons and zones: the standard five from the demo .env, a Kitchen Tracks button of your own with a
-    # Stereo only filter and a shortcut, and the Kitchen zone running it for "tracks like this"
+    # Playlists and devices: the standard five from the demo .env, a Kitchen Tracks playlist of your own with a
+    # Stereo only filter and a shortcut, and the Kitchen Echo running it for "tracks like this"
     import buttons
+    import devices
     import filters
-    import zones
     stereo = filters.blank(in_language("Stereo only"))
     stereo["rules"] = [{"field": "sample_rate", "op": "at_most", "value": "48", "value2": ""}]
     filters.save([stereo])
@@ -395,9 +395,9 @@ def start_demo(gui, temp):
     buttons.set_settings(kitchen["id"], dict(kitchen["settings"], AI_MODERATOR_TRACKS="balanced", SIMILAR_TRACK_COUNT="20"))
     buttons.set_filters(kitchen["id"], [stereo["id"]])
     buttons.set_shortcut(kitchen["id"], "Ctrl+Alt+2")
-    record = zones.for_zone("Kitchen")
+    record = devices.for_device("demo-kitchen")
     record["buttons"]["tracks_like"] = kitchen["id"]
-    zones.update("Kitchen", buttons=record["buttons"], filters=[stereo["id"]])
+    devices.update("demo-kitchen", buttons=record["buttons"])
     try:   # the console's Log (1.11.0 and later)
         import buildlog
         buildlog._table(con)
@@ -718,9 +718,9 @@ def main():
                 play.settings._buttons_refresh()
                 settle(root, 0.5)
                 go_to(play.settings._button_right, [tab], gui.TabbedPane)
-            elif action and action.startswith("zone:"):
-                play.settings._zone_name = action.split(":")[1]
-                play.settings._zones_refresh()
+            elif action and action.startswith("device:"):
+                play.settings._device_id = action.split(":")[1]
+                play.settings._devices_refresh()
             elif action == "edit_filters":
                 dialog = play.settings._open_filters()
             if action == "review":

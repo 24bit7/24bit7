@@ -598,6 +598,7 @@ class FlatButton(tk.Frame):
         self._accent = accent   # a bar colour other than orange (magenta: uses AI credits)
         self._text_fg = text_fg  # a text colour other than the usual, while the button can be pressed
         self._state = "normal"
+        self._dim = False        # drawn like a disabled button but still clickable (the Play tab's unarmed playlists)
         self._inside = False
         self._pressed = False
         self._chars, self._lines = width, height
@@ -635,18 +636,22 @@ class FlatButton(tk.Frame):
             fill = PALETTE["button_hover"]
         else:
             fill = self._bg
-        bar = None if self._quiet else ((self._accent or PALETTE["button_accent"]) if on
+        lit = on and not self._dim
+        bar = None if self._quiet else ((self._accent or PALETTE["button_accent"]) if lit
                                         else PALETTE["button_outline"])
         w, h = self._size
         image = rounded_shape(self, w, h, self._px(CORNER), fill, PALETTE["button_outline"],
                               self._px(1), bar, self._px(BUTTON_BAR))
-        self._label.config(image=image, fg=(self._text_fg or PALETTE["button_fg"]) if on else PALETTE["button_off_fg"],
+        self._label.config(image=image, fg=(self._text_fg or PALETTE["button_fg"]) if lit else PALETTE["button_off_fg"],
                            cursor="hand2" if on else "")
 
     def config(self, cnf=None, **kw):
         redraw = False
         if "state" in kw:
             self._state = "disabled" if str(kw.pop("state")) == "disabled" else "normal"
+            redraw = True
+        if "dim" in kw:
+            self._dim = bool(kw.pop("dim"))
             redraw = True
         if "text" in kw:
             text = kw.pop("text")

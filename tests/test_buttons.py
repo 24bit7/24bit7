@@ -9,7 +9,7 @@ KITCHEN = "amzn1.ask.device.KITCHEN"
 
 
 def mods():
-    return importlib.import_module("buttons"), importlib.import_module("zones"), importlib.import_module("filters")
+    return importlib.import_module("buttons"), importlib.import_module("devices"), importlib.import_module("filters")
 
 
 def seed(app, artist="The Beatles", title="Here Comes The Sun"):
@@ -104,36 +104,42 @@ def test_upgrade_runs_once_and_keeps_what_was_added(app):
     assert buttons.load() == [], "an empty list is a choice, not a reason to upgrade again"
 
 
-def test_device_with_its_own_settings_gets_a_button_its_zone_points_to(app):
+def test_device_with_its_own_settings_gets_a_playlist_it_runs_kept_off_the_play_tab(app):
     app.set_env(SIMILAR_TRACK_COUNT="30")
-    buttons, zones, _ = mods()
+    buttons, devices, _ = mods()
     main_playlist = app.engine.profile_values("playlist")
     kitchen(app, page=dict(main_playlist, SIMILAR_TRACK_COUNT="12"))
     items = buttons.load()
     names = [b["name"] for b in items]
     assert "Kitchen Echo Similar Tracks" in names, names
-    assert "Kitchen Echo Similar Artists" not in names, "only the kinds whose values differ get a button"
+    assert "Kitchen Echo Similar Artists" not in names, "only the kinds whose values differ get a playlist"
     own = next(b for b in items if b["name"] == "Kitchen Echo Similar Tracks")
     assert own["kind"] == "tracks" and own["settings"]["SIMILAR_TRACK_COUNT"] == "12"
-    record = zones.load()["Kitchen"]
+    assert own["shown"] is False and all(b["shown"] for b in items if b is not own), "off the Play tab; the rest on it"
+    assert [b["name"] for b in buttons.shown()] == names[:5]
+    record = devices.load()[KITCHEN]
     assert record["buttons"]["tracks_like"] == own["id"]
     assert record["buttons"]["music_like"] is None
-    assert zones.button_for("Kitchen", "tracks_like")["id"] == own["id"]
-    assert zones.button_for("Kitchen", "more_like")["id"] == own["id"], "more like this is the same phrase"
-    assert zones.button_for("Kitchen", "music_like")["standard"] == "artists", "unset phrases run the standard button"
-    assert zones.button_for("Speakers", "tracks_like")["standard"] == "tracks", "a zone with no record too"
+    assert devices.playlist_for(KITCHEN, "tracks_like")["id"] == own["id"]
+    assert devices.playlist_for(KITCHEN, "more_like")["id"] == own["id"], "more like this is the same phrase"
+    assert devices.playlist_for(KITCHEN, "music_like")["standard"] == "artists", "unset phrases run the standard playlist"
+    assert devices.playlist_for("nobody", "tracks_like")["standard"] == "tracks", "a device with no record too"
+    assert app.printed.has("Kitchen Echo had settings of its own") and app.printed.has("Kitchen Echo Similar Tracks"), \
+        app.printed.text()
+    assert devices.used_by(own["id"]) == [KITCHEN]
 
 
-def test_device_whose_settings_match_main_gets_no_button(app):
-    buttons, zones, _ = mods()
+def test_device_whose_settings_match_main_gets_no_playlist(app):
+    buttons, devices, _ = mods()
     kitchen(app, page=dict(app.engine.profile_values("playlist")), saved=app.saved_playlists.blank())
     assert len(buttons.load()) == 5
-    assert all(v is None for v in zones.load().get("Kitchen", zones.blank("Kitchen"))["buttons"].values())
+    assert all(v is None for v in devices.load().get(KITCHEN, devices.blank())["buttons"].values())
     assert app.printed.has("Kitchen Echo's own JRiver Playlists settings are no longer used"), app.printed.text()
+    assert not app.printed.has("had settings of its own")
 
 
-def test_upgrade_moves_filters_onto_buttons_and_zones(app):
-    buttons, zones, filters = mods()
+def test_upgrade_ticks_shared_filters_on_the_standard_playlists_and_says_so_for_a_device_only_one(app):
+    buttons, devices, filters = mods()
     kitchen(app)
     everyone = add_filter(app, name="Everyone", devices=["all"])
     main_only = add_filter(app, name="Main", devices=["main"])
@@ -141,8 +147,23 @@ def test_upgrade_moves_filters_onto_buttons_and_zones(app):
     items = buttons.load()
     for b in items:
         assert b["filters"] == [everyone["id"], main_only["id"]], (b["name"], b["filters"])
-    assert zones.load()["Kitchen"]["filters"] == [kitchen_only["id"]]
-    assert zones.filter_ids("Speakers") == []
+    assert filters.used_by(kitchen_only["id"]) == []
+    assert app.printed.has("the filter Kitchen applied to Kitchen Echo only"), app.printed.text()
+
+
+def test_a_template_starts_from_the_shipped_defaults_and_a_copy_gets_the_next_free_name(app):
+    app.set_env(SIMILAR_TRACK_COUNT="8")
+    buttons, _, _ = mods()
+    buttons.load()
+    fresh = buttons.add("Fresh", "tracks", buttons.TEMPLATE)
+    assert fresh["settings"].get("SIMILAR_TRACK_COUNT") is None, "a template ignores what .env has"
+    assert fresh["settings"]["NONSTOP_TRACKS"] == "0" and fresh["shown"] is True
+    copy = buttons.add("Copy", "tracks")
+    assert copy["settings"]["SIMILAR_TRACK_COUNT"] == "8", "no from: the standard one of its kind"
+    assert buttons.unique_name("Similar Tracks") == "Similar Tracks 2" and buttons.unique_name("New") == "New"
+    twin = buttons.duplicate(buttons.standard("tracks")["id"])
+    assert twin["name"] == "Similar Tracks 2" and twin["settings"]["SIMILAR_TRACK_COUNT"] == "8"
+    assert [b["name"] for b in buttons.load()][1:3] == ["Similar Tracks", "Similar Tracks 2"], "right after its source"
 
 
 def test_restore_default_buttons_puts_back_only_what_is_missing(app):
@@ -188,37 +209,6 @@ def test_a_filter_that_is_not_ticked_on_the_button_does_nothing(app):
     assert not r.has("Filters:"), "Applies on no longer decides anything for a button build: " + r.text()
 
 
-def test_run_adds_the_zones_filters(app):
-    buttons, zones, _ = mods()
-    old = add_filter(app, name="Zone sixties", devices=[],
-                     rules=[{"field": "year", "op": "before", "value": "1968", "value2": ""}])
-    zones.update("Speakers", filters=[old["id"]])
-    b = buttons.blank("Plain", "tracks")
-    r = app.Lines()
-    buttons.run(b, report=r, seed_info=seed(app))
-    z = app.jriver.zone("Speakers").playlist
-    assert all(int(app.jriver.by_key[k]["Date (year)"]) < 1968 for k in z[1:]), r.text()
-    assert r.has("Filters: Zone sixties"), r.text()
-
-
-def test_zone_filters_follow_the_output_setting_not_the_seed(app):
-    buttons, zones, _ = mods()
-    old = add_filter(app, name="Kitchen sixties", devices=[],
-                     rules=[{"field": "year", "op": "before", "value": "1968", "value2": ""}])
-    zones.update("Kitchen", filters=[old["id"]])
-    b = buttons.blank("Plain", "tracks")
-    r = app.Lines()
-    buttons.run(b, report=r, seed_info=seed(app))   # Output: Same zone, so Speakers
-    assert not r.has("Filters:"), r.text()
-    app.set_env(OUTPUT_TARGET="zone:Kitchen")
-    r = app.Lines()
-    buttons.run(b, report=r, seed_info=seed(app))
-    assert r.has("Filters: Kitchen sixties"), r.text()
-    assert buttons.zone_for_build(seed(app), zone="Sonos") == "Sonos", "a zone asked for by voice wins"
-    app.set_env(OUTPUT_TARGET="youtube", EXTRA_OUTPUTS="youtube")
-    assert buttons.zone_for_build(seed(app)) is None, "YouTube has no zone"
-
-
 def test_top_tracks_button_with_guests_on_is_a_headliner(app):
     buttons, _, _ = mods()
     by = {b["name"]: b for b in buttons.load()}
@@ -236,8 +226,8 @@ def test_describe_says_what_is_on(app):
     b = buttons.blank("Evening", "artists")
     b["settings"] = {"DRIFT_ARTISTS": "1", "NONSTOP_ARTISTS": "1", "DEEP_CUTS_ARTISTS": "spaced"}
     b["filters"] = ["abc"]
-    assert buttons.describe(b) == "Similar Artists, Drift, Deep Cuts, Non-stop, Filters"
-    assert buttons.describe(buttons.blank("Plain", "tracks")) == "Similar Tracks"
+    assert buttons.describe(b) == "Artist Matching, Drift, Deep Cuts, Non-stop, Filters"
+    assert buttons.describe(buttons.blank("Plain", "tracks")) == "Track Matching"
     by = {x["name"]: x for x in buttons.load()}
     assert buttons.describe(by["Headliner"]).startswith("Artist's Top Tracks, Guests")
 
@@ -271,7 +261,7 @@ def test_add_starts_from_a_button_of_the_same_kind(app):
     assert items[-1]["settings"]["TOP_GUESTS"] == "third" and items[-1]["filters"] == ["abc"]
     assert not items[-1]["standard"]
     plain = buttons.add("  ", "tracks", "no-such-id")   # no name: the kind's; nothing to copy: the standard one's
-    assert plain["name"] == "Similar Tracks" and plain["settings"] == buttons.standard("tracks")["settings"]
+    assert plain["name"] == "Track Matching" and plain["settings"] == buttons.standard("tracks")["settings"]
     wrong = buttons.add("Odd", "vibe", head["id"])      # a button of another kind: not copied
     assert wrong["settings"] == buttons.standard("vibe")["settings"]
 
@@ -325,16 +315,18 @@ def test_run_keeps_a_review_profile_on_top_of_the_button(app):
 # --- Settings > Buttons (stage three) ------------------------------------------------------
 
 def test_set_settings_keeps_only_the_kinds_keys_and_filters_say_who_uses_them(app):
-    buttons, zones, filters = mods()
+    buttons, devices, filters = mods()
     head = buttons.load()[3]
     buttons.set_settings(head["id"], {"TOP_TRACKS_COUNT": "15", "SIMILAR_ARTIST_LIMIT": "9", "TOP_GUESTS": "third"})
     assert buttons.get(head["id"])["settings"] == {"TOP_TRACKS_COUNT": "15", "TOP_GUESTS": "third"}
     f = add_filter(app, name="Stereo")
-    assert filters.used_by(f["id"]) == ([], [])
+    assert filters.used_by(f["id"]) == []
     buttons.set_filters(head["id"], [f["id"]])
     assert buttons.get(head["id"])["filters"] == [f["id"]]
-    assert filters.used_by(f["id"]) == (["Headliner"], [])
-    zones.update("Kitchen", filters=[f["id"]])
-    assert filters.used_by(f["id"]) == (["Headliner"], ["Kitchen"])
+    assert filters.used_by(f["id"]) == ["Headliner"]
+    buttons.set_shown(head["id"], False)
+    assert buttons.get(head["id"])["shown"] is False and "Headliner" not in [b["name"] for b in buttons.shown()]
+    buttons.set_shown(head["id"], True)
+    assert buttons.get(head["id"])["shown"] is True
     buttons.set_filters("no-such-id", [f["id"]])
     assert len(buttons.load()) == 5
