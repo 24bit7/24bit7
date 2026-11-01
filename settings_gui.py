@@ -30,7 +30,7 @@ import devices
 import ai_usage
 import i18n
 import tabs
-from tabs import TabbedPane, PALETTE, FlatButton, TCombobox, NamePrompt, PromptWindow
+from tabs import TabbedPane, PALETTE, FlatButton, TCombobox, NamePrompt, PromptWindow, PickRow
 from datetime import datetime
 from i18n import N_, t, tn
 
@@ -877,10 +877,11 @@ TEMPLATE_NOTES = {   # what each template is, for the Add a Playlist window
 
 class PickList(tk.Frame):
     """
-    A list of names to pick one from, drawn as rows: the chosen row has a border in the accent colour
-    and no fill, the same as the list under Settings > Playlists (a Tk listbox can only fill a row).
-    Keeps the listbox calls its callers use: get(0, "end"), curselection, selection_set,
-    selection_clear, and <<ListboxSelect>> after a pick. Up and Down move the pick.
+    A list of names to pick one from, drawn as rows (tabs.PickRow) on the field colour, so it reads
+    as a list against the window: the chosen row has a rounded outline in the accent colour and no
+    fill, the same as the list under Settings > Playlists (a Tk listbox can only fill a row). Keeps
+    the listbox calls its callers use: get(0, "end"), curselection, selection_set, selection_clear,
+    and <<ListboxSelect>> after a pick. Up and Down move the pick.
     """
 
     def __init__(self, parent, items, bg, fg, colours=None, on_double=None):
@@ -891,15 +892,12 @@ class PickList(tk.Frame):
         self._bg = bg
         colours = colours or {}
         for i, text in enumerate(self._items):
-            row = tk.Frame(self, bg=bg, highlightthickness=2, highlightbackground=bg, highlightcolor=bg)
-            row.pack(fill="x", padx=2, pady=1)
-            label = tk.Label(row, text=text, anchor="w", bg=bg, fg=colours.get(i) or fg, font=("Segoe UI", 10),
-                             padx=6, pady=2, cursor="hand2")
-            label.pack(fill="x")
-            for w in (row, label):
-                w.bind("<Button-1>", lambda e, k=i: (self.focus_set(), self.pick(k)))
-                if on_double is not None:
-                    w.bind("<Double-Button-1>", lambda e, k=i: (self.pick(k), on_double()))
+            row = PickRow(self, text, fg=colours.get(i) or fg, bg=bg, chosen=i == self._index)
+            row.configure(cursor="hand2")
+            row.pack(fill="x", padx=3, pady=1)
+            row.bind("<Button-1>", lambda e, k=i: (self.focus_set(), self.pick(k)))
+            if on_double is not None:
+                row.bind("<Double-Button-1>", lambda e, k=i: (self.pick(k), on_double()))
             self._rows.append(row)
         self.bind("<Up>", lambda e: self._step(-1))
         self.bind("<Down>", lambda e: self._step(1))
@@ -907,8 +905,7 @@ class PickList(tk.Frame):
 
     def _paint(self):
         for i, row in enumerate(self._rows):
-            colour = PALETTE["button_fg"] if i == self._index else self._bg
-            row.config(highlightbackground=colour, highlightcolor=colour)
+            row.set_chosen(i == self._index)
 
     def _step(self, by):
         if self._items:
@@ -976,7 +973,7 @@ class AddPlaylistPrompt(PromptWindow):
         self._page_holder = tk.Frame(inner, bg=bg, width=px(420), height=max(px(190), rows * px(29) + px(80)))
         self._page_holder.pack(anchor="w", fill="x")
         self._page_holder.pack_propagate(False)
-        list_bg = PALETTE.get("entry_bg") or bg
+        list_bg = PALETTE.get("field_bg") or bg   # the text boxes' colour: the list stands apart from the window
         # From Existing
         page = tk.Frame(self._page_holder, bg=bg)
         self._pages["existing"] = page
@@ -1339,7 +1336,7 @@ class SettingsTab(tk.Frame):
                         "the standard playlist of that kind."))
         holder = tk.Frame(box)
         holder.grid(row=0, column=0, sticky="we")
-        self._button_list = tk.Frame(holder, bd=1, relief="solid", bg=PALETTE.get("entry_bg") or box.cget("bg"))
+        self._button_list = tk.Frame(holder, bd=1, relief="solid", bg=PALETTE.get("field_bg") or box.cget("bg"))
         self._button_list.pack(side="left", fill="x", expand=True, anchor="n")
         self._button_rows = []
         strip = tk.Frame(holder)   # four square buttons beside the list: add, delete, up, down
@@ -1403,19 +1400,15 @@ class SettingsTab(tk.Frame):
         self._button_rows = []
         bg = self._button_list.cget("bg")
         for b in self._buttons:
-            on = b["id"] == self._button_id   # the chosen row: a border in the accent colour, no fill
-            edge = PALETTE["button_fg"] if on else bg
-            row = tk.Frame(self._button_list, bg=bg, highlightthickness=2, highlightbackground=edge, highlightcolor=edge)
-            row.pack(fill="x", padx=2, pady=1)
+            on = b["id"] == self._button_id   # the chosen row: a rounded outline in the accent colour, no fill
             var = tk.BooleanVar(value=b.get("shown", True))
-            tick = ttk.Checkbutton(row, variable=var, command=lambda bt=b, v=var: self._button_tick_changed(bt, v.get()))
-            tick.pack(side="left", padx=(6, 0))
-            label = tk.Label(row, text=b["name"], anchor="w", bg=row.cget("bg"), font=("Segoe UI", 10),
-                             fg=PALETTE["ai_purple"] if b["kind"] == "vibe" else None, cursor="hand2", padx=4)
-            label.pack(side="left", fill="x", expand=True)
-            for w in (row, label):
-                w.bind("<Button-1>", lambda e, bt=b: self._pick_button(bt["id"]))
-            self._button_rows.append((b["id"], row, tick, label, var))
+            row = PickRow(self._button_list, b["name"], fg=PALETTE["ai_purple"] if b["kind"] == "vibe" else None, bg=bg,
+                          chosen=on, left=lambda canvas, bt=b, v=var: ttk.Checkbutton(
+                              canvas, variable=v, command=lambda: self._button_tick_changed(bt, v.get())))
+            row.configure(cursor="hand2")
+            row.pack(fill="x", padx=3, pady=1)
+            row.bind("<Button-1>", lambda e, bt=b: self._pick_button(bt["id"]))
+            self._button_rows.append((b["id"], row, row.left, row, var))
         if not self._buttons:
             tk.Label(self._button_list, text=t("No playlists yet."), fg=PALETTE["help_fg"], font=HELP_FONT, bg=bg).pack(
                 anchor="w", padx=8, pady=6)

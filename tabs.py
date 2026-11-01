@@ -1215,6 +1215,96 @@ def strip_title_bar(window):
         pass   # not Windows, or an older one: a plain window, which is fine
 
 
+def round_corners(window, radius, windll=None):
+    """
+    Rounded corners for a window of the app's own. Windows 11 draws them when asked (the DWM
+    attribute); Windows 10 doesn't know the attribute, so there the window gets a rounded region
+    of its own, which clips its corners the same way. Call it once the window has its final size.
+    Returns "dwm", "region" or None. windll is for tests.
+    """
+    try:
+        import ctypes
+        windll = windll or ctypes.windll
+        window.update_idletasks()
+        hwnd = windll.user32.GetParent(window.winfo_id())
+        if not hwnd:
+            return None
+        pref = ctypes.c_int(DWMWCP_ROUND)
+        if windll.dwmapi.DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ctypes.byref(pref),
+                                               ctypes.sizeof(pref)) == 0:
+            return "dwm"
+        import ctypes.wintypes
+        rect = ctypes.wintypes.RECT()
+        windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
+        w, h = rect.right - rect.left, rect.bottom - rect.top
+        region = windll.gdi32.CreateRoundRectRgn(0, 0, w + 1, h + 1, 2 * radius, 2 * radius)
+        windll.user32.SetWindowRgn(hwnd, region, True)   # Windows owns the region from here
+        return "region"
+    except Exception:
+        return None
+
+
+class PickRow(tk.Canvas):
+    """
+    One row of a list to pick from (the Add a Playlist window, Settings > Playlists): its text, a
+    widget at the left if wanted (a tick), and, when chosen, a rounded outline in the accent colour
+    with no fill, redrawn at whatever width the row has. left is a function making the widget with
+    the row as its parent.
+    """
+
+    def __init__(self, master, text, fg=None, bg=None, left=None, chosen=False):
+        bg = bg or master.cget("bg")
+        super().__init__(master, bg=bg, bd=0, highlightthickness=0)
+        try:
+            scale = max(1.0, self.winfo_fpixels("1i") / 96.0)
+        except tk.TclError:
+            scale = 1.0
+        self._px = lambda n: max(1, int(round(n * scale)))
+        px = self._px
+        self._font = ("Segoe UI", 10)
+        self._h = tkfont.Font(root=self, font=self._font).metrics("linespace") + px(10)
+        self.configure(height=self._h)
+        self._bg, self._fg = bg, fg or PALETTE["text"]
+        self._chosen = bool(chosen)
+        self._shape, self._shape_id = None, None
+        x = px(10)
+        self.left = left(self) if left is not None else None
+        if self.left is not None:
+            self.create_window(px(6), self._h // 2, window=self.left, anchor="w")
+            x += self.left.winfo_reqwidth() + px(2)
+        self._text_id = self.create_text(x, self._h // 2, text=text, anchor="w", font=self._font, fill=self._fg)
+        self.bind("<Configure>", lambda e: self._redraw(e.width))
+
+    @property
+    def chosen(self):
+        return self._chosen
+
+    @property
+    def text(self):
+        return self.itemcget(self._text_id, "text")
+
+    def set_chosen(self, on):
+        on = bool(on)
+        if on != self._chosen:
+            self._chosen = on
+            self._redraw()
+
+    def set_text(self, text):
+        self.itemconfig(self._text_id, text=text)
+
+    def _redraw(self, width=None):
+        w = width or self.winfo_width()
+        if w <= 1:
+            return
+        edge = PALETTE["button_fg"] if self._chosen else self._bg
+        self._shape = rounded_shape(self, w, self._h, self._px(CORNER), self._bg, edge, self._px(2))
+        if self._shape_id is None:
+            self._shape_id = self.create_image(0, 0, image=self._shape, anchor="nw")
+            self.tag_lower(self._shape_id)
+        else:
+            self.itemconfig(self._shape_id, image=self._shape)
+
+
 class PromptWindow(tk.Toplevel):
     """
     A small window of the app's own, in place of Tk's stock dialogs, which ignore the theme. A black
@@ -1328,6 +1418,7 @@ class PromptWindow(tk.Toplevel):
             strip_title_bar(self)
             self.geometry(f"{w}x{h}+{max(0, x)}+{max(0, y)}")   # again: Windows moves it when the bar goes
             self.update_idletasks()
+            self.corners = round_corners(self, self._px(10))
             try:
                 self.wm_attributes("-alpha", 1.0)
             except tk.TclError:
@@ -1341,8 +1432,20 @@ class PromptWindow(tk.Toplevel):
         self._drag = (event.x_root - self.winfo_x(), event.y_root - self.winfo_y())
 
     def _drag_move(self, event):
+        """One move per turn of the event loop, then a repaint, so the contents keep up with the frame."""
         dx, dy = self._drag
-        self.geometry(f"+{event.x_root - dx}+{event.y_root - dy}")
+        self._drag_to = (event.x_root - dx, event.y_root - dy)
+        if getattr(self, "_drag_job", None) is None:
+            self._drag_job = self.after_idle(self._drag_apply)
+
+    def _drag_apply(self):
+        self._drag_job = None
+        try:
+            x, y = self._drag_to
+            self.geometry(f"+{x}+{y}")
+            self.update_idletasks()
+        except (tk.TclError, AttributeError):
+            pass
 
     def ok(self):
         self.result = True

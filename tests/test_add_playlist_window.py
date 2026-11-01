@@ -3,7 +3,7 @@ The Add a Playlist window (1 Nov 2026): three tabs, From Existing, From Template
 form. From Existing lists every playlist: one that's off the Play tab, Add ticks back; one on it, Create
 Copy copies (Name 2, right after it). From Template lists the four kinds as shipped, Headliner and Inner
 Circle; New (a blank slate) has a sentence and Create. Enter and a double-click answer like Add. The
-lists draw the pick as a border in the accent colour, not a filled row.
+lists sit on the field colour and draw the pick as a rounded outline in the accent colour, not a filled row.
 """
 
 from test_gui import ui  # noqa: F401  (the GUI fixture)
@@ -29,14 +29,16 @@ def test_from_existing_lists_every_playlist_and_adds_back_or_copies(app, ui):
     assert "Create Copy makes Similar Artists 2 right after it" in win.existing_note.cget("text")
     assert win.ok_button.cget("text") == "Create Copy"
     rows = win.existing_list._rows
-    assert rows[0].cget("highlightbackground") == PALETTE["button_fg"], "the pick is a border in the accent colour"
-    assert rows[1].cget("highlightbackground") == rows[1].cget("bg"), "the others have none"
+    assert rows[0].chosen and not rows[1].chosen, "the pick is a rounded outline in the accent colour"
+    assert rows[0].find_all() and rows[0].type(rows[0].find_all()[0]) == "image", "drawn as a rounded shape, not a box"
+    assert rows[0]._shape is not None and rows[0].itemcget(rows[0]._shape_id, "image") == str(rows[0]._shape)
+    assert win.existing_list.cget("bg") == PALETTE["field_bg"] != win._colours[0], "the list stands apart from the window"
     win.existing_list.pick(3)
     ui.pump(0.2)
     assert win.existing_note.cget("text").startswith("Headliner: Artist's Top Tracks + Artist Matching")
     assert "Off the Play tab; Add puts it back" in win.existing_note.cget("text")
     assert win.ok_button.cget("text") == "Add"
-    assert rows[3].cget("highlightbackground") == PALETTE["button_fg"] and rows[0].cget("highlightbackground") == rows[0].cget("bg")
+    assert rows[3].chosen and not rows[0].chosen
     win.ok()
     assert win.result == ("existing", head["id"])
     win = open_window(ui)

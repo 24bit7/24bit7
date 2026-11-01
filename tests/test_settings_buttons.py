@@ -123,10 +123,11 @@ def test_the_chosen_row_is_a_border_and_the_help_line_is_gone(app, ui):
     import buttons
     head = next(b for b in buttons.load() if b["name"] == "Headliner")
     chosen = rows[head["id"]]
-    assert chosen.cget("highlightbackground") == PALETTE["button_fg"], "a border in the accent colour"
-    assert chosen.cget("bg") == s._button_list.cget("bg"), "no fill"
+    assert chosen.chosen and chosen.text == "Headliner", "a rounded outline in the accent colour"
+    assert chosen.cget("bg") == s._button_list.cget("bg") == PALETTE["field_bg"], "no fill, on the field colour"
+    assert chosen.left is not None and chosen.left.winfo_manager(), "the tick sits inside the row"
     others = [r for bid, r in rows.items() if bid != head["id"]]
-    assert all(r.cget("highlightbackground") == r.cget("bg") for r in others)
+    assert not any(r.chosen for r in others)
     assert "Ticked: on the Play tab. Rename: click the name at the top of its page." not in labels(s._buttons_outer)
     assert not ui.errors, ui.errors[0]
 
