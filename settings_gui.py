@@ -954,6 +954,7 @@ class AddPlaylistPrompt(PromptWindow):
         self._templates += [(r["key"], t(r["name"]), t(TEMPLATE_NOTES[r["key"]])) for r in buttons.READY_MADE]
         self._tab = "existing"
         super().__init__(parent, t("Add a Playlist"))
+        self._describe()   # the OK button exists now: Add or Create Copy for the first pick
 
     def _body(self, inner, bg, fg):
         px = self._px

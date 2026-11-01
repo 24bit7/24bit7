@@ -115,7 +115,7 @@ class DropPill(tk.Canvas):
 
     def __init__(self, master, w, h, text, colour, bg, font, px):
         super().__init__(master, width=w, height=h, bg=bg, bd=0, highlightthickness=0)
-        self._w, self._h, self._text, self._colour, self._font, self._px = w, h, text, colour, font, px
+        self._pw, self._ph, self._text, self._colour, self._font, self._px = w, h, text, colour, font, px
         self.lit = None
         self.set_lit(False)
 
@@ -125,7 +125,7 @@ class DropPill(tk.Canvas):
         self.lit = on
         self.delete("all")
         c, px = self._colour, self._px
-        w, h = self._w - 1, self._h - 1
+        w, h = self._pw - 1, self._ph - 1
         r = h // 2
         if on:
             self.create_oval(0, 0, 2 * r, h, fill=c, outline=c)
@@ -139,7 +139,7 @@ class DropPill(tk.Canvas):
             self.create_line(r, 0, w - r, 0, fill=c, width=line, dash=dash)
             self.create_line(r, h, w - r, h, fill=c, width=line, dash=dash)
             fg = c
-        self.create_text(self._w / 2, self._h / 2, text=self._text, font=self._font, fill=fg)
+        self.create_text(self._pw / 2, self._ph / 2, text=self._text, font=self._font, fill=fg)
 
 
 class PlayTab(tk.Frame):

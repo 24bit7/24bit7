@@ -5,7 +5,7 @@ Config; the first config added becomes Config 1, and Remove on a made playlist's
 """
 
 from test_gui import ui  # noqa: F401  (the GUI fixture)
-from test_settings_buttons import shown_labels
+from test_settings_buttons import labels, shown_labels
 
 
 def test_a_blank_slate_on_the_play_tab_says_so_and_opens_its_page(app, ui, monkeypatch):
@@ -38,12 +38,11 @@ def test_a_blank_slates_page_adds_its_first_config_and_can_lose_it_again(app, ui
     new, _ = buttons.add_from_choice(("new", None))
     s.show_playlist(new["id"])
     ui.pump(0.5)
-    texts = shown_labels(s._button_right)
-    assert "No config yet: add one below." in texts and not any(t.startswith("Config 1") for t in texts)
-    assert s._button_page is None
+    assert "No config yet: add one below." in shown_labels(s._button_right)
+    assert "Config 1" not in labels(s._button_inner) and s._button_page is None
     s._config_add(buttons.get(new["id"]), "tracks")
     ui.pump(0.5)
-    texts = shown_labels(s._button_right)
+    texts = labels(s._button_inner)   # the scrolling page, inside a canvas
     assert "Config 1" in texts and "Track Matching" not in texts, "the kind sits in the heading's dropdown, not a label"
     assert s._button_page is not None and s._button_page.config_kind == "tracks"
     assert "Remove" in texts, "a made playlist's Config 1 can be removed"
