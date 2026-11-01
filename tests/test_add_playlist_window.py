@@ -75,11 +75,44 @@ def test_keys_move_the_pick_and_the_tabs_switch(app, ui):
     win = open_window(ui)
     win._pick_tab("template")
     ui.pump(0.2)
-    win.template_list._step(1)
-    win.template_list._step(1)
+    win.template_list.step(1)
+    win.template_list.step(1)
     assert win.template_list.curselection() == (2,) and win.template_note.cget("text"), "Down moves the pick and the note follows"
     win._pick_tab("existing")
     ui.pump(0.2)
     assert win._pages["existing"].winfo_manager() and not win._pages["template"].winfo_manager()
     win.cancel()
+    assert not ui.errors, ui.errors[0]
+
+
+def test_tab_walks_the_tabs_and_the_arrows_work_without_a_click(app, ui):
+    import buttons
+    win = open_window(ui)
+    assert win._tab == "existing"
+    win.focus_force()   # the keyboard is on the window, not in a list
+    ui.pump(0.2)
+    win.event_generate("<Down>")
+    win.event_generate("<Down>")
+    ui.pump(0.2)
+    assert win.existing_list.curselection() == (2,), "Down moved the pick with no click into the list"
+    assert win.existing_note.cget("text").startswith("Artist's Top Tracks:")
+    win.event_generate("<Tab>")
+    ui.pump(0.2)
+    assert win._tab == "template" and win.focus_get() is not None
+    win.event_generate("<Tab>")
+    ui.pump(0.2)
+    assert win._tab == "new" and win.ok_button.cget("text") == "Create"
+    win.event_generate("<Tab>")
+    ui.pump(0.2)
+    assert win._tab == "existing", "round it goes"
+    win.event_generate("<Shift-Tab>")
+    ui.pump(0.2)
+    assert win._tab == "new", "and back"
+    win._pick_tab("template")
+    win.event_generate("<Up>")
+    win.event_generate("<Down>")
+    win.event_generate("<Down>")
+    win.event_generate("<Return>")
+    ui.pump(0.3)
+    assert win.result == ("template", "top"), "Enter adds the pick the arrows made"
     assert not ui.errors, ui.errors[0]

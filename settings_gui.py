@@ -899,15 +899,16 @@ class PickList(tk.Frame):
             if on_double is not None:
                 row.bind("<Double-Button-1>", lambda e, k=i: (self.pick(k), on_double()))
             self._rows.append(row)
-        self.bind("<Up>", lambda e: self._step(-1))
-        self.bind("<Down>", lambda e: self._step(1))
+        self.bind("<Up>", lambda e: self.step(-1))
+        self.bind("<Down>", lambda e: self.step(1))
         self._paint()
 
     def _paint(self):
         for i, row in enumerate(self._rows):
             row.set_chosen(i == self._index)
 
-    def _step(self, by):
+    def step(self, by):
+        """Moves the pick up (-1) or down (1), from the keyboard."""
         if self._items:
             self.pick(min(len(self._items) - 1, max(0, (self._index if self._index is not None else -1) + by)))
         return "break"
@@ -952,6 +953,27 @@ class AddPlaylistPrompt(PromptWindow):
         self._tab = "existing"
         super().__init__(parent, t("Add a Playlist"))
         self._describe()   # the OK button exists now: Add or Create Copy for the first pick
+        # Keys from the moment the window opens: Tab and Shift+Tab walk the tabs, Up and Down the current list
+        self.bind("<Tab>", lambda e: self._tab_by(1))
+        self.bind("<Shift-Tab>", lambda e: self._tab_by(-1))
+        try:
+            self.bind("<ISO_Left_Tab>", lambda e: self._tab_by(-1))   # Shift+Tab as some X servers name it
+        except tk.TclError:
+            pass
+        self.bind("<Up>", lambda e: self._list_step(-1))
+        self.bind("<Down>", lambda e: self._list_step(1))
+
+    TAB_ORDER = ("existing", "template", "new")
+
+    def _tab_by(self, by):
+        self._pick_tab(self.TAB_ORDER[(self.TAB_ORDER.index(self._tab) + by) % len(self.TAB_ORDER)])
+        return "break"
+
+    def _list_step(self, by):
+        lb = {"existing": self.existing_list, "template": self.template_list}.get(self._tab)
+        if lb is not None:
+            lb.step(by)
+        return "break"
 
     def _body(self, inner, bg, fg):
         px = self._px

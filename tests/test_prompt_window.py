@@ -55,11 +55,43 @@ def test_windows_10_gets_a_rounded_region_and_windows_11_the_dwm_corners(app, ui
     assert not ui.errors, ui.errors[0]
 
 
-def test_the_add_window_asked_for_corners_and_drags_once_per_turn(app, ui):
+def test_the_header_hands_the_drag_to_windows(app, ui):
+    import tabs
+    import settings_gui
+    win = settings_gui.AddPlaylistPrompt(ui.settings)
+    ui.pump(0.6)
+
+    class At:
+        x_root, y_root = 300, 120
+    fake = Calls(dwm_ok=True)
+    assert tabs.native_drag(win, At(), windll=fake) is True
+    assert [n for n, _ in fake.calls] == ["GetParent", "ReleaseCapture", "PostMessageW"], fake.calls
+    assert dict(fake.calls)["PostMessageW"] == (4242, 0x00A1, 2, (120 << 16) | 300), "a title-bar press, where the mouse is"
+    monkeypatch_calls = []
+    tabs_native = tabs.native_drag
+    tabs.native_drag = lambda window, event, windll=None: monkeypatch_calls.append(event) or True
+    try:
+        win._drag_start(At())
+        assert monkeypatch_calls and win._drag is None, "Windows has the drag: Tk moves nothing"
+        moves = []
+        win.geometry = lambda spec=None: moves.append(spec)
+        win._drag_move(At())
+        ui.pump(0.2)
+        assert moves == []
+    finally:
+        tabs.native_drag = tabs_native
+    win.cancel()
+    assert not ui.errors, ui.errors[0]
+
+
+def test_the_add_window_asked_for_corners_and_drags_once_per_turn_where_windows_wont(app, ui):
+    import tabs
     import settings_gui
     win = settings_gui.AddPlaylistPrompt(ui.settings)
     ui.pump(0.6)
     assert win.corners in ("dwm", "region"), win.corners
+    tabs_native = tabs.native_drag
+    tabs.native_drag = lambda window, event, windll=None: False   # not Windows: Tk moves the window
     x0, y0 = win.winfo_x(), win.winfo_y()
     moves = []
     real = win.geometry
@@ -77,6 +109,7 @@ def test_the_add_window_asked_for_corners_and_drags_once_per_turn(app, ui):
     for step in range(1, 6):
         win._drag_move(At(x0 + 50 + step * 8, y0 + 10 + step * 4))   # five events in one burst
     ui.pump(0.3)
+    tabs.native_drag = tabs_native
     assert len(moves) == 1 and moves[0] == f"+{x0 + 40}+{y0 + 20}", (moves, "one move, where the last event said")
     win.cancel()
     assert not ui.errors, ui.errors[0]

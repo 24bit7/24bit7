@@ -1244,6 +1244,38 @@ def round_corners(window, radius, windll=None):
         return None
 
 
+WM_NCLBUTTONDOWN, HTCAPTION = 0x00A1, 2
+
+
+def native_drag(window, event, windll=None):
+    """
+    Hands a press on a window's own header to Windows as a title-bar drag, as the main window's
+    chrome does: Windows then moves the whole window as one picture, so nothing inside smears.
+    Posted, not sent, so Windows starts its move loop once Tk's handler has returned. Returns
+    whether Windows took it (False elsewhere, where the caller moves the window itself). windll
+    is for tests.
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+        windll = windll or ctypes.windll
+        hwnd = windll.user32.GetParent(window.winfo_id())
+        if not hwnd:
+            return False
+        post = windll.user32.PostMessageW
+        try:
+            post.argtypes = (wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
+            post.restype = wintypes.BOOL
+        except (AttributeError, TypeError):
+            pass   # a stand-in in tests
+        x, y = event.x_root & 0xFFFF, event.y_root & 0xFFFF
+        windll.user32.ReleaseCapture()
+        post(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, (y << 16) | x)
+        return True
+    except Exception:
+        return False
+
+
 class PickRow(tk.Canvas):
     """
     One row of a list to pick from (the Add a Playlist window, Settings > Playlists): its text, a
@@ -1429,10 +1461,16 @@ class PromptWindow(tk.Toplevel):
             pass
 
     def _drag_start(self, event):
+        """Windows moves the window itself (native_drag); elsewhere Tk does, from _drag_move."""
+        self._drag = None
+        if native_drag(self, event):
+            return
         self._drag = (event.x_root - self.winfo_x(), event.y_root - self.winfo_y())
 
     def _drag_move(self, event):
         """One move per turn of the event loop, then a repaint, so the contents keep up with the frame."""
+        if self._drag is None:
+            return   # Windows has the drag
         dx, dy = self._drag
         self._drag_to = (event.x_root - dx, event.y_root - dy)
         if getattr(self, "_drag_job", None) is None:
