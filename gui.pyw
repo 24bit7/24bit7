@@ -563,7 +563,7 @@ class PlayTab(tk.Frame):
         parent = buttons.get(parent["id"])
         for playlist, text, is_default in buttons.menu_rows(parent):
             row = tabs.PickRow(inner, text, fg=PALETTE["ai_purple"] if playlist["kind"] == "vibe" else fg, bg=bg,
-                               tag=t("default") if is_default else "")
+                               tag=t("default") if is_default else "", fit=True)
             row.configure(cursor="hand2")
             row.pack(fill="x", padx=3, pady=1)
             row.bind("<Enter>", lambda e, r=row: r.set_chosen(True))   # the rounded outline on hover
@@ -578,7 +578,7 @@ class PlayTab(tk.Frame):
                 row.bind("<Button-3>", lambda e, c=playlist, p=parent: self._child_menu(e, p, c))
             pop._rows.append((playlist, row, row.tag))
         pop.update_idletasks()
-        w = max(pop.winfo_reqwidth(), fb.winfo_width())
+        w = max(pop.winfo_reqwidth(), fb.winfo_width())   # the widest row (fit=True), or the button
         pop.geometry(f"{w}x{pop.winfo_reqheight()}+{fb.winfo_rootx()}+{fb.winfo_rooty() + fb.winfo_height() + 2}")
         pop.deiconify()
         pop.lift()

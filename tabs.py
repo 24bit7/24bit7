@@ -1322,9 +1322,11 @@ class PickRow(tk.Canvas):
     """
 
     def __init__(self, master, text, fg=None, bg=None, left=None, chosen=False, indent=0, fold=None, on_fold=None,
-                 tag=""):
+                 tag="", fit=False):
         """indent: pixels in from the left (a child row). fold: None, "open" or "closed" (a parent's arrow,
-        on_fold called when clicked). tag: small text at the right ("default")."""
+        on_fold called when clicked). tag: small text at the right ("default"). fit: ask for just the width
+        the text and tag need, with five spaces between them (a drop-down sized to its rows); otherwise the
+        row takes the width its list gives it."""
         bg = bg or master.cget("bg")
         super().__init__(master, bg=bg, bd=0, highlightthickness=0)
         try:
@@ -1355,6 +1357,10 @@ class PickRow(tk.Canvas):
         self._text_id = self.create_text(x + px(4), self._h // 2, text=text, anchor="w", font=self._font, fill=self._fg)
         self._tag_id = self.create_text(0, self._h // 2, text=tag, anchor="e", font=("Segoe UI", 8),
                                         fill=PALETTE["button_fg"])
+        if fit:
+            text_w = tkfont.Font(root=self, font=self._font).measure(text + " " * 5)
+            tag_w = tkfont.Font(root=self, font=("Segoe UI", 8)).measure(tag) if tag else 0
+            self.configure(width=x + px(4) + text_w + tag_w + px(14))   # a little over: drawn text runs wider than measured
         self.bind("<Configure>", lambda e: self._redraw(e.width))
 
     @property

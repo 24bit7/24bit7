@@ -195,3 +195,36 @@ def test_the_default_row_does_not_drag_and_a_parent_page_has_the_alternate_title
     ui.pump(0.3)
     assert settings._subtitle_box is None, "not on a playlist with nothing nested under it"
     assert not ui.errors, ui.errors[0]
+
+
+def test_the_drop_down_is_only_as_wide_as_its_rows_need(app, ui):
+    """1 Nov 2026, late: a Tk canvas asks for ten centimetres unless told, so the drop-down came out
+    twice the button's width. Its rows now ask for just their text, five spaces and the tag."""
+    import tkinter.font as tkfont
+    import buttons
+    p = ui.play
+    top, ten, deep = make_parent(buttons)
+    p.refresh_buttons()
+    ui.pump(0.3)
+    fb = p.play_buttons[2]
+    p._open_children(buttons.get(top["id"]))
+    ui.pump(0.4)
+    pop = p._children_popup
+    widest = max(row.winfo_reqwidth() for _pl, row, _tag in pop._rows) + 8   # the rows' padx and the popup's edge
+    assert pop.winfo_width() == max(fb.winfo_width(), widest), "the wider of the button and its widest row"
+    assert pop.winfo_width() < 300, "not Tk's ten centimetres"
+    p._close_children()
+    long_title = "Artist's Top Tracks, Twelve of Them, in the Order the Sources Rank Them"
+    buttons.set_subtitle(top["id"], long_title)
+    p._open_children(buttons.get(top["id"]))
+    ui.pump(0.4)
+    pop = p._children_popup
+    row = pop._rows[0][1]
+    assert pop.winfo_width() > fb.winfo_width(), "a long row widens it"
+    text_right = row.bbox(row._text_id)[2]
+    tag_left = row.bbox(row._tag_id)[0]
+    five = tkfont.Font(root=row, font=row._font).measure(" " * 5)
+    assert tag_left - text_right >= five, f"at least five spaces before the tag, got {tag_left - text_right} for {five}"
+    assert row.bbox(row._tag_id)[2] <= row.winfo_width(), "and the tag is in view"
+    p._close_children()
+    assert not ui.errors, ui.errors[0]
