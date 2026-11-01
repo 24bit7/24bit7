@@ -125,13 +125,12 @@ YouTube and Tidal only appear here while they're ticked under Settings > Other >
 
 ### More Options
 
-**More Options** opens a second row, under a thin line. It remembers whether it was open. Its first two are buttons that show their setting and step through the choices with a click; a right-click steps back.
+**More Options** opens a second row, under a thin line. It remembers whether it was open. Its first two are buttons that show their setting and step through the choices with a click; a right-click steps back. A playlist's own Moderator, Drift, Deep Cuts and Non-stop are on its page under [Settings > Playlists](#playlists): drag the playlist onto the Settings pill to get there.
 
 ![More Options open](images/play_more_options.png)
 
 - **Seed: Current Track** or **Seed: Playing Now** (teal). See [The seed](#the-seed).
 - **Play Mode** or **Review Mode** (orange). See [The seed](#the-seed) and [Review](#review).
-- **Moderator**, **Drift**, **Deep Cuts** and **Non-stop** show the settings of the playlist you last used (the first on the row until you've used one), live. Change one and it sticks to that playlist, and the console says so. With the bar open the other playlists are dimmed: click one to see its settings, and click it again to build. When the bar opens, the console says whose settings are showing. See [Moderator](#moderator), [Drift](#drift), [Deep Cuts](#deep-cuts) and [Non-stop](#non-stop).
 - **Show Credits** lists the producer, engineer, musicians and other credits for what's playing, from Discogs, in two lists: the playing track's own credits (or every track's, under its number and title) and the album's. Credits Discogs marks for some tracks only, such as a drummer on tracks 2 to 4, go to those tracks. Settings > Other > Show Credits chooses the current track or all tracks, and which list comes first. It needs a Discogs token.
 - **+ Add JRiver Playlist** joins one of your JRiver playlists to the next build. See [Adding your own playlists](#adding-your-own-playlists).
 - **?**, at the right-hand end of the row, switches the Play tab's hover notes on and off. On, resting the pointer on anything in the Play tab explains it; off, the default, nothing pops up. Notes saying why something is greyed out (no AI key, for example) always show. It remembers its setting.

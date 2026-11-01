@@ -129,13 +129,12 @@ YouTube und Tidal erscheinen hier nur, solange sie unter Einstellungen > Sonstig
 
 ### Mehr Optionen
 
-**Mehr Optionen** öffnet eine zweite Zeile unter einer dünnen Linie. Es merkt sich, ob sie offen war. Die ersten zwei sind Knöpfe, die ihre Einstellung zeigen und mit einem Klick durch die Möglichkeiten gehen; ein Rechtsklick geht zurück.
+**Mehr Optionen** öffnet eine zweite Zeile unter einer dünnen Linie. Es merkt sich, ob sie offen war. Die ersten zwei sind Knöpfe, die ihre Einstellung zeigen und mit einem Klick durch die Möglichkeiten gehen; ein Rechtsklick geht zurück. Moderator, Drift, Deep Cuts und Non-stop einer Playlist stehen auf ihrer Seite unter [Einstellungen > Playlists](#playlists): Zieh die Playlist auf das Feld Einstellungen, um dorthin zu kommen.
 
 ![Mehr Optionen offen](images/de/play_more_options.png)
 
 - **Seed: Aktueller Titel** oder **Seed: Playing Now** (türkis). Siehe [Der Seed](#der-seed).
 - **Abspielmodus** oder **Review-Modus** (orange). Siehe [Der Seed](#der-seed) und [Review](#review).
-- **Moderator**, **Drift**, **Deep Cuts** und **Non-stop** zeigen live die Einstellungen der Playlist, die du zuletzt verwendet hast (die erste der Reihe, bis du eine verwendet hast). Änderst du eine, bleibt sie bei dieser Playlist, und die Konsole sagt es. Bei offener Leiste sind die anderen Playlists abgeblendet: Klick eine an, um ihre Einstellungen zu sehen, und noch einmal, um sie zu erstellen. Wenn die Leiste aufgeht, sagt die Konsole, wessen Einstellungen zu sehen sind. Siehe [Moderator](#moderator), [Drift](#drift), [Deep Cuts](#deep-cuts) und [Non-stop](#non-stop).
 - **Mitwirkende** zeigt Produzent, Toningenieur, Musiker und weitere Mitwirkende des laufenden Titels von Discogs, in zwei Listen: die eigenen Mitwirkenden des laufenden Titels (oder aller Titel, unter Nummer und Titel) und die des Albums. Mitwirkende, die Discogs nur für einige Titel vermerkt, etwa ein Schlagzeuger auf den Titeln 2 bis 4, kommen zu diesen Titeln. Einstellungen > Sonstiges > Mitwirkende zeigen wählt den aktuellen Titel oder alle Titel und welche Liste zuerst kommt. Es braucht ein Discogs-Token.
 - **+ JRiver-Playlist hinzufügen** nimmt eine deiner JRiver-Playlists in die nächste Playlist auf. Siehe [Eigene Playlists hinzufügen](#eigene-playlists-hinzufügen).
 - **?** am rechten Ende der Zeile schaltet die Hinweise des Abspielen-Tabs an und aus. An erklärt alles im Abspielen-Tab, wenn du den Mauszeiger darauf ruhen lässt; aus, die Voreinstellung, zeigt nichts. Hinweise, warum etwas ausgegraut ist (zum Beispiel kein KI-Schlüssel), erscheinen immer. Es merkt sich seine Einstellung.

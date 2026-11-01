@@ -81,51 +81,6 @@ def test_matching_playlists_go_teal_with_seed_on_playing_now(app, ui):
     assert not ui.errors, ui.errors[0]
 
 
-def test_opening_and_closing_more_options_keeps_the_console(app, ui):
-    p = ui.play
-    p._end_greeting(keep=False)
-    p._append_log("A line to keep.")
-    p._show_more(True, save=False)
-    ui.pump(0.3)
-    p.play_buttons[1]._command()   # arms another playlist
-    ui.pump(0.2)
-    p._show_more(False, save=False)
-    ui.pump(0.3)
-    text = p.log.get("1.0", "end")
-    assert "A line to keep." in text and "showing the settings of Similar Tracks" in text, text
-    assert not ui.errors, ui.errors[0]
-
-
-def test_the_console_keeps_one_more_options_line_naming_the_armed_playlist(app, ui):
-    p = ui.play
-    p._end_greeting(keep=False)
-    p._append_log("A line to keep.")
-    p._show_more(True, save=False)
-    ui.pump(0.3)
-    for i in (1, 2, 3):
-        p.play_buttons[i]._command()   # arms another playlist each time
-        ui.pump(0.2)
-    text = p.log.get("1.0", "end")
-    assert text.count("More Options:") == 1, text
-    assert "showing the settings of Headliner." in text and "Similar Tracks" not in text, "rewritten in place, not added to"
-    assert text.index("A line to keep.") < text.index("More Options:"), "where it stood"
-    p._append_log("Another line.")
-    p.play_buttons[0]._command()
-    ui.pump(0.2)
-    text = p.log.get("1.0", "end")
-    assert text.count("More Options:") == 1 and text.index("More Options:") < text.index("Another line.")
-    p._show_more(False, save=False)
-    p._append_log("Build output.")
-    p._live.clear()   # a build starts: the console was cleared
-    p.log.config(state="normal")
-    p.log.delete("1.0", "end")
-    p.log.config(state="disabled")
-    p._show_more(True, save=False)
-    ui.pump(0.3)
-    assert p.log.get("1.0", "end").count("More Options:") == 1, "written afresh after a clear"
-    assert not ui.errors, ui.errors[0]
-
-
 def test_right_click_menu_renames_copies_moves_removes_and_restores(app, ui, monkeypatch):
     import buttons
     import tabs
@@ -171,31 +126,25 @@ def test_right_click_menu_renames_copies_moves_removes_and_restores(app, ui, mon
     assert not ui.errors, ui.errors[0]
 
 
-def test_more_options_dials_show_and_change_the_armed_playlist(app, ui):
+def test_more_options_has_no_dials_and_a_click_always_builds(app, ui, monkeypatch):
+    """1 Nov 2026: Moderator, Drift, Deep Cuts and Non-stop are each playlist's own, on its page; the bar keeps
+    Seed, Mode, + Add JRiver Playlist, Show Credits and ?. With it open, a click builds, nothing arms or dims."""
     import buttons
-    import settings_gui
     p = ui.play
+    p._end_greeting(keep=False)
     p._show_more(True, save=False)
     ui.pump(0.3)
-    assert p._armed == p.play_buttons[0]._button["id"], "the first on the row, until one is used"
-    assert [b._dim for b in p.play_buttons] == [False, True, True, True, True, True]
-    assert p._dial_vars["moderator"].get() == "Off" and p._dial_vars["nonstop"].get() == "Off"
-    p.play_buttons[1]._command()   # a dimmed playlist arms, no build
+    kinds = [type(w).__name__ for w in p.extras_row.winfo_children() if w.winfo_manager()]
+    assert kinds.count("ClickThrough") == 3, (kinds, "Seed, Mode and ?: no dials")
+    assert not hasattr(p, "moderator_cb") and not hasattr(p, "nonstop_cb") and not hasattr(p, "_armed")
+    assert not any(b._dim for b in p.play_buttons), "nothing dimmed with the bar open"
+    ran = []
+    monkeypatch.setattr(p, "on_button", lambda button: ran.append(button["name"]))
+    p.play_buttons[1]._command()
     ui.pump(0.2)
-    assert p._armed == p.play_buttons[1]._button["id"] and not p.running
-    assert [b._dim for b in p.play_buttons] == [True, False, True, True, True, True]
-    p._dial_vars["nonstop"].set("Keep It Tight")
-    p._dial_changed("nonstop")
-    ui.pump(0.2)
-    tracks = buttons.standard("tracks")
-    assert tracks["settings"]["NONSTOP_TRACKS"] == "1" and tracks["settings"]["NONSTOP_TRACKS_MODE"] == "tight"
-    assert settings_gui.read_env().get("NONSTOP_TRACKS") == "1", "the standard playlist keeps .env in step"
-    p.play_buttons[2]._command()   # Artist's Top Tracks: no Moderator, Drift or Deep Cuts dial
-    ui.pump(0.2)
-    assert not p.moderator_cb.winfo_manager() and not p.drift_cb.winfo_manager() and p.nonstop_cb.winfo_manager()
+    assert ran == ["Similar Tracks"], "one click builds"
+    assert "More Options:" not in p.log.get("1.0", "end"), "and the console says nothing about it"
     p._show_more(False, save=False)
-    ui.pump(0.2)
-    assert not any(b._dim for b in p.play_buttons), "closed: one click builds, nothing dimmed"
     assert not ui.errors, ui.errors[0]
 
 

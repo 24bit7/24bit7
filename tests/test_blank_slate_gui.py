@@ -19,7 +19,6 @@ def test_a_blank_slate_on_the_play_tab_says_so_and_opens_its_page(app, ui, monke
     b = p.play_buttons[-1]
     assert b._name == "New Playlist" and b._text_fg == PALETTE["help_fg"], "grey text: nothing to build"
     assert p._button_note(new) == "No config yet. Click to open its page and add one."
-    assert p._dial_values(new) == {"moderator": None, "drift": None, "deepcuts": None, "nonstop": None}
     opened = []
     monkeypatch.setattr(p, "open_playlist_settings", lambda bid, rename=False: opened.append(bid))
     p._end_greeting(keep=False)

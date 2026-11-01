@@ -99,7 +99,8 @@ def blank(name, kind):
     is added on its page; the first config added becomes its own.
     """
     return {"id": uuid.uuid4().hex[:8], "name": name, "kind": kind, "settings": {}, "filters": [],
-            "shortcut": "", "standard": "", "shown": True, "configs": [], "mix": mix_default()}
+            "shortcut": "", "standard": "", "shown": True, "configs": [], "mix": mix_default(),
+            "parent": "", "default": ""}   # nested under another playlist; a parent's default child (see nest)
 
 
 def tidy(item):
@@ -126,6 +127,8 @@ def tidy(item):
     out["settings"] = {k: v for k, v in settings.items() if k in KIND_KEYS.get(kind, [])}
     out["filters"] = [str(f) for f in (out.get("filters") or [])]
     out["shown"] = bool(out.get("shown", True))
+    out["parent"] = str(out.get("parent") or "")
+    out["default"] = str(out.get("default") or "")
     out["mix"] = tidy_mix(out.get("mix"), len(out["configs"]) + (0 if kind is None else 1))
     return out
 
@@ -314,7 +317,113 @@ def load():
     if items is None:
         upgrade()
         items = _stored() or []
-    return _adopt_env_shortcuts(items)
+    return settle(_adopt_env_shortcuts(items))
+
+
+# --- nesting: a playlist under another, one level deep ---------------------------------------------
+#
+# A playlist with a parent sits in that parent's menu on the Play tab rather than on the row. The
+# parent's button runs its default: itself, or the child its "default" names. The stored list is in
+# tree order (each parent followed by its children), which is the order everything shows.
+
+def settle(items):
+    """
+    Makes the tree whole and puts the list in tree order: a parent must exist and be top-level, a
+    child has no children of its own (they come out to the row), and a default must be a child.
+    """
+    ids = {b["id"] for b in items}
+    by_id = {b["id"]: b for b in items}
+    for b in items:
+        p = b.get("parent") or ""
+        if p and (p not in ids or p == b["id"] or by_id[p].get("parent")):
+            b["parent"] = ""
+    for b in items:
+        if b.get("default") and not any(c["id"] == b["default"] and c.get("parent") == b["id"] for c in items):
+            b["default"] = ""
+        if b.get("parent"):
+            b["default"] = ""
+    ordered = []
+    for b in items:
+        if not b.get("parent"):
+            ordered.append(b)
+            ordered += [c for c in items if c.get("parent") == b["id"]]
+    return ordered
+
+
+def children(parent_id, ticked_only=True):
+    """A parent's children in order: the ticked ones (in its menu), or every one."""
+    return [b for b in load() if b.get("parent") == parent_id and (b.get("shown", True) or not ticked_only)]
+
+
+def is_parent(button):
+    return any(b.get("parent") == button["id"] for b in load())
+
+
+def nest(child_id, parent_id):
+    """
+    Puts a playlist under another: off the row and into the parent's menu, after any children it
+    has. One level deep: a child can't take children, and a playlist with children can't be nested.
+    Returns whether it happened.
+    """
+    items = load()
+    by_id = {b["id"]: b for b in items}
+    child, parent = by_id.get(child_id), by_id.get(parent_id)
+    if child is None or parent is None or child is parent or parent.get("parent"):
+        return False
+    if any(b.get("parent") == child_id for b in items):
+        return False
+    child["parent"] = parent_id
+    child["default"] = ""
+    save(settle(items))
+    return True
+
+
+def unnest(child_id):
+    """Brings a child out onto the row, right after its parent's group. Returns whether it happened."""
+    items = load()
+    child = next((b for b in items if b["id"] == child_id), None)
+    if child is None or not child.get("parent"):
+        return False
+    parent_id = child["parent"]
+    items.remove(child)
+    last = max(k for k, b in enumerate(items) if b["id"] == parent_id or b.get("parent") == parent_id)
+    items.insert(last + 1, child)
+    child["parent"] = ""
+    for b in items:
+        if b["id"] == parent_id and b.get("default") == child_id:
+            b["default"] = ""
+    save(settle(items))
+    return True
+
+
+def set_default(parent_id, child_id):
+    """What a parent's button runs: one of its children, or "" for the parent itself."""
+    items = load()
+    for b in items:
+        if b["id"] == parent_id and not b.get("parent"):
+            b["default"] = child_id if any(c["id"] == child_id and c.get("parent") == parent_id for c in items) else ""
+    save(items)
+
+
+def runs(button):
+    """The playlist a button's main part builds: the parent's default child if it has one, else itself."""
+    if button.get("default"):
+        child = get(button["default"])
+        if child is not None and child.get("parent") == button["id"]:
+            return child
+    return button
+
+
+def siblings(items, button):
+    """The playlists at the same level as this one, in order: the top level, or one parent's children."""
+    return [b for b in items if (b.get("parent") or "") == (button.get("parent") or "")]
+
+
+def _group(items, button):
+    """A top-level playlist with its children, as one block to move; a child on its own."""
+    if button.get("parent"):
+        return [button]
+    return [button] + [c for c in items if c.get("parent") == button["id"]]
 
 
 def save(items):
@@ -346,8 +455,8 @@ def has_kind(button, kind):
 
 
 def shown():
-    """The playlists ticked for the Play tab, in the order shown."""
-    return [b for b in load() if b.get("shown", True)]
+    """The playlists on the Play tab's row, in the order shown: ticked, and not nested under another."""
+    return [b for b in load() if b.get("shown", True) and not b.get("parent")]
 
 
 def set_shown(button_id, on):
@@ -412,51 +521,65 @@ def rename(button_id, name):
     save(items)
 
 
-def move(button_id, by):
-    """Moves a button along the row: by -1 is one place left, +1 one place right."""
-    items = load()
-    ids = [b["id"] for b in items]
+def _swap_with_sibling(items, button_id, by, among=None):
+    """Moves a playlist past the next sibling (by -1 up, +1 down), its children with it. among: the siblings that count."""
+    moving = next((b for b in items if b["id"] == button_id), None)
+    if moving is None:
+        return items
+    sibs = among if among is not None else siblings(items, moving)
+    sibs = [b for b in sibs if (b.get("parent") or "") == (moving.get("parent") or "")]
+    ids = [b["id"] for b in sibs]
     if button_id not in ids:
-        return
+        return items
     i = ids.index(button_id)
-    j = min(max(i + by, 0), len(items) - 1)
-    items.insert(j, items.pop(i))
-    save(items)
+    j = min(max(i + by, 0), len(ids) - 1)   # a big step stops at the end
+    if j == i:
+        return items
+    block = _group(items, moving)
+    other = _group(items, sibs[j])
+    for b in block:
+        items.remove(b)
+    anchor = items.index(other[0]) if by < 0 else items.index(other[-1]) + 1
+    return items[:anchor] + block + items[anchor:]
+
+
+def move(button_id, by):
+    """Moves a playlist among its siblings: by -1 is one place up (left on the row), +1 one place down."""
+    save(_swap_with_sibling(load(), button_id, by))
 
 
 def remove(button_id):
-    save([b for b in load() if b["id"] != button_id])
+    """Deletes a playlist. Its children, if any, come out onto the row where it was."""
+    items = load()
+    for b in items:
+        if b.get("parent") == button_id:
+            b["parent"] = ""
+        if b.get("default") == button_id:
+            b["default"] = ""
+    save([b for b in items if b["id"] != button_id])
 
 
 def move_shown(button_id, by):
-    """Moves a playlist along the Play tab's row: by -1 one place left, +1 one place right, past hidden ones."""
+    """Moves a playlist along the Play tab's row: by -1 one place left, +1 one place right, past unticked ones."""
     items = load()
-    row = [b["id"] for b in items if b.get("shown", True)]
-    if button_id not in row:
-        return
-    i = row.index(button_id)
-    j = i + by
-    if j < 0 or j >= len(row):
-        return
-    moving = next(b for b in items if b["id"] == button_id)
-    items.remove(moving)
-    anchor = next(k for k, b in enumerate(items) if b["id"] == row[j])
-    items.insert(anchor + (1 if by > 0 else 0), moving)
-    save(items)
+    row = [b for b in items if b.get("shown", True) and not b.get("parent")]
+    save(_swap_with_sibling(items, button_id, by, among=row))
 
 
 def move_to(button_id, before_id):
-    """Drops a playlist in front of another on the Play tab's row (before_id None: at the end)."""
+    """Drops a playlist in front of another on the Play tab's row (before_id None: at the end), its children with it."""
     items = load()
     moving = next((b for b in items if b["id"] == button_id), None)
-    if moving is None or button_id == before_id:
+    if moving is None or button_id == before_id or moving.get("parent"):
         return
-    items.remove(moving)
+    block = _group(items, moving)
+    for b in block:
+        items.remove(b)
     if before_id is None:
-        items.append(moving)
+        items += block
     else:
         anchor = next((k for k, b in enumerate(items) if b["id"] == before_id), len(items))
-        items.insert(anchor, moving)
+        items = items[:anchor] + block + items[anchor:]
     save(items)
 
 
@@ -469,7 +592,9 @@ def duplicate(button_id):
     items = load()
     moving = next(b for b in items if b["id"] == new["id"])
     items.remove(moving)
-    items.insert(next(k for k, b in enumerate(items) if b["id"] == button_id) + 1, moving)
+    moving["parent"] = source.get("parent") or ""   # a child's copy sits beside it in the menu
+    group = _group(items, source)
+    items.insert(items.index(group[-1]) + 1, moving)
     save(items)
     return get(new["id"])
 

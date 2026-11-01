@@ -85,16 +85,7 @@ PLAY_NOTES = {
     "AI Playlist": N_("Describe a mood or moment and the AI picks tracks for it, from your library. Uses AI credits."),
     "+": N_("Puts a playlist you've taken off the row back, or makes a new one. Right-click any playlist to rename, "
             "copy, move or remove it; hold one to drag it."),
-    "More Options": N_("Opens the row below: Seed, Mode, the lit playlist's own Moderator, Drift, Deep Cuts and "
-                       "Non-stop, and your JRiver playlists."),
-    "Moderator": N_("The lit playlist's Moderator: an AI check that removes tracks clashing with the seed's mood. "
-                    "Changing it here changes that playlist."),
-    "Drift": N_("The lit playlist's Drift: searches again when your library falls short of the target. Changing "
-                "it here changes that playlist."),
-    "Deep Cuts": N_("The lit playlist's Deep Cuts: tops it up from the corners of your collection you rarely play. "
-                    "Changing it here changes that playlist."),
-    "Non-stop": N_("The lit playlist's Non-stop: more music when its last track starts. Changing it here changes "
-                   "that playlist."),
+    "More Options": N_("Opens the row below: Seed, Mode, your JRiver playlists and Show Credits."),
     "Output": N_("Where the finished playlist goes: the zone you seeded from, another JRiver zone, or YouTube or "
                  "Tidal (ticked under Settings > Other > Additional Outputs)."),
     "Zone": N_("Which JRiver zone Now Playing shows and seeds from."),
@@ -147,7 +138,6 @@ class PlayTab(tk.Frame):
         super().__init__(master)
         self.root = root
         self.settings = None   # the Settings tab, once built
-        self._armed = None     # the playlist More Options' dials show, and the last one used
         root.bind("<<ButtonsChanged>>", lambda e: self.refresh_buttons(), add="+")   # from Settings > Buttons
         self.log_queue = queue.Queue()
         engine.OUTPUT_HOOK = self.log_queue.put   # engine's print() and [debug] lines land here
@@ -417,24 +407,8 @@ class PlayTab(tk.Frame):
                                          labels={"Play": N_("Play Mode"), "Review": N_("Review Mode")})
         self.behaviour_cb.pack(side="left", padx=(0, 8))
         tk.Frame(self.extras_row, width=1, height=24, bg=PALETTE["line"]).pack(side="left", padx=(8, 16))
-        # The lit playlist's own Moderator, Drift, Deep Cuts and Non-stop: live dials that change that playlist
-        self._dial_vars = {k: tk.StringVar(value="Off") for k in ("moderator", "drift", "deepcuts", "nonstop")}
-        self._dials_loading = False
-        magenta = PALETTE["ai_purple"]
-        self.moderator_cb = ClickThrough(self.extras_row, "Moderator", self._dial_vars["moderator"],
-                                         ["Off", "Relaxed", "Balanced", "Strict"],
-                                         command=lambda: self._dial_changed("moderator"),
-                                         lit={"Relaxed": magenta, "Balanced": magenta, "Strict": magenta})
-        self.drift_cb = ClickThrough(self.extras_row, "Drift", self._dial_vars["drift"], ["Off", "Keep It Tight", "Spread"],
-                                     command=lambda: self._dial_changed("drift"))
-        self.deepcuts_cb = ClickThrough(self.extras_row, "Deep Cuts", self._dial_vars["deepcuts"],
-                                        ["Off", "Spaced", "Shuffled"], command=lambda: self._dial_changed("deepcuts"))
-        self.nonstop_cb = ClickThrough(self.extras_row, "∞", self._dial_vars["nonstop"], ["Off", "Keep It Tight", "Wander"],
-                                       command=lambda: self._dial_changed("nonstop"), symbol=True)
-        self._dial_sep = tk.Frame(self.extras_row, width=1, height=24, bg=PALETTE["line"])
-        for cb in (self.moderator_cb, self.drift_cb, self.deepcuts_cb, self.nonstop_cb):
-            cb.pack(side="left", padx=(0, 8))
-        self._dial_sep.pack(side="left", padx=(8, 16))
+        # Moderator, Drift, Deep Cuts and Non-stop are each playlist's own, on its page (1 Nov 2026: with playlists
+        # nested under one another, a live dial here had no honest playlist to show)
         # Add playlist: JRiver playlists joined to the next build from the app (not voice)
         self.add_playlist_button = FlatButton(self.extras_row, text=t("+ Add JRiver Playlist"), quiet=True,
                                               width=max(18, len(t("+ Add JRiver Playlist")) + 1),
@@ -481,105 +455,8 @@ class PlayTab(tk.Frame):
         on, wrap = self.help_on, self.note_wrap
         for widget, name in ((self.more_button, "More Options"), (self.add_button, "+"), (self.output_cb, "Output"),
                              (self.zone_cb, "Zone"), (self.seed_cb, "Seed"), (self.behaviour_cb, "Mode"),
-                             (self.add_playlist_button, "+ Add JRiver Playlist"), (self.help_cb, "Help"),
-                             (self.moderator_cb, "Moderator"), (self.drift_cb, "Drift"),
-                             (self.deepcuts_cb, "Deep Cuts"), (self.nonstop_cb, "Non-stop")):
+                             (self.add_playlist_button, "+ Add JRiver Playlist"), (self.help_cb, "Help")):
             Tooltip(widget, t(PLAY_NOTES[name]), when=on, wrap=wrap)
-
-    # --- the dials: what the armed playlist has, read live from it; a change writes back to it ----------
-
-    DIAL_KEYS = {   # dial -> (the keys a kind's settings hold, which kinds have it)
-        "moderator": ("AI_MODERATOR_{G}", ("artists", "tracks")),
-        "drift": ("DRIFT_{G}", ("artists", "tracks", "vibe")),
-        "deepcuts": ("DEEP_CUTS_{G}", ("artists", "tracks", "vibe")),
-        "nonstop": ("NONSTOP_{G}", ("artists", "tracks", "top", "vibe")),
-    }
-
-    def _dial_values(self, button):
-        """Each dial's value for a playlist, from its settings over .env, or None where the kind has no such thing."""
-        if button.get("kind") is None:   # a blank slate: no dials
-            return {dial: None for dial in self.DIAL_KEYS}
-        g = button["kind"].upper()
-        env = read_env()
-        env.update(button.get("settings") or {})
-        out = {}
-        for dial, (key, kinds) in self.DIAL_KEYS.items():
-            if button["kind"] not in kinds:
-                out[dial] = None
-                continue
-            raw = (env.get(key.format(G=g)) or "").strip().lower()
-            if dial == "moderator":
-                out[dial] = {"relaxed": "Relaxed", "balanced": "Balanced", "strict": "Strict"}.get(raw, "Off")
-            elif dial == "drift":
-                on = raw in ("1", "true", "yes")
-                close = (env.get(f"DRIFT_{g}_FROM") or "spread").strip().lower() == "close"
-                out[dial] = ("Keep It Tight" if close else "Spread") if on else "Off"
-            elif dial == "deepcuts":
-                out[dial] = {"spaced": "Spaced", "shuffled": "Shuffled"}.get(raw, "Off")
-            else:
-                on = raw in ("1", "true", "yes")
-                tight = (env.get(f"NONSTOP_{g}_MODE") or "").strip().lower() == "tight"
-                out[dial] = ("Keep It Tight" if tight else "Wander") if on else "Off"
-        return out
-
-    def _sync_dials(self):
-        """The dials show the armed playlist's settings; a dial its kind doesn't have is hidden."""
-        button = self._armed_playlist()
-        if button is None:
-            return
-        values = self._dial_values(button)
-        self._dials_loading = True
-        try:
-            for dial, cb in (("moderator", self.moderator_cb), ("drift", self.drift_cb),
-                             ("deepcuts", self.deepcuts_cb), ("nonstop", self.nonstop_cb)):
-                value = values[dial]
-                if value is None:
-                    cb.pack_forget()
-                    continue
-                self._dial_vars[dial].set(value)
-                if not cb.winfo_manager():
-                    cb.pack(side="left", padx=(0, 8), before=self._dial_sep)
-        finally:
-            self._dials_loading = False
-
-    def _dial_changed(self, dial):
-        """A dial clicked: the armed playlist's setting changes, as it would on its page."""
-        if self._dials_loading:
-            return
-        button = self._armed_playlist()
-        if button is None or button.get("kind") is None:
-            return
-        g = button["kind"].upper()
-        value = self._dial_vars[dial].get()
-        changes = {}
-        if dial == "moderator":
-            changes[f"AI_MODERATOR_{g}"] = value.lower()
-        elif dial == "drift":
-            changes[f"DRIFT_{g}"] = "0" if value == "Off" else "1"
-            if value != "Off":
-                changes[f"DRIFT_{g}_FROM"] = "close" if value == "Keep It Tight" else "spread"
-        elif dial == "deepcuts":
-            changes[f"DEEP_CUTS_{g}"] = value.lower()
-        else:
-            changes[f"NONSTOP_{g}"] = "0" if value == "Off" else "1"
-            if value != "Off":
-                changes[f"NONSTOP_{g}_MODE"] = "tight" if value == "Keep It Tight" else "journey"
-        settings = dict(button.get("settings") or {})
-        settings.update(changes)
-        buttons.set_settings(button["id"], settings)
-        if button.get("standard"):   # the standard playlists keep .env in step, as their page does
-            try:
-                write_env(changes)
-            except Exception as e:
-                messagebox.showerror(t("Save failed"), str(e), parent=self)
-        label = {"moderator": "Moderator", "drift": "Drift", "deepcuts": "Deep Cuts", "nonstop": "Non-stop"}[dial]
-        self._append_log(t("{name}: {setting} {value} (changed).", name=button["name"], setting=t(label), value=t(value)))
-        if self.settings is not None and getattr(self.settings, "_button_id", None) == button["id"]:
-            try:
-                self.settings._button_fill_page()
-            except Exception:
-                pass
-        self._draw_buttons()   # the hover note says what's on
 
     # --- the row of buttons -------------------------------------------------------------------------
 
@@ -602,8 +479,6 @@ class PlayTab(tk.Frame):
         self.play_buttons = []
         on, wrap = self.help_on, self.note_wrap
         shown = buttons.shown()
-        if self._armed not in [b["id"] for b in shown]:
-            self._armed = shown[0]["id"] if shown else None   # the first on the row, until one is used
         for button in shown:
             ai = button["kind"] == "vibe"
             empty = button["kind"] is None   # a blank slate: grey text, and its note always shows
@@ -626,7 +501,6 @@ class PlayTab(tk.Frame):
                 Tooltip(b, self._button_note(button), when=on, wrap=wrap)
             self.play_buttons.append(b)
         self._sync_ai_button()
-        self._sync_armed()
         self._flow_buttons()
 
     def _flow_buttons(self):
@@ -650,77 +524,12 @@ class PlayTab(tk.Frame):
         if self.running:
             for b in self.play_buttons:
                 b.config(state="disabled")
-        self._sync_dials()
-
-    # --- the armed playlist: what More Options' dials show, and what a click builds ----------------
-
-    def _more_open(self):
-        row = getattr(self, "extras_row", None)   # the row is built after the buttons
-        return bool(row is not None and row.winfo_manager())
 
     def _press_playlist(self, button):
-        """A click: with More Options open, an unarmed playlist arms (the dials jump to it); the armed one builds."""
+        """A click builds (a drag's release isn't one)."""
         if getattr(self, "_drag_moved", False):
             return   # the release of a drag, not a click
-        if self._more_open() and button["id"] != self._armed:
-            self._arm(button["id"], say=True)
-            return
-        self._armed = button["id"]
-        self._sync_armed()
-        self._sync_dials()
         self.on_button(button)
-
-    def _arm(self, button_id, say=False):
-        self._armed = button_id
-        self._sync_armed()
-        self._sync_dials()
-        if say:
-            button = buttons.get(button_id)
-            if button is not None:
-                self._say_more_options(t("More Options: showing the settings of {name}.", name=button["name"]))
-
-    def _say_more_options(self, line):
-        """
-        The console's one More Options line, naming the playlist whose settings the dials show. Arming
-        another playlist rewrites it in place rather than adding a line per click; once a build has
-        cleared the console, the line is written afresh.
-        """
-        old = getattr(self, "_more_note", None)
-        if old is not None and old in self._live:
-            self._live[self._live.index(old)] = line
-            if old in self._held:
-                self._held[self._held.index(old)] = line
-            else:
-                self._replace_line(old, line)
-            self._more_note = line
-            return
-        self._more_note = self._append_log(line)
-
-    def _replace_line(self, old, new):
-        """Rewrites one console line where it stands, if it's on screen; returns whether it was."""
-        if not self._live_visible():
-            return False
-        at = self.log.search(old, "1.0", stopindex="end", exact=True)
-        while at:
-            start, end = f"{at} linestart", f"{at} lineend"
-            if self.log.get(start, end) == old:
-                kind = self._line_kind(new)
-                self.log.config(state="normal")
-                self.log.delete(start, end)
-                self.log.insert(start, new, (kind,) if kind else ())
-                self.log.config(state="disabled")
-                return True
-            at = self.log.search(old, f"{at}+1c", stopindex="end", exact=True)
-        return False
-
-    def _sync_armed(self):
-        """With More Options open, every playlist but the armed one dims; closed, all read as usual."""
-        dim_others = self._more_open()
-        for b in self.play_buttons:
-            b.config(dim=dim_others and b._button["id"] != self._armed)
-
-    def _armed_playlist(self):
-        return buttons.get(self._armed) if self._armed else None
 
     # --- dragging a playlist: along the row, or onto the cog (its settings) or the cross (off the row) ---
 
@@ -987,7 +796,6 @@ class PlayTab(tk.Frame):
 
     def _show_more(self, open_, save=True):
         """Opens or closes the More options row. Open or closed is remembered between launches."""
-        was_open = self._more_open()
         if open_:
             self.more_line.pack(fill="x", padx=16, pady=(6, 0))
             self.extras_row.pack(fill="x", pady=(12, 2))   # the console below has its own top margin
@@ -1000,14 +808,6 @@ class PlayTab(tk.Frame):
         if save:
             playmix.set_open(open_)
         self._update_more_label()
-        if hasattr(self, "play_buttons"):
-            self._sync_armed()
-            self._sync_dials()
-            if open_ and (save or not was_open) and hasattr(self, "log"):
-                button = self._armed_playlist()
-                if button is not None:
-                    self._say_more_options(t("More Options: showing the settings of {name}, the last playlist you used. "
-                                             "Click another playlist to see its.", name=button["name"]))
 
     def _on_mix_rows_changed(self):
         """An added playlist changed: the console says what the next build will do, once per change."""
@@ -1145,7 +945,6 @@ class PlayTab(tk.Frame):
         engine.refresh_settings_if_changed()
         self._sync_ai_button()
         self._update_more_label()
-        self._sync_dials()
 
     def _sync_ai_button(self):
         """Every AI Playlist button greys out while Use AI is Off (Settings > Keys) or there's no key."""
