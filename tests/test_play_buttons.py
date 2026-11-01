@@ -45,6 +45,7 @@ def test_plus_opens_the_window_and_its_three_answers_land(app, ui, monkeypatch):
     buttons.set_shown(head["id"], False)
     p.refresh_buttons()
     assert "Headliner" not in names(p)
+    p._end_greeting(keep=False)   # the start-up greeting holds console lines back while it types
     monkeypatch.setattr(p, "_ask_new_button", lambda: ("existing", head["id"]))
     p.on_add_button()
     assert names(p)[3] == "Headliner", "ticked again, it comes back at its place in the list"
