@@ -1596,6 +1596,7 @@ class SettingsTab(tk.Frame):
         for child in right.winfo_children():
             child.destroy()
         self._button_page, self._score_pages = None, []
+        self._subtitle_box = None   # the Alternate Title box, on a parent's page only
         button = buttons.get(self._button_id) if self._button_id else None
         if button is None:
             holder = tk.Frame(right)
@@ -1625,7 +1626,7 @@ class SettingsTab(tk.Frame):
             alt.grid(row=2, column=0, sticky="w", pady=(8, 0))
             tk.Label(alt, text=t("Alternate Title")).pack(side="left")
             self._subtitle_var = tk.StringVar(value=button.get("subtitle") or "")
-            box_ = ttk.Entry(alt, textvariable=self._subtitle_var, width=28)
+            box_ = self._subtitle_box = ttk.Entry(alt, textvariable=self._subtitle_var, width=28)
             box_.pack(side="left", padx=(8, 0))
 
             def save_subtitle(_e=None, bid=button["id"]):
