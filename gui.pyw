@@ -700,20 +700,34 @@ class PlayTab(tk.Frame):
         self.refresh_buttons()
 
     def _show_drop_targets(self, button):
-        """Two targets appear over the top of the console while a playlist is held: a cog and a cross."""
+        """
+        While a playlist is held, a strip slides over the top of the console: "Drop {name} on", then two
+        big pills, Settings (the accent) and Remove (orange). The one under the pointer fills in.
+        """
         self._hide_drop_targets()
-        box = self._drop_box = tk.Frame(self.console_box, bg="#000000")
-        box.place(relx=0.5, y=14, anchor="n")
-        self._targets = {}
-        for key, symbol, text, colour in (("settings", "⚙", t("{name}'s settings", name=button["name"]), PALETTE["button_fg"]),
-                                          ("remove", "×", t("Remove {name}", name=button["name"]), PALETTE["brand_orange"])):
-            cell = tk.Frame(box, bg="#000000", padx=18)
+        px = self.winfo_fpixels("1i") / 96.0
+        strip_bg = tabs.mix_colour(self, "#ffffff", "#000000", 0.11)
+        box = self._drop_box = tk.Frame(self.console_box, bg=strip_bg)
+        box.place(relx=0, y=0, relwidth=1)
+        inner = tk.Frame(box, bg=strip_bg)
+        inner.pack(pady=int(14 * px))
+        tk.Label(inner, text=t("Drop {name} on", name=button["name"]), font=("Segoe UI", 10), fg="#bdbdbd",
+                 bg=strip_bg).pack(side="left", padx=(0, int(18 * px)))
+        self._drop_images, self._targets = [], {}
+        font = ("Segoe UI", 15, "bold")
+        measure = tkfont.Font(root=self, font=font)
+        h = int(56 * px)
+        for key, text, colour in (("settings", "\u2699  " + t("Settings"), PALETTE["button_fg"]),
+                                  ("remove", "\u2715  " + t("Remove"), PALETTE["brand_orange"])):
+            w = measure.measure(text) + int(64 * px)
+            plain = tabs.rounded_shape(self, w, h, h // 2, strip_bg, colour, int(2 * px))
+            lit = tabs.rounded_shape(self, w, h, h // 2, colour, colour, int(2 * px))
+            self._drop_images += [plain, lit]
+            cell = tk.Frame(inner, bg=strip_bg, padx=int(12 * px))
             cell.pack(side="left")
-            ring = tk.Label(cell, text=symbol, font=("Segoe UI", 22, "bold"), fg=colour, bg="#000000", width=3,
-                            height=1, highlightthickness=2, highlightbackground=colour, highlightcolor=colour)
-            ring.pack()
-            tk.Label(cell, text=text, font=("Segoe UI", 9), fg=colour, bg="#000000").pack(pady=(4, 0))
-            self._targets[key] = (cell, ring, colour)
+            pill = tk.Label(cell, text=text, image=plain, compound="center", font=font, fg=colour, bg=strip_bg, bd=0)
+            pill.pack()
+            self._targets[key] = (cell, pill, (colour, plain, lit))
 
     def _hide_drop_targets(self):
         box = getattr(self, "_drop_box", None)
@@ -730,14 +744,14 @@ class PlayTab(tk.Frame):
 
     def _highlight_target(self, x_root, y_root):
         over = self._target_at(x_root, y_root)
-        for key, (_cell, ring, colour) in getattr(self, "_targets", {}).items():
-            ring.config(bg=colour if key == over else "#000000", fg="#000000" if key == over else colour)
+        for key, (_cell, pill, (colour, plain, lit)) in getattr(self, "_targets", {}).items():
+            pill.config(image=lit if key == over else plain, fg="#000000" if key == over else colour)
 
-    def open_playlist_settings(self, button_id):
-        """Settings, on this playlist's page."""
+    def open_playlist_settings(self, button_id, rename=False):
+        """Settings, on this playlist's page (rename: with the name box open, for a new playlist)."""
         if self.settings is None:
             return
-        self.settings.show_playlist(button_id)
+        self.settings.show_playlist(button_id, rename=rename)
         try:
             self.master.select(self.settings)
         except (AttributeError, tk.TclError):
@@ -757,23 +771,8 @@ class PlayTab(tk.Frame):
         return ask_new_button(self)
 
     def on_add_button(self, event=None):
-        """+: a menu of the playlists not on the row, then New..."""
-        import review_gui
-        p = review_gui.palette()
-        menu = tk.Menu(self, tearoff=0, bg=p["bg"], fg=p["text"], activebackground=p["row_on"],
-                       activeforeground=p["accent"])
-        hidden = [b for b in buttons.load() if not b.get("shown", True)]
-        for b in hidden:
-            menu.add_command(label=b["name"], command=lambda bt=b: self._show_playlist(bt))
-        if hidden:
-            menu.add_separator()
-        menu.add_command(label=t("New..."), command=self._new_playlist)
-        x = event.x_root if event is not None else self.add_button.winfo_rootx()
-        y = event.y_root if event is not None else self.add_button.winfo_rooty() + self.add_button.winfo_height()
-        try:
-            menu.tk_popup(x, y)
-        finally:
-            menu.grab_release()
+        """+: the Add a Playlist window, with its three ways in (from existing, from template, new)."""
+        self._new_playlist()
 
     def _show_playlist(self, button):
         buttons.set_shown(button["id"], True)
@@ -783,10 +782,14 @@ class PlayTab(tk.Frame):
         answer = self._ask_new_button()
         if answer is None:
             return
-        name, kind, from_id = answer
-        new = buttons.add(name, kind, from_id)
+        button, wants_page = buttons.add_from_choice(answer)
         self.refresh_buttons()
-        self.open_playlist_settings(new["id"])
+        if button is None:
+            return
+        if wants_page:   # New: its page opens with the name box ready to type in
+            self.open_playlist_settings(button["id"], rename=True)
+        else:
+            self._append_log(t("Note: {name} is on the Play tab.", name=button["name"]))
 
     def _button_menu(self, event, button):
         """Right-click on a playlist: Rename, Duplicate, Settings, Move Left, Move Right, Remove; and Restore."""
@@ -990,7 +993,11 @@ class PlayTab(tk.Frame):
             return
         teal = self.seed_var.get() == "Playing Now" and not self._seed_is_search()
         for b in self.buttons:
-            if getattr(b, "_name", None) in ("Similar Artists", "Similar Tracks"):
+            button = getattr(b, "_button", None)
+            if button is None:
+                continue
+            # Playing Now feeds Artist Matching and Track Matching, so every playlist with one of those configs lights
+            if any(c["kind"] in ("artists", "tracks") for c in buttons.configs(button)):
                 b._accent = self.seed_colour if teal else None
                 b._draw()
 

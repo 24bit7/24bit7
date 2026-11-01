@@ -36,34 +36,63 @@ def test_row_comes_from_the_ticked_playlists_then_more_options_and_plus(app, ui)
     assert p.buttons[-1] is p.credits_button, "Show Credits still greys out with the rest"
 
 
-def test_plus_offers_the_unticked_playlists_then_new(app, ui, monkeypatch):
+def test_plus_opens_the_window_and_its_three_answers_land(app, ui, monkeypatch):
     import buttons
     p = ui.play
-    menus = []
-    monkeypatch.setattr(tk.Menu, "tk_popup", lambda self, *a, **k: menus.append(self))
     opened = []
-    monkeypatch.setattr(p, "open_playlist_settings", lambda bid: opened.append(bid))
+    monkeypatch.setattr(p, "open_playlist_settings", lambda bid, rename=False: opened.append((bid, rename)))
     head = next(b for b in buttons.load() if b["name"] == "Headliner")
     buttons.set_shown(head["id"], False)
     p.refresh_buttons()
     assert "Headliner" not in names(p)
+    monkeypatch.setattr(p, "_ask_new_button", lambda: ("existing", head["id"]))
     p.on_add_button()
-    menu = menus[-1]
-    labels = [menu.entrycget(i, "label") for i in range(menu.index("end") + 1) if menu.type(i) == "command"]
-    assert labels == ["Headliner", "New..."]
-    menu.invoke(0)
     assert names(p)[3] == "Headliner", "ticked again, it comes back at its place in the list"
-    monkeypatch.setattr(p, "_ask_new_button", lambda: ("Sunday Guests", "top", head["id"]))
+    assert opened == [] and p.log.get("1.0", "end").count("Headliner is on the Play tab") == 1
+    monkeypatch.setattr(p, "_ask_new_button", lambda: ("template", "headliner"))
     p.on_add_button()
-    menus[-1].invoke(0)   # New...: the only entry now
-    assert names(p)[-1] == "Sunday Guests"
+    assert names(p)[-1] == "Headliner 2" and opened == []
+    made = p.play_buttons[-1]._button
+    assert [c["kind"] for c in buttons.configs(made)] == ["top", "artists"]
+    monkeypatch.setattr(p, "_ask_new_button", lambda: ("new", None))
+    p.on_add_button()
     new = p.play_buttons[-1]._button
-    assert new["kind"] == "top" and [c["kind"] for c in new["configs"]] == ["artists"] and new["shown"]
-    assert opened == [new["id"]], "its page opens in Settings"
-    assert p.play_buttons[-1]._tooltip.text.endswith("Artist's Top Tracks + Artist Matching"), "its note says what's on"
+    assert new["name"] == "New Playlist" and new["kind"] == "artists"
+    assert opened == [(new["id"], True)], "its page opens with the name box ready"
     monkeypatch.setattr(p, "_ask_new_button", lambda: None)
-    p._new_playlist()
-    assert names(p)[-1] == "Sunday Guests", "Cancel adds nothing"
+    p.on_add_button()
+    assert names(p)[-1] == "New Playlist", "Cancel adds nothing"
+    assert not ui.errors, ui.errors[0]
+
+
+def test_matching_playlists_go_teal_with_seed_on_playing_now(app, ui):
+    import buttons
+    p = ui.play
+    buttons.load()
+    p.seed_var.set("Playing Now")
+    p._sync_seed_bars()
+    ui.pump(0.2)
+    lit = {b._name for b in p.play_buttons if b._accent == p.seed_colour}
+    assert lit == {"Similar Artists", "Similar Tracks", "Headliner", "Inner Circle"}, lit
+    p.seed_var.set("Current Track")
+    p._sync_seed_bars()
+    assert not [b for b in p.play_buttons if b._accent == p.seed_colour]
+    assert not ui.errors, ui.errors[0]
+
+
+def test_opening_and_closing_more_options_keeps_the_console(app, ui):
+    p = ui.play
+    p._end_greeting(keep=False)
+    p._append_log("A line to keep.")
+    p._show_more(True, save=False)
+    ui.pump(0.3)
+    p.play_buttons[1]._command()   # arms another playlist
+    ui.pump(0.2)
+    p._show_more(False, save=False)
+    ui.pump(0.3)
+    text = p.log.get("1.0", "end")
+    assert "A line to keep." in text and "showing the settings of Similar Tracks" in text, text
+    assert not ui.errors, ui.errors[0]
 
 
 def test_right_click_menu_renames_copies_moves_removes_and_restores(app, ui, monkeypatch):

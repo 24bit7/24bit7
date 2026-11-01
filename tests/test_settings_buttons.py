@@ -181,6 +181,26 @@ def test_inner_circle_sits_on_a_matching_page_and_its_dials_keep_in_step(app, ui
     assert not ui.errors, ui.errors[0]
 
 
+def test_the_config_heading_changes_the_kind_except_on_a_standard_playlist(app, ui):
+    import buttons
+    p = pick_button(ui, "Similar Artists")
+    page = inner_page(ui, "Sources")
+    assert not getattr(ui.settings, "_kind_boxes", []) or not any(
+        cb.winfo_exists() and str(cb.master.master.master) == str(page) for cb in ui.settings._kind_boxes), \
+        "a standard playlist's own kind is a label"
+    p = pick_button(ui, "Headliner")
+    ui.pump(0.3)
+    boxes = [cb for cb in ui.settings._kind_boxes if cb.winfo_exists()]
+    assert [cb.get() for cb in boxes] == ["Artist's Top Tracks", "Artist Matching"]
+    boxes[1].set("Track Matching")
+    boxes[1].event_generate("<<ComboboxSelected>>")
+    ui.pump(0.5)
+    head = next(b for b in buttons.load() if b["name"] == "Headliner")
+    assert [c["kind"] for c in buttons.configs(head)] == ["top", "tracks"]
+    assert "SIMILAR_TRACK_COUNT" in head["configs"][0]["settings"]
+    assert not ui.errors, ui.errors[0]
+
+
 def test_a_second_config_has_its_own_block_and_the_mix_section_appears(app, ui):
     import buttons
     from tkinter import messagebox
@@ -332,18 +352,34 @@ def test_add_remove_and_restore_from_settings(app, ui, monkeypatch):
     from tkinter import messagebox
     s = buttons_page(ui)
     head = next(b for b in buttons.load() if b["name"] == "Headliner")
-    monkeypatch.setattr(settings_gui, "ask_new_button", lambda parent: ("Sunday Guests", "top", head["id"]))
+    monkeypatch.setattr(settings_gui, "ask_new_button", lambda parent: ("template", "headliner"))
     s._button_add()
     ui.pump(0.3)
-    assert s._button_names()[-1] == "Sunday Guests" and s._button_page.button["name"] == "Sunday Guests"
+    assert s._button_names()[-1] == "Headliner 2" and s._button_page.button["name"] == "Headliner 2"
     assert [c["kind"] for c in s._button_page.button["configs"]] == ["artists"]
-    assert [b._name for b in ui.play.play_buttons][-1] == "Sunday Guests", "the Play tab follows"
+    assert [b._name for b in ui.play.play_buttons][-1] == "Headliner 2", "the Play tab follows"
+    assert "disabled" in s._list_buttons["down"].cget("state") and "normal" in s._list_buttons["up"].cget("state")
+    monkeypatch.setattr(settings_gui, "ask_new_button", lambda parent: ("new", None))
+    s._button_add()
+    ui.pump(0.6)
+    assert s._button_page.button["name"] == "New Playlist"
+    entry = next((w for w in walk(s._button_right) if isinstance(w, tk.Entry) and w.get() == "New Playlist"), None)
+    assert entry is not None, "the name box is open on a new playlist's page"
+    entry.delete(0, "end")
+    entry.insert(0, "Sunday Guests")
+    entry.focus_force()
+    ui.pump(0.2)
+    entry.event_generate("<Return>")
+    ui.pump(0.3)
+    assert s._button_names()[-1] == "Sunday Guests"
     s._button_remove()   # the question answered No by the fixture
     assert s._button_names()[-1] == "Sunday Guests"
     monkeypatch.setattr(messagebox, "askyesno", lambda *a, **k: True)
     s._button_remove()
     ui.pump(0.3)
     assert "Sunday Guests" not in s._button_names()
+    buttons.remove(buttons.get(s._button_names() and next(b["id"] for b in buttons.load() if b["name"] == "Headliner 2"))["id"])
+    s._buttons_refresh()
     assert s._button_page.button["name"] == "Similar Artists", "back to the first"
     assert "Sunday Guests" not in [b._name for b in ui.play.play_buttons]
     s._button_restore()

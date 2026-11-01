@@ -62,6 +62,39 @@ def test_add_remove_and_set_a_config(app):
     assert buttons.remove_config(b["id"], 0) == b, "the first config can't be removed"
 
 
+def test_a_configs_kind_can_change_and_starts_again_from_the_standard_of_that_kind(app):
+    import buttons
+    app.set_env(SIMILAR_TRACK_COUNT="7", TOP_TRACKS_COUNT="12")
+    b = two_configs(app)
+    b = buttons.set_config_kind(b["id"], 1, "top")
+    assert [c["kind"] for c in buttons.configs(b)] == ["top", "top"]
+    assert b["configs"][0]["settings"]["TOP_TRACKS_COUNT"] == "12", "the standard Top Tracks' settings"
+    assert b["mix"]["drift_from"] == 0, "no config has Drift now, so it points at the first"
+    b = buttons.set_config_kind(b["id"], 0, "tracks")
+    assert b["kind"] == "tracks" and b["settings"]["SIMILAR_TRACK_COUNT"] == "7"
+    assert b["mix"]["drift_from"] == 0, "the first config has Drift again"
+    std = buttons.standard("artists")
+    assert buttons.set_config_kind(std["id"], 0, "tracks")["kind"] == "artists", "a standard playlist keeps its kind"
+    assert buttons.set_config_kind(b["id"], 0, "nonsense")["kind"] == "tracks"
+
+
+def test_add_from_choice_covers_the_windows_three_ways_in(app):
+    import buttons
+    buttons.load()
+    head = next(x for x in buttons.load() if x["name"] == "Headliner")
+    buttons.set_shown(head["id"], False)
+    back, wants_page = buttons.add_from_choice(("existing", head["id"]))
+    assert back["id"] == head["id"] and back["shown"] is True and wants_page is False
+    made, wants_page = buttons.add_from_choice(("template", "inner_circle"))
+    assert made["name"] == "Inner Circle 2" and made["settings"]["INNER_CIRCLE_ARTISTS"] == "1" and wants_page is False
+    made, _ = buttons.add_from_choice(("template", "tracks"))
+    assert made["name"] == "Track Matching" and made["kind"] == "tracks" and "SIMILAR_TRACK_COUNT" not in made["settings"]
+    new, wants_page = buttons.add_from_choice(("new", None))
+    assert new["name"] == "New Playlist" and new["kind"] == "artists" and new["shown"] is True and wants_page is True
+    new2, _ = buttons.add_from_choice(("new", None))
+    assert new2["name"] == "New Playlist 2"
+
+
 def test_the_old_guests_headliner_becomes_two_configs_on_load(app):
     import json
     import buttons

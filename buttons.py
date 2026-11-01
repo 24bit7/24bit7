@@ -205,6 +205,53 @@ def set_config_settings(button_id, index, settings):
     save(items)
 
 
+def set_config_kind(button_id, index, kind):
+    """
+    Changes a config's kind (index 0 is the playlist's own): its settings start again from the
+    standard playlist of the new kind, or the kind's shipped defaults. A standard playlist's own
+    kind can't change. Returns the playlist.
+    """
+    items = load()
+    b = next(x for x in items if x["id"] == button_id)
+    if kind not in KIND_NAMES or (index == 0 and b.get("standard")):
+        return b
+    base = standard(kind)
+    settings = dict(base["settings"]) if base and base["id"] != button_id else template_settings(kind)
+    if index == 0:
+        b["kind"], b["settings"] = kind, settings
+    elif 1 <= index <= len(b["configs"]):
+        b["configs"][index - 1] = {"kind": kind, "settings": settings}
+    else:
+        return b
+    cfgs = configs(b)
+    if not has_drift(cfgs[b["mix"]["drift_from"]]["kind"]):   # Drift can't come from Artist's Top Tracks
+        b["mix"]["drift_from"] = next((i for i, c in enumerate(cfgs) if has_drift(c["kind"])), 0)
+    save(items)
+    return get(button_id)
+
+
+def add_from_choice(choice):
+    """
+    The Add a Playlist window's answer: ("existing", id) ticks a playlist back onto the Play tab;
+    ("template", key) adds the template (a kind's shipped defaults, or Headliner or Inner Circle)
+    under its own name, ticked; ("new", None) adds an Artist Matching playlist called New Playlist,
+    ticked, for its page to shape. Returns (the playlist, whether it's new and wants its page).
+    """
+    how, what = choice
+    if how == "existing":
+        b = get(what)
+        if b is not None and not b.get("shown", True):
+            set_shown(what, True)
+        return get(what), False
+    if how == "template":
+        recipe = next((r for r in READY_MADE if r["key"] == what), None)
+        if recipe is not None:
+            return add(unique_name(t(recipe["name"])), recipe["kind"], f"{TEMPLATE}:{what}"), False
+        kind = what if what in KIND_NAMES else "artists"
+        return add(unique_name(t(KIND_LABELS[kind])), kind, TEMPLATE), False
+    return add(unique_name(t("New Playlist")), "artists", TEMPLATE), True
+
+
 def set_mix(button_id, **fields):
     """How a playlist's configs come together: combine, pattern, drift_from, continue_as."""
     items = load()

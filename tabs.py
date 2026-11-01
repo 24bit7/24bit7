@@ -968,7 +968,11 @@ class ClickThrough(FlatButton):
 
     def _refresh(self):
         try:
-            self.config(text=self._text())
+            if getattr(self, "_symbol", False):   # the value changed: measure first, so the new text is never clipped
+                self._size = self._measure("")
+                self._draw()
+            else:
+                self.config(text=self._text())
         except tk.TclError:
             pass   # closing
 
@@ -1211,15 +1215,17 @@ def strip_title_bar(window):
         pass   # not Windows, or an older one: a plain window, which is fine
 
 
-class NamePrompt(tk.Toplevel):
+class PromptWindow(tk.Toplevel):
     """
-    Asks for a name, in place of Tk's stock simpledialog, which ignores the theme. A black header
-    strip with the title (the drag handle, with a close mark at its right), the question, the name
-    in a rounded box selected ready to type over, then OK and Cancel drawn like the app's buttons.
-    Enter is OK, Escape is Cancel. The answer is in .result: the name typed, or None.
+    A small window of the app's own, in place of Tk's stock dialogs, which ignore the theme. A black
+    header strip with the title (the drag handle, with a close mark at its right), a body a subclass
+    fills in _body, then OK and Cancel drawn like the app's buttons (the OK text from ok_text).
+    Enter is OK, Escape is Cancel. The answer is in .result: None for Cancel.
     """
 
-    def __init__(self, parent, title, prompt, initial=""):
+    ok_text = "OK"
+
+    def __init__(self, parent, title):
         top = parent.winfo_toplevel()
         super().__init__(top)
         self.withdraw()   # built out of sight: shown once, dressed and in place, with no flicker
@@ -1259,22 +1265,14 @@ class NamePrompt(tk.Toplevel):
 
         inner = tk.Frame(body, bg=bg, padx=px(18), pady=px(16))
         inner.pack(fill="both", expand=True)
-        tk.Label(inner, text=prompt, font=("Segoe UI", 10), bg=bg, fg=fg, anchor="w").pack(anchor="w",
-                                                                                           pady=(0, px(8)))
-        self.box = RoundedEntry(inner, width=44, font=("Segoe UI", 10))
-        self.box.pack(anchor="w")
-        self.entry = self.box.entry
-        if initial:
-            self.entry.insert(0, initial)
-            self.entry.select_range(0, "end")
-            self.entry.icursor("end")
-        self._extra(inner, bg, fg)   # a subclass's rows under the name (the Play tab's Add Button)
+        self._colours = (bg, fg, line)
+        self._body(inner, bg, fg)
         buttons = tk.Frame(inner, bg=bg)
         buttons.pack(anchor="e", pady=(px(16), 0))
         self.cancel_button = self._button(buttons, t("Cancel"), self.cancel, bg, line)
         self.cancel_button.pack(side="left", padx=(0, px(8)))
-        self.ok_button = self._button(buttons, "OK", self.ok, PALETTE.get("field_bg") or PALETTE["button_bg"],
-                                      PALETTE["button_accent"])
+        self.ok_button = self._button(buttons, t(self.ok_text), self.ok,
+                                      PALETTE.get("field_bg") or PALETTE["button_bg"], PALETTE["button_accent"])
         self.ok_button.pack(side="left")
 
         self.bind("<Return>", lambda e: self.ok())
@@ -1282,8 +1280,20 @@ class NamePrompt(tk.Toplevel):
         self.protocol("WM_DELETE_WINDOW", self.cancel)
         self.after(10, lambda: self._show_over(top))
 
-    def _extra(self, inner, bg, fg):
-        """Nothing here: a subclass adds its own rows between the name box and the buttons."""
+    def _body(self, inner, bg, fg):
+        """A subclass builds the window's content here."""
+
+    def _focus_first(self):
+        """Where the keyboard goes once the window shows."""
+
+    def set_ok_text(self, text):
+        """Relabels the OK button (a tab that creates rather than adds)."""
+        bg, _fg, line = self._colours
+        parent = self.ok_button.master
+        self.ok_button.destroy()
+        self.ok_button = self._button(parent, text, self.ok, PALETTE.get("field_bg") or PALETTE["button_bg"],
+                                      PALETTE["button_accent"])
+        self.ok_button.pack(side="left")
 
     def _button(self, parent, text, command, fill, edge):
         """A rounded button drawn as an image with the text on top, as the AI Playlist window's."""
@@ -1323,7 +1333,7 @@ class NamePrompt(tk.Toplevel):
             except tk.TclError:
                 pass
             self.lift()
-            self.entry.focus_set()
+            self._focus_first()
         except tk.TclError:
             pass
 
@@ -1335,11 +1345,45 @@ class NamePrompt(tk.Toplevel):
         self.geometry(f"+{event.x_root - dx}+{event.y_root - dy}")
 
     def ok(self):
-        self.result = self.entry.get()
+        self.result = True
         self.destroy()
 
     def cancel(self):
         self.result = None
+        self.destroy()
+
+
+class NamePrompt(PromptWindow):
+    """
+    Asks for a name: the question, the name in a rounded box selected ready to type over, then OK
+    and Cancel. The answer is in .result: the name typed, or None.
+    """
+
+    def __init__(self, parent, title, prompt, initial=""):
+        self._prompt, self._initial = prompt, initial
+        super().__init__(parent, title)
+
+    def _body(self, inner, bg, fg):
+        px = self._px
+        tk.Label(inner, text=self._prompt, font=("Segoe UI", 10), bg=bg, fg=fg, anchor="w").pack(anchor="w",
+                                                                                                  pady=(0, px(8)))
+        self.box = RoundedEntry(inner, width=44, font=("Segoe UI", 10))
+        self.box.pack(anchor="w")
+        self.entry = self.box.entry
+        if self._initial:
+            self.entry.insert(0, self._initial)
+            self.entry.select_range(0, "end")
+            self.entry.icursor("end")
+        self._extra(inner, bg, fg)   # a subclass's rows under the name
+
+    def _extra(self, inner, bg, fg):
+        """Nothing here: a subclass adds its own rows between the name box and the buttons."""
+
+    def _focus_first(self):
+        self.entry.focus_set()
+
+    def ok(self):
+        self.result = self.entry.get()
         self.destroy()
 
 
