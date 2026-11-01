@@ -1620,14 +1620,32 @@ class SettingsTab(tk.Frame):
             about = t("Standard {kind} playlist: what a device's voice commands run unless Settings > Devices says otherwise.",
                       kind=about)
         tk.Label(head, text=about, fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=1, column=0, sticky="w")
+        if buttons.is_parent(button):   # a parent: how its own option reads in its drop-down
+            alt = tk.Frame(head)
+            alt.grid(row=2, column=0, sticky="w", pady=(8, 0))
+            tk.Label(alt, text=t("Alternate Title")).pack(side="left")
+            self._subtitle_var = tk.StringVar(value=button.get("subtitle") or "")
+            box_ = ttk.Entry(alt, textvariable=self._subtitle_var, width=28)
+            box_.pack(side="left", padx=(8, 0))
+
+            def save_subtitle(_e=None, bid=button["id"]):
+                if self._subtitle_var.get().strip() != (buttons.get(bid) or {}).get("subtitle", ""):
+                    buttons.set_subtitle(bid, self._subtitle_var.get())
+                    self._buttons = buttons.load()
+                    self._buttons_changed()
+            box_.bind("<FocusOut>", save_subtitle)
+            box_.bind("<Return>", save_subtitle)
+            help_mark(alt, t("How this playlist's own option reads in its drop-down, beside the playlists nested "
+                             "under it: \"Top 12, Random Order\", say. The button keeps the name."),
+                      on=box_).pack(side="left", padx=(8, 0))
         self._button_filter_row = tk.Frame(head)
-        self._button_filter_row.grid(row=2, column=0, sticky="w", pady=(8, 0))
+        self._button_filter_row.grid(row=3, column=0, sticky="w", pady=(8, 0))
         self._button_filters_refresh()
         for old in [c for c in self.hotkey_vars if hotkeys.is_button(c)]:   # the page before this one's box
             del self.hotkey_vars[old], self.hotkey_notes[old]
         if kind != "vibe" and hotkeys.AVAILABLE:   # an AI Playlist needs a theme typed, so no key can run it
             short = tk.Frame(head)
-            short.grid(row=3, column=0, sticky="w", pady=(8, 0))
+            short.grid(row=4, column=0, sticky="w", pady=(8, 0))
             widgets = self._shortcut_row(short, 0, hotkeys.button_code(button["id"]), N_("Shortcut"),
                                          button.get("shortcut") or "")
             help_mark(short, t("Keys that run this playlist from anywhere in Windows, even with 24bit7 in the tray, "

@@ -75,8 +75,9 @@ def test_the_arrow_opens_the_children_and_a_child_builds_once(app, ui, monkeypat
     ui.pump(0.4)
     pop = p._children_popup
     assert pop is not None and pop.winfo_exists() and pop.winfo_viewable()
-    rows = [(child["name"], tag.cget("text")) for child, _row, tag in pop._rows]
-    assert rows == [("Top 10, Best First", "default"), ("Deep Cut Top Tracks", "")]
+    rows = [(pl["name"], row.text, tag) for pl, row, tag in pop._rows]
+    assert rows == [("Artist's Top Tracks", "Artist's Top Tracks", ""), ("Top 10, Best First", "Top 10, Best First", "default"),
+                    ("Deep Cut Top Tracks", "Deep Cut Top Tracks", "")], "the parent's own row first, then the children"
     fb = p.play_buttons[2]
     assert pop.winfo_rooty() >= fb.winfo_rooty() + fb.winfo_height(), "under the button"
     ran = []

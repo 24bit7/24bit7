@@ -100,7 +100,8 @@ def blank(name, kind):
     """
     return {"id": uuid.uuid4().hex[:8], "name": name, "kind": kind, "settings": {}, "filters": [],
             "shortcut": "", "standard": "", "shown": True, "configs": [], "mix": mix_default(),
-            "parent": "", "default": ""}   # nested under another playlist; a parent's default child (see nest)
+            "parent": "", "default": "",   # nested under another playlist; a parent's default child (see nest)
+            "subtitle": ""}                # a parent's alternate title: how its own option reads in its menu
 
 
 def tidy(item):
@@ -129,6 +130,7 @@ def tidy(item):
     out["shown"] = bool(out.get("shown", True))
     out["parent"] = str(out.get("parent") or "")
     out["default"] = str(out.get("default") or "")
+    out["subtitle"] = str(out.get("subtitle") or "").strip()
     out["mix"] = tidy_mix(out.get("mix"), len(out["configs"]) + (0 if kind is None else 1))
     return out
 
@@ -406,6 +408,26 @@ def set_default(parent_id, child_id):
         if b["id"] == parent_id and not b.get("parent"):
             b["default"] = child_id if any(c["id"] == child_id and c.get("parent") == parent_id for c in items) else ""
     save(items)
+
+
+def set_subtitle(button_id, text):
+    """A parent's alternate title, shown for its own row in its menu ("Top 12, Random Order")."""
+    items = load()
+    for b in items:
+        if b["id"] == button_id:
+            b["subtitle"] = (text or "").strip()
+    save(items)
+
+
+def menu_rows(parent):
+    """
+    What a parent's drop-down lists, in order: the parent itself (its alternate title if it has one),
+    then its ticked children. Each row is (playlist, text shown, is the default).
+    """
+    default = parent.get("default") or ""
+    rows = [(parent, parent.get("subtitle") or parent["name"], default == "")]
+    rows += [(c, c["name"], c["id"] == default) for c in children(parent["id"])]
+    return rows
 
 
 def runs(button):

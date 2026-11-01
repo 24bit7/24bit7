@@ -532,6 +532,23 @@ def symbol_shape(widget, w, h, radius, fill, edge, line, colour, symbol, value, 
     return photo
 
 
+def split_shape(widget, w, h, radius, fill, edge, line, bar, bar_h, split_x, divider="#000000"):
+    """
+    A rounded button picture cut in two at split_x, for a split button: the face and the arrow part
+    are one shape, the bar runs the whole width, and a one-pixel line in `divider` stands between
+    them, from the top edge down to the bar. Returns (left, right) as Tk images.
+    """
+    key = ("split", w, h, radius, fill, edge, line, bar, bar_h, split_x, divider)
+    if key in _SHAPES:
+        return _SHAPES[key]
+    from PIL import ImageDraw, ImageTk
+    whole = ImageTk.getimage(rounded_shape(widget, w, h, radius, fill, edge, line, bar, bar_h)).convert("RGBA")
+    ImageDraw.Draw(whole).line((split_x, line, split_x, h - 1 - line - bar_h), fill=_rgba(widget, divider), width=1)
+    pair = (ImageTk.PhotoImage(whole.crop((0, 0, split_x, h))), ImageTk.PhotoImage(whole.crop((split_x, 0, w, h))))
+    _SHAPES[key] = pair
+    return pair
+
+
 def rounded_shape(widget, w, h, radius, fill, edge, line, bar=None, bar_h=0, open_bottom=False):
     """
     A rounded rectangle as a Tk image: an outline of width line in edge, filled with
@@ -654,11 +671,13 @@ class FlatButton(tk.Frame):
         w, h = self._size
         edge, line = (PALETTE["button_fg"], self._px(2)) if self._target else (PALETTE["button_outline"], self._px(1))
         fg = (self._text_fg or PALETTE["button_fg"]) if lit else PALETTE["button_off_fg"]
-        image = rounded_shape(self, w - self._arrow_w, h, self._px(CORNER), fill, edge, line, bar, self._px(BUTTON_BAR))
-        self._label.config(image=image, fg=fg, cursor="hand2" if on else "")
-        if self._arrow is not None:
-            part = rounded_shape(self, self._arrow_w, h, self._px(CORNER), fill, edge, line, bar, self._px(BUTTON_BAR))
+        if self._arrow is not None:   # one shape, the bar across the whole of it, a black line before the arrow
+            image, part = split_shape(self, w, h, self._px(CORNER), fill, edge, line, bar, self._px(BUTTON_BAR),
+                                      w - self._arrow_w)
             self._arrow.config(image=part, fg=fg, cursor="hand2" if on else "")
+        else:
+            image = rounded_shape(self, w, h, self._px(CORNER), fill, edge, line, bar, self._px(BUTTON_BAR))
+        self._label.config(image=image, fg=fg, cursor="hand2" if on else "")
 
     def config(self, cnf=None, **kw):
         redraw = False

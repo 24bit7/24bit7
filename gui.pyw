@@ -552,9 +552,7 @@ class PlayTab(tk.Frame):
         kids = buttons.children(parent["id"])
         if fb is None or not kids:
             return
-        import review_gui
-        colours = review_gui.palette()
-        bg, fg, line, on_bg = PALETTE["field_bg"], PALETTE["text"], PALETTE["line"], colours["row_on"]
+        bg, fg, line = PALETTE["field_bg"], PALETTE["text"], PALETTE["line"]
         pop = self._children_popup = tk.Toplevel(self)
         pop.withdraw()
         pop.overrideredirect(True)
@@ -562,23 +560,23 @@ class PlayTab(tk.Frame):
         inner = tk.Frame(pop, bg=bg)
         inner.pack(fill="both", expand=True)
         pop._rows = []
-        font = ("Segoe UI", 10)
-        default = buttons.get(parent["id"]).get("default")
-        for child in kids:
-            row = tk.Frame(inner, bg=bg, cursor="hand2")
-            row.pack(fill="x")
-            name = tk.Label(row, text=child["name"], font=font, bg=bg, cursor="hand2", padx=14, pady=7,
-                            fg=PALETTE["ai_purple"] if child["kind"] == "vibe" else fg)
-            name.pack(side="left")
-            tag = tk.Label(row, text=t("default") if child["id"] == default else "", font=("Segoe UI", 8), bg=bg,
-                           fg=PALETTE["button_fg"], padx=14)
-            tag.pack(side="right")
-            for w in (row, name, tag):
-                w.bind("<Enter>", lambda e, r=row, n=name, g=tag: [x.config(bg=on_bg) for x in (r, n, g)])
-                w.bind("<Leave>", lambda e, r=row, n=name, g=tag: [x.config(bg=bg) for x in (r, n, g)])
-                w.bind("<Button-1>", lambda e, c=child: self._run_child(c))
-                w.bind("<Button-3>", lambda e, c=child, p=parent: self._child_menu(e, p, c))
-            pop._rows.append((child, row, tag))
+        parent = buttons.get(parent["id"])
+        for playlist, text, is_default in buttons.menu_rows(parent):
+            row = tabs.PickRow(inner, text, fg=PALETTE["ai_purple"] if playlist["kind"] == "vibe" else fg, bg=bg,
+                               tag=t("default") if is_default else "")
+            row.configure(cursor="hand2")
+            row.pack(fill="x", padx=3, pady=1)
+            row.bind("<Enter>", lambda e, r=row: r.set_chosen(True))   # the rounded outline on hover
+            row.bind("<Leave>", lambda e, r=row: r.set_chosen(False))
+            if playlist is parent:
+                row.bind("<ButtonRelease-1>", lambda e, p=parent: self._run_child(buttons.runs(dict(p, default=""))))
+                row.bind("<Button-3>", lambda e, p=parent: self._parent_row_menu(e, p))
+            else:
+                row.bind("<ButtonPress-1>", lambda e, c=playlist, d=is_default: self._pop_press(e, c, d))
+                row.bind("<B1-Motion>", lambda e: self._pop_drag_move(e))
+                row.bind("<ButtonRelease-1>", lambda e, c=playlist: self._pop_release(e, c))
+                row.bind("<Button-3>", lambda e, c=playlist, p=parent: self._child_menu(e, p, c))
+            pop._rows.append((playlist, row, row.tag))
         pop.update_idletasks()
         w = max(pop.winfo_reqwidth(), fb.winfo_width())
         pop.geometry(f"{w}x{pop.winfo_reqheight()}+{fb.winfo_rootx()}+{fb.winfo_rooty() + fb.winfo_height() + 2}")
@@ -608,9 +606,111 @@ class PlayTab(tk.Frame):
         self._children_popup = None
 
     def _run_child(self, child):
-        """A child clicked in the menu: built once, this time."""
+        """A row clicked in the menu: built once, this time."""
         self._close_children()
         self.on_button(child)
+
+    def _parent_row_menu(self, event, parent):
+        """Right-click on the parent's own row: make it the default again, and its Settings."""
+        import review_gui
+        p = review_gui.palette()
+        menu = tk.Menu(self, tearoff=0, bg=p["bg"], fg=p["text"], activebackground=p["row_on"],
+                       activeforeground=p["accent"])
+        menu.add_command(label=t("Make Default"), state="normal" if parent.get("default") else "disabled",
+                         command=lambda: self._set_default(parent, ""))
+        menu.add_command(label=t("Settings"), command=lambda: (self._close_children(),
+                                                               self.open_playlist_settings(parent["id"])))
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+
+    # --- dragging a child out of the drop-down: onto the row, into another parent, or onto a pill ---
+
+    def _pop_press(self, event, child, is_default):
+        self._pop_pressed = {"child": child, "x": event.x_root, "y": event.y_root, "draggable": not is_default,
+                             "dragging": False}
+
+    def _pop_drag_move(self, event):
+        press = getattr(self, "_pop_pressed", None)
+        if not press or not press["draggable"]:
+            return
+        if not press["dragging"]:
+            if abs(event.x_root - press["x"]) < self.DRAG_START and abs(event.y_root - press["y"]) < self.DRAG_START:
+                return
+            press["dragging"] = True
+            pop = self._children_popup
+            if pop is not None:
+                try:
+                    pop.attributes("-alpha", 0.0)   # out of sight, but alive: the mouse events keep coming to it
+                except tk.TclError:
+                    pop.withdraw()
+            self._show_drag_image_for(press["child"]["name"])
+            self._show_drop_targets(press["child"])
+            press["grab"] = (self._drag_image.winfo_reqwidth() // 2, self._drag_image.winfo_reqheight() // 2)
+        gx, gy = press["grab"]
+        self._drag_image.geometry(f"+{event.x_root - gx}+{event.y_root - gy}")
+        over = self._target_at(event.x_root, event.y_root)
+        self._highlight_target(event.x_root, event.y_root)
+        if over is None:
+            self._watch_nest(press["child"], None, event.x_root, event.y_root)
+        else:
+            self._watch_nest(press["child"], None, None, None)
+
+    def _pop_release(self, event, child):
+        press = getattr(self, "_pop_pressed", None)
+        self._pop_pressed = None
+        if not press or not press["dragging"]:
+            if press is not None:
+                self._run_child(child)   # a click, not a drag
+            return
+        target = self._target_at(event.x_root, event.y_root)
+        nest_into = getattr(self, "_nest_target", None)
+        self._clear_nest()
+        self._hide_drop_targets()
+        self._hide_drag_image()
+        self._close_children()
+        if target == "settings":
+            self.open_playlist_settings(child["id"])
+        elif target == "remove":   # out of the menu and kept, as a row playlist's Remove keeps it
+            buttons.set_shown(child["id"], False)
+            self._append_log(t("Note: {name} is out of the menu. It's still under Settings > Playlists, and + puts it back.",
+                               name=child["name"]))
+        elif nest_into is not None:
+            parent = nest_into._button
+            if buttons.nest(child["id"], parent["id"]):
+                self._append_log(t("Note: {child} is under {parent} now. The arrow on {parent} lists it.",
+                                   child=child["name"], parent=parent["name"]))
+        else:
+            row = self.button_row
+            on_row = row.winfo_rooty() <= event.y_root <= row.winfo_rooty() + row.winfo_height()
+            if on_row:   # out onto the row, in front of the first button whose middle is right of the pointer
+                before = next((b._button["id"] for b in self.play_buttons
+                               if b.winfo_rooty() <= event.y_root <= b.winfo_rooty() + b.winfo_height()
+                               and event.x_root < b.winfo_rootx() + b.winfo_width() // 2), None)
+                buttons.unnest(child["id"])
+                buttons.move_to(child["id"], before)
+                self._append_log(t("Note: {name} is back on the Play tab.", name=child["name"]))
+        self.refresh_buttons()
+
+    def _show_drag_image_for(self, name):
+        """A drag image for a playlist that has no button on the row (one dragged out of a drop-down)."""
+        self._hide_drag_image()
+        sample = FlatButton(self.button_row, text=name, width=18, height=2)   # never placed: drawn for its picture
+        top = self._drag_image = tk.Toplevel(self)
+        top.withdraw()
+        top.overrideredirect(True)
+        try:
+            top.attributes("-topmost", True)
+            top.attributes("-alpha", 0.92)
+        except tk.TclError:
+            pass
+        top.configure(bg=self.button_row.cget("bg"))
+        tk.Label(top, image=sample._label.cget("image"), text=name, compound="center", font=sample._font,
+                 fg=sample._label.cget("fg"), bg=self.button_row.cget("bg"), bd=0, highlightthickness=0).pack()
+        top._sample = sample   # keeps the image alive
+        top.update_idletasks()
+        top.deiconify()
 
     def _child_menu(self, event, parent, child):
         """Right-click on a child in the menu: Make Default (or Plain Again), Out to the Row, Settings."""
@@ -668,24 +768,26 @@ class PlayTab(tk.Frame):
         over = self._target_at(event.x_root, event.y_root)
         self._highlight_target(event.x_root, event.y_root)
         if over is None:
-            self._watch_nest(fb, event.x_root, event.y_root)
+            self._watch_nest(fb._button, fb, event.x_root, event.y_root)
             if getattr(self, "_nest_target", None) is None:
                 self._slide_slot(fb, event.x_root, event.y_root)
         else:
-            self._watch_nest(fb, None, None)
+            self._watch_nest(fb._button, fb, None, None)
 
     NEST_HOLD = 500   # ms held over another button before it becomes the nest target
 
-    def _watch_nest(self, fb, x_root, y_root):
+    def _watch_nest(self, playlist, fb, x_root, y_root):
         """
         Nesting by drag: the held playlist, kept over another button for a moment, nests under it on
         the drop. The button under the pointer is watched; after NEST_HOLD it lights as the target and
-        a tag says "Nest under {name}". Moving off it clears. A playlist with children can't be nested.
+        a tag says "Nest under {name}". Moving off it clears. A playlist with children can't be nested,
+        and a child dragged out of a drop-down can't go back into the same one. fb: the held playlist's
+        own button, if it's on the row.
         """
         under = None
-        if x_root is not None and not buttons.is_parent(fb._button):
+        if x_root is not None and not buttons.is_parent(playlist):
             for other in self.play_buttons:
-                if other is fb:
+                if other is fb or other._button["id"] == (playlist.get("parent") or ""):
                     continue
                 if (other.winfo_rootx() <= x_root <= other.winfo_rootx() + other.winfo_width()
                         and other.winfo_rooty() <= y_root <= other.winfo_rooty() + other.winfo_height()):
@@ -748,6 +850,9 @@ class PlayTab(tk.Frame):
         top = getattr(self, "_drag_image", None)
         if top is not None:
             try:
+                sample = getattr(top, "_sample", None)
+                if sample is not None:
+                    sample.destroy()
                 top.destroy()
             except tk.TclError:
                 pass

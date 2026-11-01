@@ -131,3 +131,18 @@ def test_a_blank_parent_runs_its_first_child(app):
     assert buttons.runs(buttons.get(group["id"]))["name"] == "Similar Tracks"
     row = names(buttons.shown())
     assert "Similar" in row and "Similar Artists" not in row and "Similar Tracks" not in row, "the group is on the row, its children aren't"
+
+
+def test_a_parents_alternate_title_reads_in_its_menu(app):
+    import buttons
+    top, ten, deep = setup(buttons)
+    buttons.nest(ten["id"], top["id"])
+    buttons.nest(deep["id"], top["id"])
+    buttons.set_shown(deep["id"], False)
+    rows = [(pl["name"], text, is_default) for pl, text, is_default in buttons.menu_rows(buttons.get(top["id"]))]
+    assert rows == [("Artist's Top Tracks", "Artist's Top Tracks", True), ("Top 10, Best First", "Top 10, Best First", False)],         "the parent's own row first, the default; unticked children stay out"
+    buttons.set_subtitle(top["id"], "  Top 12, Random Order ")
+    buttons.set_default(top["id"], ten["id"])
+    rows = [(text, is_default) for _pl, text, is_default in buttons.menu_rows(buttons.get(top["id"]))]
+    assert rows == [("Top 12, Random Order", False), ("Top 10, Best First", True)], "the alternate title, trimmed"
+    assert buttons.get(top["id"])["name"] == "Artist's Top Tracks", "the name is untouched"
