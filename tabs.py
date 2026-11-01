@@ -1302,7 +1302,10 @@ class PickRow(tk.Canvas):
     the row as its parent.
     """
 
-    def __init__(self, master, text, fg=None, bg=None, left=None, chosen=False):
+    def __init__(self, master, text, fg=None, bg=None, left=None, chosen=False, indent=0, fold=None, on_fold=None,
+                 tag=""):
+        """indent: pixels in from the left (a child row). fold: None, "open" or "closed" (a parent's arrow,
+        on_fold called when clicked). tag: small text at the right ("default")."""
         bg = bg or master.cget("bg")
         super().__init__(master, bg=bg, bd=0, highlightthickness=0)
         try:
@@ -1317,12 +1320,22 @@ class PickRow(tk.Canvas):
         self._bg, self._fg = bg, fg or PALETTE["text"]
         self._chosen = bool(chosen)
         self._shape, self._shape_id = None, None
-        x = px(10)
+        self.indent, self.fold = indent, fold
+        x = px(6) + indent
+        self._fold_id = None
+        if fold is not None:
+            self._fold_id = self.create_text(x + px(4), self._h // 2, text="\u25be" if fold == "open" else "\u25b8",
+                                             anchor="w", font=("Segoe UI", 8), fill=PALETTE["help_fg"])
+            if on_fold is not None:
+                self.tag_bind(self._fold_id, "<Button-1>", lambda e: (on_fold(), "break")[1])
+            x += px(16)
         self.left = left(self) if left is not None else None
         if self.left is not None:
-            self.create_window(px(6), self._h // 2, window=self.left, anchor="w")
+            self.create_window(x, self._h // 2, window=self.left, anchor="w")
             x += self.left.winfo_reqwidth() + px(2)
-        self._text_id = self.create_text(x, self._h // 2, text=text, anchor="w", font=self._font, fill=self._fg)
+        self._text_id = self.create_text(x + px(4), self._h // 2, text=text, anchor="w", font=self._font, fill=self._fg)
+        self._tag_id = self.create_text(0, self._h // 2, text=tag, anchor="e", font=("Segoe UI", 8),
+                                        fill=PALETTE["button_fg"])
         self.bind("<Configure>", lambda e: self._redraw(e.width))
 
     @property
@@ -1332,6 +1345,10 @@ class PickRow(tk.Canvas):
     @property
     def text(self):
         return self.itemcget(self._text_id, "text")
+
+    @property
+    def tag(self):
+        return self.itemcget(self._tag_id, "text")
 
     def set_chosen(self, on):
         on = bool(on)
@@ -1347,6 +1364,7 @@ class PickRow(tk.Canvas):
         if w <= 1:
             return
         edge = PALETTE["button_fg"] if self._chosen else self._bg
+        self.coords(self._tag_id, w - self._px(10), self._h // 2)
         self._shape = rounded_shape(self, w, self._h, self._px(CORNER), self._bg, edge, self._px(2))
         if self._shape_id is None:
             self._shape_id = self.create_image(0, 0, image=self._shape, anchor="nw")

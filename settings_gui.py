@@ -884,15 +884,15 @@ class PickList(tk.Frame):
     and <<ListboxSelect>> after a pick. Up and Down move the pick.
     """
 
-    def __init__(self, parent, items, bg, fg, colours=None, on_double=None):
+    def __init__(self, parent, items, bg, fg, colours=None, on_double=None, indents=None):
         super().__init__(parent, bg=bg, bd=1, relief="solid", takefocus=1, highlightthickness=0)
         self._items = list(items)
         self._index = 0 if self._items else None
         self._rows = []
         self._bg = bg
-        colours = colours or {}
+        colours, indents = colours or {}, indents or {}
         for i, text in enumerate(self._items):
-            row = PickRow(self, text, fg=colours.get(i) or fg, bg=bg, chosen=i == self._index)
+            row = PickRow(self, text, fg=colours.get(i) or fg, bg=bg, chosen=i == self._index, indent=indents.get(i, 0))
             row.configure(cursor="hand2")
             row.pack(fill="x", padx=3, pady=1)
             row.bind("<Button-1>", lambda e, k=i: (self.focus_set(), self.pick(k)))
@@ -1001,7 +1001,8 @@ class AddPlaylistPrompt(PromptWindow):
         self._pages["existing"] = page
         self.existing_list = self._listbox(page, list_bg, fg, [b["name"] for b in self._existing],
                                            {i: PALETTE["ai_purple"] for i, b in enumerate(self._existing)
-                                            if b["kind"] == "vibe"})
+                                            if b["kind"] == "vibe"},
+                                           indents={i: px(22) for i, b in enumerate(self._existing) if b.get("parent")})
         self.existing_list.bind("<<ListboxSelect>>", lambda e: self._describe())
         self.existing_note = tk.Label(page, text="", font=HELP_FONT, bg=bg, fg=PALETTE["help_fg"], anchor="w",
                                       justify="left", wraplength=px(400))
@@ -1025,8 +1026,8 @@ class AddPlaylistPrompt(PromptWindow):
                  wraplength=px(400)).pack(anchor="w")
         self._pick_tab(self._tab)
 
-    def _listbox(self, page, bg, fg, items, colours=None):
-        lb = PickList(page, items, bg, fg, colours=colours, on_double=self.ok)
+    def _listbox(self, page, bg, fg, items, colours=None, indents=None):
+        lb = PickList(page, items, bg, fg, colours=colours, on_double=self.ok, indents=indents)
         lb.pack(fill="x")
         return lb
 
@@ -1054,13 +1055,21 @@ class AddPlaylistPrompt(PromptWindow):
         if self._tab == "existing":
             b = self._chosen(self.existing_list, self._existing)
             if b is not None:
-                if b.get("shown", True):
-                    self.existing_note.config(text=t("{name}: {what}. On the Play tab already; Create Copy makes {copy} "
-                                                     "right after it.", name=b["name"], what=buttons.describe(b),
-                                                     copy=buttons.unique_name(b["name"])))
+                parent = next((p for p in self._existing if p["id"] == b.get("parent")), None)
+                if parent is not None and b.get("shown", True):
+                    words = t("{name}: {what}. In the menu of {parent} already; Create Copy makes {copy} beside it.",
+                              name=b["name"], what=buttons.describe(b), parent=parent["name"],
+                              copy=buttons.unique_name(b["name"]))
+                elif parent is not None:
+                    words = t("{name}: {what}. Out of the menu of {parent}; Add puts it back.", name=b["name"],
+                              what=buttons.describe(b), parent=parent["name"])
+                elif b.get("shown", True):
+                    words = t("{name}: {what}. On the Play tab already; Create Copy makes {copy} right after it.",
+                              name=b["name"], what=buttons.describe(b), copy=buttons.unique_name(b["name"]))
                 else:
-                    self.existing_note.config(text=t("{name}: {what}. Off the Play tab; Add puts it back at its place.",
-                                                     name=b["name"], what=buttons.describe(b)))
+                    words = t("{name}: {what}. Off the Play tab; Add puts it back at its place.", name=b["name"],
+                              what=buttons.describe(b))
+                self.existing_note.config(text=words)
                 if hasattr(self, "ok_button"):
                     wanted = t("Create Copy") if b.get("shown", True) else t("Add")
                     if self.ok_button.cget("text") != wanted:
@@ -1363,15 +1372,20 @@ class SettingsTab(tk.Frame):
         self._button_list = tk.Frame(holder, bd=1, relief="solid", bg=PALETTE.get("field_bg") or box.cget("bg"))
         self._button_list.pack(side="left", fill="x", expand=True, anchor="n")
         self._button_rows = []
-        strip = tk.Frame(holder)   # four square buttons beside the list: add, delete, up, down
+        strip = tk.Frame(holder)   # six square buttons beside the list: add, delete, up, down, out, nest
         strip.pack(side="left", anchor="n", padx=(8, 0))
         self._list_buttons = {}
+        self._folded = set()   # parents whose children are folded away in the list
         for key, symbol, note, command, gap in (
                 ("add", "+", N_("Add a playlist: one that's off the Play tab, a template, or a new one."), self._button_add, 0),
                 ("remove", "\u2212", N_("Delete the chosen playlist. To take it off the Play tab and keep it, untick it."),
                  self._button_remove, 0),
                 ("up", "\u25b2", N_("Move the chosen playlist up: left on the Play tab."), lambda: self._button_move(-1), 8),
-                ("down", "\u25bc", N_("Move the chosen playlist down: right on the Play tab."), lambda: self._button_move(1), 0)):
+                ("down", "\u25bc", N_("Move the chosen playlist down: right on the Play tab."), lambda: self._button_move(1), 0),
+                ("out", "\u25c0", N_("Bring the chosen playlist out of its parent's menu, back onto the row."),
+                 self._button_unnest, 8),
+                ("nest", "\u25b6", N_("Nest the chosen playlist under the one above it: off the row and into that "
+                                      "playlist's menu, which its button's arrow opens."), self._button_nest, 0)):
             b = FlatButton(strip, text=symbol, width=2, command=command, quiet=True)
             b.pack(pady=(gap, 4))
             Tooltip(b, t(note))
@@ -1423,15 +1437,27 @@ class SettingsTab(tk.Frame):
             child.destroy()
         self._button_rows = []
         bg = self._button_list.cget("bg")
+        parents = {b["parent"] for b in self._buttons if b.get("parent")}
+        indent = scaled(self._button_list, 22)
         for b in self._buttons:
+            if b.get("parent") in self._folded:
+                continue   # folded away under its parent
             on = b["id"] == self._button_id   # the chosen row: a rounded outline in the accent colour, no fill
             var = tk.BooleanVar(value=b.get("shown", True))
+            is_parent = b["id"] in parents
+            parent = next((p for p in self._buttons if p["id"] == b.get("parent")), None)
             row = PickRow(self._button_list, b["name"], fg=PALETTE["ai_purple"] if b["kind"] == "vibe" else None, bg=bg,
                           chosen=on, left=lambda canvas, bt=b, v=var: ttk.Checkbutton(
-                              canvas, variable=v, command=lambda: self._button_tick_changed(bt, v.get())))
+                              canvas, variable=v, command=lambda: self._button_tick_changed(bt, v.get())),
+                          indent=indent if parent is not None else 0,
+                          fold=("closed" if b["id"] in self._folded else "open") if is_parent else None,
+                          on_fold=lambda bt=b: self._fold(bt["id"]),
+                          tag=t("default") if parent is not None and parent.get("default") == b["id"] else "")
             row.configure(cursor="hand2")
             row.pack(fill="x", padx=3, pady=1)
             row.bind("<Button-1>", lambda e, bt=b: self._pick_button(bt["id"]))
+            if parent is not None:
+                row.bind("<Button-3>", lambda e, bt=b, p=parent: self._child_row_menu(e, p, bt))
             self._button_rows.append((b["id"], row, row.left, row, var))
         if not self._buttons:
             tk.Label(self._button_list, text=t("No playlists yet."), fg=PALETTE["help_fg"], font=HELP_FONT, bg=bg).pack(
@@ -1439,15 +1465,69 @@ class SettingsTab(tk.Frame):
         self._sync_list_buttons()
 
     def _sync_list_buttons(self):
-        """Remove, Up and Down grey out when they can't apply: nothing chosen, the first, the last."""
+        """
+        Remove, Up, Down, Out and Nest grey out when they can't apply: nothing chosen; the first or last
+        among its siblings; not a child; a parent, a child, or the first top-level one.
+        """
         strip = getattr(self, "_list_buttons", None)
         if not strip:
             return
-        ids = [b["id"] for b in self._buttons]
-        i = ids.index(self._button_id) if self._button_id in ids else -1
-        strip["remove"].config(state="normal" if i >= 0 else "disabled")
+        chosen = next((b for b in self._buttons if b["id"] == self._button_id), None)
+        sibs = [b for b in self._buttons if chosen is not None
+                and (b.get("parent") or "") == (chosen.get("parent") or "")]
+        i = sibs.index(chosen) if chosen is not None else -1
+        strip["remove"].config(state="normal" if chosen is not None else "disabled")
         strip["up"].config(state="normal" if i > 0 else "disabled")
-        strip["down"].config(state="normal" if 0 <= i < len(ids) - 1 else "disabled")
+        strip["down"].config(state="normal" if 0 <= i < len(sibs) - 1 else "disabled")
+        strip["out"].config(state="normal" if chosen is not None and chosen.get("parent") else "disabled")
+        can_nest = (chosen is not None and not chosen.get("parent") and i > 0
+                    and not any(b.get("parent") == chosen["id"] for b in self._buttons))
+        strip["nest"].config(state="normal" if can_nest else "disabled")
+
+    def _fold(self, parent_id):
+        """The arrow on a parent row: its children fold away, or come back."""
+        if parent_id in self._folded:
+            self._folded.discard(parent_id)
+        else:
+            self._folded.add(parent_id)
+        self._fill_button_list()
+
+    def _button_nest(self):
+        """Nests the chosen playlist under the top-level playlist above it."""
+        chosen = next((b for b in self._buttons if b["id"] == self._button_id), None)
+        if chosen is None or chosen.get("parent"):
+            return
+        above = [b for b in self._buttons if not b.get("parent")]
+        i = above.index(chosen)
+        if i == 0 or not buttons.nest(chosen["id"], above[i - 1]["id"]):
+            return
+        self._buttons_refresh()
+        self._buttons_changed()
+
+    def _button_unnest(self):
+        if self._button_id is not None and buttons.unnest(self._button_id):
+            self._buttons_refresh()
+            self._buttons_changed()
+
+    def _child_row_menu(self, event, parent, child):
+        """Right-click on a child in the list: Make Default (or Not the Default), Out to the Row."""
+        import review_gui
+        p = review_gui.palette()
+        menu = tk.Menu(self, tearoff=0, bg=p["bg"], fg=p["text"], activebackground=p["row_on"],
+                       activeforeground=p["accent"])
+        is_default = parent.get("default") == child["id"]
+
+        def set_default():
+            buttons.set_default(parent["id"], "" if is_default else child["id"])
+            self._buttons_refresh()
+            self._buttons_changed()
+        menu.add_command(label=t("Not the Default") if is_default else t("Make Default"), command=set_default)
+        menu.add_command(label=t("Out to the Row"), command=lambda: (buttons.unnest(child["id"]), self._buttons_refresh(),
+                                                                     self._buttons_changed()))
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
 
     def _pick_button(self, button_id):
         if button_id != self._button_id and any(b["id"] == button_id for b in self._buttons):
