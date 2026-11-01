@@ -401,7 +401,8 @@ class PlayTab(tk.Frame):
             cb.pack(side="left", padx=(0, 8))
         self._dial_sep.pack(side="left", padx=(8, 16))
         # Add playlist: JRiver playlists joined to the next build from the app (not voice)
-        self.add_playlist_button = FlatButton(self.extras_row, text=t("+ Add JRiver Playlist"), quiet=True, width=18,
+        self.add_playlist_button = FlatButton(self.extras_row, text=t("+ Add JRiver Playlist"), quiet=True,
+                                              width=max(18, len(t("+ Add JRiver Playlist")) + 1),
                                               height=1, command=lambda: self.mix_rows.add())
         self.add_playlist_button.pack(side="left", padx=(0, 8))
         self.credits_button = FlatButton(self.extras_row, text=t("Show Credits"), command=self.on_credits,
@@ -634,7 +635,7 @@ class PlayTab(tk.Frame):
         if say:
             button = buttons.get(button_id)
             if button is not None:
-                self._append_log(t("More Options: showing {name}'s settings.", name=button["name"]))
+                self._append_log(t("More Options: showing the settings of {name}.", name=button["name"]))
 
     def _sync_armed(self):
         """With More Options open, every playlist but the armed one dims; closed, all read as usual."""
@@ -876,7 +877,7 @@ class PlayTab(tk.Frame):
             if open_ and (save or not was_open) and hasattr(self, "log"):
                 button = self._armed_playlist()
                 if button is not None:
-                    self._append_log(t("More Options: showing {name}'s settings, the last playlist you used. Click "
+                    self._append_log(t("More Options: showing the settings of {name}, the last playlist you used. Click "
                                        "another playlist to see its.", name=button["name"]))
 
     def _on_mix_rows_changed(self):

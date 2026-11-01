@@ -586,7 +586,7 @@ DRIFT_USING_OPTIONS = [("artists", N_("Similar artists")), ("tracks", N_("Simila
 # AI Playlist's Drift choices say plainly which ones use the AI
 VIBE_DRIFT_USING_OPTIONS = [("artists", N_("Similar artists (no AI)")), ("tracks", N_("Similar tracks (no AI)")),
                             ("ai", N_("AI (uses credits)"))]
-DRIFT_SOURCE_MODES = [("same", N_("Same as the Sources page")), ("custom", N_("Custom Sources"))]
+DRIFT_SOURCE_MODES = [("same", N_("Same as the Sources")), ("custom", N_("Custom Sources"))]
 # If All Else Fails: what happens when a build finds nothing at all
 FALLBACK_MODE_OPTIONS = [("shuffle", N_("Shuffle Genre")), ("file", N_("Run File")), ("playlist", N_("Play Playlist"))]
 FALLBACK_HELP = (N_("When a build finds nothing at all. Shuffle Genre plays songs from your library in the seed "
@@ -671,7 +671,7 @@ DRIFT_MODE_HELP = (N_("When a playlist comes up short, Drift searches again usin
 DRIFT_MODERATOR_OPTIONS = [("same", N_("Same as build")), ("off", N_("Off")), ("relaxed", N_("Relaxed")),
                            ("balanced", N_("Balanced")), ("strict", N_("Strict"))]
 DRIFT_ARTIST_SOURCE_NAMES = [s for s in SOURCE_NAMES if s[0] != "ai"]   # Drift from the sources never uses the AI
-DRIFT_SOURCES_HELP = (N_("Same as the Sources page uses the sources ticked on this button's Sources page. Custom "
+DRIFT_SOURCES_HELP = (N_("Same as the Sources uses the sources ticked in this config. Custom "
                       "Sources lets the top-up rounds use different ones, for example steadier sources first "
                       "and more adventurous ones to fill the gaps."))
 DRIFT_SAME_WARNING = (N_("Same sources keep Drift's picks closest to the seed. Custom Sources give Drift a "
@@ -2820,7 +2820,7 @@ class SettingsTab(tk.Frame):
             legacy_on = p.env.get("SIMILAR_REQUIRE_AGREEMENT", "1") in ("1", "true", "yes")
             start = p.env.get("SIMILAR_MIN_AGREEMENT", "").strip() or ("2" if legacy_on else "1")
             p.vars["SIMILAR_MIN_AGREEMENT"] = tk.StringVar(value="Off" if start in ("0", "1") else start)
-            row = self._line(box, r, t("Sources that must agree"), pady=(10, 0))
+            row = self._line(box, r, t("Must agree"), pady=(10, 0))
             p.agree_cb = TCombobox(row, textvariable=p.vars["SIMILAR_MIN_AGREEMENT"], state="readonly", width=6)
             p.agree_cb.pack(side="left")
             p.agree_cb.bind("<<ComboboxSelected>>", p.save)
@@ -2841,7 +2841,7 @@ class SettingsTab(tk.Frame):
                                             "recent: roughly the last six months; older songs may find fewer matches."))
             start = p.env.get("SIMILAR_TRACK_MIN_AGREEMENT", "2").strip() or "2"
             p.vars["SIMILAR_TRACK_MIN_AGREEMENT"] = tk.StringVar(value="Off" if start in ("0", "1") else start)
-            row = self._line(box, r, t("Sources that must agree"), pady=(10, 0))
+            row = self._line(box, r, t("Must agree"), pady=(10, 0))
             p.track_agree_cb = TCombobox(row, textvariable=p.vars["SIMILAR_TRACK_MIN_AGREEMENT"],
                                             state="readonly", width=6)
             p.track_agree_cb.pack(side="left")

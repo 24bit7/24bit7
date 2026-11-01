@@ -107,7 +107,7 @@ def test_settings_note_follows_the_sources_choice(app, ui):
         box.event_generate("<<ComboboxSelected>>")
         ui.pump(0.2)
         assert warn.winfo_manager() == "", option
-        box.set("Same as the Sources page")
+        box.set("Same as the Sources")
         box.event_generate("<<ComboboxSelected>>")
         ui.pump(0.2)
         assert warn.winfo_manager() == "grid", option
