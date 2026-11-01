@@ -1558,7 +1558,11 @@ class SettingsTab(tk.Frame):
                 return
             name = var.get().strip()
             entry.destroy()
-            title.pack(side="left", before=parent.winfo_children()[0])
+            first = next((w for w in parent.winfo_children() if w is not title and w.winfo_manager()), None)
+            if first is not None:   # back in front of "click to rename" (before= needs a packed sibling)
+                title.pack(side="left", before=first)
+            else:
+                title.pack(side="left")
             if save and name and name != button["name"]:
                 buttons.rename(button["id"], name)
                 button["name"] = name
@@ -4808,10 +4812,14 @@ class SettingsTab(tk.Frame):
             tk.Label(frame, text=t(title), font=LABEL_FONT).grid(row=0, column=0, sticky="w")
             row = self._score_header(p, frame, section_key, 1)
             for code, label in names:
-                name = tk.Label(frame, text=label, anchor="w", fg=PALETTE["ai_purple"] if code == "ai" else None)
+                if code == "ai":   # the AI isn't scored against the others; Full Results shows what it found
+                    continue
+                name = tk.Label(frame, text=label, anchor="w")
                 name.grid(row=row, column=0, sticky="w", pady=1)
                 self._score_cells(p, frame, section_key, code, row)
                 row += 1
+        for key, widget in p.score_ui["artists"].items():   # one Test and Full Results serve both tables
+            p.score_ui["tracks"].setdefault(key, widget)
         self._watch_source_test()
 
     def _fill_zone_boxes(self):

@@ -65,6 +65,8 @@ def test_name_zone_and_switch_save(app, ui):
     entry = next(w for w in walk(s._device_right) if isinstance(w, tk.Entry))
     entry.delete(0, "end")
     entry.insert(0, "Kitchen Dot")
+    entry.focus_force()   # Tk sends a generated key press to the focus widget
+    ui.pump(0.2)
     entry.event_generate("<Return>")
     ui.pump(0.3)
     assert dict((d[0], d[1]) for d in app.voice.devices())[KITCHEN] == "Kitchen Dot"

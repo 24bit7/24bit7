@@ -24,7 +24,7 @@ def test_row_comes_from_the_ticked_playlists_then_more_options_and_plus(app, ui)
     assert names(p) == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Headliner", "Inner Circle", "AI Playlist"]
     buttons.set_shown(buttons.standard("vibe")["id"], False)
     p.refresh_buttons()
-    assert names(p) == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Headliner"], "unticked: off the row"
+    assert names(p) == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Headliner", "Inner Circle"], "unticked: off the row"
     buttons.set_shown(buttons.standard("vibe")["id"], True)
     p.refresh_buttons()
     ui.pump(0.3)
@@ -52,7 +52,7 @@ def test_plus_offers_the_unticked_playlists_then_new(app, ui, monkeypatch):
     labels = [menu.entrycget(i, "label") for i in range(menu.index("end") + 1) if menu.type(i) == "command"]
     assert labels == ["Headliner", "New..."]
     menu.invoke(0)
-    assert names(p)[-1] == "Headliner", "ticked again, it comes back at its place in the list"
+    assert names(p)[3] == "Headliner", "ticked again, it comes back at its place in the list"
     monkeypatch.setattr(p, "_ask_new_button", lambda: ("Sunday Guests", "top", head["id"]))
     p.on_add_button()
     menus[-1].invoke(0)   # New...: the only entry now
@@ -98,8 +98,8 @@ def test_right_click_menu_renames_copies_moves_removes_and_restores(app, ui, mon
     menus[-1].invoke(2)   # Settings
     assert opened[-1] == p.play_buttons[0]._button["id"]
     menus[-1].invoke(6)   # Remove from the Play Tab: no question, nothing deleted
-    assert names(p) == ["Similar Tracks", "Star Turn", "Star Turn 2", "Artist's Top Tracks", "AI Playlist"]
-    assert buttons.standard("artists")["shown"] is False and len(buttons.load()) == 6
+    assert names(p) == ["Similar Tracks", "Star Turn", "Star Turn 2", "Artist's Top Tracks", "Inner Circle", "AI Playlist"]
+    assert buttons.standard("artists")["shown"] is False and len(buttons.load()) == 7
     p._button_menu(Click(), None)   # right-click on +
     assert labels(menus[-1]) == ["Restore Default Playlists"] and menus[-1].entrycget(0, "state") == "disabled", \
         "off the row isn't missing"
@@ -118,12 +118,12 @@ def test_more_options_dials_show_and_change_the_armed_playlist(app, ui):
     p._show_more(True, save=False)
     ui.pump(0.3)
     assert p._armed == p.play_buttons[0]._button["id"], "the first on the row, until one is used"
-    assert [b._dim for b in p.play_buttons] == [False, True, True, True, True]
+    assert [b._dim for b in p.play_buttons] == [False, True, True, True, True, True]
     assert p._dial_vars["moderator"].get() == "Off" and p._dial_vars["nonstop"].get() == "Off"
     p.play_buttons[1]._command()   # a dimmed playlist arms, no build
     ui.pump(0.2)
     assert p._armed == p.play_buttons[1]._button["id"] and not p.running
-    assert [b._dim for b in p.play_buttons] == [True, False, True, True, True]
+    assert [b._dim for b in p.play_buttons] == [True, False, True, True, True, True]
     p._dial_vars["nonstop"].set("Keep It Tight")
     p._dial_changed("nonstop")
     ui.pump(0.2)
@@ -172,7 +172,12 @@ def test_enter_on_search_runs_the_standard_similar_artists(app, ui, monkeypatch)
     buttons.remove(buttons.standard("artists")["id"])
     p.refresh_buttons()
     p.on_similar()
-    assert len(ran) == 1 and ui.answers[-1][1][0] == "No Button", ui.answers
+    ui.wait_idle()
+    assert ran == ["Similar Artists", "Inner Circle"], "with the standard gone, the next Artist Matching playlist stands in"
+    buttons.remove(buttons.standard("artists")["id"])
+    p.refresh_buttons()
+    p.on_similar()
+    assert len(ran) == 2 and ui.answers[-1][1][0] == "No Playlist", ui.answers
 
 
 def test_ai_buttons_grey_out_together(app, ui):

@@ -21,6 +21,18 @@ def labels(widget):
     return [str(w.cget("text")) for w in walk(widget) if isinstance(w, (tk.Label, ttk.Checkbutton))]
 
 
+def shown(widget):
+    """Like walk, but skips anything not placed by a geometry manager: the sections a config builds out of sight."""
+    yield widget
+    for child in widget.winfo_children():
+        if child.winfo_manager():
+            yield from shown(child)
+
+
+def shown_labels(widget):
+    return [str(w.cget("text")) for w in shown(widget) if isinstance(w, (tk.Label, ttk.Checkbutton))]
+
+
 def settings_pane(ui):
     return next(c for c in ui.settings.winfo_children() if hasattr(c, "select"))
 
@@ -73,9 +85,9 @@ def test_playlists_tab_replaces_sources_playlist_and_filters(app, ui):
     assert s._button_id == s._buttons[0]["id"] and s._button_page.button["name"] == "Similar Artists"
     assert not [w for w in walk(s._button_right) if hasattr(w, "_tabs")], "one page, no inner tabs"
     texts = labels(s._button_inner)
-    assert "Config 1" in texts and "Similar Artists" in texts and "SOURCES" in texts and "PLAYLIST" in texts, texts[:12]
+    assert "Config 1" in texts and "Artist Matching" in texts and "Sources" in texts and "Playlist" in texts, texts[:12]
     pick_button(ui, "AI Playlist")
-    assert "SOURCES" not in labels(s._button_inner), "an AI Playlist has no sources to pick"
+    assert "Sources" not in labels(s._button_inner), "an AI Playlist has no sources to pick"
     assert not ui.errors, ui.errors[0]
 
 
@@ -111,6 +123,8 @@ def test_the_name_at_the_top_renames_in_place(app, ui):
     entry = next(w for w in walk(s._button_right) if isinstance(w, tk.Entry) and w.get() == "Headliner")
     entry.delete(0, "end")
     entry.insert(0, "Star Turn")
+    entry.focus_force()   # Tk sends a generated key press to the focus widget
+    ui.pump(0.2)
     entry.event_generate("<Return>")
     ui.pump(0.3)
     assert s._button_title.cget("text") == "Star Turn" and s._button_names()[3] == "Star Turn"
@@ -172,15 +186,16 @@ def test_a_second_config_has_its_own_block_and_the_mix_section_appears(app, ui):
     from tkinter import messagebox
     p = pick_button(ui, "Similar Tracks")
     page = inner_page(ui, "Sources")
-    texts = labels(page)
+    texts = shown_labels(page)
     assert "Config 1" in texts and "Mix" not in texts and "Config 2" not in texts
+    drift_labels, nonstop_labels = texts.count("Drift"), texts.count("Non-stop")
     s = ui.settings
     s._config_add(p.button, "artists")
     ui.pump(0.5)
     page = inner_page(ui, "Sources")
-    texts = labels(page)
+    texts = shown_labels(page)
     assert "Config 2" in texts and "Mix" in texts and "Combine" in texts and "Drift from" in texts and "Continue as" in texts
-    assert texts.count("Drift") == 1 and texts.count("Non-stop") == 1, "the whole-playlist sections show once"
+    assert texts.count("Drift") == drift_labels and texts.count("Non-stop") == nonstop_labels, "the whole-playlist sections show once"
     pages = s._button_pages
     assert [getattr(q, "config_kind", None) for q in pages] == ["tracks", "artists"]
     pages[1].vars["SIMILAR_ARTIST_LIMIT"].set("9")
@@ -211,7 +226,7 @@ def test_a_second_config_has_its_own_block_and_the_mix_section_appears(app, ui):
     ui.pump(0.5)
     b = buttons.get(p.button["id"])
     assert b["configs"] == [] and b["mix"]["continue_as"] == 0
-    assert "Mix" not in labels(inner_page(ui, "Sources"))
+    assert "Mix" not in shown_labels(inner_page(ui, "Sources"))
     assert not ui.errors, ui.errors[0]
 
 
@@ -247,7 +262,7 @@ def test_deep_cuts_switch_on_every_button_and_the_standard_one_reaches_env(app, 
     import settings_gui
 
     def switch(page):
-        return [w for w in walk(page) if isinstance(w, ttk.Combobox)
+        return [w for w in shown(page) if isinstance(w, ttk.Combobox)
                 and tuple(w.cget("values")) == ("Off", "Spaced", "Shuffled")]
     pick_button(ui, "Similar Artists")
     page = inner_page(ui, "Playlist")
@@ -332,7 +347,7 @@ def test_add_remove_and_restore_from_settings(app, ui, monkeypatch):
     assert s._button_page.button["name"] == "Similar Artists", "back to the first"
     assert "Sunday Guests" not in [b._name for b in ui.play.play_buttons]
     s._button_restore()
-    assert ui.answers[-1][1][0] == "Restore Default Buttons", "nothing missing: it says so"
+    assert ui.answers[-1][1][0] == "Restore Default Playlists", "nothing missing: it says so"
     buttons.remove(buttons.standard("tracks")["id"])
     s._buttons_refresh()
     s._button_restore()

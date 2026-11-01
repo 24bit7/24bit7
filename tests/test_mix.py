@@ -148,6 +148,30 @@ def test_drift_runs_from_the_named_config_only(app, monkeypatch):
     assert seen == {"tracks": "0", "artists": "1"}, seen
 
 
+def test_the_whole_playlist_settings_are_the_first_configs_for_every_config(app, monkeypatch):
+    import os
+    import buttons
+    e = app.engine
+    seen = {}
+
+    def fake_artists(report=print, seed_info=None, **k):
+        seen.update({key: os.environ.get(key) for key in ("SKIP_PLAYED_ARTISTS", "SKIP_PLAYED_ARTISTS_DAYS", "DEEP_CUTS_ARTISTS",
+                                                           "LONG_CLOSER_MINUTES_ARTISTS", "NONSTOP_ARTISTS", "DRIFT_ARTISTS")})
+    monkeypatch.setattr(e, buttons.BUILDERS["top"], lambda report=print, seed_info=None, **k: None)
+    monkeypatch.setattr(e, "create_similar_playlist", fake_artists)
+    buttons.load()
+    b = buttons.add("Pair", "top")
+    buttons.set_settings(b["id"], dict(b["settings"], SKIP_PLAYED_TOP="1", SKIP_PLAYED_TOP_DAYS="9", LONG_CLOSER_MINUTES_TOP="11"))
+    b = buttons.add_config(b["id"], "artists")
+    buttons.set_config_settings(b["id"], 1, dict(b["configs"][0]["settings"], SKIP_PLAYED_ARTISTS="0", SKIP_PLAYED_ARTISTS_DAYS="2",
+                                                 DEEP_CUTS_ARTISTS="spaced", NONSTOP_ARTISTS="1", DRIFT_ARTISTS="1"))
+    buttons.run(buttons.get(b["id"]), report=app.Lines(), seed_info=seed(app))
+    assert seen["SKIP_PLAYED_ARTISTS"] == "1" and seen["SKIP_PLAYED_ARTISTS_DAYS"] == "9", "config 1's Skip played, as shown"
+    assert seen["LONG_CLOSER_MINUTES_ARTISTS"] == "11"
+    assert seen["DEEP_CUTS_ARTISTS"] == "off", "Top Tracks has no Deep Cuts, so the hidden one stays off"
+    assert seen["NONSTOP_ARTISTS"] == "1" and seen["DRIFT_ARTISTS"] == "1", "Non-stop and Drift follow the Mix, not config 1"
+
+
 def test_a_top_up_and_a_build_of_its_own_run_the_first_config_alone(app, monkeypatch):
     import buttons
     e = app.engine

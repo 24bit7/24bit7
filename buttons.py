@@ -701,6 +701,32 @@ def _run_one(button, kind, settings, report, seed_info, build, extra_filters, op
         engine.use_profile(previous or None)
 
 
+def whole_playlist_settings(first, kind):
+    """
+    The first config's whole-playlist settings (Skip played, Hidden Tracks, If All Else Fails, Run After
+    Building, Deep Cuts) as `kind`'s keys, for a later config of a mix. Non-stop and Drift aren't among
+    them: those follow the Mix's Continue as and Drift from. Deep Cuts goes off when the first config
+    has none (Artist's Top Tracks).
+    """
+    g0, g = first["kind"].upper(), kind.upper()
+    out = {}
+    for tmpl in _EACH:
+        if tmpl.startswith("NONSTOP_"):
+            continue
+        k0, k = tmpl.format(G=g0), tmpl.format(G=g)
+        if k in KIND_KEYS[kind] and k0 in first["settings"]:
+            out[k] = first["settings"][k0]
+    for tmpl in ("DEEP_CUTS_{G}", "DEEP_CUTS_{G}_SHARE"):
+        k0, k = tmpl.format(G=g0), tmpl.format(G=g)
+        if k in KIND_KEYS[kind]:
+            if k0 in KIND_KEYS[first["kind"]]:
+                if k0 in first["settings"]:
+                    out[k] = first["settings"][k0]
+            elif tmpl == "DEEP_CUTS_{G}":
+                out[k] = "off"
+    return out
+
+
 def _run_mix(button, cfgs, report, seed_info, extra_filters, options):
     """
     A playlist of two or more configs: the same seed for each, built one after another. The
@@ -721,6 +747,8 @@ def _run_mix(button, cfgs, report, seed_info, extra_filters, options):
             engine.check_cancelled()
             engine.COMBINE_INDEX = i
             settings = dict(cfg["settings"])
+            if i:   # the sections shown for the whole playlist are the first config's: they apply to every config
+                settings.update(whole_playlist_settings(cfgs[0], cfg["kind"]))
             if i != mix["drift_from"]:
                 settings[f"DRIFT_{cfg['kind'].upper()}"] = "0"
             report(t("Config {n} of {total}: {kind}", n=i + 1, total=len(cfgs), kind=t(KIND_LABELS[cfg["kind"]])))

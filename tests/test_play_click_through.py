@@ -77,7 +77,7 @@ def test_row_order_and_separator(app, ui):
     assert p.more_line.winfo_manager()
     texts = [getattr(w, "cget")("text") for w in p.extras_row.pack_slaves() if hasattr(w, "_label")]
     assert texts[0].startswith("Seed:") and texts[1] == "Play Mode"
-    assert texts[-3:] == ["+ Add Playlist", "Show Credits", "?"], texts   # ? packed at the right-hand end
+    assert texts[-3:] == ["+ Add JRiver Playlist", "Show Credits", "?"], texts   # ? packed at the right-hand end
     p._show_more(False)
     ui.pump(0.2)
     assert not p.more_line.winfo_manager()
