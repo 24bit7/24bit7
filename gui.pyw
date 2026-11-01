@@ -462,6 +462,15 @@ class PlayTab(tk.Frame):
 
     def _button_note(self, button):
         """A button's hover note: its own (a standard button) or its kind's, then a line saying what's on."""
+        kids = buttons.children(button["id"])
+        if kids:   # a parent: its default's note, then what the arrow holds
+            face = buttons.runs(button)
+            more = t("The arrow lists 1 more playlist.") if len(kids) == 1 else t("The arrow lists {n} more playlists.",
+                                                                                 n=len(kids))
+            return self._plain_note(face) + "\n" + more
+        return self._plain_note(button)
+
+    def _plain_note(self, button):
         if button.get("kind") is None:
             return t("No config yet. Click to open its page and add one.")
         kind_name = buttons.KIND_NAMES[button["kind"]]
@@ -480,13 +489,16 @@ class PlayTab(tk.Frame):
         on, wrap = self.help_on, self.note_wrap
         shown = buttons.shown()
         for button in shown:
-            ai = button["kind"] == "vibe"
-            empty = button["kind"] is None   # a blank slate: grey text, and its note always shows
-            b = FlatButton(self.button_row, text=button["name"], width=18, height=2,
+            kids = buttons.children(button["id"])
+            face = buttons.runs(button)   # a parent's face carries its default's name
+            ai = face["kind"] == "vibe"
+            empty = face["kind"] is None   # a blank slate: grey text, and its note always shows
+            b = FlatButton(self.button_row, text=face["name"], width=18, height=2,
                            command=lambda bt=button: self._press_playlist(bt),
                            accent=PALETTE["ai_purple"] if ai else None,   # magenta: AI credits
-                           text_fg=PALETTE["ai_purple"] if ai else PALETTE["help_fg"] if empty else None)
-            b._name, b._kind, b._button = button["name"], button["kind"], button
+                           text_fg=PALETTE["ai_purple"] if ai else PALETTE["help_fg"] if empty else None,
+                           arrow=bool(kids), arrow_command=lambda bt=button: self._open_children(bt))
+            b._name, b._kind, b._button = button["name"], face["kind"], button
             for w in (b, b._label):
                 w.bind("<Button-3>", lambda e, bt=button: self._button_menu(e, bt))
                 w.bind("<ButtonPress-1>", lambda e, fb=b: self._drag_start(e, fb), add="+")
@@ -526,10 +538,107 @@ class PlayTab(tk.Frame):
                 b.config(state="disabled")
 
     def _press_playlist(self, button):
-        """A click builds (a drag's release isn't one)."""
+        """A click builds the playlist, or a parent's default (a drag's release isn't a click)."""
         if getattr(self, "_drag_moved", False):
             return   # the release of a drag, not a click
-        self.on_button(button)
+        self.on_button(buttons.runs(button))
+
+    # --- a parent's menu: its children, the default marked ------------------------------------------
+
+    def _open_children(self, parent):
+        """The arrow on a parent: a small popup of its children under the button."""
+        self._close_children()
+        fb = next((b for b in self.play_buttons if b._button["id"] == parent["id"]), None)
+        kids = buttons.children(parent["id"])
+        if fb is None or not kids:
+            return
+        import review_gui
+        colours = review_gui.palette()
+        bg, fg, line, on_bg = PALETTE["field_bg"], PALETTE["text"], PALETTE["line"], colours["row_on"]
+        pop = self._children_popup = tk.Toplevel(self)
+        pop.withdraw()
+        pop.overrideredirect(True)
+        pop.configure(bg=line, padx=1, pady=1)
+        inner = tk.Frame(pop, bg=bg)
+        inner.pack(fill="both", expand=True)
+        pop._rows = []
+        font = ("Segoe UI", 10)
+        default = buttons.get(parent["id"]).get("default")
+        for child in kids:
+            row = tk.Frame(inner, bg=bg, cursor="hand2")
+            row.pack(fill="x")
+            name = tk.Label(row, text=child["name"], font=font, bg=bg, cursor="hand2", padx=14, pady=7,
+                            fg=PALETTE["ai_purple"] if child["kind"] == "vibe" else fg)
+            name.pack(side="left")
+            tag = tk.Label(row, text=t("default") if child["id"] == default else "", font=("Segoe UI", 8), bg=bg,
+                           fg=PALETTE["button_fg"], padx=14)
+            tag.pack(side="right")
+            for w in (row, name, tag):
+                w.bind("<Enter>", lambda e, r=row, n=name, g=tag: [x.config(bg=on_bg) for x in (r, n, g)])
+                w.bind("<Leave>", lambda e, r=row, n=name, g=tag: [x.config(bg=bg) for x in (r, n, g)])
+                w.bind("<Button-1>", lambda e, c=child: self._run_child(c))
+                w.bind("<Button-3>", lambda e, c=child, p=parent: self._child_menu(e, p, c))
+            pop._rows.append((child, row, tag))
+        pop.update_idletasks()
+        w = max(pop.winfo_reqwidth(), fb.winfo_width())
+        pop.geometry(f"{w}x{pop.winfo_reqheight()}+{fb.winfo_rootx()}+{fb.winfo_rooty() + fb.winfo_height() + 2}")
+        pop.deiconify()
+        pop.lift()
+        pop.focus_force()
+        pop.bind("<Escape>", lambda e: self._close_children())
+        pop.bind("<FocusOut>", lambda e: self.after(100, self._close_children_if_unfocused))
+
+    def _close_children_if_unfocused(self):
+        pop = getattr(self, "_children_popup", None)
+        if pop is not None and pop.winfo_exists():
+            try:
+                focused = pop.focus_get()
+            except (KeyError, tk.TclError):
+                focused = None
+            if focused is None or not str(focused).startswith(str(pop)):
+                self._close_children()
+
+    def _close_children(self):
+        pop = getattr(self, "_children_popup", None)
+        if pop is not None:
+            try:
+                pop.destroy()
+            except tk.TclError:
+                pass
+        self._children_popup = None
+
+    def _run_child(self, child):
+        """A child clicked in the menu: built once, this time."""
+        self._close_children()
+        self.on_button(child)
+
+    def _child_menu(self, event, parent, child):
+        """Right-click on a child in the menu: Make Default (or Plain Again), Out to the Row, Settings."""
+        import review_gui
+        p = review_gui.palette()
+        menu = tk.Menu(self, tearoff=0, bg=p["bg"], fg=p["text"], activebackground=p["row_on"],
+                       activeforeground=p["accent"])
+        is_default = buttons.get(parent["id"]).get("default") == child["id"]
+        menu.add_command(label=t("Make Default") if not is_default else t("Not the Default"),
+                         command=lambda: self._set_default(parent, "" if is_default else child["id"]))
+        menu.add_command(label=t("Out to the Row"), command=lambda: self._unnest(child))
+        menu.add_command(label=t("Settings"), command=lambda: (self._close_children(),
+                                                               self.open_playlist_settings(child["id"])))
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+
+    def _set_default(self, parent, child_id):
+        buttons.set_default(parent["id"], child_id)
+        self._close_children()
+        self.refresh_buttons()
+
+    def _unnest(self, child):
+        self._close_children()
+        if buttons.unnest(child["id"]):
+            self.refresh_buttons()
+            self._append_log(t("Note: {name} is back on the Play tab.", name=child["name"]))
 
     # --- dragging a playlist: along the row, or onto the cog (its settings) or the cross (off the row) ---
 
@@ -559,7 +668,61 @@ class PlayTab(tk.Frame):
         over = self._target_at(event.x_root, event.y_root)
         self._highlight_target(event.x_root, event.y_root)
         if over is None:
-            self._slide_slot(fb, event.x_root, event.y_root)
+            self._watch_nest(fb, event.x_root, event.y_root)
+            if getattr(self, "_nest_target", None) is None:
+                self._slide_slot(fb, event.x_root, event.y_root)
+        else:
+            self._watch_nest(fb, None, None)
+
+    NEST_HOLD = 500   # ms held over another button before it becomes the nest target
+
+    def _watch_nest(self, fb, x_root, y_root):
+        """
+        Nesting by drag: the held playlist, kept over another button for a moment, nests under it on
+        the drop. The button under the pointer is watched; after NEST_HOLD it lights as the target and
+        a tag says "Nest under {name}". Moving off it clears. A playlist with children can't be nested.
+        """
+        under = None
+        if x_root is not None and not buttons.is_parent(fb._button):
+            for other in self.play_buttons:
+                if other is fb:
+                    continue
+                if (other.winfo_rootx() <= x_root <= other.winfo_rootx() + other.winfo_width()
+                        and other.winfo_rooty() <= y_root <= other.winfo_rooty() + other.winfo_height()):
+                    under = other
+                    break
+        if under is getattr(self, "_nest_watch", None):
+            return
+        self._clear_nest()
+        self._nest_watch = under
+        if under is not None:
+            self._nest_job = self.after(self.NEST_HOLD, lambda: self._mark_nest(under))
+
+    def _mark_nest(self, target):
+        self._nest_job = None
+        self._nest_target = target
+        target.config(target=True)
+        px = self.winfo_fpixels("1i") / 96.0
+        tag = self._nest_tag = tk.Label(self.button_row, text=t("Nest under {name}", name=target._button["name"]),
+                                        font=("Segoe UI", 8, "bold"), bg=PALETTE["button_fg"], fg="#000000",
+                                        padx=int(8 * px), pady=int(2 * px))
+        tag.place(x=target.winfo_x(), y=target.winfo_y() + target.winfo_height() - int(6 * px))
+        tag.lift()
+
+    def _clear_nest(self):
+        job = getattr(self, "_nest_job", None)
+        if job is not None:
+            self.after_cancel(job)
+        self._nest_job = None
+        target = getattr(self, "_nest_target", None)
+        if target is not None and target.winfo_exists():
+            target.config(target=False)
+        self._nest_target = None
+        self._nest_watch = None
+        tag = getattr(self, "_nest_tag", None)
+        if tag is not None:
+            tag.destroy()
+        self._nest_tag = None
 
     def _show_drag_image(self, fb):
         """
@@ -619,6 +782,8 @@ class PlayTab(tk.Frame):
             self._drag_moved = False
             return
         target = self._target_at(event.x_root, event.y_root)
+        nest_into = getattr(self, "_nest_target", None)
+        self._clear_nest()
         self._hide_drop_targets()
         self._hide_drag_image()
         button = fb._button
@@ -626,6 +791,11 @@ class PlayTab(tk.Frame):
             self.open_playlist_settings(button["id"])
         elif target == "remove":
             self._remove_button(button)
+        elif nest_into is not None:   # held over another playlist: under it, into its menu
+            parent = nest_into._button
+            if buttons.nest(button["id"], parent["id"]):
+                self._append_log(t("Note: {child} is under {parent} now. The arrow on {parent} lists it.",
+                                   child=button["name"], parent=parent["name"]))
         else:   # dropped on the row: where its slot has slid to
             i = self.play_buttons.index(fb)
             before = self.play_buttons[i + 1]._button["id"] if i + 1 < len(self.play_buttons) else None
@@ -766,6 +936,8 @@ class PlayTab(tk.Frame):
         """Off the row, not deleted: + brings it back, and voice commands and shortcuts still run it."""
         buttons.set_shown(button["id"], False)
         self.refresh_buttons()
+        self._live.clear()   # a fresh console for the note (Ben, 1 Nov)
+        self._clear_log()
         self._append_log(t("Note: {name} is off the Play tab. It's still under Settings > Playlists, and + puts it back.",
                            name=button["name"]))
 
@@ -923,7 +1095,7 @@ class PlayTab(tk.Frame):
             if button is None:
                 continue
             # Playing Now feeds Artist Matching and Track Matching, so every playlist with one of those configs lights
-            if any(c["kind"] in ("artists", "tracks") for c in buttons.configs(button)):
+            if any(c["kind"] in ("artists", "tracks") for c in buttons.configs(buttons.runs(button))):
                 b._accent = self.seed_colour if teal else None
                 b._draw()
 

@@ -585,9 +585,11 @@ class FlatButton(tk.Frame):
     """
 
     def __init__(self, master, text="", command=None, width=None, height=None, quiet=False,
-                 accent=None, text_fg=None, **kw):
+                 accent=None, text_fg=None, arrow=False, arrow_command=None, **kw):
         back = master.cget("bg")
         super().__init__(master, bg=back, **kw)
+        self._arrow_command = arrow_command
+        self._target = False     # drawn as a drop target (a playlist held over it, about to nest)
         try:
             scale = max(1.0, self.winfo_fpixels("1i") / 96.0)
         except tk.TclError:
@@ -608,7 +610,17 @@ class FlatButton(tk.Frame):
         self._label = tk.Label(self, text=text, compound="center", font=self._font, bg=back,
                                fg=PALETTE["button_fg"], bd=0, highlightthickness=0, padx=0, pady=0,
                                cursor="hand2")
-        self._label.pack()
+        self._label.pack(side="left")
+        # a split button: an arrow part at the right (a parent playlist's menu), its own click
+        self._arrow_w = self._px(24) if arrow else 0
+        self._arrow = None
+        if arrow:
+            self._arrow = tk.Label(self, text="\u25be", compound="center", font=self._font, bg=back,
+                                   fg=PALETTE["button_fg"], bd=0, highlightthickness=0, padx=0, pady=0, cursor="hand2")
+            self._arrow.pack(side="left")
+            self._arrow.bind("<Enter>", self._on_enter)
+            self._arrow.bind("<Leave>", self._on_leave)
+            self._arrow.bind("<Button-1>", lambda e: self._arrow_command() if self._arrow_command and self._state == "normal" else None)
         self._size = self._measure(text)
         self._draw()
         for widget in (self, self._label):
@@ -626,7 +638,7 @@ class FlatButton(tk.Frame):
             text_w = max(self._font.measure(part) for part in (text or " ").split("\n")) + 2 * px(8)
         lines = self._lines or max(1, (text or "").count("\n") + 1)
         text_h = lines * self._font.metrics("linespace")
-        return text_w + px(6) + 2 * line, text_h + px(4) + 2 * line + px(BUTTON_BAR)
+        return text_w + px(6) + 2 * line + self._arrow_w, text_h + px(4) + 2 * line + px(BUTTON_BAR)
 
     def _draw(self):
         on = self._state == "normal"
@@ -640,10 +652,13 @@ class FlatButton(tk.Frame):
         bar = None if self._quiet else ((self._accent or PALETTE["button_accent"]) if lit
                                         else PALETTE["button_outline"])
         w, h = self._size
-        image = rounded_shape(self, w, h, self._px(CORNER), fill, PALETTE["button_outline"],
-                              self._px(1), bar, self._px(BUTTON_BAR))
-        self._label.config(image=image, fg=(self._text_fg or PALETTE["button_fg"]) if lit else PALETTE["button_off_fg"],
-                           cursor="hand2" if on else "")
+        edge, line = (PALETTE["button_fg"], self._px(2)) if self._target else (PALETTE["button_outline"], self._px(1))
+        fg = (self._text_fg or PALETTE["button_fg"]) if lit else PALETTE["button_off_fg"]
+        image = rounded_shape(self, w - self._arrow_w, h, self._px(CORNER), fill, edge, line, bar, self._px(BUTTON_BAR))
+        self._label.config(image=image, fg=fg, cursor="hand2" if on else "")
+        if self._arrow is not None:
+            part = rounded_shape(self, self._arrow_w, h, self._px(CORNER), fill, edge, line, bar, self._px(BUTTON_BAR))
+            self._arrow.config(image=part, fg=fg, cursor="hand2" if on else "")
 
     def config(self, cnf=None, **kw):
         redraw = False
@@ -652,6 +667,9 @@ class FlatButton(tk.Frame):
             redraw = True
         if "dim" in kw:
             self._dim = bool(kw.pop("dim"))
+            redraw = True
+        if "target" in kw:
+            self._target = bool(kw.pop("target"))
             redraw = True
         if "text" in kw:
             text = kw.pop("text")
@@ -678,7 +696,7 @@ class FlatButton(tk.Frame):
 
     def _over(self):
         x, y = self.winfo_pointerxy()
-        return self.winfo_containing(x, y) in (self, self._label)
+        return self.winfo_containing(x, y) in (self, self._label, self._arrow)
 
     def _on_enter(self, _e):
         self._inside = True

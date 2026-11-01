@@ -372,6 +372,9 @@ def nest(child_id, parent_id):
         return False
     if any(b.get("parent") == child_id for b in items):
         return False
+    items.remove(child)   # after the parent's last child, whatever its place in the list was
+    last = max(k for k, b in enumerate(items) if b["id"] == parent_id or b.get("parent") == parent_id)
+    items.insert(last + 1, child)
     child["parent"] = parent_id
     child["default"] = ""
     save(settle(items))
@@ -406,11 +409,18 @@ def set_default(parent_id, child_id):
 
 
 def runs(button):
-    """The playlist a button's main part builds: the parent's default child if it has one, else itself."""
+    """
+    The playlist a button's main part builds: the parent's default child if it has one, else itself.
+    A blank slate with children (a pure group) runs its first child.
+    """
     if button.get("default"):
         child = get(button["default"])
         if child is not None and child.get("parent") == button["id"]:
             return child
+    if button.get("kind") is None:
+        kids = children(button["id"])
+        if kids:
+            return kids[0]
     return button
 
 

@@ -115,3 +115,19 @@ def test_a_stored_tangle_settles_on_load(app):
     assert loaded["Artist's Top Tracks"]["default"] == ""
     order = names(buttons.load())
     assert order.index("Top 10, Best First") == order.index("Artist's Top Tracks") + 1, "in tree order"
+
+
+def test_a_blank_parent_runs_its_first_child(app):
+    import buttons
+    buttons.load()
+    group, _ = buttons.add_from_choice(("new", None))   # a blank slate: a pure group once it has children
+    buttons.rename(group["id"], "Similar")
+    artists, tracks = buttons.standard("artists"), buttons.standard("tracks")
+    assert buttons.runs(buttons.get(group["id"]))["id"] == group["id"], "nothing under it yet: itself"
+    buttons.nest(artists["id"], group["id"])
+    buttons.nest(tracks["id"], group["id"])
+    assert buttons.runs(buttons.get(group["id"]))["name"] == "Similar Artists", "the first child"
+    buttons.set_default(group["id"], tracks["id"])
+    assert buttons.runs(buttons.get(group["id"]))["name"] == "Similar Tracks"
+    row = names(buttons.shown())
+    assert "Similar" in row and "Similar Artists" not in row and "Similar Tracks" not in row, "the group is on the row, its children aren't"
