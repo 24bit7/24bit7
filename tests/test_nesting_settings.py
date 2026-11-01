@@ -83,13 +83,14 @@ def test_right_click_on_a_child_sets_the_default(app, ui):
     s._buttons_refresh()
     ui.pump(0.3)
     parent, child = buttons.get(top["id"]), buttons.get(deep["id"])
-    # the menu's own commands, run as the menu would
-    buttons.set_default(parent["id"], child["id"])
-    s._buttons_refresh()
+    s._set_child_default(parent, child)   # what the right-click menu's Make Default runs
     ui.pump(0.3)
     rows = rows_by_name(s)
     assert rows["Deep Cut Top Tracks"].tag == "default" and rows["Top 10, Best First"].tag == ""
     assert ui.play.play_buttons[2]._label.cget("text") == "Deep Cut Top Tracks", "the Play tab's face follows"
+    s._set_child_default(buttons.get(top["id"]), buttons.get(deep["id"]))   # Not the Default
+    ui.pump(0.3)
+    assert rows_by_name(s)["Deep Cut Top Tracks"].tag == "" and ui.play.play_buttons[2]._label.cget("text") == "Artist's Top Tracks"
     assert not ui.errors, ui.errors[0]
 
 

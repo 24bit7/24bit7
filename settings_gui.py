@@ -1509,6 +1509,13 @@ class SettingsTab(tk.Frame):
             self._buttons_refresh()
             self._buttons_changed()
 
+    def _set_child_default(self, parent, child):
+        """Make Default on a child, or Not the Default on the one that is; the Play tab's face follows."""
+        is_default = parent.get("default") == child["id"]
+        buttons.set_default(parent["id"], "" if is_default else child["id"])
+        self._buttons_refresh()
+        self._buttons_changed()
+
     def _child_row_menu(self, event, parent, child):
         """Right-click on a child in the list: Make Default (or Not the Default), Out to the Row."""
         import review_gui
@@ -1516,12 +1523,8 @@ class SettingsTab(tk.Frame):
         menu = tk.Menu(self, tearoff=0, bg=p["bg"], fg=p["text"], activebackground=p["row_on"],
                        activeforeground=p["accent"])
         is_default = parent.get("default") == child["id"]
-
-        def set_default():
-            buttons.set_default(parent["id"], "" if is_default else child["id"])
-            self._buttons_refresh()
-            self._buttons_changed()
-        menu.add_command(label=t("Not the Default") if is_default else t("Make Default"), command=set_default)
+        menu.add_command(label=t("Not the Default") if is_default else t("Make Default"),
+                         command=lambda: self._set_child_default(parent, child))
         menu.add_command(label=t("Out to the Row"), command=lambda: (buttons.unnest(child["id"]), self._buttons_refresh(),
                                                                      self._buttons_changed()))
         try:
