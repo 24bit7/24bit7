@@ -158,10 +158,12 @@ def test_a_top_up_of_another_kind_runs_the_standard_playlist_under_the_original_
     no_jazz["rules"] = [{"field": "genre", "op": "not_contains", "value": "jazz", "value2": ""}]
     filters.save(filters.load() + [no_jazz])
     artists = buttons.add("Rock Artists", "artists")
-    buttons.set_settings(artists["id"], dict(artists["settings"], NONSTOP_ARTISTS="1", NONSTOP_ARTISTS_USING="tracks"))
+    # a small first build (two artists), so the zone can't already hold everything the top-up finds in the fake library
+    buttons.set_settings(artists["id"], dict(artists["settings"], NONSTOP_ARTISTS="1", NONSTOP_ARTISTS_USING="tracks",
+                                             SIMILAR_ARTIST_LIMIT="2", SIMILAR_ARTIST_TRACK_COUNT="5", DRIFT_ARTISTS="0"))
     buttons.set_filters(artists["id"], [no_jazz["id"]])
     std = buttons.standard("tracks")
-    buttons.set_settings(std["id"], dict(std["settings"], SIMILAR_TRACK_COUNT="4"))
+    buttons.set_settings(std["id"], dict(std["settings"], SIMILAR_TRACK_COUNT="5"))   # five is the setting's floor
     buttons.run(buttons.get(artists["id"]), report=app.Lines(), seed_info=seed(app))
     z = last_track(app, "Speakers")
     before = len(z.playlist)
@@ -170,8 +172,9 @@ def test_a_top_up_of_another_kind_runs_the_standard_playlist_under_the_original_
     lines = app.Lines()
     jobs[0](lines)
     added = z.playlist[before:]
-    assert 0 < len(added) <= 4, lines.text()
+    assert 0 < len(added) <= 5, lines.text()
     assert lines.has("Filters: No Jazz") and lines.has("with Rock Artists."), lines.text()
+    assert lines.has("target 5,"), lines.text()
     assert all("jazz" not in str(app.jriver.by_key[k].get("Genre", "")).lower() for k in added), lines.text()
 
 
