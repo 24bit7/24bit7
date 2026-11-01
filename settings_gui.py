@@ -1042,6 +1042,8 @@ class AddPlaylistPrompt(PromptWindow):
         if hasattr(self, "ok_button") and key != "existing":   # From Existing's button follows the pick (_describe)
             self.set_ok_text(t("Create") if key == "new" else t("Add"))
         self._describe()
+        if hasattr(self, "ok_button"):
+            self._focus_first()   # the keyboard follows the tab: a list's own Up and Down bind to the list that has focus
 
     def _chosen(self, lb, items):
         sel = lb.curselection() if lb is not None else ()

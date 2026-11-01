@@ -89,7 +89,7 @@ def test_tab_walks_the_tabs_and_the_arrows_work_without_a_click(app, ui):
     import buttons
     win = open_window(ui)
     assert win._tab == "existing"
-    win.focus_force()   # the keyboard is on the window, not in a list
+    win.existing_list.focus_force()   # where the window puts the keyboard when it opens
     ui.pump(0.2)
     win.event_generate("<Down>")
     win.event_generate("<Down>")
@@ -98,7 +98,11 @@ def test_tab_walks_the_tabs_and_the_arrows_work_without_a_click(app, ui):
     assert win.existing_note.cget("text").startswith("Artist's Top Tracks:")
     win.event_generate("<Tab>")
     ui.pump(0.2)
-    assert win._tab == "template" and win.focus_get() is not None
+    assert win._tab == "template" and win.focus_get() is win.template_list, "the keyboard followed the tab"
+    win.event_generate("<Down>")
+    ui.pump(0.2)
+    assert win.template_list.curselection() == (1,), "Down moves the list on show (Ben, 1 Nov: it moved the hidden one)"
+    assert win.existing_list.curselection() == (2,), "and not the hidden one"
     win.event_generate("<Tab>")
     ui.pump(0.2)
     assert win._tab == "new" and win.ok_button.cget("text") == "Create"
