@@ -875,21 +875,84 @@ TEMPLATE_NOTES = {   # what each template is, for the Add a Playlist window
 }
 
 
+class PickList(tk.Frame):
+    """
+    A list of names to pick one from, drawn as rows: the chosen row has a border in the accent colour
+    and no fill, the same as the list under Settings > Playlists (a Tk listbox can only fill a row).
+    Keeps the listbox calls its callers use: get(0, "end"), curselection, selection_set,
+    selection_clear, and <<ListboxSelect>> after a pick. Up and Down move the pick.
+    """
+
+    def __init__(self, parent, items, bg, fg, colours=None, on_double=None):
+        super().__init__(parent, bg=bg, bd=1, relief="solid", takefocus=1, highlightthickness=0)
+        self._items = list(items)
+        self._index = 0 if self._items else None
+        self._rows = []
+        self._bg = bg
+        colours = colours or {}
+        for i, text in enumerate(self._items):
+            row = tk.Frame(self, bg=bg, highlightthickness=2, highlightbackground=bg, highlightcolor=bg)
+            row.pack(fill="x", padx=2, pady=1)
+            label = tk.Label(row, text=text, anchor="w", bg=bg, fg=colours.get(i) or fg, font=("Segoe UI", 10),
+                             padx=6, pady=2, cursor="hand2")
+            label.pack(fill="x")
+            for w in (row, label):
+                w.bind("<Button-1>", lambda e, k=i: (self.focus_set(), self.pick(k)))
+                if on_double is not None:
+                    w.bind("<Double-Button-1>", lambda e, k=i: (self.pick(k), on_double()))
+            self._rows.append(row)
+        self.bind("<Up>", lambda e: self._step(-1))
+        self.bind("<Down>", lambda e: self._step(1))
+        self._paint()
+
+    def _paint(self):
+        for i, row in enumerate(self._rows):
+            colour = PALETTE["button_fg"] if i == self._index else self._bg
+            row.config(highlightbackground=colour, highlightcolor=colour)
+
+    def _step(self, by):
+        if self._items:
+            self.pick(min(len(self._items) - 1, max(0, (self._index if self._index is not None else -1) + by)))
+        return "break"
+
+    def pick(self, i):
+        self._index = i if 0 <= i < len(self._items) else None
+        self._paint()
+        self.event_generate("<<ListboxSelect>>")
+
+    def get(self, first, last=None):
+        if last is None:
+            return self._items[first]
+        return tuple(self._items[first:(len(self._items) if last == "end" else last + 1)])
+
+    def curselection(self):
+        return (self._index,) if self._index is not None else ()
+
+    def selection_set(self, i):
+        self._index = i if 0 <= i < len(self._items) else None
+        self._paint()
+
+    def selection_clear(self, *_):
+        self._index = None
+        self._paint()
+
+
 class AddPlaylistPrompt(PromptWindow):
     """
-    The Add a Playlist window: three tabs. From Existing lists the playlists off the Play tab and
-    ticks the chosen one back; From Template lists the four kinds as shipped, Headliner and Inner
-    Circle; New makes an Artist Matching playlist and opens its page with the name box ready. The
-    answer in .result is ("existing", id), ("template", key) or ("new", None); None for Cancel.
+    The Add a Playlist window: three tabs. From Existing lists every playlist: one that's off the
+    Play tab, Add ticks back; one that's on it, Create Copy copies (Name 2, right after it). From
+    Template lists the four kinds as shipped, Headliner and Inner Circle; New makes a blank slate
+    and opens its page with the name box ready. The answer in .result is ("existing", id),
+    ("copy", id), ("template", key) or ("new", None); None for Cancel.
     """
 
     ok_text = N_("Add")
 
     def __init__(self, parent):
-        self._existing = [b for b in buttons.load() if not b.get("shown", True)]
+        self._existing = buttons.load()
         self._templates = [(kind, t(label), t(TEMPLATE_NOTES[kind])) for kind, label in buttons.KIND_LABELS.items()]
         self._templates += [(r["key"], t(r["name"]), t(TEMPLATE_NOTES[r["key"]])) for r in buttons.READY_MADE]
-        self._tab = "existing" if self._existing else "template"
+        self._tab = "existing"
         super().__init__(parent, t("Add a Playlist"))
 
     def _body(self, inner, bg, fg):
@@ -908,27 +971,27 @@ class AddPlaylistPrompt(PromptWindow):
             self._tabs[key] = (tab, bar)
         tk.Frame(inner, bg=PALETTE["line"], height=px(1)).pack(fill="x", pady=(0, px(12)))
         self._pages = {}
-        self._page_holder = tk.Frame(inner, bg=bg, width=px(420), height=px(190))
+        rows = max(len(self._existing), len(self._templates))   # tall enough for the longer list and its note
+        self._page_holder = tk.Frame(inner, bg=bg, width=px(420), height=max(px(190), rows * px(29) + px(80)))
         self._page_holder.pack(anchor="w", fill="x")
         self._page_holder.pack_propagate(False)
         list_bg = PALETTE.get("entry_bg") or bg
         # From Existing
         page = tk.Frame(self._page_holder, bg=bg)
         self._pages["existing"] = page
-        if self._existing:
-            self.existing_list = self._listbox(page, list_bg, fg, [b["name"] for b in self._existing])
-            self.existing_list.bind("<<ListboxSelect>>", lambda e: self._describe())
-        else:
-            self.existing_list = None
-            tk.Label(page, text=t("Every playlist is on the Play tab already."), font=("Segoe UI", 10), bg=bg,
-                     fg=PALETTE["help_fg"], anchor="w").pack(anchor="w")
+        self.existing_list = self._listbox(page, list_bg, fg, [b["name"] for b in self._existing],
+                                           {i: PALETTE["ai_purple"] for i, b in enumerate(self._existing)
+                                            if b["kind"] == "vibe"})
+        self.existing_list.bind("<<ListboxSelect>>", lambda e: self._describe())
         self.existing_note = tk.Label(page, text="", font=HELP_FONT, bg=bg, fg=PALETTE["help_fg"], anchor="w",
                                       justify="left", wraplength=px(400))
         self.existing_note.pack(anchor="w", pady=(px(8), 0))
         # From Template
         page = tk.Frame(self._page_holder, bg=bg)
         self._pages["template"] = page
-        self.template_list = self._listbox(page, list_bg, fg, [label for _k, label, _n in self._templates])
+        self.template_list = self._listbox(page, list_bg, fg, [label for _k, label, _n in self._templates],
+                                           {i: PALETTE["ai_purple"] for i, (k, _l, _n) in enumerate(self._templates)
+                                            if k == "vibe"})
         self.template_list.bind("<<ListboxSelect>>", lambda e: self._describe())
         self.template_note = tk.Label(page, text="", font=HELP_FONT, bg=bg, fg=PALETTE["help_fg"], anchor="w",
                                       justify="left", wraplength=px(400))
@@ -936,22 +999,15 @@ class AddPlaylistPrompt(PromptWindow):
         # New
         page = tk.Frame(self._page_holder, bg=bg)
         self._pages["new"] = page
-        tk.Label(page, text=t("A new Artist Matching playlist with 24bit7's defaults. Its page opens under Settings > "
-                              "Playlists with the name box ready to type in; its kind is changed on the Config 1 "
-                              "heading."), font=("Segoe UI", 10), bg=bg, fg=fg, anchor="w", justify="left",
+        tk.Label(page, text=t("A blank slate: a playlist with no config yet. Its page opens under Settings > Playlists "
+                              "with the name box ready to type in, and + Add a Config says what it builds."),
+                 font=("Segoe UI", 10), bg=bg, fg=fg, anchor="w", justify="left",
                  wraplength=px(400)).pack(anchor="w")
         self._pick_tab(self._tab)
 
-    def _listbox(self, page, bg, fg, items):
-        lb = tk.Listbox(page, height=6, activestyle="none", exportselection=False, font=("Segoe UI", 10), bg=bg, fg=fg,
-                        selectbackground=PALETTE["button_fg"], selectforeground="#000000", bd=1, relief="solid",
-                        highlightthickness=0)
-        for item in items:
-            lb.insert("end", item)
-        if items:
-            lb.selection_set(0)
+    def _listbox(self, page, bg, fg, items, colours=None):
+        lb = PickList(page, items, bg, fg, colours=colours, on_double=self.ok)
         lb.pack(fill="x")
-        lb.bind("<Double-Button-1>", lambda e: self.ok())
         return lb
 
     def _pick_tab(self, key):
@@ -963,7 +1019,7 @@ class AddPlaylistPrompt(PromptWindow):
         for k, page in self._pages.items():
             page.pack_forget()
         self._pages[key].pack(fill="both", expand=True)
-        if hasattr(self, "ok_button"):
+        if hasattr(self, "ok_button") and key != "existing":   # From Existing's button follows the pick (_describe)
             self.set_ok_text(t("Create") if key == "new" else t("Add"))
         self._describe()
 
@@ -973,11 +1029,20 @@ class AddPlaylistPrompt(PromptWindow):
         return items[i] if 0 <= i < len(items) else None
 
     def _describe(self):
-        if self._tab == "existing" and self.existing_list is not None:
+        if self._tab == "existing":
             b = self._chosen(self.existing_list, self._existing)
             if b is not None:
-                self.existing_note.config(text=t("{name}: {what}. Off the Play tab; Add puts it back at its place.",
-                                                 name=b["name"], what=buttons.describe(b)))
+                if b.get("shown", True):
+                    self.existing_note.config(text=t("{name}: {what}. On the Play tab already; Create Copy makes {copy} "
+                                                     "right after it.", name=b["name"], what=buttons.describe(b),
+                                                     copy=buttons.unique_name(b["name"])))
+                else:
+                    self.existing_note.config(text=t("{name}: {what}. Off the Play tab; Add puts it back at its place.",
+                                                     name=b["name"], what=buttons.describe(b)))
+                if hasattr(self, "ok_button"):
+                    wanted = t("Create Copy") if b.get("shown", True) else t("Add")
+                    if self.ok_button.cget("text") != wanted:
+                        self.set_ok_text(wanted)
         elif self._tab == "template":
             chosen = self._chosen(self.template_list, self._templates)
             if chosen is not None:
@@ -992,7 +1057,7 @@ class AddPlaylistPrompt(PromptWindow):
             b = self._chosen(self.existing_list, self._existing)
             if b is None:
                 return
-            self.result = ("existing", b["id"])
+            self.result = ("copy" if b.get("shown", True) else "existing", b["id"])
         elif self._tab == "template":
             chosen = self._chosen(self.template_list, self._templates)
             if chosen is None:
@@ -1004,7 +1069,7 @@ class AddPlaylistPrompt(PromptWindow):
 
 
 def ask_new_button(parent):
-    """Opens the Add a Playlist window and waits: ("existing", id), ("template", key), ("new", None), or None."""
+    """Opens the Add a Playlist window and waits: ("existing", id), ("copy", id), ("template", key), ("new", None), or None."""
     win = AddPlaylistPrompt(parent)
     try:
         win.grab_set()
@@ -1289,11 +1354,8 @@ class SettingsTab(tk.Frame):
             b.pack(pady=(gap, 4))
             Tooltip(b, t(note))
             self._list_buttons[key] = b
-        tk.Label(box, text=t("Ticked: on the Play tab. Rename: click the name at the top of its page."),
-                 fg=PALETTE["help_fg"], font=HELP_FONT, wraplength=scaled(box, 220), justify="left").grid(
-            row=1, column=0, sticky="w", pady=(8, 0))
         restore = tk.Label(box, text=t("Restore Default Playlists"), fg=PALETTE["button_fg"], font=HELP_FONT, cursor="hand2")
-        restore.grid(row=2, column=0, sticky="w", pady=(6, 0))
+        restore.grid(row=1, column=0, sticky="w", pady=(8, 0))
         restore.bind("<Button-1>", lambda e: self._button_restore())
         Tooltip(restore, t("Puts back any of the standard playlists that's been deleted."))
         self._button_right = tk.Frame(outer, pady=12)
@@ -1339,11 +1401,11 @@ class SettingsTab(tk.Frame):
             child.destroy()
         self._button_rows = []
         bg = self._button_list.cget("bg")
-        chosen_bg = PALETTE.get("row_on") or PALETTE["button_hover"]
         for b in self._buttons:
-            on = b["id"] == self._button_id
-            row = tk.Frame(self._button_list, bg=chosen_bg if on else bg)
-            row.pack(fill="x")
+            on = b["id"] == self._button_id   # the chosen row: a border in the accent colour, no fill
+            edge = PALETTE["button_fg"] if on else bg
+            row = tk.Frame(self._button_list, bg=bg, highlightthickness=2, highlightbackground=edge, highlightcolor=edge)
+            row.pack(fill="x", padx=2, pady=1)
             var = tk.BooleanVar(value=b.get("shown", True))
             tick = ttk.Checkbutton(row, variable=var, command=lambda bt=b, v=var: self._button_tick_changed(bt, v.get()))
             tick.pack(side="left", padx=(6, 0))
@@ -1452,7 +1514,7 @@ class SettingsTab(tk.Frame):
         self._button_title.pack(side="left")
         tk.Label(title_row, text=t("click to rename"), fg=PALETTE["help_fg"], font=HELP_FONT).pack(side="left", padx=(10, 0))
         self._button_title.bind("<Button-1>", lambda e: self._button_rename_inline(button))
-        about = t(buttons.KIND_LABELS[kind])
+        about = t("No config yet: add one below.") if kind is None else t(buttons.KIND_LABELS[kind])
         if button.get("standard"):
             about = t("Standard {kind} playlist: what a device's voice commands run unless Settings > Devices says otherwise.",
                       kind=about)
@@ -1487,8 +1549,11 @@ class SettingsTab(tk.Frame):
             p.config_index, p.config_kind = n, cfg["kind"]
             p.save = lambda *_, p=p: self._save_button_page(p)
             pages.append((p, block))
-        self._button_page, self._button_pages = pages[0][0], [p for p, _ in pages]
+        self._button_page, self._button_pages = (pages[0][0] if pages else None), [p for p, _ in pages]
         self._add_config_row(inner, button)
+        if not pages:   # a blank slate: the row above is all there is until a config is added
+            self._refresh_key_marks()
+            return
         if len(cfgs) > 1:
             self._mix_section(inner, button, cfgs, mix)
         # the sections for the whole playlist sit under the configs, in a fixed order whichever config fills them
@@ -1568,7 +1633,7 @@ class SettingsTab(tk.Frame):
             arrow.config(text="\u25be" if shown["open"] else "\u25b8")
         for w in (arrow, title):
             w.bind("<Button-1>", toggle)
-        if n > 0:
+        if n > 0 or not button.get("standard"):   # a standard playlist keeps its own config
             remove = tk.Label(head, text=t("Remove"), fg=PALETTE["help_fg"], font=HELP_FONT, cursor="hand2")
             remove.pack(side="right")
             remove.bind("<Button-1>", lambda e: self._config_remove(button, n))
@@ -1593,17 +1658,20 @@ class SettingsTab(tk.Frame):
         self._buttons_changed()
 
     def _add_config_row(self, inner, button):
-        """+ Add Another Config: a menu of the four kinds; the new config starts from the standard playlist of its kind."""
+        """+ Add Another Config (+ Add a Config on a blank slate): a menu of the four kinds; the new config starts from the standard playlist of its kind."""
         row = tk.Frame(inner)
         row.grid(row=inner.grid_size()[1], column=0, sticky="w", pady=(0, 14))
-        add = ttk.Button(row, text=t("+ Add Another Config"), command=lambda: menu.tk_popup(
+        empty = not buttons.configs(button)
+        add = ttk.Button(row, text=t("+ Add a Config") if empty else t("+ Add Another Config"), command=lambda: menu.tk_popup(
             add.winfo_rootx(), add.winfo_rooty() + add.winfo_height()))
         add.pack(side="left")
         menu = tk.Menu(row, tearoff=0)
         for kind, label in buttons.KIND_LABELS.items():
             menu.add_command(label=t(label), command=lambda k=kind: self._config_add(button, k))
-        Tooltip(add, t("A second config finds tracks its own way (Artist Matching under Artist's Top Tracks, say), "
-                       "and the Mix section that appears says how they come together."))
+        Tooltip(add, t("What this playlist builds: Artist Matching, Track Matching, Artist's Top Tracks or an AI "
+                       "Playlist, starting from the standard playlist of that kind.") if empty else
+                t("A second config finds tracks its own way (Artist Matching under Artist's Top Tracks, say), "
+                  "and the Mix section that appears says how they come together."))
         self._config_menu = menu
 
     def _config_add(self, button, kind):

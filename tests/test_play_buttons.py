@@ -58,7 +58,7 @@ def test_plus_opens_the_window_and_its_three_answers_land(app, ui, monkeypatch):
     monkeypatch.setattr(p, "_ask_new_button", lambda: ("new", None))
     p.on_add_button()
     new = p.play_buttons[-1]._button
-    assert new["name"] == "New Playlist" and new["kind"] == "artists"
+    assert new["name"] == "New Playlist" and new["kind"] is None, "New is a blank slate"
     assert opened == [(new["id"], True)], "its page opens with the name box ready"
     monkeypatch.setattr(p, "_ask_new_button", lambda: None)
     p.on_add_button()
@@ -93,6 +93,36 @@ def test_opening_and_closing_more_options_keeps_the_console(app, ui):
     ui.pump(0.3)
     text = p.log.get("1.0", "end")
     assert "A line to keep." in text and "showing the settings of Similar Tracks" in text, text
+    assert not ui.errors, ui.errors[0]
+
+
+def test_the_console_keeps_one_more_options_line_naming_the_armed_playlist(app, ui):
+    p = ui.play
+    p._end_greeting(keep=False)
+    p._append_log("A line to keep.")
+    p._show_more(True, save=False)
+    ui.pump(0.3)
+    for i in (1, 2, 3):
+        p.play_buttons[i]._command()   # arms another playlist each time
+        ui.pump(0.2)
+    text = p.log.get("1.0", "end")
+    assert text.count("More Options:") == 1, text
+    assert "showing the settings of Headliner." in text and "Similar Tracks" not in text, "rewritten in place, not added to"
+    assert text.index("A line to keep.") < text.index("More Options:"), "where it stood"
+    p._append_log("Another line.")
+    p.play_buttons[0]._command()
+    ui.pump(0.2)
+    text = p.log.get("1.0", "end")
+    assert text.count("More Options:") == 1 and text.index("More Options:") < text.index("Another line.")
+    p._show_more(False, save=False)
+    p._append_log("Build output.")
+    p._live.clear()   # a build starts: the console was cleared
+    p.log.config(state="normal")
+    p.log.delete("1.0", "end")
+    p.log.config(state="disabled")
+    p._show_more(True, save=False)
+    ui.pump(0.3)
+    assert p.log.get("1.0", "end").count("More Options:") == 1, "written afresh after a clear"
     assert not ui.errors, ui.errors[0]
 
 

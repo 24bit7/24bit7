@@ -107,6 +107,41 @@ PLAY_NOTES = {
 BUTTON_GAP = 8   # between the Play tab's buttons, and between its rows of them
 
 
+class DropPill(tk.Canvas):
+    """
+    A drop target while a playlist is dragged (Settings, Remove): a pill with a thin dashed outline
+    in its colour, filled in with that colour while the pointer is over it.
+    """
+
+    def __init__(self, master, w, h, text, colour, bg, font, px):
+        super().__init__(master, width=w, height=h, bg=bg, bd=0, highlightthickness=0)
+        self._w, self._h, self._text, self._colour, self._font, self._px = w, h, text, colour, font, px
+        self.lit = None
+        self.set_lit(False)
+
+    def set_lit(self, on):
+        if on == self.lit:
+            return
+        self.lit = on
+        self.delete("all")
+        c, px = self._colour, self._px
+        w, h = self._w - 1, self._h - 1
+        r = h // 2
+        if on:
+            self.create_oval(0, 0, 2 * r, h, fill=c, outline=c)
+            self.create_oval(w - 2 * r, 0, w, h, fill=c, outline=c)
+            self.create_rectangle(r, 0, w - r, h, fill=c, outline=c)
+            fg = "#000000"
+        else:
+            dash, line = (px(5), px(4)), px(1)
+            self.create_arc(0, 0, 2 * r, h, start=90, extent=180, style="arc", outline=c, width=line, dash=dash)
+            self.create_arc(w - 2 * r, 0, w, h, start=-90, extent=180, style="arc", outline=c, width=line, dash=dash)
+            self.create_line(r, 0, w - r, 0, fill=c, width=line, dash=dash)
+            self.create_line(r, h, w - r, h, fill=c, width=line, dash=dash)
+            fg = c
+        self.create_text(self._w / 2, self._h / 2, text=self._text, font=self._font, fill=fg)
+
+
 class PlayTab(tk.Frame):
     def __init__(self, master, root):
         super().__init__(master)
@@ -462,6 +497,8 @@ class PlayTab(tk.Frame):
 
     def _dial_values(self, button):
         """Each dial's value for a playlist, from its settings over .env, or None where the kind has no such thing."""
+        if button.get("kind") is None:   # a blank slate: no dials
+            return {dial: None for dial in self.DIAL_KEYS}
         g = button["kind"].upper()
         env = read_env()
         env.update(button.get("settings") or {})
@@ -510,7 +547,7 @@ class PlayTab(tk.Frame):
         if self._dials_loading:
             return
         button = self._armed_playlist()
-        if button is None:
+        if button is None or button.get("kind") is None:
             return
         g = button["kind"].upper()
         value = self._dial_vars[dial].get()
@@ -548,6 +585,8 @@ class PlayTab(tk.Frame):
 
     def _button_note(self, button):
         """A button's hover note: its own (a standard button) or its kind's, then a line saying what's on."""
+        if button.get("kind") is None:
+            return t("No config yet. Click to open its page and add one.")
         kind_name = buttons.KIND_NAMES[button["kind"]]
         note = t(PLAY_NOTES.get(button["name"] if button.get("standard") or button["name"] in PLAY_NOTES
                                 else kind_name, PLAY_NOTES[kind_name]))
@@ -567,17 +606,20 @@ class PlayTab(tk.Frame):
             self._armed = shown[0]["id"] if shown else None   # the first on the row, until one is used
         for button in shown:
             ai = button["kind"] == "vibe"
+            empty = button["kind"] is None   # a blank slate: grey text, and its note always shows
             b = FlatButton(self.button_row, text=button["name"], width=18, height=2,
                            command=lambda bt=button: self._press_playlist(bt),
                            accent=PALETTE["ai_purple"] if ai else None,   # magenta: AI credits
-                           text_fg=PALETTE["ai_purple"] if ai else None)
+                           text_fg=PALETTE["ai_purple"] if ai else PALETTE["help_fg"] if empty else None)
             b._name, b._kind, b._button = button["name"], button["kind"], button
             for w in (b, b._label):
                 w.bind("<Button-3>", lambda e, bt=button: self._button_menu(e, bt))
                 w.bind("<ButtonPress-1>", lambda e, fb=b: self._drag_start(e, fb), add="+")
                 w.bind("<B1-Motion>", lambda e, fb=b: self._drag_move(e, fb), add="+")
                 w.bind("<ButtonRelease-1>", lambda e, fb=b: self._drag_end(e, fb), add="+")
-            if ai:   # its "why it's greyed out" note shows whatever ? says
+            if empty:
+                Tooltip(b, self._button_note(button), wrap=wrap)
+            elif ai:   # its "why it's greyed out" note shows whatever ? says
                 Tooltip(b, self._button_note(button), when=lambda: on() and engine.ai_enabled(), wrap=wrap)
                 b._ai_tip = Tooltip(b, "", when=lambda: not engine.ai_enabled())
             else:
@@ -635,7 +677,41 @@ class PlayTab(tk.Frame):
         if say:
             button = buttons.get(button_id)
             if button is not None:
-                self._append_log(t("More Options: showing the settings of {name}.", name=button["name"]))
+                self._say_more_options(t("More Options: showing the settings of {name}.", name=button["name"]))
+
+    def _say_more_options(self, line):
+        """
+        The console's one More Options line, naming the playlist whose settings the dials show. Arming
+        another playlist rewrites it in place rather than adding a line per click; once a build has
+        cleared the console, the line is written afresh.
+        """
+        old = getattr(self, "_more_note", None)
+        if old is not None and old in self._live:
+            self._live[self._live.index(old)] = line
+            if old in self._held:
+                self._held[self._held.index(old)] = line
+            else:
+                self._replace_line(old, line)
+            self._more_note = line
+            return
+        self._more_note = self._append_log(line)
+
+    def _replace_line(self, old, new):
+        """Rewrites one console line where it stands, if it's on screen; returns whether it was."""
+        if not self._live_visible():
+            return False
+        at = self.log.search(old, "1.0", stopindex="end", exact=True)
+        while at:
+            start, end = f"{at} linestart", f"{at} lineend"
+            if self.log.get(start, end) == old:
+                kind = self._line_kind(new)
+                self.log.config(state="normal")
+                self.log.delete(start, end)
+                self.log.insert(start, new, (kind,) if kind else ())
+                self.log.config(state="disabled")
+                return True
+            at = self.log.search(old, f"{at}+1c", stopindex="end", exact=True)
+        return False
 
     def _sync_armed(self):
         """With More Options open, every playlist but the armed one dims; closed, all read as usual."""
@@ -653,7 +729,8 @@ class PlayTab(tk.Frame):
     def _drag_start(self, event, fb):
         if fb._state != "normal":
             return
-        self._drag = {"button": fb, "x": event.x_root, "y": event.y_root, "home": fb.place_info()}
+        self._drag = {"button": fb, "x": event.x_root, "y": event.y_root,
+                      "grab": (event.x_root - fb.winfo_rootx(), event.y_root - fb.winfo_rooty())}
         self._drag_moved = False
 
     def _drag_move(self, event, fb):
@@ -665,11 +742,66 @@ class PlayTab(tk.Frame):
                 return
             self._drag_moved = True
             fb._pressed = False
-            fb.lift()
+            self._show_drag_image(fb)
+            fb.config(dim=True)   # its slot stays, dimmed, and moves along the row as the pointer goes
             self._show_drop_targets(fb._button)
-        home = drag["home"]
-        fb.place(x=int(home["x"]) + event.x_root - drag["x"], y=int(home["y"]) + event.y_root - drag["y"])
+        gx, gy = drag["grab"]
+        self._drag_image.geometry(f"+{event.x_root - gx}+{event.y_root - gy}")
+        over = self._target_at(event.x_root, event.y_root)
         self._highlight_target(event.x_root, event.y_root)
+        if over is None:
+            self._slide_slot(fb, event.x_root, event.y_root)
+
+    def _show_drag_image(self, fb):
+        """
+        The dragged playlist follows the pointer as a small borderless window with the button's look.
+        (Tk clips a widget to its parent, so the button itself could never show over the console.)
+        """
+        self._hide_drag_image()
+        top = self._drag_image = tk.Toplevel(self)
+        top.withdraw()
+        top.overrideredirect(True)
+        try:
+            top.attributes("-topmost", True)
+            top.attributes("-alpha", 0.92)
+        except tk.TclError:
+            pass
+        top.configure(bg=self.button_row.cget("bg"))
+        tk.Label(top, image=fb._label.cget("image"), text=fb._name, compound="center", font=fb._font,
+                 fg=fb._label.cget("fg"), bg=self.button_row.cget("bg"), bd=0, highlightthickness=0).pack()
+        top.geometry(f"+{fb.winfo_rootx()}+{fb.winfo_rooty()}")
+        top.deiconify()
+
+    def _hide_drag_image(self):
+        top = getattr(self, "_drag_image", None)
+        if top is not None:
+            try:
+                top.destroy()
+            except tk.TclError:
+                pass
+        self._drag_image = None
+
+    def _slide_slot(self, fb, x_root, y_root):
+        """
+        Live reordering: the dragged playlist's slot moves in front of the first button whose middle is
+        right of the pointer on the pointer's row, and the row re-flows, so the gap opens where the
+        drop will land. Below the row (over the console) nothing moves.
+        """
+        others = [b for b in self.play_buttons if b is not fb]
+        rows = sorted({b.winfo_rooty() for b in others})
+        row_y = next((y for y in rows if y <= y_root <= y + fb.winfo_height() + BUTTON_GAP), None)
+        if row_y is None:
+            return
+        on_row = [b for b in others if b.winfo_rooty() == row_y]
+        before = next((b for b in on_row if x_root < b.winfo_rootx() + b.winfo_width() // 2), None)
+        if before is None:   # past the row's last button: after it, so before whatever follows on the next row
+            after_row = [b for b in others if b.winfo_rooty() > row_y]
+            before = after_row[0] if after_row else None
+        order = others[:]
+        order.insert(order.index(before) if before is not None else len(order), fb)
+        if order != self.play_buttons:
+            self.play_buttons = order
+            self._flow_buttons()
 
     def _drag_end(self, event, fb):
         drag = getattr(self, "_drag", None)
@@ -679,55 +811,45 @@ class PlayTab(tk.Frame):
             return
         target = self._target_at(event.x_root, event.y_root)
         self._hide_drop_targets()
+        self._hide_drag_image()
         button = fb._button
         if target == "settings":
             self.open_playlist_settings(button["id"])
         elif target == "remove":
             self._remove_button(button)
-        else:
-            # dropped on the row: in front of the first button whose middle is right of the pointer
-            before = None
-            for other in self.play_buttons:
-                if other is fb:
-                    continue
-                mid = other.winfo_rootx() + other.winfo_width() // 2
-                if event.x_root < mid and (other.winfo_rooty() <= event.y_root <= other.winfo_rooty() + other.winfo_height()
-                                           or abs(other.winfo_rooty() - fb.winfo_rooty()) < 4):
-                    before = other._button["id"]
-                    break
+        else:   # dropped on the row: where its slot has slid to
+            i = self.play_buttons.index(fb)
+            before = self.play_buttons[i + 1]._button["id"] if i + 1 < len(self.play_buttons) else None
             buttons.move_to(button["id"], before)
         self.after(50, lambda: setattr(self, "_drag_moved", False))
         self.refresh_buttons()
 
     def _show_drop_targets(self, button):
         """
-        While a playlist is held, a strip slides over the top of the console: "Drop {name} on", then two
-        big pills, Settings (the accent) and Remove (orange). The one under the pointer fills in.
+        While a playlist is held, a strip slides over the top of the console with two big pills in the
+        middle, Settings (the accent) and Remove (orange): a thin dashed outline each, filled in while
+        the pointer is over it.
         """
         self._hide_drop_targets()
-        px = self.winfo_fpixels("1i") / 96.0
+        scale = self.winfo_fpixels("1i") / 96.0
+        px = lambda n: max(1, int(round(n * scale)))   # noqa: E731
         strip_bg = tabs.mix_colour(self, "#ffffff", "#000000", 0.11)
         box = self._drop_box = tk.Frame(self.console_box, bg=strip_bg)
         box.place(relx=0, y=0, relwidth=1)
         inner = tk.Frame(box, bg=strip_bg)
-        inner.pack(pady=int(14 * px))
-        tk.Label(inner, text=t("Drop {name} on", name=button["name"]), font=("Segoe UI", 10), fg="#bdbdbd",
-                 bg=strip_bg).pack(side="left", padx=(0, int(18 * px)))
-        self._drop_images, self._targets = [], {}
-        font = ("Segoe UI", 15, "bold")
+        inner.pack(pady=px(14))   # packed without a side: centred
+        self._targets = {}
+        font = ("Segoe UI", 11, "bold")
         measure = tkfont.Font(root=self, font=font)
-        h = int(56 * px)
+        h = px(56)
         for key, text, colour in (("settings", "\u2699  " + t("Settings"), PALETTE["button_fg"]),
                                   ("remove", "\u2715  " + t("Remove"), PALETTE["brand_orange"])):
-            w = measure.measure(text) + int(64 * px)
-            plain = tabs.rounded_shape(self, w, h, h // 2, strip_bg, colour, int(2 * px))
-            lit = tabs.rounded_shape(self, w, h, h // 2, colour, colour, int(2 * px))
-            self._drop_images += [plain, lit]
-            cell = tk.Frame(inner, bg=strip_bg, padx=int(12 * px))
+            w = max(measure.measure(text) + px(64), px(200))
+            cell = tk.Frame(inner, bg=strip_bg, padx=px(14))
             cell.pack(side="left")
-            pill = tk.Label(cell, text=text, image=plain, compound="center", font=font, fg=colour, bg=strip_bg, bd=0)
+            pill = DropPill(cell, w, h, text, colour, strip_bg, font, px)
             pill.pack()
-            self._targets[key] = (cell, pill, (colour, plain, lit))
+            self._targets[key] = (cell, pill)
 
     def _hide_drop_targets(self):
         box = getattr(self, "_drop_box", None)
@@ -736,7 +858,7 @@ class PlayTab(tk.Frame):
         self._drop_box, self._targets = None, {}
 
     def _target_at(self, x_root, y_root):
-        for key, (cell, _ring, _colour) in getattr(self, "_targets", {}).items():
+        for key, (cell, _pill) in getattr(self, "_targets", {}).items():
             if (cell.winfo_rootx() <= x_root <= cell.winfo_rootx() + cell.winfo_width()
                     and cell.winfo_rooty() <= y_root <= cell.winfo_rooty() + cell.winfo_height()):
                 return key
@@ -744,8 +866,8 @@ class PlayTab(tk.Frame):
 
     def _highlight_target(self, x_root, y_root):
         over = self._target_at(x_root, y_root)
-        for key, (_cell, pill, (colour, plain, lit)) in getattr(self, "_targets", {}).items():
-            pill.config(image=lit if key == over else plain, fg="#000000" if key == over else colour)
+        for key, (_cell, pill) in getattr(self, "_targets", {}).items():
+            pill.set_lit(key == over)
 
     def open_playlist_settings(self, button_id, rename=False):
         """Settings, on this playlist's page (rename: with the name box open, for a new playlist)."""
@@ -842,6 +964,10 @@ class PlayTab(tk.Frame):
         """Runs a playlist: from the Search tab's typed seed, or from the Now Playing zone's track."""
         if self.running:
             return
+        if button["kind"] is None:   # a blank slate: say so, and open its page to add a config
+            self._append_log(t(buttons.NO_CONFIG_YET, name=button["name"]))
+            self.open_playlist_settings(button["id"])
+            return
         if button["kind"] == "vibe":
             return self.on_vibe(button)
         if self._seed_is_search():
@@ -880,8 +1006,8 @@ class PlayTab(tk.Frame):
             if open_ and (save or not was_open) and hasattr(self, "log"):
                 button = self._armed_playlist()
                 if button is not None:
-                    self._append_log(t("More Options: showing the settings of {name}, the last playlist you used. Click "
-                                       "another playlist to see its.", name=button["name"]))
+                    self._say_more_options(t("More Options: showing the settings of {name}, the last playlist you used. "
+                                             "Click another playlist to see its.", name=button["name"]))
 
     def _on_mix_rows_changed(self):
         """An added playlist changed: the console says what the next build will do, once per change."""
@@ -1271,8 +1397,9 @@ class PlayTab(tk.Frame):
             self.review_panel.console_activity()   # a dot on Console while Review is showing
         if self._greeting_active:
             self._held.append(line)   # not into the middle of the greeting: shown once it clears
-            return
+            return line
         self._insert_line(line)
+        return line
 
     def _insert_line(self, line):
         """Puts a line on screen, coloured by its kind, if the tab it belongs to is the one showing."""

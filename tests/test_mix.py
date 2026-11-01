@@ -59,7 +59,8 @@ def test_add_remove_and_set_a_config(app):
     b = buttons.remove_config(b["id"], 1)
     assert [c["kind"] for c in buttons.configs(b)] == ["top", "vibe"]
     assert b["mix"]["continue_as"] == 0 and b["mix"]["pattern"] == [3, 1], "indexes and the pattern follow the removal"
-    assert buttons.remove_config(b["id"], 0) == b, "the first config can't be removed"
+    b = buttons.remove_config(b["id"], 0)
+    assert [c["kind"] for c in buttons.configs(b)] == ["vibe"], "the first config off: the next moves up (a blank slate, 1 Nov)"
 
 
 def test_a_configs_kind_can_change_and_starts_again_from_the_standard_of_that_kind(app):
@@ -90,9 +91,12 @@ def test_add_from_choice_covers_the_windows_three_ways_in(app):
     made, _ = buttons.add_from_choice(("template", "tracks"))
     assert made["name"] == "Track Matching" and made["kind"] == "tracks" and "SIMILAR_TRACK_COUNT" not in made["settings"]
     new, wants_page = buttons.add_from_choice(("new", None))
-    assert new["name"] == "New Playlist" and new["kind"] == "artists" and new["shown"] is True and wants_page is True
+    assert new["name"] == "New Playlist" and new["kind"] is None and new["shown"] is True and wants_page is True
     new2, _ = buttons.add_from_choice(("new", None))
     assert new2["name"] == "New Playlist 2"
+    copy, wants_page = buttons.add_from_choice(("copy", head["id"]))
+    assert copy["name"] == "Headliner 2" and [c["kind"] for c in buttons.configs(copy)] == ["top", "artists"]
+    assert wants_page is False and [b["name"] for b in buttons.load()].index("Headliner 2") ==         [b["name"] for b in buttons.load()].index("Headliner") + 1, "right after the one it copies"
 
 
 def test_the_old_guests_headliner_becomes_two_configs_on_load(app):

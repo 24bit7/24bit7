@@ -83,6 +83,9 @@ KIND_KEYS = {kind: _OWN[kind] + [k.format(G=kind.upper()) for k in _EACH + (_DRI
 GLOBAL_KEYS = ["AI_MODERATOR", "NONSTOP", "NONSTOP_USING", "NONSTOP_RESEED", "NONSTOP_VIBE",
                "SKIP_LONG_CLOSERS", "LONG_CLOSER_MINUTES", "FALLBACK_SPOKEN"]
 
+# What a blank slate says when something tries to build it (the Play tab, a shortcut, a voice command)
+NO_CONFIG_YET = N_("{name} has no config yet. Add one on its page under Settings > Playlists.")
+
 # Which engine build each kind runs
 BUILDERS = {"artists": "create_similar_playlist", "tracks": "create_similar_tracks_playlist",
             "top": "play_top_n", "vibe": "create_vibe_playlist"}
@@ -91,30 +94,39 @@ BUILDERS = {"artists": "create_similar_playlist", "tracks": "create_similar_trac
 def blank(name, kind):
     """
     A playlist: its first config is its own kind and settings; "configs" holds any further ones
-    ({"kind", "settings"}), and "mix" says how they come together (see mix_default).
+    ({"kind", "settings"}), and "mix" says how they come together (see mix_default). kind None
+    is a blank slate (New under the Play tab's +): no config yet, so nothing to build until one
+    is added on its page; the first config added becomes its own.
     """
     return {"id": uuid.uuid4().hex[:8], "name": name, "kind": kind, "settings": {}, "filters": [],
             "shortcut": "", "standard": "", "shown": True, "configs": [], "mix": mix_default()}
 
 
 def tidy(item):
-    kind = item.get("kind") if item.get("kind") in KIND_NAMES else "artists"
+    if "kind" in item and item.get("kind") is None:
+        kind = None   # a blank slate, saved as it was made
+    else:
+        kind = item.get("kind") if item.get("kind") in KIND_NAMES else "artists"
     out = blank(str(item.get("name") or t("Button")), kind)
     out.update({k: v for k, v in item.items() if k in out})
     settings = {str(k): str(v) for k, v in (item.get("settings") or {}).items()}
     out["configs"] = [{"kind": c["kind"], "settings": {str(k): str(v) for k, v in (c.get("settings") or {}).items()
                                                         if k in KIND_KEYS[c["kind"]]}}
                       for c in (out.get("configs") or []) if isinstance(c, dict) and c.get("kind") in KIND_NAMES]
+    if kind is None and out["configs"]:   # a blank slate carries no configs: the first is its own
+        first = out["configs"].pop(0)
+        kind, settings = first["kind"], first["settings"]
+        out["kind"] = kind
     if kind == "top" and settings.get("TOP_GUESTS") == "third" and not out["configs"]:
         # Headliner as the dev build of 30 Oct 2026 kept it (a Guests setting): now top tracks + artist matching
         recipe = next(r for r in READY_MADE if r["key"] == "headliner")
         env = _env_values()
         out["configs"] = [{"kind": k, "settings": dict(settings_from(env.get, k), **extra)} for k, extra in recipe["configs"]]
         out["mix"] = dict(recipe["mix"])
-    out["settings"] = {k: v for k, v in settings.items() if k in KIND_KEYS[kind]}
+    out["settings"] = {k: v for k, v in settings.items() if k in KIND_KEYS.get(kind, [])}
     out["filters"] = [str(f) for f in (out.get("filters") or [])]
     out["shown"] = bool(out.get("shown", True))
-    out["mix"] = tidy_mix(out.get("mix"), len(out["configs"]) + 1)
+    out["mix"] = tidy_mix(out.get("mix"), len(out["configs"]) + (0 if kind is None else 1))
     return out
 
 
@@ -139,7 +151,9 @@ def tidy_mix(mix, count):
 
 
 def configs(button):
-    """A playlist's configs in order: its own kind and settings first, then any added under it."""
+    """A playlist's configs in order: its own kind and settings first, then any added under it. A blank slate has none."""
+    if button.get("kind") is None:
+        return []
     return [{"kind": button["kind"], "settings": button.get("settings") or {}}] + list(button.get("configs") or [])
 
 
@@ -154,7 +168,7 @@ def continue_as(button):
     settings as its own and no further configs. A plain playlist comes back as itself.
     """
     cfgs = configs(button)
-    if len(cfgs) == 1:
+    if len(cfgs) <= 1:   # a plain playlist, or a blank slate
         return button
     i = (button.get("mix") or {}).get("continue_as", 0)
     cfg = cfgs[i] if 0 <= i < len(cfgs) else cfgs[0]
@@ -166,7 +180,12 @@ def add_config(button_id, kind):
     items = load()
     b = next(x for x in items if x["id"] == button_id)
     base = standard(kind)
-    b["configs"].append({"kind": kind, "settings": dict(base["settings"]) if base else template_settings(kind)})
+    settings = dict(base["settings"]) if base else template_settings(kind)
+    if b.get("kind") is None:   # a blank slate: its first config is its own
+        b["kind"], b["settings"], b["configs"], b["mix"] = kind, settings, [], mix_default()
+        save(items)
+        return get(button_id)
+    b["configs"].append({"kind": kind, "settings": settings})
     cfgs = configs(b)
     if not has_drift(cfgs[b["mix"]["drift_from"]]["kind"]) and has_drift(kind):
         b["mix"]["drift_from"] = len(cfgs) - 1   # the first config with Drift gets it
@@ -175,12 +194,23 @@ def add_config(button_id, kind):
 
 
 def remove_config(button_id, index):
-    """Takes config `index` (1 or more: the first is the playlist itself) off a playlist."""
+    """
+    Takes config `index` off a playlist. Index 0 is the playlist's own: the next config moves up
+    into its place, or with none left the playlist is a blank slate again. A standard playlist
+    keeps its own.
+    """
     items = load()
     b = next(x for x in items if x["id"] == button_id)
-    if not 1 <= index <= len(b["configs"]):
+    if not 0 <= index < len(configs(b)) or (index == 0 and b.get("standard")):
         return get(button_id)
-    del b["configs"][index - 1]
+    if index == 0:
+        if b["configs"]:
+            first = b["configs"].pop(0)
+            b["kind"], b["settings"] = first["kind"], first["settings"]
+        else:
+            b["kind"], b["settings"] = None, {}
+    else:
+        del b["configs"][index - 1]
     mix = b["mix"]
     for key in ("drift_from", "continue_as"):
         if mix[key] == index:
@@ -233,9 +263,9 @@ def set_config_kind(button_id, index, kind):
 def add_from_choice(choice):
     """
     The Add a Playlist window's answer: ("existing", id) ticks a playlist back onto the Play tab;
-    ("template", key) adds the template (a kind's shipped defaults, or Headliner or Inner Circle)
-    under its own name, ticked; ("new", None) adds an Artist Matching playlist called New Playlist,
-    ticked, for its page to shape. Returns (the playlist, whether it's new and wants its page).
+    ("copy", id) copies one that's on it; ("template", key) adds the template (a kind's shipped defaults, or Headliner or Inner Circle)
+    under its own name, ticked; ("new", None) adds a blank slate called New Playlist, ticked, with
+    no config until its page adds one. Returns (the playlist, whether it's new and wants its page).
     """
     how, what = choice
     if how == "existing":
@@ -243,13 +273,15 @@ def add_from_choice(choice):
         if b is not None and not b.get("shown", True):
             set_shown(what, True)
         return get(what), False
+    if how == "copy":   # one that's on the Play tab already: a copy, Name 2, right after it
+        return duplicate(what), False
     if how == "template":
         recipe = next((r for r in READY_MADE if r["key"] == what), None)
         if recipe is not None:
             return add(unique_name(t(recipe["name"])), recipe["kind"], f"{TEMPLATE}:{what}"), False
         kind = what if what in KIND_NAMES else "artists"
         return add(unique_name(t(KIND_LABELS[kind])), kind, TEMPLATE), False
-    return add(unique_name(t("New Playlist")), "artists", TEMPLATE), True
+    return add(unique_name(t("New Playlist")), None), True
 
 
 def set_mix(button_id, **fields):
@@ -302,6 +334,8 @@ def of_kind(kind):
 
 def standard(kind):
     """The standard playlist of a kind (the one made at the upgrade), else the first of that kind, else None."""
+    if kind is None:
+        return None
     items = of_kind(kind)
     return next((b for b in items if b.get("standard") == kind), items[0] if items else None)
 
@@ -331,13 +365,15 @@ def add(name, kind, from_id=None):
     """
     A new playlist at the end of the list, ticked, with the settings and filters of the one it starts
     from: one of yours by id, the standard one of its kind by default, or the kind's shipped defaults
-    (from_id TEMPLATE).
+    (from_id TEMPLATE). kind None: a blank slate, no config until its page adds one.
     """
     items = load()
     ready = next((r for r in READY_MADE if from_id == f"{TEMPLATE}:{r['key']}"), None)
     if ready is not None:   # Headliner, Inner Circle: the standard playlists of its kinds with the recipe laid on top
         new = ready_made_button(ready["key"], {k: standard(k) for k in KIND_NAMES})
         new["name"] = name.strip() or t(ready["name"])
+    elif kind is None:
+        new = blank(name.strip() or t("New Playlist"), None)
     else:
         new = blank(name.strip() or t(KIND_LABELS[kind]), kind)
         if from_id == TEMPLATE:
@@ -476,6 +512,8 @@ def nonstop_config(button):
     plus "with" for an AI Playlist. A playlist is topped up as the button that built it says.
     """
     button = continue_as(button)   # a mix carries on as the config its Mix says
+    if button.get("kind") is None:   # a blank slate: nothing to carry on as
+        return {"on": False, "using": "artists", "reseed": "last", "mode": "journey"}
     merged = dict(_env_values(), **(button.get("settings") or {}))
     return engine.nonstop_settings(lambda name, default="": merged.get(name, default))[button["kind"]]
 
@@ -720,6 +758,9 @@ def run(button, report=print, seed_info=None, build=None, extra_filters=(), **op
     runs as the first config alone.
     """
     cfgs = configs(button)
+    if not cfgs:   # a blank slate: nothing to build until its page adds a config
+        report(t(NO_CONFIG_YET, name=button["name"]))
+        return None
     if build is not None or len(cfgs) == 1 or engine.NONSTOP_APPEND or options.get("topup"):
         return _run_one(button, button["kind"], button.get("settings") or {}, report, seed_info, build, extra_filters,
                         options)
@@ -822,6 +863,8 @@ def _run_mix(button, cfgs, report, seed_info, extra_filters, options):
 def describe(button):
     """A short line for a hover note: the kind (or kinds, joined with +), then what's on."""
     cfgs = configs(button)
+    if not cfgs:
+        return t("No config yet")
     mix = tidy_mix(button.get("mix"), len(cfgs))
     s = button.get("settings") or {}
     g = button["kind"].upper()

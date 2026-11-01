@@ -114,6 +114,23 @@ def test_the_tick_puts_a_playlist_on_the_play_tab_and_move_up_and_down_reorder(a
     assert not ui.errors, ui.errors[0]
 
 
+def test_the_chosen_row_is_a_border_and_the_help_line_is_gone(app, ui):
+    from tabs import PALETTE
+    s = buttons_page(ui)
+    pick_button(ui, "Headliner")
+    ui.pump(0.3)
+    rows = {bid: row for bid, row, _tick, _label, _var in s._button_rows}
+    import buttons
+    head = next(b for b in buttons.load() if b["name"] == "Headliner")
+    chosen = rows[head["id"]]
+    assert chosen.cget("highlightbackground") == PALETTE["button_fg"], "a border in the accent colour"
+    assert chosen.cget("bg") == s._button_list.cget("bg"), "no fill"
+    others = [r for bid, r in rows.items() if bid != head["id"]]
+    assert all(r.cget("highlightbackground") == r.cget("bg") for r in others)
+    assert "Ticked: on the Play tab. Rename: click the name at the top of its page." not in labels(s._buttons_outer)
+    assert not ui.errors, ui.errors[0]
+
+
 def test_the_name_at_the_top_renames_in_place(app, ui):
     import buttons
     pick_button(ui, "Headliner")
@@ -362,7 +379,7 @@ def test_add_remove_and_restore_from_settings(app, ui, monkeypatch):
     monkeypatch.setattr(settings_gui, "ask_new_button", lambda parent: ("new", None))
     s._button_add()
     ui.pump(0.6)
-    assert s._button_page.button["name"] == "New Playlist"
+    assert s._button_names()[-1] == "New Playlist" and s._button_page is None, "a blank slate has no config page yet"
     entry = next((w for w in walk(s._button_right) if isinstance(w, tk.Entry) and w.get() == "New Playlist"), None)
     assert entry is not None, "the name box is open on a new playlist's page"
     entry.delete(0, "end")
