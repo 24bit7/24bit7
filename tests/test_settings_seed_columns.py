@@ -18,9 +18,14 @@ def walk(widget):
 
 
 def option_page(ui, button="Similar Artists"):
-    """A button's page, built and on screen: (the scrolling page, its ProfilePage)."""
+    """A button's page, built and on screen (other test files import this, so it stays a single widget)."""
     pick_button(ui, button)
-    return inner_page(ui, "Playlist"), ui.settings._button_page
+    return inner_page(ui, "Playlist")
+
+
+def option_pair(ui, button="Similar Artists"):
+    """(the scrolling page, its ProfilePage)."""
+    return option_page(ui, button), ui.settings._button_page
 
 
 def texts_in(page):
@@ -34,7 +39,7 @@ def set_box(sb, value, ui):
 
 
 def test_the_standard_playlist_has_both_seed_lines_and_the_review_tick(app, ui):
-    page, p = option_page(ui)
+    page, p = option_pair(ui)
     texts = texts_in(page)
     for text in ("Playlist Selection", "When Seed is Current Track", "When Seed is Playing Now", "Limit To", "tracks, from",
                  "artists, pick", "of each artist's top", "artists from Playing Now, take", "Separate Settings for Review Mode"):
@@ -47,7 +52,7 @@ def test_the_standard_playlist_has_both_seed_lines_and_the_review_tick(app, ui):
 
 def test_the_current_track_line_saves_into_the_playlist_and_the_limit_tick_greys_its_box(app, ui):
     import buttons
-    page, p = option_page(ui)
+    page, p = option_pair(ui)
     boxes = p.seed_boxes["current"]
     set_box(boxes["SIMILAR_ARTIST_LIMIT"], "9", ui)
     assert buttons.standard("artists")["settings"]["SIMILAR_ARTIST_LIMIT"] == "9"
@@ -61,7 +66,7 @@ def test_the_current_track_line_saves_into_the_playlist_and_the_limit_tick_greys
 
 def test_playing_now_figures_save_to_env(app, ui):
     import settings_gui
-    page, p = option_page(ui)
+    page, p = option_pair(ui)
     set_box(p.seed_boxes["pn"]["PN_SAMPLE_ARTISTS"], "7", ui)
     assert settings_gui.read_env().get("PN_SAMPLE_ARTISTS") == "7"
     assert app.engine.playing_now_artist_figures()["PN_SAMPLE_ARTISTS"] == 7
@@ -69,7 +74,7 @@ def test_playing_now_figures_save_to_env(app, ui):
 
 def test_separate_review_settings_show_the_orange_box_and_save_as_review_keys(app, ui):
     import settings_gui
-    page, p = option_page(ui)
+    page, p = option_pair(ui)
     s = ui.settings
     var, frame = s._review_vars["separate"], None
     assert var.get() is False and all(v.get() for v in s._review_vars["same"].values()), "mirroring to start"
@@ -90,7 +95,7 @@ def test_separate_review_settings_show_the_orange_box_and_save_as_review_keys(ap
 
 def test_similar_tracks_lines(app, ui):
     import settings_gui
-    page, p = option_page(ui, "Similar Tracks")
+    page, p = option_pair(ui, "Similar Tracks")
     sb = p.seed_boxes["pn"]["PN_TRACKS_PER_SAMPLE"]
     assert sb.get() == "6"
     set_box(sb, "8", ui)
@@ -117,7 +122,7 @@ def test_profiles_carry_the_new_settings(app):
 def test_a_button_of_your_own_has_only_the_current_track_line(app, ui):
     import buttons
     buttons.add("Sunday", "artists")
-    page, p = option_page(ui, "Sunday")
+    page, p = option_pair(ui, "Sunday")
     texts = texts_in(page)
     assert "When Seed is Current Track" in texts and "When Seed is Playing Now" not in texts, texts
     assert "Separate Settings for Review Mode" not in texts
