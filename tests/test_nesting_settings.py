@@ -98,7 +98,6 @@ def test_from_existing_indents_children_and_says_where_they_are(app, ui):
     import buttons
     import settings_gui
     top, ten, deep = make_tree(buttons)
-    buttons.set_shown(deep["id"], False)
     win = settings_gui.AddPlaylistPrompt(ui.settings)
     ui.pump(0.5)
     rows = win.existing_list._rows
@@ -111,8 +110,8 @@ def test_from_existing_indents_children_and_says_where_they_are(app, ui):
     assert win.ok_button.cget("text") == "Create Copy"
     win.existing_list.pick(4)
     ui.pump(0.2)
-    assert "Out of the menu of Artist's Top Tracks; Add puts it back" in win.existing_note.cget("text")
-    assert win.ok_button.cget("text") == "Add"
+    assert "In the menu of Artist's Top Tracks already; Create Copy makes Deep Cut Top Tracks 2 beside it" in win.existing_note.cget("text")
+    assert win.ok_button.cget("text") == "Create Copy", "every playlist is on the Play tab: From Existing copies (2 Nov 2026)"
     win.ok()
-    assert win.result == ("existing", deep["id"])
+    assert win.result == ("copy", deep["id"])
     assert not ui.errors, ui.errors[0]

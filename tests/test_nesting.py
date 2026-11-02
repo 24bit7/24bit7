@@ -29,9 +29,7 @@ def test_nesting_takes_a_playlist_off_the_row_and_into_the_parents_menu(app):
     order = names(buttons.load())
     assert order.index("Top 10, Best First") == order.index("Artist's Top Tracks") + 1, "tree order: children follow their parent"
     assert order.index("Artist + Guests") == order.index("Deep Cut Top Tracks") + 1
-    buttons.set_shown(deep["id"], False)
-    assert names(buttons.children(top["id"])) == ["Top 10, Best First"], "unticked: out of the menu, kept"
-    assert names(buttons.children(top["id"], ticked_only=False)) == ["Top 10, Best First", "Deep Cut Top Tracks"]
+    assert names(buttons.children(top["id"])) == ["Top 10, Best First", "Deep Cut Top Tracks"], "every child is in the menu"
 
 
 def test_one_level_deep(app):
@@ -138,11 +136,13 @@ def test_a_parents_alternate_title_reads_in_its_menu(app):
     top, ten, deep = setup(buttons)
     buttons.nest(ten["id"], top["id"])
     buttons.nest(deep["id"], top["id"])
-    buttons.set_shown(deep["id"], False)
     rows = [(pl["name"], text, is_default) for pl, text, is_default in buttons.menu_rows(buttons.get(top["id"]))]
-    assert rows == [("Artist's Top Tracks", "Artist's Top Tracks", True), ("Top 10, Best First", "Top 10, Best First", False)],         "the parent's own row first, the default; unticked children stay out"
+    assert rows == [("Artist's Top Tracks", "Artist's Top Tracks", True), ("Top 10, Best First", "Top 10, Best First", False),
+                    ("Deep Cut Top Tracks", "Deep Cut Top Tracks", False)], "the parent's own row first, the default, then every child"
+    buttons.set_subtitle(deep["id"], "Deep Cuts Only")   # Title in Menu on a child too (2 Nov 2026)
+    assert [text for _pl, text, _d in buttons.menu_rows(buttons.get(top["id"]))][2] == "Deep Cuts Only"
     buttons.set_subtitle(top["id"], "  Top 12, Random Order ")
     buttons.set_default(top["id"], ten["id"])
     rows = [(text, is_default) for _pl, text, is_default in buttons.menu_rows(buttons.get(top["id"]))]
-    assert rows == [("Top 12, Random Order", False), ("Top 10, Best First", True)], "the alternate title, trimmed"
+    assert rows == [("Top 12, Random Order", False), ("Top 10, Best First", True), ("Deep Cuts Only", False)], "the alternate title, trimmed"
     assert buttons.get(top["id"])["name"] == "Artist's Top Tracks", "the name is untouched"

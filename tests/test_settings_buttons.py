@@ -91,17 +91,12 @@ def test_playlists_tab_replaces_sources_playlist_and_filters(app, ui):
     assert not ui.errors, ui.errors[0]
 
 
-def test_the_tick_puts_a_playlist_on_the_play_tab_and_move_up_and_down_reorder(app, ui):
+def test_the_list_has_no_tick_and_move_up_and_down_reorder(app, ui):
+    """2 Nov 2026: a playlist is a button or a device's, so the list has no tick: everything in it is on the Play tab."""
     import buttons
     s = buttons_page(ui)
-    _id, _row, tick, _label, var = s._button_rows[3]   # Artist + Guests
-    assert var.get() is True
-    tick.invoke()
-    ui.pump(0.3)
-    assert buttons.get(s._buttons[3]["id"])["shown"] is False
-    assert "Artist + Guests" not in [b._name for b in ui.play.play_buttons], "the Play tab follows"
-    tick.invoke()
-    ui.pump(0.3)
+    _id, row, tick, _label, var = s._button_rows[3]   # Artist + Guests
+    assert tick is None and var is None and row.left is None, "no tick"
     assert "Artist + Guests" in [b._name for b in ui.play.play_buttons]
     pick_button(ui, "Artist + Guests")
     s._button_move(-1)
@@ -125,7 +120,6 @@ def test_the_chosen_row_is_a_border_and_the_help_line_is_gone(app, ui):
     chosen = rows[head["id"]]
     assert chosen.chosen and chosen.text == "Artist + Guests", "a rounded outline in the accent colour"
     assert chosen.cget("bg") == s._button_list.cget("bg") == PALETTE["field_bg"], "no fill, on the field colour"
-    assert chosen.left is not None and chosen.left.winfo_manager(), "the tick sits inside the row"
     others = [r for bid, r in rows.items() if bid != head["id"]]
     assert not any(r.chosen for r in others)
     assert "Ticked: on the Play tab. Rename: click the name at the top of its page." not in labels(s._buttons_outer)
@@ -353,7 +347,7 @@ def test_filters_tick_on_the_page_and_edit_filters_opens_a_window(app, ui):
     assert win.title() == "Edit Filters" and win.winfo_exists()
     texts = labels(win)
     assert "Applies on" not in texts and "Active filters" not in texts
-    assert "Used by: Artist + Guests" in texts, texts
+    assert "Used by: Artist + Guests (config 1)" in texts, texts   # filters are each config's (2 Nov 2026)
     assert s._open_filters() is win, "opened again, it's the same window"
     ticks[0].invoke()
     ui.pump(0.2)

@@ -22,10 +22,13 @@ def test_row_comes_from_the_ticked_playlists_then_more_options_and_plus(app, ui)
     import buttons
     p = ui.play
     assert names(p) == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Artist + Guests", "Consensus", "AI Playlist"]
-    buttons.set_shown(buttons.standard("vibe")["id"], False)
+    items = buttons.load()
+    next(b for b in items if b["standard"] == "vibe")["device"] = "echo-1"   # a device's own playlist: not a button
+    buttons.save(items)
     p.refresh_buttons()
-    assert names(p) == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Artist + Guests", "Consensus"], "unticked: off the row"
-    buttons.set_shown(buttons.standard("vibe")["id"], True)
+    assert names(p) == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Artist + Guests", "Consensus"], "a device's: off the row"
+    next(b for b in items if b["standard"] == "vibe")["device"] = ""
+    buttons.save(items)
     p.refresh_buttons()
     ui.pump(0.3)
     row = p.play_buttons + [p.more_button, p.add_button]
@@ -42,14 +45,13 @@ def test_plus_opens_the_window_and_its_three_answers_land(app, ui, monkeypatch):
     opened = []
     monkeypatch.setattr(p, "open_playlist_settings", lambda bid, rename=False: opened.append((bid, rename)))
     head = next(b for b in buttons.load() if b["name"] == "Artist + Guests")
-    buttons.set_shown(head["id"], False)
-    p.refresh_buttons()
-    assert "Artist + Guests" not in names(p)
     p._end_greeting(keep=False)   # the start-up greeting holds console lines back while it types
-    monkeypatch.setattr(p, "_ask_new_button", lambda: ("existing", head["id"]))
+    monkeypatch.setattr(p, "_ask_new_button", lambda: ("copy", head["id"]))
     p.on_add_button()
-    assert names(p)[3] == "Artist + Guests", "ticked again, it comes back at its place in the list"
-    assert opened == [] and p.log.get("1.0", "end").count("Artist + Guests is on the Play tab") == 1
+    assert names(p)[4] == "Artist + Guests 2", "From Existing copies: every playlist is on the Play tab already (2 Nov 2026)"
+    assert opened == [] and p.log.get("1.0", "end").count("Artist + Guests 2 is on the Play tab") == 1
+    buttons.remove(next(b for b in buttons.load() if b["name"] == "Artist + Guests 2")["id"])
+    p.refresh_buttons()
     monkeypatch.setattr(p, "_ask_new_button", lambda: ("template", "headliner"))
     p.on_add_button()
     assert names(p)[-1] == "Artist + Guests 2" and opened == []
@@ -99,7 +101,7 @@ def test_right_click_menu_renames_copies_moves_removes_and_restores(app, ui, mon
     ui.pump(0.3)
     p._button_menu(Click(), p.play_buttons[3]._button)   # Artist + Guests
     menu = menus[-1]
-    assert labels(menu) == ["Rename", "Duplicate", "Settings", "Move Left", "Move Right", "Remove from the Play Tab",
+    assert labels(menu) == ["Rename", "Duplicate", "Settings", "Move Left", "Move Right", "Delete",
                             "Restore Default Playlists"]
     assert menu.entrycget(8, "state") == "disabled", "nothing to restore while everything shipped is there"
     menu.invoke(4)   # Move Left
@@ -116,15 +118,16 @@ def test_right_click_menu_renames_copies_moves_removes_and_restores(app, ui, mon
     assert menus[-1].entrycget(4, "state") == "disabled", "the first can't move left"
     menus[-1].invoke(2)   # Settings
     assert opened[-1] == p.play_buttons[0]._button["id"]
-    menus[-1].invoke(6)   # Remove from the Play Tab: no question, nothing deleted
+    import gui
+    asked = []
+    monkeypatch.setattr(gui.messagebox, "askyesno", lambda *a, **k: asked.append(a) or True)
+    menus[-1].invoke(6)   # Delete: asks, then the playlist is gone (no off-the-row state, 2 Nov 2026)
+    assert len(asked) == 1 and "Delete Similar Artists?" in asked[0][1]
     assert names(p) == ["Similar Tracks", "Star Turn", "Star Turn 2", "Artist's Top Tracks", "Consensus", "AI Playlist"]
-    assert buttons.standard("artists")["shown"] is False and len(buttons.load()) == 9
+    assert not any(b.get("standard") == "artists" for b in buttons.load()) and len(buttons.load()) == 8
     p._button_menu(Click(), None)   # right-click on +
-    assert labels(menus[-1]) == ["Restore Default Playlists"] and menus[-1].entrycget(0, "state") == "disabled", \
-        "off the row isn't missing"
-    buttons.remove(buttons.standard("artists")["id"])
-    p._button_menu(Click(), None)
-    assert menus[-1].entrycget(0, "state") == "normal"
+    assert labels(menus[-1]) == ["Restore Default Playlists"] and menus[-1].entrycget(0, "state") == "normal", \
+        "deleted: missing, so Restore is live"
     menus[-1].invoke(0)
     assert names(p)[-1] == "Similar Artists", "the missing standard playlist comes back at the end"
     assert not ui.errors, ui.errors[0]

@@ -117,8 +117,9 @@ def blank(name, kind):
     return {"id": uuid.uuid4().hex[:8], "name": name, "kind": kind, "settings": {}, "filters": [],
             "shortcut": "", "standard": "", "shown": True, "configs": [], "mix": mix_default(),
             "parent": "", "default": "",   # nested under another playlist; a parent's default child (see nest)
-            "subtitle": "",                # a parent's alternate title: how its own option reads in its menu
-            "made": ""}                    # the ready-made recipe it was made as (READY_MADE key), if any
+            "subtitle": "",                # Title in Menu: how its row reads in a menu (a parent's own row, or a child's)
+            "made": "",                    # the ready-made recipe it was made as (READY_MADE key), if any
+            "device": ""}                  # the Alexa device whose phrase it is: off the Play tab, in the Device Playlists box
 
 
 def tidy(item):
@@ -153,6 +154,7 @@ def tidy(item):
     out["default"] = str(out.get("default") or "")
     out["subtitle"] = str(out.get("subtitle") or "").strip()
     out["made"] = str(out.get("made") or "")
+    out["device"] = str(out.get("device") or "")
     out["mix"] = tidy_mix(out.get("mix"), len(out["configs"]) + (0 if kind is None else 1))
     return out
 
@@ -311,12 +313,7 @@ def add_from_choice(choice):
     no config until its page adds one. Returns (the playlist, whether it's new and wants its page).
     """
     how, what = choice
-    if how == "existing":
-        b = get(what)
-        if b is not None and not b.get("shown", True):
-            set_shown(what, True)
-        return get(what), False
-    if how == "copy":   # one that's on the Play tab already: a copy, Name 2, right after it
+    if how in ("existing", "copy"):   # a copy, Name 2, right after it (every playlist is on the Play tab, 2 Nov 2026)
         return duplicate(what), False
     if how == "template":
         recipe = next((r for r in READY_MADE if r["key"] == what), None)
@@ -368,13 +365,42 @@ def _rename_shipped(items):
     return items
 
 
+def _adopt_130(items):
+    """
+    2 Nov 2026: a playlist is either a button (on the Play tab, on the row or in a menu) or a device's
+    (the Device Playlists box). An off-the-row playlist from 1.29 that a device's phrase names becomes
+    that device's; any other comes back onto the row, said once in the console.
+    """
+    off = [b for b in items if not b.get("shown", True) and not b.get("device")]
+    if not off:
+        return items
+    import devices
+    owners = {}
+    for device_id, record in devices.load_raw().items():
+        for pid in record["buttons"].values():
+            if pid:
+                owners.setdefault(pid, device_id)
+    back = []
+    for b in off:
+        b["shown"] = True
+        if b["id"] in owners:
+            b["device"] = owners[b["id"]]
+        else:
+            back.append(b["name"])
+    if back:
+        engine.print(t("Note: {names} back on the Play tab: a playlist is either a button or a device's now "
+                       "(Settings > Playlist Settings).", names=", ".join(back)))
+    save(items)
+    return items
+
+
 def load():
     """Every button, in the order shown. The first call ever makes them from today's settings."""
     items = _stored()
     if items is None:
         upgrade()
         items = _stored() or []
-    return settle(_adopt_env_shortcuts(_rename_shipped(items)))
+    return settle(_adopt_env_shortcuts(_adopt_130(_rename_shipped(items))))
 
 
 # --- nesting: a playlist under another, one level deep ---------------------------------------------
@@ -407,7 +433,7 @@ def settle(items):
     return ordered
 
 
-def children(parent_id, ticked_only=True):
+def children(parent_id, ticked_only=True):   # ticked_only: kept for older callers; every child is on the Play tab now
     """A parent's children in order: the ticked ones (in its menu), or every one."""
     return [b for b in load() if b.get("parent") == parent_id and (b.get("shown", True) or not ticked_only)]
 
@@ -481,7 +507,7 @@ def menu_rows(parent):
     """
     default = parent.get("default") or ""
     rows = [(parent, parent.get("subtitle") or parent["name"], default == "")]
-    rows += [(c, c["name"], c["id"] == default) for c in children(parent["id"])]
+    rows += [(c, c.get("subtitle") or c["name"], c["id"] == default) for c in children(parent["id"])]   # Title in Menu
     return rows
 
 
@@ -542,17 +568,18 @@ def has_kind(button, kind):
 
 
 def shown():
-    """The playlists on the Play tab's row, in the order shown: ticked, and not nested under another."""
-    return [b for b in load() if b.get("shown", True) and not b.get("parent")]
+    """The playlists on the Play tab's row, in the order shown: not nested under another, and not a device's."""
+    return [b for b in load() if not b.get("parent") and not b.get("device")]
 
 
-def set_shown(button_id, on):
-    """The tick beside a playlist under Settings > Playlists: on the Play tab, or kept for voice and shortcuts only."""
-    items = load()
-    for b in items:
-        if b["id"] == button_id:
-            b["shown"] = bool(on)
-    save(items)
+def buttons_only():
+    """Every playlist that's a button (Your Playlist Buttons), in order: not a device's."""
+    return [b for b in load() if not b.get("device")]
+
+
+def of_device(device_id):
+    """A device's own playlists (the Device Playlists box), in order."""
+    return [b for b in load() if b.get("device") == str(device_id)]
 
 
 # --- the Play tab's + and right-click ---------------------------------------------------------
@@ -1027,15 +1054,15 @@ def upgrade():
             if own_settings == by_kind[kind]["settings"]:
                 continue
             b = blank(f"{shown_name} {t(label)}", kind)
-            b["settings"], b["filters"], b["shown"] = own_settings, list(shared), False
+            b["settings"], b["filters"], b["device"] = own_settings, list(shared), str(device_id)
             items.append(b)
             made.append(b)
             for phrase, phrase_kind in devices.PHRASE_KINDS.items():
                 if phrase_kind == kind:
                     record["buttons"][phrase] = b["id"]
         if made:
-            engine.print(t("Note: {name} had settings of its own. They're now playlists of its own under Settings > "
-                           "Playlists ({names}), which its voice commands run; they're kept off the Play tab.",
+            engine.print(t("Note: {name} had settings of its own. They're now its own playlists under Settings > "
+                           "Playlist Settings > Device Playlists ({names}), which its voice commands run.",
                            name=shown_name, names=", ".join(x["name"] for x in made)))
     save(arrange_shipped(items))   # last, so the devices above were compared with the settings the user had
     devices.save(device_data)

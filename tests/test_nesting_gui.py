@@ -141,13 +141,21 @@ def test_holding_over_another_button_nests_on_the_drop(app, ui):
     assert not ui.errors, ui.errors[0]
 
 
-def test_removing_a_playlist_clears_the_console_first(app, ui):
+def test_deleting_a_playlist_asks_then_clears_the_console_first(app, ui, monkeypatch):
+    """2 Nov 2026: a playlist is a button or a device's, so off the row means deleted, after a yes."""
+    import buttons
+    import gui
     p = ui.play
     p._end_greeting(keep=False)
     p._append_log("Old build output.")
-    p._remove_button(p.play_buttons[3]._button)   # Artist + Guests
+    monkeypatch.setattr(gui.messagebox, "askyesno", lambda *a, **k: False)
+    p._delete_button(p.play_buttons[3]._button)   # Artist + Guests: no
+    assert "Artist + Guests" in [b._name for b in p.play_buttons], "a no leaves it"
+    monkeypatch.setattr(gui.messagebox, "askyesno", lambda *a, **k: True)
+    p._delete_button(p.play_buttons[3]._button)
     ui.pump(0.3)
     text = p.log.get("1.0", "end")
-    assert "Old build output." not in text and "Artist + Guests is off the Play tab." in text
-    assert p._live == [l for l in p._live if "Artist + Guests is off" in l], "the kept lines start again too"
+    assert "Old build output." not in text and "Artist + Guests deleted." in text
+    assert p._live == [l for l in p._live if "Artist + Guests deleted" in l], "the kept lines start again too"
+    assert "Artist + Guests" not in [b["name"] for b in buttons.load()]
     assert not ui.errors, ui.errors[0]

@@ -703,10 +703,8 @@ class PlayTab(tk.Frame):
             self.open_playlist_settings(child["id"])
         elif target == "use":
             self._use_settings_of(child)
-        elif target == "remove":   # out of the menu and kept, as a row playlist's Remove keeps it
-            buttons.set_shown(child["id"], False)
-            self._append_log(t("Note: {name} is out of the menu. It's still under Settings > Playlists, and + puts it back.",
-                               name=child["name"]))
+        elif target == "remove":   # a playlist is a button or a device's (2 Nov 2026): off the row means deleted
+            self._delete_button(child)
         elif nest_into is not None:
             parent = nest_into._button
             if buttons.nest(child["id"], parent["id"]):
@@ -928,7 +926,7 @@ class PlayTab(tk.Frame):
         elif target == "use":
             self._use_settings_of(button)
         elif target == "remove":
-            self._remove_button(button)
+            self._delete_button(button)
         elif nest_into is not None:   # held over another playlist: under it, into its menu
             parent = nest_into._button
             if buttons.nest(button["id"], parent["id"]):
@@ -961,7 +959,7 @@ class PlayTab(tk.Frame):
         measure = tkfont.Font(root=self, font=font)
         h = px(48)
         pills = [("settings", "\u2699  " + t("Settings"), PALETTE["button_fg"]),
-                 ("remove", "\u2715  " + t("Remove"), PALETTE["brand_orange"])]
+                 ("remove", "\u2715  " + t("Delete"), PALETTE["brand_orange"])]
         if playmix.is_open():   # the row's switches can take this playlist's settings
             pills.append(("use", "\u2913  " + t("Use Its Settings"), self.seed_colour))
         for key, text, colour in pills:
@@ -1017,10 +1015,6 @@ class PlayTab(tk.Frame):
         """+: the Add a Playlist window, with its three ways in (from existing, from template, new)."""
         self._new_playlist()
 
-    def _show_playlist(self, button):
-        buttons.set_shown(button["id"], True)
-        self.refresh_buttons()
-
     def _new_playlist(self):
         answer = self._ask_new_button()
         if answer is None:
@@ -1051,7 +1045,7 @@ class PlayTab(tk.Frame):
                              command=lambda: (buttons.move_shown(button["id"], -1), self.refresh_buttons()))
             menu.add_command(label=t("Move Right"), state="normal" if 0 <= i < len(ids) - 1 else "disabled",
                              command=lambda: (buttons.move_shown(button["id"], 1), self.refresh_buttons()))
-            menu.add_command(label=t("Remove from the Play Tab"), command=lambda: self._remove_button(button))
+            menu.add_command(label=t("Delete"), command=lambda: self._delete_button(button))
             menu.add_separator()
         menu.add_command(label=t("Restore Default Playlists"), state="normal" if buttons.missing_shipped() else "disabled",
                          command=lambda: (buttons.restore_standard(), self.refresh_buttons()))
@@ -1072,14 +1066,21 @@ class PlayTab(tk.Frame):
         if new is not None:
             self.open_playlist_settings(new["id"])
 
-    def _remove_button(self, button):
-        """Off the row, not deleted: + brings it back, and voice commands and shortcuts still run it."""
-        buttons.set_shown(button["id"], False)
+    def _delete_button(self, button):
+        """
+        Deletes a playlist from the Play tab (the Delete pill or right-click Delete), after asking. There's no
+        off-the-row state any more (2 Nov 2026): a playlist is a button or a device's. Its children come out
+        onto the row; one 24bit7 ships comes back with Restore Default Playlists.
+        """
+        if not messagebox.askyesno(t("Delete Playlist"),
+                                   t("Delete {name}? Its page and settings go with it. Restore Default Playlists brings "
+                                     "back one 24bit7 ships.", name=button["name"]), parent=self):
+            return
+        buttons.remove(button["id"])
         self.refresh_buttons()
         self._live.clear()   # a fresh console for the note (Ben, 1 Nov)
         self._clear_log()
-        self._append_log(t("Note: {name} is off the Play tab. It's still under Settings > Playlists, and + puts it back.",
-                           name=button["name"]))
+        self._append_log(t("Note: {name} deleted.", name=button["name"]))
 
     def on_button(self, button):
         """Runs a playlist: from the Search tab's typed seed, or from the Now Playing zone's track."""

@@ -125,8 +125,9 @@ def test_device_with_its_own_settings_gets_a_playlist_it_runs_kept_off_the_play_
     assert "Kitchen Echo Similar Artists" not in names, "only the kinds whose values differ get a playlist"
     own = next(b for b in items if b["name"] == "Kitchen Echo Similar Tracks")
     assert own["kind"] == "tracks" and own["settings"]["SIMILAR_TRACK_COUNT"] == "12"
-    assert own["shown"] is False and all(b["shown"] for b in items if b is not own), "off the Play tab; the rest on it"
-    assert [b["name"] for b in buttons.shown()] == names[:6]
+    assert own["device"] == KITCHEN and all(not b["device"] for b in items if b is not own), "the device's own; the rest buttons"
+    assert [b["name"] for b in buttons.shown()] == names[:6], "a device's playlist isn't on the Play tab"
+    assert [b["name"] for b in buttons.of_device(KITCHEN)] == ["Kitchen Echo Similar Tracks"]
     record = devices.load()[KITCHEN]
     assert record["buttons"]["tracks_like"] == own["id"]
     assert record["buttons"]["music_like"] is None
@@ -356,10 +357,7 @@ def test_set_settings_keeps_only_the_kinds_keys_and_filters_say_who_uses_them(ap
     buttons.set_filters(head["id"], [f["id"]])
     assert buttons.get(head["id"])["filters"] == [f["id"]]
     assert filters.used_by(f["id"]) == ["Artist + Guests (config 1)"], "filters are each config's (2 Nov 2026): a mix names the config"
-    buttons.set_shown(head["id"], False)
-    assert buttons.get(head["id"])["shown"] is False and "Artist + Guests" not in [b["name"] for b in buttons.shown()]
-    buttons.set_shown(head["id"], True)
-    assert buttons.get(head["id"])["shown"] is True
+    assert "Artist + Guests" in [b["name"] for b in buttons.shown()], "every button is on the Play tab (2 Nov 2026)"
     buttons.set_filters("no-such-id", [f["id"]])
     assert len(buttons.load()) == 6
 

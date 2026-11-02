@@ -20,7 +20,6 @@ def test_from_existing_lists_every_playlist_and_adds_back_or_copies(app, ui):
     import buttons
     from tabs import PALETTE
     head = next(b for b in buttons.load() if b["name"] == "Artist + Guests")
-    buttons.set_shown(head["id"], False)
     win = open_window(ui)
     assert win._tab == "existing"
     assert win.existing_list.get(0, "end") == ("Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Artist + Guests",
@@ -36,11 +35,11 @@ def test_from_existing_lists_every_playlist_and_adds_back_or_copies(app, ui):
     win.existing_list.pick(3)
     ui.pump(0.2)
     assert win.existing_note.cget("text").startswith("Artist + Guests: Artist's Top Tracks + Artist Matching")
-    assert "Off the Play tab; Add puts it back" in win.existing_note.cget("text")
-    assert win.ok_button.cget("text") == "Add"
+    assert "Create Copy makes Artist + Guests 2 right after it" in win.existing_note.cget("text")
+    assert win.ok_button.cget("text") == "Create Copy", "every playlist is on the Play tab: From Existing copies (2 Nov 2026)"
     assert rows[3].chosen and not rows[0].chosen
     win.ok()
-    assert win.result == ("existing", head["id"])
+    assert win.result == ("copy", head["id"])
     win = open_window(ui)
     win.existing_list.pick(1)
     win.ok()

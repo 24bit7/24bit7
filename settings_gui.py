@@ -949,7 +949,7 @@ class AddPlaylistPrompt(PromptWindow):
     ok_text = N_("Add")
 
     def __init__(self, parent):
-        self._existing = buttons.load()
+        self._existing = [b for b in buttons.load() if not b.get("device")]   # a device's own aren't buttons
         self._templates = [(kind, t(label), t(TEMPLATE_NOTES[kind])) for kind, label in buttons.KIND_LABELS.items()]
         self._templates += [(r["key"], t(r["name"]), t(TEMPLATE_NOTES[r["key"]])) for r in buttons.READY_MADE]
         self._tab = "existing"
@@ -1058,24 +1058,16 @@ class AddPlaylistPrompt(PromptWindow):
             b = self._chosen(self.existing_list, self._existing)
             if b is not None:
                 parent = next((p for p in self._existing if p["id"] == b.get("parent")), None)
-                if parent is not None and b.get("shown", True):
+                if parent is not None:
                     words = t("{name}: {what}. In the menu of {parent} already; Create Copy makes {copy} beside it.",
                               name=b["name"], what=buttons.describe(b), parent=parent["name"],
                               copy=buttons.unique_name(b["name"]))
-                elif parent is not None:
-                    words = t("{name}: {what}. Out of the menu of {parent}; Add puts it back.", name=b["name"],
-                              what=buttons.describe(b), parent=parent["name"])
-                elif b.get("shown", True):
+                else:
                     words = t("{name}: {what}. On the Play tab already; Create Copy makes {copy} right after it.",
                               name=b["name"], what=buttons.describe(b), copy=buttons.unique_name(b["name"]))
-                else:
-                    words = t("{name}: {what}. Off the Play tab; Add puts it back at its place.", name=b["name"],
-                              what=buttons.describe(b))
                 self.existing_note.config(text=words)
-                if hasattr(self, "ok_button"):
-                    wanted = t("Create Copy") if b.get("shown", True) else t("Add")
-                    if self.ok_button.cget("text") != wanted:
-                        self.set_ok_text(wanted)
+                if hasattr(self, "ok_button") and self.ok_button.cget("text") != t("Create Copy"):
+                    self.set_ok_text(t("Create Copy"))
         elif self._tab == "template":
             chosen = self._chosen(self.template_list, self._templates)
             if chosen is not None:
@@ -1090,7 +1082,7 @@ class AddPlaylistPrompt(PromptWindow):
             b = self._chosen(self.existing_list, self._existing)
             if b is None:
                 return
-            self.result = ("copy" if b.get("shown", True) else "existing", b["id"])
+            self.result = ("copy", b["id"])
         elif self._tab == "template":
             chosen = self._chosen(self.template_list, self._templates)
             if chosen is None:
@@ -1379,8 +1371,8 @@ class SettingsTab(tk.Frame):
         self._list_buttons = {}
         self._folded = set()   # parents whose children are folded away in the list
         for key, symbol, note, command, gap in (
-                ("add", "+", N_("Add a playlist: one that's off the Play tab, a template, or a new one."), self._button_add, 0),
-                ("remove", "\u2212", N_("Delete the chosen playlist. To take it off the Play tab and keep it, untick it."),
+                ("add", "+", N_("Add a playlist: a copy of one, a template, or a new one."), self._button_add, 0),
+                ("remove", "\u2212", N_("Delete the chosen playlist. Its children come out onto the row."),
                  self._button_remove, 0),
                 ("up", "\u25b2", N_("Move the chosen playlist up: left on the Play tab."), lambda: self._button_move(-1), 8),
                 ("down", "\u25bc", N_("Move the chosen playlist down: right on the Play tab."), lambda: self._button_move(1), 0),
@@ -1420,7 +1412,7 @@ class SettingsTab(tk.Frame):
 
     def _buttons_refresh(self):
         """Lists the playlists as the Play tab has them; rebuilds the right side when the chosen one changed."""
-        self._buttons = buttons.load()
+        self._buttons = buttons.buttons_only()
         ids = [b["id"] for b in self._buttons]
         if self._button_id not in ids:
             self._button_id = ids[0] if ids else None
@@ -1446,13 +1438,10 @@ class SettingsTab(tk.Frame):
             if b.get("parent") in self._folded:
                 continue   # folded away under its parent
             on = b["id"] == self._button_id   # the chosen row: a rounded outline in the accent colour, no fill
-            var = tk.BooleanVar(value=b.get("shown", True))
             is_parent = b["id"] in parents
             parent = next((p for p in self._buttons if p["id"] == b.get("parent")), None)
             row = PickRow(self._button_list, b["name"], fg=PALETTE["ai_purple"] if b["kind"] == "vibe" else None, bg=bg,
-                          chosen=on, left=lambda canvas, bt=b, v=var: ttk.Checkbutton(
-                              canvas, variable=v, command=lambda: self._button_tick_changed(bt, v.get())),
-                          indent=indent if parent is not None else 0,
+                          chosen=on, indent=indent if parent is not None else 0,   # no tick: everything here is on the Play tab
                           fold=("closed" if b["id"] in self._folded else "open") if is_parent else None,
                           on_fold=lambda bt=b: self._fold(bt["id"]),
                           tag=t("default") if parent is not None and parent.get("default") == b["id"] else "",
@@ -1462,7 +1451,7 @@ class SettingsTab(tk.Frame):
             row.bind("<Button-1>", lambda e, bt=b: self._pick_button(bt["id"]))
             if parent is not None:
                 row.bind("<Button-3>", lambda e, bt=b, p=parent: self._child_row_menu(e, p, bt))
-            self._button_rows.append((b["id"], row, row.left, row, var))
+            self._button_rows.append((b["id"], row, None, row, None))
         if self._button_rows:   # every row the width of the widest, with room for a longer name to come
             width = max(scaled(self._button_list, 220), max(r.winfo_reqwidth() for _i, r, _l, _r, _v in self._button_rows))
             for _i, r, _l, _r, _v in self._button_rows:
@@ -1546,11 +1535,6 @@ class SettingsTab(tk.Frame):
             self._fill_button_list()
             self._button_fill_page()
 
-    def _button_tick_changed(self, button, on):
-        buttons.set_shown(button["id"], on)
-        self._buttons = buttons.load()
-        self._buttons_changed()
-
     def _button_move(self, by):
         if self._button_id is None:
             return
@@ -1580,7 +1564,7 @@ class SettingsTab(tk.Frame):
         if button is None:
             return
         if not messagebox.askyesno(t("Remove Playlist"),
-                                   t("Delete {name}? To take it off the Play tab and keep it, untick it instead.",
+                                   t("Delete {name}? Its page and settings go with it.",
                                      name=button["name"]), parent=self):
             return
         buttons.remove(button["id"])
@@ -1640,7 +1624,7 @@ class SettingsTab(tk.Frame):
             def save_subtitle(_e=None, bid=button["id"]):
                 if self._subtitle_var.get().strip() != (buttons.get(bid) or {}).get("subtitle", ""):
                     buttons.set_subtitle(bid, self._subtitle_var.get())
-                    self._buttons = buttons.load()
+                    self._buttons = buttons.buttons_only()
                     self._buttons_changed()
             box_.bind("<FocusOut>", save_subtitle)
             box_.bind("<Return>", save_subtitle)
@@ -1770,7 +1754,7 @@ class SettingsTab(tk.Frame):
 
     def _config_set_kind(self, button, n, kind):
         buttons.set_config_kind(button["id"], n, kind)
-        self._buttons = buttons.load()
+        self._buttons = buttons.buttons_only()
         self._button_fill_page()
         self._buttons_changed()
 
@@ -1781,7 +1765,7 @@ class SettingsTab(tk.Frame):
                                      kind=t(buttons.KIND_LABELS[cfg["kind"]]), name=button["name"]), parent=self):
             return
         buttons.remove_config(button["id"], n)
-        self._buttons = buttons.load()
+        self._buttons = buttons.buttons_only()
         self._button_fill_page()
         self._buttons_changed()
 
@@ -1804,7 +1788,7 @@ class SettingsTab(tk.Frame):
 
     def _config_add(self, button, kind):
         buttons.add_config(button["id"], kind)
-        self._buttons = buttons.load()
+        self._buttons = buttons.buttons_only()
         self._button_fill_page()
         self._buttons_changed()
 
@@ -1902,7 +1886,7 @@ class SettingsTab(tk.Frame):
                 buttons.rename(button["id"], name)
                 button["name"] = name
                 title.config(text=name)
-                self._buttons = buttons.load()
+                self._buttons = buttons.buttons_only()
                 self._fill_button_list()
                 self._buttons_changed()
         entry.bind("<Return>", lambda e: finish(True))
