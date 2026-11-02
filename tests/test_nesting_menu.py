@@ -112,12 +112,12 @@ def test_a_child_drags_out_of_the_drop_down_onto_the_row(app, ui):
     ui.pump(0.3)
     assert p._pop_pressed["dragging"] and p._drag_image is not None and p._drop_box is not None
     assert float(pop.attributes("-alpha")) == 0.0, "the drop-down is out of sight but alive"
-    head = p.play_buttons[3]   # Headliner: drop in front of it
+    head = p.play_buttons[3]   # Artist + Guests: drop in front of it
     hx, hy = head.winfo_rootx() + 4, head.winfo_rooty() + head.winfo_height() // 2
     p._pop_drag_move(At(hx, hy))
     p._pop_release(At(hx, hy), deep)
     ui.pump(0.4)
-    assert names(p)[3] == "Deep Cut Top Tracks" and names(p)[4] == "Headliner", "out onto the row, where it was dropped"
+    assert names(p)[3] == "Deep Cut Top Tracks" and names(p)[4] == "Artist + Guests", "out onto the row, where it was dropped"
     assert buttons.get(deep["id"])["parent"] == ""
     assert "Deep Cut Top Tracks is back on the Play tab." in p.log.get("1.0", "end")
     assert p._children_popup is None and p._drag_image is None and p._drop_box is None
@@ -128,7 +128,7 @@ def test_a_child_drags_into_another_parent_or_onto_settings(app, ui, monkeypatch
     import buttons
     p = ui.play
     top, ten, deep = make_parent(buttons)
-    head = next(b for b in buttons.load() if b["name"] == "Headliner")
+    head = next(b for b in buttons.load() if b["name"] == "Artist + Guests")
     p.refresh_buttons()
     p._end_greeting(keep=False)
     ui.pump(0.3)
@@ -142,12 +142,12 @@ def test_a_child_drags_into_another_parent_or_onto_settings(app, ui, monkeypatch
     hx, hy = middle(head_fb)
     p._pop_drag_move(At(hx, hy))
     ui.pump(0.8)
-    assert p._nest_target is head_fb, "held over Headliner: the target"
+    assert p._nest_target is head_fb, "held over Artist + Guests: the target"
     p._pop_release(At(hx, hy), deep)
     ui.pump(0.4)
     assert [b["name"] for b in buttons.children(head["id"])] == ["Deep Cut Top Tracks"]
     assert [b["name"] for b in buttons.children(top["id"])] == ["Top 10, Best First"]
-    assert "Deep Cut Top Tracks is under Headliner now." in p.log.get("1.0", "end")
+    assert "Deep Cut Top Tracks is under Artist + Guests now." in p.log.get("1.0", "end")
     # onto Settings
     opened = []
     monkeypatch.setattr(p, "open_playlist_settings", lambda bid, rename=False: opened.append(bid))
@@ -191,7 +191,7 @@ def test_the_default_row_does_not_drag_and_a_parent_page_has_the_alternate_title
     box.event_generate("<Return>")
     ui.pump(0.3)
     assert buttons.get(top["id"])["subtitle"] == "Top 12, Random Order"
-    pick_button(ui, "Headliner")
+    pick_button(ui, "Artist + Guests")
     ui.pump(0.3)
     assert settings._subtitle_box is None, "not on a playlist with nothing nested under it"
     assert not ui.errors, ui.errors[0]
@@ -256,3 +256,38 @@ def test_the_search_hint_names_track_matching_not_a_similar_tracks_button(app, u
     hint = next(h for h in hints if "needs the track" in h)
     assert "Only Track Matching needs the track; the other playlists need just the artist." in hint
     assert "Similar Tracks" not in hint and "buttons" not in hint
+
+
+def test_menu_rows_seed_applies_to_read_teal_with_seed_on_playing_now(app, ui):
+    """2 Nov 2026 (Ben): with Seed on Playing Now, the rows in a parent's menu that Seed applies to read in
+    the Seed colour, as the buttons do. One rule, buttons.follows_seed: the first config is a matching kind.
+    So Consensus goes teal and Artist + Guests (top tracks first, guests second) doesn't."""
+    import buttons
+    p = ui.play
+    buttons.load()
+    artists = buttons.standard("artists")
+    for name in ("Consensus", "Artist + Guests", "Similar Tracks"):
+        buttons.nest(next(b for b in buttons.load() if b["name"] == name)["id"], artists["id"])
+    assert buttons.follows_seed(buttons.get(artists["id"])) and not buttons.follows_seed(
+        next(b for b in buttons.load() if b["name"] == "Artist + Guests"))
+    p.refresh_buttons()
+    p.seed_var.set("Playing Now")
+    p._sync_seed_bars()
+    ui.pump(0.3)
+    fb = next(b for b in p.play_buttons if b._name == "Similar Artists")
+    assert fb._accent == p.seed_colour
+    p._open_children(buttons.get(artists["id"]))
+    ui.pump(0.4)
+    pop = p._children_popup
+    colours = {row.text: row.itemcget(row._text_id, "fill") for _pl, row, _tag in pop._rows}
+    assert colours["Similar Artists"] == p.seed_colour, "the parent's own row"
+    assert colours["Consensus"] == p.seed_colour and colours["Similar Tracks"] == p.seed_colour
+    assert colours["Artist + Guests"] != p.seed_colour
+    p._close_children()
+    p.seed_var.set("Current Track")
+    p._sync_seed_bars()
+    p._open_children(buttons.get(artists["id"]))
+    ui.pump(0.4)
+    assert all(row.itemcget(row._text_id, "fill") != p.seed_colour for _pl, row, _tag in p._children_popup._rows)
+    p._close_children()
+    assert not ui.errors, ui.errors[0]

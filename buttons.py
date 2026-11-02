@@ -11,7 +11,7 @@ a playlist up with the Non-stop settings of the playlist that built it, and a pl
 shortcut runs it from the keyboard.
 
 Playlists are kept as JSON in the database's meta table, in the order shown. The first load
-with none makes the standard four from .env, so day one changes nothing, then Headliner. An
+with none makes the standard four from .env, so day one changes nothing, then Artist + Guests. An
 Alexa device with settings of its own gets a playlist for each kind whose values differ from
 the main ones ("Kitchen Echo Similar Tracks"), kept off the Play tab, which that device's
 phrases run. Filters that applied to all devices or to Windows (Main) are ticked on the
@@ -44,13 +44,13 @@ def mix_default():
 
 
 # The ready-made playlists, offered as templates and made at the upgrade: each starts from the standard
-# playlist of its kind(s) with these settings laid on top. Headliner: the artist's top tracks, two at a
+# playlist of its kind(s) with these settings laid on top. Artist + Guests: the artist's top tracks, two at a
 # time, with one track from a close similar artist between them (Ben, 30 Oct 2026, listening to Zero 7).
 READY_MADE = [
-    {"key": "headliner", "name": N_("Headliner"), "kind": "top", "settings": {"TOP_TRACKS_COUNT": "12"},
+    {"key": "headliner", "name": N_("Artist + Guests"), "kind": "top", "settings": {"TOP_TRACKS_COUNT": "12"},
      "configs": [("artists", {"SIMILAR_ARTIST_LIMIT": "5", "SIMILAR_ARTIST_TRACK_COUNT": "6", "TRACKS_PER_ARTIST_PICK": "1"})],
      "mix": {"combine": "alternate", "pattern": [2, 1], "drift_from": 1, "continue_as": 0}},
-    {"key": "inner_circle", "name": N_("Inner Circle"), "kind": "artists",
+    {"key": "inner_circle", "name": N_("Consensus"), "kind": "artists",
      "settings": {"INNER_CIRCLE_ARTISTS": "1", "INNER_CIRCLE_ARTISTS_SIZE": "3", "INNER_CIRCLE_ARTISTS_AGREE": "2"},
      "configs": [], "mix": None},
     # The two other ways to take an artist's top tracks, shipped under Artist's Top Tracks (Ben, 2 Nov 2026)
@@ -62,7 +62,7 @@ READY_MADE = [
 
 # How the playlists are arranged as 24bit7 ships them (Ben, 2 Nov 2026): three buttons, two with menus.
 # Similar Artists, titled Artist Matching in its menu, over the standard Similar Tracks (named Track
-# Matching), Inner Circle and Headliner; Artist's Top Tracks, set to fifteen tracks in random order
+# Matching), Consensus and Artist + Guests; Artist's Top Tracks, set to fifteen tracks in random order
 # whatever the user had (only those two settings; the rest stays theirs), titled Top 15, Random, over
 # Top 10, Best First and Top 10, Best Last; AI Playlist alone. The upgrade lays this on (arrange_shipped),
 # and Restore Default Playlists puts back whatever of it has gone (restore_standard).
@@ -137,7 +137,7 @@ def tidy(item):
         kind, settings = first["kind"], first["settings"]
         out["kind"] = kind
     if kind == "top" and settings.get("TOP_GUESTS") == "third" and not out["configs"]:
-        # Headliner as the dev build of 30 Oct 2026 kept it (a Guests setting): now top tracks + artist matching
+        # Artist + Guests as the dev build of 30 Oct 2026 kept it (a Guests setting): now top tracks + artist matching
         recipe = next(r for r in READY_MADE if r["key"] == "headliner")
         env = _env_values()
         out["configs"] = [{"kind": k, "settings": dict(settings_from(env.get, k), **extra)} for k, extra in recipe["configs"]]
@@ -178,6 +178,16 @@ def configs(button):
     if button.get("kind") is None:
         return []
     return [{"kind": button["kind"], "settings": button.get("settings") or {}}] + list(button.get("configs") or [])
+
+
+def follows_seed(button):
+    """
+    Whether the Play tab's Seed (Current Track or Playing Now) applies to a playlist: when its first
+    config is Artist Matching or Track Matching. One rule for the button's teal, the menu rows' and the
+    build itself (2 Nov 2026: Artist + Guests has a matching config second, so it lit but never followed).
+    """
+    cfgs = configs(button)
+    return bool(cfgs) and cfgs[0]["kind"] in ("artists", "tracks")
 
 
 def has_drift(kind):
@@ -286,7 +296,7 @@ def set_config_kind(button_id, index, kind):
 def add_from_choice(choice):
     """
     The Add a Playlist window's answer: ("existing", id) ticks a playlist back onto the Play tab;
-    ("copy", id) copies one that's on it; ("template", key) adds the template (a kind's shipped defaults, or Headliner or Inner Circle)
+    ("copy", id) copies one that's on it; ("template", key) adds the template (a kind's shipped defaults, or Artist + Guests or Consensus)
     under its own name, ticked; ("new", None) adds a blank slate called New Playlist, ticked, with
     no config until its page adds one. Returns (the playlist, whether it's new and wants its page).
     """
@@ -331,13 +341,30 @@ def _stored():
     return [tidy(x) for x in items if isinstance(x, dict)]
 
 
+# The shipped names before 1.30.0 (Ben, 2 Nov 2026: Inner Circle undersold a quality check, Headliner was a bit
+# flat). A playlist still carrying the old shipped name takes the new one; one the user renamed is left alone.
+RENAMED_SHIPPED = {"inner_circle": ("Inner Circle", N_("Consensus")), "headliner": ("Headliner", N_("Artist + Guests"))}
+
+
+def _rename_shipped(items):
+    changed = False
+    for b in items:
+        old, new = RENAMED_SHIPPED.get(b.get("made") or "", ("", ""))
+        if old and b.get("name") == old:
+            b["name"] = t(new)
+            changed = True
+    if changed:
+        save(items)
+    return items
+
+
 def load():
     """Every button, in the order shown. The first call ever makes them from today's settings."""
     items = _stored()
     if items is None:
         upgrade()
         items = _stored() or []
-    return settle(_adopt_env_shortcuts(items))
+    return settle(_adopt_env_shortcuts(_rename_shipped(items)))
 
 
 # --- nesting: a playlist under another, one level deep ---------------------------------------------
@@ -528,7 +555,7 @@ def add(name, kind, from_id=None):
     """
     items = load()
     ready = next((r for r in READY_MADE if from_id == f"{TEMPLATE}:{r['key']}"), None)
-    if ready is not None:   # Headliner, Inner Circle: the standard playlists of its kinds with the recipe laid on top
+    if ready is not None:   # Artist + Guests, Consensus: the standard playlists of its kinds with the recipe laid on top
         new = ready_made_button(ready["key"], {k: standard(k) for k in KIND_NAMES})
         new["name"] = name.strip() or t(ready["name"])
     elif kind is None:
@@ -686,6 +713,12 @@ def nonstop_config(button):
     Non-stop as a button has it, its settings over .env: {"on", "using", "reseed", "mode"},
     plus "with" for an AI Playlist. A playlist is topped up as the button that built it says.
     """
+    import overrides
+    return overrides.nonstop(nonstop_own(button), button)   # the open More Options row's switch, on top
+
+
+def nonstop_own(button):
+    """Non-stop as the playlist's own page has it, with no override laid over it."""
     button = continue_as(button)   # a mix carries on as the config its Mix says
     if button.get("kind") is None:   # a blank slate: nothing to carry on as
         return {"on": False, "using": "artists", "reseed": "last", "mode": "journey"}
@@ -799,7 +832,7 @@ def standard_buttons(env=None):
 
 def ready_made_button(key, bases):
     """
-    A ready-made playlist (Headliner, Inner Circle) from the standard playlists of its kinds:
+    A ready-made playlist (Artist + Guests, Consensus) from the standard playlists of its kinds:
     bases is {kind: the standard playlist or None}. A kind with no standard starts from the
     shipped defaults.
     """
@@ -882,7 +915,7 @@ def missing_shipped():
 def restore_standard():
     """
     Restore Default Playlists: puts back whatever of what 24bit7 ships has gone, a standard playlist
-    or a ready-made one (Headliner, Inner Circle, the two Top 10s), each under the playlist it ships
+    or a ready-made one (Artist + Guests, Consensus, the two Top 10s), each under the playlist it ships
     under when that's there, else after the rest. Nothing already there is touched.
     """
     items = load()
@@ -939,7 +972,7 @@ def _old_devices():
 
 def upgrade():
     """
-    The first run with playlists: the standard four from .env, Headliner and Inner Circle, then a
+    The first run with playlists: the standard four from .env, Artist + Guests and Consensus, then a
     playlist per kind an Alexa device with its own settings changed, which that device's phrases
     run and which stays off the Play tab; then the shipped arrangement (arrange_shipped). Filters for all devices or Windows (Main) go on the standard
     playlists; a device-only filter goes nowhere, said once. Runs once: saving an empty list
@@ -949,7 +982,7 @@ def upgrade():
     env = _env_values()
     items = standard_buttons(env)
     by_kind = {b["kind"]: b for b in items}
-    at = items.index(by_kind["vibe"])   # before AI Playlist (Ben, 30 Oct): Headliner, then Inner Circle
+    at = items.index(by_kind["vibe"])   # before AI Playlist (Ben, 30 Oct): Artist + Guests, then Consensus
     items.insert(at, ready_made_button("headliner", by_kind))
     items.insert(at + 1, ready_made_button("inner_circle", by_kind))
     all_filters = filters.stored_raw()   # with their old Applies on lists
@@ -1012,6 +1045,9 @@ def run(button, report=print, seed_info=None, build=None, extra_filters=(), **op
     if not cfgs:   # a blank slate: nothing to build until its page adds a config
         report(t(NO_CONFIG_YET, name=button["name"]))
         return None
+    import overrides
+    if overrides.active() and not (engine.NONSTOP_APPEND or options.get("topup")):   # said once per build, not per top-up
+        report(t("More Options: {switches}, over this playlist's own settings.", switches=overrides.summary()))
     if build is not None or len(cfgs) == 1 or engine.NONSTOP_APPEND or options.get("topup"):
         return _run_one(button, button["kind"], button.get("settings") or {}, report, seed_info, build, extra_filters,
                         options)
@@ -1024,7 +1060,9 @@ def _run_one(button, kind, settings, report, seed_info, build, extra_filters, op
     ids += [i for i in extra_filters if i not in ids]
     previous = dict(engine.PROFILE)
     before = engine.BUILD_BUTTON
-    engine.use_profile(dict(settings or {}, **previous))
+    import overrides
+    settings = dict(settings or {}, **overrides.layer(button, kind, settings))   # the open row's switches, on top
+    engine.use_profile(dict(settings, **previous))
     engine.FILTER_IDS = ids
     engine.BUILD_BUTTON = button["id"]
     try:
@@ -1121,7 +1159,7 @@ def describe(button):
     g = button["kind"].upper()
     bits = [" + ".join(t(KIND_LABELS[c["kind"]]) for c in cfgs)]
     if any(c["settings"].get(f"INNER_CIRCLE_{c['kind'].upper()}", "0") in engine.YES for c in cfgs):
-        bits.append("Inner Circle")
+        bits.append("Consensus")
     d = cfgs[mix["drift_from"]]
     if d["settings"].get(f"DRIFT_{d['kind'].upper()}", "0") in engine.YES:
         bits.append("Drift")

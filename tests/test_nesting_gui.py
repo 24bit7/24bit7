@@ -42,7 +42,7 @@ def test_a_parent_is_a_split_button_whose_face_runs_the_default(app, ui, monkeyp
     top, ten = make_parent(buttons)
     p.refresh_buttons()
     ui.pump(0.3)
-    assert names(p) == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Headliner", "Inner Circle", "AI Playlist"]
+    assert names(p) == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Artist + Guests", "Consensus", "AI Playlist"]
     fb = p.play_buttons[2]
     assert fb._arrow is not None and p.play_buttons[1]._arrow is None, "only the parent has the arrow"
     assert fb._size[0] > p.play_buttons[1]._size[0], "and is wider for it"
@@ -145,9 +145,9 @@ def test_removing_a_playlist_clears_the_console_first(app, ui):
     p = ui.play
     p._end_greeting(keep=False)
     p._append_log("Old build output.")
-    p._remove_button(p.play_buttons[3]._button)   # Headliner
+    p._remove_button(p.play_buttons[3]._button)   # Artist + Guests
     ui.pump(0.3)
     text = p.log.get("1.0", "end")
-    assert "Old build output." not in text and "Headliner is off the Play tab." in text
-    assert p._live == [l for l in p._live if "Headliner is off" in l], "the kept lines start again too"
+    assert "Old build output." not in text and "Artist + Guests is off the Play tab." in text
+    assert p._live == [l for l in p._live if "Artist + Guests is off" in l], "the kept lines start again too"
     assert not ui.errors, ui.errors[0]

@@ -81,7 +81,7 @@ def test_playlists_tab_replaces_sources_playlist_and_filters(app, ui):
     titles = tab_titles(settings_pane(ui))
     assert "Playlists" in titles and not {"Sources", "Playlist", "Filters", "Buttons", "Zones"} & set(titles), titles
     assert "Devices" in titles
-    assert s._button_names() == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Headliner", "Inner Circle", "AI Playlist"]
+    assert s._button_names() == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Artist + Guests", "Consensus", "AI Playlist"]
     assert s._button_id == s._buttons[0]["id"] and s._button_page.button["name"] == "Similar Artists"
     assert not [w for w in walk(s._button_right) if hasattr(w, "_tabs")], "one page, no inner tabs"
     texts = labels(s._button_inner)
@@ -94,36 +94,36 @@ def test_playlists_tab_replaces_sources_playlist_and_filters(app, ui):
 def test_the_tick_puts_a_playlist_on_the_play_tab_and_move_up_and_down_reorder(app, ui):
     import buttons
     s = buttons_page(ui)
-    _id, _row, tick, _label, var = s._button_rows[3]   # Headliner
+    _id, _row, tick, _label, var = s._button_rows[3]   # Artist + Guests
     assert var.get() is True
     tick.invoke()
     ui.pump(0.3)
     assert buttons.get(s._buttons[3]["id"])["shown"] is False
-    assert "Headliner" not in [b._name for b in ui.play.play_buttons], "the Play tab follows"
+    assert "Artist + Guests" not in [b._name for b in ui.play.play_buttons], "the Play tab follows"
     tick.invoke()
     ui.pump(0.3)
-    assert "Headliner" in [b._name for b in ui.play.play_buttons]
-    pick_button(ui, "Headliner")
+    assert "Artist + Guests" in [b._name for b in ui.play.play_buttons]
+    pick_button(ui, "Artist + Guests")
     s._button_move(-1)
     ui.pump(0.3)
-    assert s._button_names()[2:4] == ["Headliner", "Artist's Top Tracks"]
-    assert [b._name for b in ui.play.play_buttons][2] == "Headliner"
+    assert s._button_names()[2:4] == ["Artist + Guests", "Artist's Top Tracks"]
+    assert [b._name for b in ui.play.play_buttons][2] == "Artist + Guests"
     s._button_move(1)
     ui.pump(0.3)
-    assert s._button_names()[2:4] == ["Artist's Top Tracks", "Headliner"]
+    assert s._button_names()[2:4] == ["Artist's Top Tracks", "Artist + Guests"]
     assert not ui.errors, ui.errors[0]
 
 
 def test_the_chosen_row_is_a_border_and_the_help_line_is_gone(app, ui):
     from tabs import PALETTE
     s = buttons_page(ui)
-    pick_button(ui, "Headliner")
+    pick_button(ui, "Artist + Guests")
     ui.pump(0.3)
     rows = {bid: row for bid, row, _tick, _label, _var in s._button_rows}
     import buttons
-    head = next(b for b in buttons.load() if b["name"] == "Headliner")
+    head = next(b for b in buttons.load() if b["name"] == "Artist + Guests")
     chosen = rows[head["id"]]
-    assert chosen.chosen and chosen.text == "Headliner", "a rounded outline in the accent colour"
+    assert chosen.chosen and chosen.text == "Artist + Guests", "a rounded outline in the accent colour"
     assert chosen.cget("bg") == s._button_list.cget("bg") == PALETTE["field_bg"], "no fill, on the field colour"
     assert chosen.left is not None and chosen.left.winfo_manager(), "the tick sits inside the row"
     others = [r for bid, r in rows.items() if bid != head["id"]]
@@ -134,11 +134,11 @@ def test_the_chosen_row_is_a_border_and_the_help_line_is_gone(app, ui):
 
 def test_the_name_at_the_top_renames_in_place(app, ui):
     import buttons
-    pick_button(ui, "Headliner")
+    pick_button(ui, "Artist + Guests")
     s = ui.settings
     s._button_title.event_generate("<Button-1>")
     ui.pump(0.3)
-    entry = next(w for w in walk(s._button_right) if isinstance(w, tk.Entry) and w.get() == "Headliner")
+    entry = next(w for w in walk(s._button_right) if isinstance(w, tk.Entry) and w.get() == "Artist + Guests")
     entry.delete(0, "end")
     entry.insert(0, "Star Turn")
     entry.focus_force()   # Tk sends a generated key press to the focus widget
@@ -152,7 +152,7 @@ def test_the_name_at_the_top_renames_in_place(app, ui):
 
 
 def test_a_page_shows_only_its_kind_with_its_switches(app, ui):
-    p = pick_button(ui, "Headliner")
+    p = pick_button(ui, "Artist + Guests")
     assert "TOP_TRACKS_COUNT" in p.vars and "NONSTOP_TOP_REST" in p.vars and "TOP_TRACK_SOURCES" in p.vars
     assert not any(k in p.vars for k in ("SIMILAR_ARTIST_LIMIT", "SIMILAR_SOURCES", "DRIFT_TOP", "VIBE_TRACK_COUNT"))
     assert p.button["kind"] == "top" and not p.columns
@@ -167,14 +167,14 @@ def test_a_page_shows_only_its_kind_with_its_switches(app, ui):
 def test_inner_circle_sits_on_a_matching_page_and_its_dials_keep_in_step(app, ui):
     import buttons
     import settings_gui
-    p = pick_button(ui, "Headliner")
+    p = pick_button(ui, "Artist + Guests")
     assert not any(k.startswith("INNER_CIRCLE") for k in p.vars), "Top Tracks has no circle"
     p = pick_button(ui, "Similar Artists")
     page = inner_page(ui, "Sources")
-    tick = next(w for w in walk(page) if isinstance(w, ttk.Checkbutton) and w.cget("text") == "Inner Circle")
+    tick = next(w for w in walk(page) if isinstance(w, ttk.Checkbutton) and w.cget("text") == "Consensus")
     size_cb = next(c for c in walk(page) if isinstance(c, ttk.Combobox) and tuple(c.cget("values")) == ("3", "4", "5"))
     agree_cb = next(c for c in walk(page) if isinstance(c, ttk.Combobox) and tuple(c.cget("values")) == ("2", "3"))
-    assert "disabled" in size_cb.state() and "disabled" in agree_cb.state(), "greyed out until Inner Circle is on"
+    assert "disabled" in size_cb.state() and "disabled" in agree_cb.state(), "greyed out until Consensus is on"
     tick.invoke()
     ui.pump(0.3)
     assert "disabled" not in size_cb.state()
@@ -194,7 +194,7 @@ def test_inner_circle_sits_on_a_matching_page_and_its_dials_keep_in_step(app, ui
     ui.pump(0.3)
     assert agree_cb.get() == "3", "agree can't be more than the circle"
     assert buttons.standard("artists")["settings"]["INNER_CIRCLE_ARTISTS_AGREE"] == "3"
-    p = pick_button(ui, "Inner Circle")
+    p = pick_button(ui, "Consensus")
     assert p.vars["INNER_CIRCLE_ARTISTS"].get() is True and p.vars["INNER_CIRCLE_ARTISTS_SIZE"].get() == "3"
     assert not ui.errors, ui.errors[0]
 
@@ -206,14 +206,14 @@ def test_the_config_heading_changes_the_kind_except_on_a_standard_playlist(app, 
     assert not getattr(ui.settings, "_kind_boxes", []) or not any(
         cb.winfo_exists() and str(cb.master.master.master) == str(page) for cb in ui.settings._kind_boxes), \
         "a standard playlist's own kind is a label"
-    p = pick_button(ui, "Headliner")
+    p = pick_button(ui, "Artist + Guests")
     ui.pump(0.3)
     boxes = [cb for cb in ui.settings._kind_boxes if cb.winfo_exists()]
     assert [cb.get() for cb in boxes] == ["Artist's Top Tracks", "Artist Matching"]
     boxes[1].set("Track Matching")
     boxes[1].event_generate("<<ComboboxSelected>>")
     ui.pump(0.5)
-    head = next(b for b in buttons.load() if b["name"] == "Headliner")
+    head = next(b for b in buttons.load() if b["name"] == "Artist + Guests")
     assert [c["kind"] for c in buttons.configs(head)] == ["top", "tracks"]
     assert "SIMILAR_TRACK_COUNT" in head["configs"][0]["settings"]
     assert not ui.errors, ui.errors[0]
@@ -272,10 +272,10 @@ def test_a_custom_button_saves_into_itself_only(app, ui):
     import buttons
     import settings_gui
     env_before = settings_gui.read_env().get("TOP_TRACKS_COUNT")
-    p = pick_button(ui, "Headliner")
+    p = pick_button(ui, "Artist + Guests")
     p.vars["TOP_TRACKS_COUNT"].set("15")
     ui.pump(0.3)
-    head = next(b for b in buttons.load() if b["name"] == "Headliner")
+    head = next(b for b in buttons.load() if b["name"] == "Artist + Guests")
     assert head["settings"]["TOP_TRACKS_COUNT"] == "15" and [c["kind"] for c in head["configs"]] == ["artists"]
     assert buttons.standard("top")["settings"].get("TOP_TRACKS_COUNT", "10") != "15"
     assert settings_gui.read_env().get("TOP_TRACKS_COUNT") == env_before, ".env is the standard button's"
@@ -292,7 +292,7 @@ def test_the_standard_button_also_writes_env(app, ui):
     assert settings_gui.read_env().get("TOP_TRACKS_COUNT") == "13"
     app.engine.refresh_settings_if_changed()
     assert app.engine.TOP_TRACKS_COUNT == 13
-    assert next(b for b in buttons.load() if b["name"] == "Headliner")["settings"].get("TOP_TRACKS_COUNT", "10") != "13"
+    assert next(b for b in buttons.load() if b["name"] == "Artist + Guests")["settings"].get("TOP_TRACKS_COUNT", "10") != "13"
 
 
 def test_deep_cuts_switch_on_every_button_and_the_standard_one_reaches_env(app, ui):
@@ -317,7 +317,7 @@ def test_deep_cuts_switch_on_every_button_and_the_standard_one_reaches_env(app, 
     pick_button(ui, "Sunday")
     page = inner_page(ui, "Playlist")
     assert len(switch(page)) == 1, "a button of your own has its own switch"
-    pick_button(ui, "Headliner")
+    pick_button(ui, "Artist + Guests")
     assert not switch(inner_page(ui, "Playlist")), "Artist's Top Tracks has no Deep Cuts"
     assert not ui.errors, ui.errors[0]
 
@@ -340,7 +340,7 @@ def test_filters_tick_on_the_page_and_edit_filters_opens_a_window(app, ui):
     import filters
     f = filters.blank("Stereo")
     filters.save([f])
-    p = pick_button(ui, "Headliner")
+    p = pick_button(ui, "Artist + Guests")
     s = ui.settings
     ticks = [w for w in walk(s._button_filter_row) if isinstance(w, ttk.Checkbutton)]
     assert [t.cget("text") for t in ticks] == ["Stereo"]
@@ -353,7 +353,7 @@ def test_filters_tick_on_the_page_and_edit_filters_opens_a_window(app, ui):
     assert win.title() == "Edit Filters" and win.winfo_exists()
     texts = labels(win)
     assert "Applies on" not in texts and "Active filters" not in texts
-    assert "Used by: Headliner" in texts, texts
+    assert "Used by: Artist + Guests" in texts, texts
     assert s._open_filters() is win, "opened again, it's the same window"
     ticks[0].invoke()
     ui.pump(0.2)
@@ -369,13 +369,13 @@ def test_add_remove_and_restore_from_settings(app, ui, monkeypatch):
     import settings_gui
     from tkinter import messagebox
     s = buttons_page(ui)
-    head = next(b for b in buttons.load() if b["name"] == "Headliner")
+    head = next(b for b in buttons.load() if b["name"] == "Artist + Guests")
     monkeypatch.setattr(settings_gui, "ask_new_button", lambda parent: ("template", "headliner"))
     s._button_add()
     ui.pump(0.3)
-    assert s._button_names()[-1] == "Headliner 2" and s._button_page.button["name"] == "Headliner 2"
+    assert s._button_names()[-1] == "Artist + Guests 2" and s._button_page.button["name"] == "Artist + Guests 2"
     assert [c["kind"] for c in s._button_page.button["configs"]] == ["artists"]
-    assert [b._name for b in ui.play.play_buttons][-1] == "Headliner 2", "the Play tab follows"
+    assert [b._name for b in ui.play.play_buttons][-1] == "Artist + Guests 2", "the Play tab follows"
     assert "disabled" in s._list_buttons["down"].cget("state") and "normal" in s._list_buttons["up"].cget("state")
     monkeypatch.setattr(settings_gui, "ask_new_button", lambda parent: ("new", None))
     s._button_add()
@@ -396,7 +396,7 @@ def test_add_remove_and_restore_from_settings(app, ui, monkeypatch):
     s._button_remove()
     ui.pump(0.3)
     assert "Sunday Guests" not in s._button_names()
-    buttons.remove(buttons.get(s._button_names() and next(b["id"] for b in buttons.load() if b["name"] == "Headliner 2"))["id"])
+    buttons.remove(buttons.get(s._button_names() and next(b["id"] for b in buttons.load() if b["name"] == "Artist + Guests 2"))["id"])
     s._buttons_refresh()
     assert s._button_page.button["name"] == "Similar Artists", "back to the first"
     assert "Sunday Guests" not in [b._name for b in ui.play.play_buttons]
@@ -419,7 +419,7 @@ def test_the_list_follows_the_play_tab(app, ui, monkeypatch):
     import buttons
     import tabs
     s = buttons_page(ui)
-    pick_button(ui, "Headliner")
+    pick_button(ui, "Artist + Guests")
     monkeypatch.setattr(tabs, "ask_name", lambda *a, **k: "Star Turn")
     ui.play._rename_button(buttons.get(s._button_id))
     s._buttons_refresh()   # as opening the page does

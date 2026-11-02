@@ -1,5 +1,5 @@
 """
-Headliner (30 Oct 2026; two configs since stage C, 31 Oct): the seed artist's top tracks, two at
+Artist + Guests (30 Oct 2026; two configs since stage C, 31 Oct): the seed artist's top tracks, two at
 a time, with one track from a close similar artist between them. Honest when guests run short:
 the hosts carry on alone.
 """
@@ -18,7 +18,7 @@ def artist_of(title):
 
 def headliner(app):
     import buttons
-    h = next(b for b in buttons.load() if b["name"] == "Headliner")
+    h = next(b for b in buttons.load() if b["name"] == "Artist + Guests")
     buttons.set_settings(h["id"], dict(h["settings"], TOP_TRACKS_COUNT="6"))   # shipped at twelve; these count hosts in sixes
     return buttons.get(h["id"])
 

@@ -22,13 +22,13 @@ def test_nesting_takes_a_playlist_off_the_row_and_into_the_parents_menu(app):
     import buttons
     top, ten, deep = setup(buttons)
     assert buttons.nest(ten["id"], top["id"]) and buttons.nest(deep["id"], top["id"])
-    assert names(buttons.shown()) == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Headliner", "Inner Circle",
+    assert names(buttons.shown()) == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Artist + Guests", "Consensus",
                                       "AI Playlist"], "the children left the row"
     assert names(buttons.children(top["id"])) == ["Top 10, Best First", "Deep Cut Top Tracks"]
     assert buttons.is_parent(buttons.get(top["id"])) and not buttons.is_parent(buttons.get(ten["id"]))
     order = names(buttons.load())
     assert order.index("Top 10, Best First") == order.index("Artist's Top Tracks") + 1, "tree order: children follow their parent"
-    assert order.index("Headliner") == order.index("Deep Cut Top Tracks") + 1
+    assert order.index("Artist + Guests") == order.index("Deep Cut Top Tracks") + 1
     buttons.set_shown(deep["id"], False)
     assert names(buttons.children(top["id"])) == ["Top 10, Best First"], "unticked: out of the menu, kept"
     assert names(buttons.children(top["id"], ticked_only=False)) == ["Top 10, Best First", "Deep Cut Top Tracks"]
@@ -75,10 +75,10 @@ def test_moves_stay_within_a_level_and_carry_children(app):
         "a parent moves past the next top-level playlist, children with it"
     buttons.move_shown(top["id"], 1)
     assert names(buttons.shown())[:3] == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks"]
-    head = next(b for b in buttons.load() if b["name"] == "Headliner")
+    head = next(b for b in buttons.load() if b["name"] == "Artist + Guests")
     buttons.move_to(top["id"], head["id"])
     order = names(buttons.load())
-    assert order[order.index("Headliner") - 3:order.index("Headliner")] == ["Artist's Top Tracks", "Deep Cut Top Tracks", "Top 10, Best First"]
+    assert order[order.index("Artist + Guests") - 3:order.index("Artist + Guests")] == ["Artist's Top Tracks", "Deep Cut Top Tracks", "Top 10, Best First"]
     buttons.move_to(ten["id"], head["id"])
     assert buttons.get(ten["id"])["parent"] == top["id"], "a child isn't dropped onto the row by a move"
 
@@ -104,14 +104,14 @@ def test_a_stored_tangle_settles_on_load(app):
     by = {b["name"]: b for b in items}
     by["Top 10, Best First"]["parent"] = top["id"]
     by["Deep Cut Top Tracks"]["parent"] = ten["id"]      # under a child: not allowed
-    by["Headliner"]["parent"] = "gone"                   # a parent that doesn't exist
+    by["Artist + Guests"]["parent"] = "gone"                   # a parent that doesn't exist
     by["Artist's Top Tracks"]["default"] = deep["id"]    # not one of its children
     con = app.engine.db()
     con.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (buttons.META_KEY, json.dumps(items)))
     con.commit()
     loaded = {b["name"]: b for b in buttons.load()}
     assert loaded["Top 10, Best First"]["parent"] == top["id"]
-    assert loaded["Deep Cut Top Tracks"]["parent"] == "" and loaded["Headliner"]["parent"] == ""
+    assert loaded["Deep Cut Top Tracks"]["parent"] == "" and loaded["Artist + Guests"]["parent"] == ""
     assert loaded["Artist's Top Tracks"]["default"] == ""
     order = names(buttons.load())
     assert order.index("Top 10, Best First") == order.index("Artist's Top Tracks") + 1, "in tree order"

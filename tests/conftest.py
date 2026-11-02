@@ -22,7 +22,7 @@ REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 import fakes  # noqa: E402
 
-APP_MODULES = ["i18n", "engine", "library", "deepcuts", "voice", "saved_playlists", "nonstop", "playmix", "filters", "buttons", "devices", "buildlog", "blend",
+APP_MODULES = ["i18n", "engine", "library", "deepcuts", "voice", "saved_playlists", "nonstop", "playmix", "overrides", "filters", "buttons", "devices", "buildlog", "blend",
                "console_query", "ai_usage", "support_gui", "window_chrome", "hotkeys", "tray", "tabs", "mix_gui", "review_gui", "profiles", "ai_dialog", "discover_gui", "settings_gui", "gui", "source_test"]
 
 BASE_ENV = {
@@ -114,8 +114,8 @@ def app(tmp_path, monkeypatch):
     engine.OUTPUT_HOOK = printed
     library = importlib.import_module("library")
     voice = importlib.import_module("voice")
-    # The fake world starts on the flat row the tests were written against (the standard four with Headliner
-    # and Inner Circle between them), not the nested arrangement 24bit7 ships since 2 Nov 2026, which
+    # The fake world starts on the flat row the tests were written against (the standard four with Artist + Guests
+    # and Consensus between them), not the nested arrangement 24bit7 ships since 2 Nov 2026, which
     # tests/test_shipped_layout.py covers with the real arrange_shipped (kept on ns.arrange_shipped).
     buttons_mod = importlib.import_module("buttons")
     arrange_shipped = buttons_mod.arrange_shipped

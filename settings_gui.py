@@ -941,7 +941,7 @@ class AddPlaylistPrompt(PromptWindow):
     """
     The Add a Playlist window: three tabs. From Existing lists every playlist: one that's off the
     Play tab, Add ticks back; one that's on it, Create Copy copies (Name 2, right after it). From
-    Template lists the four kinds as shipped, Headliner and Inner Circle; New makes a blank slate
+    Template lists the four kinds as shipped, Artist + Guests and Consensus; New makes a blank slate
     and opens its page with the name box ready. The answer in .result is ("existing", id),
     ("copy", id), ("template", key) or ("new", None); None for Cancel.
     """
@@ -1395,8 +1395,8 @@ class SettingsTab(tk.Frame):
         restore = tk.Label(box, text=t("Restore Default Playlists"), fg=PALETTE["button_fg"], font=HELP_FONT, cursor="hand2")
         restore.grid(row=1, column=0, sticky="w", pady=(8, 0))
         restore.bind("<Button-1>", lambda e: self._button_restore())
-        Tooltip(restore, t("Puts back anything 24bit7 ships that's been deleted: a standard playlist, Headliner, Inner "
-                           "Circle or a Top 10, under the playlist it came under."))
+        Tooltip(restore, t("Puts back anything 24bit7 ships that's been deleted: a standard playlist, Artist + Guests, "
+                           "Consensus or a Top 10, under the playlist it came under."))
         self._button_right = tk.Frame(outer, pady=12)
         self._button_right.pack(side="left", fill="both", expand=True, padx=(0, 12))
         outer.bind("<Map>", lambda e: self._buttons_refresh())
@@ -3057,11 +3057,11 @@ class SettingsTab(tk.Frame):
             cb.state(["!disabled"] if tick.get() else ["disabled"])
 
     def _inner_circle_section(self, p, page, group):
-        """Inner Circle for a matching config: On or Off, the circle's size, and how many lists must agree."""
+        """Consensus for a matching config: On or Off, the circle's size, and how many lists must agree."""
         g = group.upper()
         what = t("artists") if group == "artists" else t("tracks")
-        box = section(page, t("Inner Circle"),
-                      t("Instead of the seed's own list of similar {what}, Inner Circle takes the seed's closest few, "
+        box = section(page, t("Consensus"),
+                      t("Instead of the seed's own list of similar {what}, Consensus takes the seed's closest few, "
                         "fetches each one's own similar {what}, and keeps what two or more of those lists agree on: "
                         "what the things you're listening to have in common. With Seed on Playing Now, the "
                         "sampled {what} are the circle. Fewer in the circle and more agreeing is tighter, and can "
@@ -3070,7 +3070,7 @@ class SettingsTab(tk.Frame):
         p.vars[on_key] = tk.BooleanVar(value=p.env.get(on_key, "0").strip().lower() in engine.YES)
         p.vars[size_key] = tk.StringVar(value=p.env.get(size_key, "3").strip() or "3")
         p.vars[agree_key] = tk.StringVar(value=p.env.get(agree_key, "2").strip() or "2")
-        tick = ttk.Checkbutton(box, text=t("Inner Circle"), variable=p.vars[on_key], command=lambda: (sync(), p.save()))
+        tick = ttk.Checkbutton(box, text=t("Consensus"), variable=p.vars[on_key], command=lambda: (sync(), p.save()))
         tick.grid(row=0, column=0, columnspan=6, sticky="w")
         row = self._line(box, 1, t("Circle"), pady=(6, 0))
         size_cb = TCombobox(row, textvariable=p.vars[size_key], values=["3", "4", "5"], state="readonly", width=4)

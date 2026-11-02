@@ -31,7 +31,7 @@ import tray
 import voice
 import hotkeys
 import nonstop
-from settings_gui import SettingsTab, write_env, read_env, Tooltip, NO_KEY_TEXT, ask_new_button
+from settings_gui import SettingsTab, write_env, read_env, Tooltip, NO_KEY_TEXT, ask_new_button, warn_moderator_once
 from discover_gui import DiscoverTab
 import tabs
 from tabs import TabbedPane, PALETTE, FlatButton, InfoLine, apply_theme, ClickThrough, RoundedEntry
@@ -41,6 +41,7 @@ from review_gui import ReviewPanel
 import badge
 import console_query
 import playmix
+import overrides
 import profiles
 from ai_dialog import AIPlaylistDialog
 import buildlog
@@ -78,9 +79,9 @@ PLAY_NOTES = {
     "Similar Artists": N_("Finds artists like the seed's, then plays their best known tracks you own."),
     "Similar Tracks": N_("Finds songs like the seed track, from every source ticked on its Sources page."),
     "Artist's Top Tracks": N_("Plays the seed artist's most popular tracks that you own."),
-    "Headliner": N_("The seed artist's most popular tracks, two at a time, with one track from a close similar "
+    "Artist + Guests": N_("The seed artist's most popular tracks, two at a time, with one track from a close similar "
                     "artist you own between them."),
-    "Inner Circle": N_("Artist Matching with Inner Circle on: the seed's three closest artists, then only the artists "
+    "Consensus": N_("Artist Matching with Consensus on: the seed's three closest artists, then only the artists "
                        "their own lists agree on. Tight, and sometimes short."),
     "AI Playlist": N_("Describe a mood or moment and the AI picks tracks for it, from your library. Uses AI credits."),
     "+": N_("Puts a playlist you've taken off the row back, or makes a new one. Right-click any playlist to rename, "
@@ -90,6 +91,12 @@ PLAY_NOTES = {
                  "Tidal (ticked under Settings > Other > Additional Outputs)."),
     "Zone": N_("Which JRiver zone Now Playing shows and seeds from."),
     "Seed": N_("What Similar Artists and Similar Tracks start from: the current track, or every track in Playing Now."),
+    "Moderator": N_("While this row is open: Off turns the Moderator off for every build; On runs it as the playlist's "
+                    "page says, or Balanced if its page has it off. Uses AI credits."),
+    "Deep Cuts": N_("While this row is open: Off turns Deep Cuts off for every build; On adds them as the playlist's "
+                    "page says, or Spaced if its page has them off."),
+    "Non-stop": N_("While this row is open: Off stops Non-stop topping up any playlist; On keeps the music going as "
+                   "the playlist's page says, or as the standard playlist of its kind does."),
     "Mode": N_("Play Mode plays the playlist straight away. Review Mode lists it first, so you choose what goes."),
     "+ Add JRiver Playlist": N_("Joins one of your own JRiver playlists to the next build."),
     "Show Credits": N_("Lists the producer, engineer, musicians and other credits for what's playing, from Discogs."),
@@ -367,7 +374,7 @@ class PlayTab(tk.Frame):
 
         # Output: where the finished playlist goes. Saved straight to .env; the engine
         # reads it at the start of each run, so changing it mid-run affects the next one.
-        # It sits at the right of the Zone line, on both seed tabs (Ben, 30 Oct 2026: room for Headliner)
+        # It sits at the right of the Zone line, on both seed tabs (Ben, 30 Oct 2026: room for Artist + Guests)
         self.output_box = tk.Frame(self.seed_nb)
         tk.Label(self.output_box, text=t("Output"), font=("Segoe UI", 9, "bold"),
                  fg=PALETTE["text_secondary"]).pack(side="left", padx=(0, 6))
@@ -407,8 +414,21 @@ class PlayTab(tk.Frame):
                                          labels={"Play": N_("Play Mode"), "Review": N_("Review Mode")})
         self.behaviour_cb.pack(side="left", padx=(0, 8))
         tk.Frame(self.extras_row, width=1, height=24, bg=PALETTE["line"]).pack(side="left", padx=(8, 16))
-        # Moderator, Drift, Deep Cuts and Non-stop are each playlist's own, on its page (1 Nov 2026: with playlists
-        # nested under one another, a live dial here had no honest playlist to show)
+        # Moderator, Deep Cuts and Non-stop: overrides (overrides.py). While this row is open they beat every
+        # playlist's own settings; closed, the pages decide (Ben, 2 Nov 2026). Each is Off or On, lit when On.
+        self.override_vars = {}
+        self.override_cbs = {}
+        for key, prefix, colour, symbol in (("moderator", "Moderator", PALETTE["ai_purple"], False),
+                                            ("deep_cuts", "Deep Cuts", PALETTE["button_fg"], False),
+                                            ("nonstop", "\u221e", PALETTE["button_fg"], True)):
+            var = tk.StringVar(value="Off")
+            cb = ClickThrough(self.extras_row, prefix, var, ["Off", "On"], symbol=symbol, lit={"On": colour},
+                              command=lambda k=key: self._on_override_changed(k))
+            cb.pack(side="left", padx=(0, 8))
+            self.override_vars[key], self.override_cbs[key] = var, cb
+        self._moderator_tip = Tooltip(self.override_cbs["moderator"], t(NO_KEY_TEXT), when=lambda: not engine.ai_enabled())
+        self._sync_override_switches()
+        tk.Frame(self.extras_row, width=1, height=24, bg=PALETTE["line"]).pack(side="left", padx=(8, 16))
         # Add playlist: JRiver playlists joined to the next build from the app (not voice)
         self.add_playlist_button = FlatButton(self.extras_row, text=t("+ Add JRiver Playlist"), quiet=True,
                                               width=max(18, len(t("+ Add JRiver Playlist")) + 1),
@@ -455,8 +475,11 @@ class PlayTab(tk.Frame):
         on, wrap = self.help_on, self.note_wrap
         for widget, name in ((self.more_button, "More Options"), (self.add_button, "+"), (self.output_cb, "Output"),
                              (self.zone_cb, "Zone"), (self.seed_cb, "Seed"), (self.behaviour_cb, "Mode"),
-                             (self.add_playlist_button, "+ Add JRiver Playlist"), (self.help_cb, "Help")):
+                             (self.add_playlist_button, "+ Add JRiver Playlist"), (self.help_cb, "Help"),
+                             (self.override_cbs["deep_cuts"], "Deep Cuts"), (self.override_cbs["nonstop"], "Non-stop")):
             Tooltip(widget, t(PLAY_NOTES[name]), when=on, wrap=wrap)
+        Tooltip(self.override_cbs["moderator"], t(PLAY_NOTES["Moderator"]), when=lambda: on() and engine.ai_enabled(),
+                wrap=wrap)
 
     # --- the row of buttons -------------------------------------------------------------------------
 
@@ -561,9 +584,11 @@ class PlayTab(tk.Frame):
         inner.pack(fill="both", expand=True)
         pop._rows = []
         parent = buttons.get(parent["id"])
+        teal = self._seed_teal()   # rows Seed applies to read in the Seed colour, as the buttons do
         for playlist, text, is_default in buttons.menu_rows(parent):
-            row = tabs.PickRow(inner, text, fg=PALETTE["ai_purple"] if playlist["kind"] == "vibe" else fg, bg=bg,
-                               tag=t("default") if is_default else "", fit=True)
+            colour = (PALETTE["ai_purple"] if playlist["kind"] == "vibe"
+                      else self.seed_colour if teal and buttons.follows_seed(playlist) else fg)
+            row = tabs.PickRow(inner, text, fg=colour, bg=bg, tag=t("default") if is_default else "", fit=True)
             row.configure(cursor="hand2")
             row.pack(fill="x", padx=3, pady=1)
             row.bind("<Enter>", lambda e, r=row: r.set_chosen(True))   # the rounded outline on hover
@@ -672,6 +697,8 @@ class PlayTab(tk.Frame):
         self._close_children()
         if target == "settings":
             self.open_playlist_settings(child["id"])
+        elif target == "use":
+            self._use_settings_of(child)
         elif target == "remove":   # out of the menu and kept, as a row playlist's Remove keeps it
             buttons.set_shown(child["id"], False)
             self._append_log(t("Note: {name} is out of the menu. It's still under Settings > Playlists, and + puts it back.",
@@ -894,6 +921,8 @@ class PlayTab(tk.Frame):
         button = fb._button
         if target == "settings":
             self.open_playlist_settings(button["id"])
+        elif target == "use":
+            self._use_settings_of(button)
         elif target == "remove":
             self._remove_button(button)
         elif nest_into is not None:   # held over another playlist: under it, into its menu
@@ -926,8 +955,11 @@ class PlayTab(tk.Frame):
         font = ("Segoe UI", 11, "bold")
         measure = tkfont.Font(root=self, font=font)
         h = px(56)
-        for key, text, colour in (("settings", "\u2699  " + t("Settings"), PALETTE["button_fg"]),
-                                  ("remove", "\u2715  " + t("Remove"), PALETTE["brand_orange"])):
+        pills = [("settings", "\u2699  " + t("Settings"), PALETTE["button_fg"]),
+                 ("remove", "\u2715  " + t("Remove"), PALETTE["brand_orange"])]
+        if playmix.is_open():   # the row's switches can take this playlist's settings
+            pills.append(("use", "\u2913  " + t("Use Its Settings"), self.seed_colour))
+        for key, text, colour in pills:
             w = max(measure.measure(text) + px(64), px(200))
             cell = tk.Frame(inner, bg=strip_bg, padx=px(14))
             cell.pack(side="left")
@@ -1061,7 +1093,7 @@ class PlayTab(tk.Frame):
                 self._run_typed(lambda **kw: buttons.run(button, **kw), seed, lambda: self.on_button(button))
             return
         options = {}
-        if button["kind"] in ("artists", "tracks"):
+        if buttons.follows_seed(button):
             options["playing_now"] = engine.play_seed_is_playing_now()   # the Seed setting
         self._run_job(lambda: self._seeded(lambda **kw: buttons.run(button, **kw), **options),
                       needs_playing=False, review=True)
@@ -1083,6 +1115,43 @@ class PlayTab(tk.Frame):
         if save:
             playmix.set_open(open_)
         self._update_more_label()
+        if save or open_:   # opened or closed by hand, or found open at start-up: say what the row does
+            self.after_idle(lambda: self._say_overrides(open_))
+
+    def _say_overrides(self, open_):
+        if open_:
+            self._sync_override_switches()
+            self._append_log(t("Note: Moderator, Deep Cuts and Non-stop here override every playlist's own settings "
+                               "while this row is open ({switches}). Close the row and the playlists' pages decide again.",
+                               switches=overrides.summary()))
+        else:
+            self._append_log(t("Note: More Options closed. Each playlist's own settings decide again."))
+
+    def _sync_override_switches(self):
+        """The three switches read what's saved (after a change, a drop on Use Its Settings, or at start-up)."""
+        if not getattr(self, "override_vars", None):
+            return
+        for key, on in overrides.switches().items():
+            self.override_vars[key].set("On" if on else "Off")
+            self.override_cbs[key].set(self.override_vars[key].get())
+
+    def _on_override_changed(self, key):
+        on = self.override_vars[key].get() == "On"
+        overrides.set_switch(key, on)
+        self.override_cbs[key].selection_clear()
+        if key == "moderator" and on:
+            warn_moderator_once(self)
+        name = t(overrides.NAMES[key])
+        self._append_log(t("Note: {name} on for every build while this row is open.", name=name) if on
+                         else t("Note: {name} off for every build while this row is open.", name=name))
+
+    def _use_settings_of(self, button):
+        """The Use Its Settings pill: the three switches take what this playlist's own page has."""
+        values = overrides.set_switches(overrides.from_playlist(button))
+        self._sync_override_switches()
+        self._append_log(t("Note: More Options set from {name}: {switches}.", name=button["name"],
+                           switches=overrides.summary()))
+        return values
 
     def _on_mix_rows_changed(self):
         """An added playlist changed: the console says what the next build will do, once per change."""
@@ -1192,15 +1261,18 @@ class PlayTab(tk.Frame):
         """Similar Artists and Similar Tracks get teal bars while Seed is Playing Now (and Now Playing is up)."""
         if not getattr(self, "buttons", None) or not hasattr(self, "seed_var"):
             return
-        teal = self.seed_var.get() == "Playing Now" and not self._seed_is_search()
+        teal = self._seed_teal()
         for b in self.buttons:
             button = getattr(b, "_button", None)
             if button is None:
                 continue
-            # Playing Now feeds Artist Matching and Track Matching, so every playlist with one of those configs lights
-            if any(c["kind"] in ("artists", "tracks") for c in buttons.configs(buttons.runs(button))):
+            if buttons.follows_seed(buttons.runs(button)):   # what the main part builds follows Seed
                 b._accent = self.seed_colour if teal else None
                 b._draw()
+
+    def _seed_teal(self):
+        """Whether Seed is on Playing Now and in force (the Now Playing tab, not Search)."""
+        return getattr(self, "seed_var", None) is not None and self.seed_var.get() == "Playing Now"             and not self._seed_is_search()
 
     def _on_behaviour_changed(self, *_):
         code = {shown: c for c, shown in PLAY_BEHAVIOUR}.get(self.behaviour_var.get(), "instant")
@@ -1224,6 +1296,8 @@ class PlayTab(tk.Frame):
     def _sync_ai_button(self):
         """Every AI Playlist button greys out while Use AI is Off (Settings > Keys) or there's no key."""
         on = engine.ai_enabled()
+        if getattr(self, "override_cbs", None):
+            self.override_cbs["moderator"].state(["!disabled"] if on else ["disabled"])
         for button in self.play_buttons:
             if getattr(button, "_kind", None) != "vibe":
                 continue

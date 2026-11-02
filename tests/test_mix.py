@@ -82,12 +82,12 @@ def test_a_configs_kind_can_change_and_starts_again_from_the_standard_of_that_ki
 def test_add_from_choice_covers_the_windows_three_ways_in(app):
     import buttons
     buttons.load()
-    head = next(x for x in buttons.load() if x["name"] == "Headliner")
+    head = next(x for x in buttons.load() if x["name"] == "Artist + Guests")
     buttons.set_shown(head["id"], False)
     back, wants_page = buttons.add_from_choice(("existing", head["id"]))
     assert back["id"] == head["id"] and back["shown"] is True and wants_page is False
     made, wants_page = buttons.add_from_choice(("template", "inner_circle"))
-    assert made["name"] == "Inner Circle 2" and made["settings"]["INNER_CIRCLE_ARTISTS"] == "1" and wants_page is False
+    assert made["name"] == "Consensus 2" and made["settings"]["INNER_CIRCLE_ARTISTS"] == "1" and wants_page is False
     made, _ = buttons.add_from_choice(("template", "tracks"))
     assert made["name"] == "Track Matching" and made["kind"] == "tracks" and "SIMILAR_TRACK_COUNT" not in made["settings"]
     new, wants_page = buttons.add_from_choice(("new", None))
@@ -95,15 +95,15 @@ def test_add_from_choice_covers_the_windows_three_ways_in(app):
     new2, _ = buttons.add_from_choice(("new", None))
     assert new2["name"] == "New Playlist 2"
     copy, wants_page = buttons.add_from_choice(("copy", head["id"]))
-    assert copy["name"] == "Headliner 2" and [c["kind"] for c in buttons.configs(copy)] == ["top", "artists"]
-    assert wants_page is False and [b["name"] for b in buttons.load()].index("Headliner 2") ==         [b["name"] for b in buttons.load()].index("Headliner") + 1, "right after the one it copies"
+    assert copy["name"] == "Artist + Guests 2" and [c["kind"] for c in buttons.configs(copy)] == ["top", "artists"]
+    assert wants_page is False and [b["name"] for b in buttons.load()].index("Artist + Guests 2") ==         [b["name"] for b in buttons.load()].index("Artist + Guests") + 1, "right after the one it copies"
 
 
 def test_the_old_guests_headliner_becomes_two_configs_on_load(app):
     import json
     import buttons
     items = buttons.load()
-    old = buttons.blank("Old Headliner", "top")
+    old = buttons.blank("Old Artist + Guests", "top")
     old["settings"] = {"TOP_TRACKS_COUNT": "8", "TOP_GUESTS": "third"}
     con = app.engine.db()
     con.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (buttons.META_KEY, json.dumps(items + [old])))

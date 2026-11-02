@@ -32,9 +32,9 @@ def test_the_list_shows_the_tree_and_folds(app, ui):
     ui.pump(0.3)
     rows = rows_by_name(s)
     assert list(rows) == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Top 10, Best First", "Deep Cut Top Tracks",
-                          "Headliner", "Inner Circle", "AI Playlist"], "tree order"
-    assert rows["Top 10, Best First"].indent > 0 and rows["Deep Cut Top Tracks"].indent > 0 and rows["Headliner"].indent == 0
-    assert rows["Artist's Top Tracks"].fold == "open" and rows["Headliner"].fold is None
+                          "Artist + Guests", "Consensus", "AI Playlist"], "tree order"
+    assert rows["Top 10, Best First"].indent > 0 and rows["Deep Cut Top Tracks"].indent > 0 and rows["Artist + Guests"].indent == 0
+    assert rows["Artist's Top Tracks"].fold == "open" and rows["Artist + Guests"].fold is None
     assert rows["Top 10, Best First"].tag == "default" and rows["Deep Cut Top Tracks"].tag == ""
     s._fold(top["id"])
     ui.pump(0.3)
@@ -49,29 +49,29 @@ def test_the_list_shows_the_tree_and_folds(app, ui):
 def test_the_strip_nests_brings_out_and_moves_within_a_level(app, ui):
     import buttons
     s = buttons_page(ui)
-    pick_button(ui, "Headliner")
+    pick_button(ui, "Artist + Guests")
     strip = s._list_buttons
     assert "normal" in strip["nest"].cget("state") and "disabled" in strip["out"].cget("state")
     s._button_nest()   # under Artist's Top Tracks, the one above
     ui.pump(0.4)
     top = buttons.standard("top")
-    assert [b["name"] for b in buttons.children(top["id"])] == ["Headliner"]
-    assert s._button_id == next(b["id"] for b in buttons.load() if b["name"] == "Headliner"), "still chosen"
+    assert [b["name"] for b in buttons.children(top["id"])] == ["Artist + Guests"]
+    assert s._button_id == next(b["id"] for b in buttons.load() if b["name"] == "Artist + Guests"), "still chosen"
     assert "normal" in strip["out"].cget("state") and "disabled" in strip["nest"].cget("state"), "a child can't nest"
     assert "disabled" in strip["up"].cget("state") and "disabled" in strip["down"].cget("state"), "an only child: nowhere to move"
-    assert [b._name for b in ui.play.play_buttons] == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Inner Circle",
+    assert [b._name for b in ui.play.play_buttons] == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Consensus",
                                                       "AI Playlist"], "the Play tab follows"
     assert ui.play.play_buttons[2]._arrow is not None
     pick_button(ui, "Artist's Top Tracks")
     assert "disabled" in strip["nest"].cget("state"), "a parent can't be nested"
     s._button_move(1)
     ui.pump(0.3)
-    assert s._button_names()[:5] == ["Similar Artists", "Similar Tracks", "Inner Circle", "Artist's Top Tracks", "Headliner"], \
+    assert s._button_names()[:5] == ["Similar Artists", "Similar Tracks", "Consensus", "Artist's Top Tracks", "Artist + Guests"], \
         "a parent moves past the next top-level playlist, child in tow"
-    pick_button(ui, "Headliner")
+    pick_button(ui, "Artist + Guests")
     s._button_unnest()
     ui.pump(0.4)
-    assert buttons.get(s._button_id)["parent"] == "" and s._button_names()[4] == "Headliner"
+    assert buttons.get(s._button_id)["parent"] == "" and s._button_names()[4] == "Artist + Guests"
     assert "disabled" in strip["out"].cget("state")
     assert not ui.errors, ui.errors[0]
 

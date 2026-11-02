@@ -1,5 +1,5 @@
 """
-The Play tab's room for Headliner (30 Oct 2026): Output moves from the button row to the right of
+The Play tab's room for Artist + Guests (30 Oct 2026): Output moves from the button row to the right of
 the Zone line, on both seed tabs, and the AI usage figure moves up to the seed tabs' row.
 """
 
@@ -8,8 +8,8 @@ from test_gui import ui   # noqa: F401  (the GUI fixture)
 
 def test_headliner_sits_between_top_tracks_and_ai_playlist(app, ui):
     names = [getattr(b, "_name", None) for b in ui.play.buttons]
-    i = names.index("Headliner")
-    assert names[i - 1] == "Artist's Top Tracks" and names[i + 1] == "Inner Circle", names
+    i = names.index("Artist + Guests")
+    assert names[i - 1] == "Artist's Top Tracks" and names[i + 1] == "Consensus", names
     import buttons
     button = ui.play.play_buttons[i]._button   # a ready-made playlist: Artist's Top Tracks + Artist Matching, 2:1
     assert [c["kind"] for c in buttons.configs(button)] == ["top", "artists"] and not button["standard"]

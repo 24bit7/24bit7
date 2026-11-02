@@ -21,10 +21,10 @@ class Click:
 def test_row_comes_from_the_ticked_playlists_then_more_options_and_plus(app, ui):
     import buttons
     p = ui.play
-    assert names(p) == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Headliner", "Inner Circle", "AI Playlist"]
+    assert names(p) == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Artist + Guests", "Consensus", "AI Playlist"]
     buttons.set_shown(buttons.standard("vibe")["id"], False)
     p.refresh_buttons()
-    assert names(p) == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Headliner", "Inner Circle"], "unticked: off the row"
+    assert names(p) == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Artist + Guests", "Consensus"], "unticked: off the row"
     buttons.set_shown(buttons.standard("vibe")["id"], True)
     p.refresh_buttons()
     ui.pump(0.3)
@@ -41,18 +41,18 @@ def test_plus_opens_the_window_and_its_three_answers_land(app, ui, monkeypatch):
     p = ui.play
     opened = []
     monkeypatch.setattr(p, "open_playlist_settings", lambda bid, rename=False: opened.append((bid, rename)))
-    head = next(b for b in buttons.load() if b["name"] == "Headliner")
+    head = next(b for b in buttons.load() if b["name"] == "Artist + Guests")
     buttons.set_shown(head["id"], False)
     p.refresh_buttons()
-    assert "Headliner" not in names(p)
+    assert "Artist + Guests" not in names(p)
     p._end_greeting(keep=False)   # the start-up greeting holds console lines back while it types
     monkeypatch.setattr(p, "_ask_new_button", lambda: ("existing", head["id"]))
     p.on_add_button()
-    assert names(p)[3] == "Headliner", "ticked again, it comes back at its place in the list"
-    assert opened == [] and p.log.get("1.0", "end").count("Headliner is on the Play tab") == 1
+    assert names(p)[3] == "Artist + Guests", "ticked again, it comes back at its place in the list"
+    assert opened == [] and p.log.get("1.0", "end").count("Artist + Guests is on the Play tab") == 1
     monkeypatch.setattr(p, "_ask_new_button", lambda: ("template", "headliner"))
     p.on_add_button()
-    assert names(p)[-1] == "Headliner 2" and opened == []
+    assert names(p)[-1] == "Artist + Guests 2" and opened == []
     made = p.play_buttons[-1]._button
     assert [c["kind"] for c in buttons.configs(made)] == ["top", "artists"]
     monkeypatch.setattr(p, "_ask_new_button", lambda: ("new", None))
@@ -74,7 +74,8 @@ def test_matching_playlists_go_teal_with_seed_on_playing_now(app, ui):
     p._sync_seed_bars()
     ui.pump(0.2)
     lit = {b._name for b in p.play_buttons if b._accent == p.seed_colour}
-    assert lit == {"Similar Artists", "Similar Tracks", "Headliner", "Inner Circle"}, lit
+    assert lit == {"Similar Artists", "Similar Tracks", "Consensus"}, lit
+    assert "Artist + Guests" not in lit, "its first config is Artist's Top Tracks, which never follows Seed (2 Nov 2026)"
     p.seed_var.set("Current Track")
     p._sync_seed_bars()
     assert not [b for b in p.play_buttons if b._accent == p.seed_colour]
@@ -96,13 +97,13 @@ def test_right_click_menu_renames_copies_moves_removes_and_restores(app, ui, mon
     buttons.restore_standard()   # the fake world starts without the two Top 10s 24bit7 ships (conftest): complete it
     p.refresh_buttons()
     ui.pump(0.3)
-    p._button_menu(Click(), p.play_buttons[3]._button)   # Headliner
+    p._button_menu(Click(), p.play_buttons[3]._button)   # Artist + Guests
     menu = menus[-1]
     assert labels(menu) == ["Rename", "Duplicate", "Settings", "Move Left", "Move Right", "Remove from the Play Tab",
                             "Restore Default Playlists"]
     assert menu.entrycget(8, "state") == "disabled", "nothing to restore while everything shipped is there"
     menu.invoke(4)   # Move Left
-    assert names(p)[2:4] == ["Headliner", "Artist's Top Tracks"]
+    assert names(p)[2:4] == ["Artist + Guests", "Artist's Top Tracks"]
     monkeypatch.setattr(tabs, "ask_name", lambda *a, **k: "Star Turn")
     p._button_menu(Click(), p.play_buttons[2]._button)
     menus[-1].invoke(0)   # Rename
@@ -116,7 +117,7 @@ def test_right_click_menu_renames_copies_moves_removes_and_restores(app, ui, mon
     menus[-1].invoke(2)   # Settings
     assert opened[-1] == p.play_buttons[0]._button["id"]
     menus[-1].invoke(6)   # Remove from the Play Tab: no question, nothing deleted
-    assert names(p) == ["Similar Tracks", "Star Turn", "Star Turn 2", "Artist's Top Tracks", "Inner Circle", "AI Playlist"]
+    assert names(p) == ["Similar Tracks", "Star Turn", "Star Turn 2", "Artist's Top Tracks", "Consensus", "AI Playlist"]
     assert buttons.standard("artists")["shown"] is False and len(buttons.load()) == 9
     p._button_menu(Click(), None)   # right-click on +
     assert labels(menus[-1]) == ["Restore Default Playlists"] and menus[-1].entrycget(0, "state") == "disabled", \
@@ -129,24 +130,27 @@ def test_right_click_menu_renames_copies_moves_removes_and_restores(app, ui, mon
     assert not ui.errors, ui.errors[0]
 
 
-def test_more_options_has_no_dials_and_a_click_always_builds(app, ui, monkeypatch):
-    """1 Nov 2026: Moderator, Drift, Deep Cuts and Non-stop are each playlist's own, on its page; the bar keeps
-    Seed, Mode, + Add JRiver Playlist, Show Credits and ?. With it open, a click builds, nothing arms or dims."""
+def test_more_options_switches_are_overrides_and_a_click_always_builds(app, ui, monkeypatch):
+    """1 Nov 2026: the live dials went (nothing arms or dims). 2 Nov 2026: Moderator, Deep Cuts and Non-stop are back
+    as override switches (overrides.py) beside Seed, Mode and ?; with the bar open, a click still just builds."""
     import buttons
     p = ui.play
     p._end_greeting(keep=False)
     p._show_more(True, save=False)
     ui.pump(0.3)
     kinds = [type(w).__name__ for w in p.extras_row.winfo_children() if w.winfo_manager()]
-    assert kinds.count("ClickThrough") == 3, (kinds, "Seed, Mode and ?: no dials")
-    assert not hasattr(p, "moderator_cb") and not hasattr(p, "nonstop_cb") and not hasattr(p, "_armed")
+    assert kinds.count("ClickThrough") == 6, (kinds, "Seed, Mode, Moderator, Deep Cuts, Non-stop and ?")
+    assert not hasattr(p, "moderator_cb") and not hasattr(p, "_armed"), "the old dials and arming are gone"
+    assert list(p.override_cbs) == ["moderator", "deep_cuts", "nonstop"]
     assert not any(b._dim for b in p.play_buttons), "nothing dimmed with the bar open"
     ran = []
     monkeypatch.setattr(p, "on_button", lambda button: ran.append(button["name"]))
     p.play_buttons[1]._command()
     ui.pump(0.2)
     assert ran == ["Similar Tracks"], "one click builds"
-    assert "More Options:" not in p.log.get("1.0", "end"), "and the console says nothing about it"
+    text = p.log.get("1.0", "end")
+    assert "override every playlist's own settings" in text, "opening the bar said what the switches do"
+    assert "showing" not in text and "armed" not in text, "and nothing about arming"
     p._show_more(False, save=False)
     assert not ui.errors, ui.errors[0]
 
@@ -159,9 +163,9 @@ def test_a_click_runs_that_button(app, ui, monkeypatch):
     p.seed_nb.select(p.search_tab)
     ui.pump(0.2)
     p.search_artist.insert(0, "The Beatles")
-    p.play_buttons[3]._command()   # Headliner, from the typed seed
+    p.play_buttons[3]._command()   # Artist + Guests, from the typed seed
     ui.wait_idle()
-    assert ran == [("Headliner", "The Beatles")]
+    assert ran == [("Artist + Guests", "The Beatles")]
     p.play_buttons[1]._command()   # Similar Tracks needs the track too
     ui.wait_idle()
     assert len(ran) == 1 and ui.answers[-1][1][0] == "Search", ui.answers
@@ -185,7 +189,7 @@ def test_enter_on_search_runs_the_standard_similar_artists(app, ui, monkeypatch)
     p.refresh_buttons()
     p.on_similar()
     ui.wait_idle()
-    assert ran == ["Similar Artists", "Inner Circle"], "with the standard gone, the next Artist Matching playlist stands in"
+    assert ran == ["Similar Artists", "Consensus"], "with the standard gone, the next Artist Matching playlist stands in"
     buttons.remove(buttons.standard("artists")["id"])
     p.refresh_buttons()
     p.on_similar()

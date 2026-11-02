@@ -1,8 +1,8 @@
 """
 The Add a Playlist window (1 Nov 2026): three tabs, From Existing, From Template and New, in place of a
 form. From Existing lists every playlist: one that's off the Play tab, Add ticks back; one on it, Create
-Copy copies (Name 2, right after it). From Template lists the four kinds as shipped, Headliner and Inner
-Circle; New (a blank slate) has a sentence and Create. Enter and a double-click answer like Add. The
+Copy copies (Name 2, right after it). From Template lists the four kinds as shipped, Artist + Guests and
+Consensus; New (a blank slate) has a sentence and Create. Enter and a double-click answer like Add. The
 lists sit on the field colour and draw the pick as a rounded outline in the accent colour, not a filled row.
 """
 
@@ -19,12 +19,12 @@ def open_window(ui):
 def test_from_existing_lists_every_playlist_and_adds_back_or_copies(app, ui):
     import buttons
     from tabs import PALETTE
-    head = next(b for b in buttons.load() if b["name"] == "Headliner")
+    head = next(b for b in buttons.load() if b["name"] == "Artist + Guests")
     buttons.set_shown(head["id"], False)
     win = open_window(ui)
     assert win._tab == "existing"
-    assert win.existing_list.get(0, "end") == ("Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Headliner",
-                                                "Inner Circle", "AI Playlist"), "every playlist, on the row or not"
+    assert win.existing_list.get(0, "end") == ("Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Artist + Guests",
+                                                "Consensus", "AI Playlist"), "every playlist, on the row or not"
     assert win.existing_note.cget("text").startswith("Similar Artists: Artist Matching")
     assert "Create Copy makes Similar Artists 2 right after it" in win.existing_note.cget("text")
     assert win.ok_button.cget("text") == "Create Copy"
@@ -35,7 +35,7 @@ def test_from_existing_lists_every_playlist_and_adds_back_or_copies(app, ui):
     assert win.existing_list.cget("bg") == PALETTE["field_bg"] != win._colours[0], "the list stands apart from the window"
     win.existing_list.pick(3)
     ui.pump(0.2)
-    assert win.existing_note.cget("text").startswith("Headliner: Artist's Top Tracks + Artist Matching")
+    assert win.existing_note.cget("text").startswith("Artist + Guests: Artist's Top Tracks + Artist Matching")
     assert "Off the Play tab; Add puts it back" in win.existing_note.cget("text")
     assert win.ok_button.cget("text") == "Add"
     assert rows[3].chosen and not rows[0].chosen
@@ -53,7 +53,7 @@ def test_from_template_and_new(app, ui):
     win._pick_tab("template")
     ui.pump(0.2)
     assert win.template_list.get(0, "end") == ("Artist Matching", "Track Matching", "Artist's Top Tracks", "AI Playlist",
-                                               "Headliner", "Inner Circle", "Top 10, Best First", "Top 10, Best Last")
+                                               "Artist + Guests", "Consensus", "Top 10, Best First", "Top 10, Best Last")
     assert win.ok_button.cget("text") == "Add"
     win.template_list.selection_clear(0, "end")
     win.template_list.selection_set(5)

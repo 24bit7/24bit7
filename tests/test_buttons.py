@@ -66,26 +66,26 @@ def test_first_load_makes_the_standard_four_from_env_then_headliner(app):
     app.set_env(SIMILAR_ARTIST_LIMIT="7", TOP_TRACKS_COUNT="9", SIMILAR_TRACK_COUNT="8")
     buttons, _, _ = mods()
     items = buttons.load()
-    assert [b["name"] for b in items] == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Headliner",
-                                          "Inner Circle", "AI Playlist"]
+    assert [b["name"] for b in items] == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Artist + Guests",
+                                          "Consensus", "AI Playlist"]
     assert [b["kind"] for b in items] == ["artists", "tracks", "top", "top", "artists", "vibe"]
     by = {b["name"]: b for b in items}
     assert by["Similar Artists"]["settings"]["SIMILAR_ARTIST_LIMIT"] == "7"
     assert by["Similar Tracks"]["settings"]["SIMILAR_TRACK_COUNT"] == "8"
     assert by["Artist's Top Tracks"]["settings"]["TOP_TRACKS_COUNT"] == "9"
-    assert by["Artist's Top Tracks"]["standard"] == "top" and by["Headliner"]["standard"] == ""
-    assert [c["kind"] for c in buttons.configs(by["Headliner"])] == ["top", "artists"]
-    assert by["Headliner"]["mix"] == {"combine": "alternate", "pattern": [2, 1], "drift_from": 1, "continue_as": 0}
-    assert by["Headliner"]["settings"]["TOP_TRACKS_COUNT"] == "12", "Headliner's own count, over the standard's"
-    assert by["Headliner"]["made"] == "headliner"
-    assert by["Headliner"]["configs"][0]["settings"]["SIMILAR_ARTIST_LIMIT"] == "5", "and its guests from Similar Artists"
-    assert by["Headliner"]["configs"][0]["settings"]["TRACKS_PER_ARTIST_PICK"] == "1"
+    assert by["Artist's Top Tracks"]["standard"] == "top" and by["Artist + Guests"]["standard"] == ""
+    assert [c["kind"] for c in buttons.configs(by["Artist + Guests"])] == ["top", "artists"]
+    assert by["Artist + Guests"]["mix"] == {"combine": "alternate", "pattern": [2, 1], "drift_from": 1, "continue_as": 0}
+    assert by["Artist + Guests"]["settings"]["TOP_TRACKS_COUNT"] == "12", "Artist + Guests's own count, over the standard's"
+    assert by["Artist + Guests"]["made"] == "headliner"
+    assert by["Artist + Guests"]["configs"][0]["settings"]["SIMILAR_ARTIST_LIMIT"] == "5", "and its guests from Similar Artists"
+    assert by["Artist + Guests"]["configs"][0]["settings"]["TRACKS_PER_ARTIST_PICK"] == "1"
     assert "SIMILAR_TRACK_COUNT" not in by["Similar Artists"]["settings"], "a button only holds its kind's keys"
-    circle = by["Inner Circle"]
+    circle = by["Consensus"]
     assert circle["kind"] == "artists" and circle["standard"] == "" and circle["shown"] is True
     assert circle["settings"]["INNER_CIRCLE_ARTISTS"] == "1" and circle["settings"]["INNER_CIRCLE_ARTISTS_SIZE"] == "3"
     assert circle["settings"]["INNER_CIRCLE_ARTISTS_AGREE"] == "2"
-    assert circle["settings"]["SIMILAR_ARTIST_LIMIT"] == "7", "Inner Circle starts from the standard Similar Artists"
+    assert circle["settings"]["SIMILAR_ARTIST_LIMIT"] == "7", "Consensus starts from the standard Similar Artists"
     assert "INNER_CIRCLE_ARTISTS" not in by["Similar Artists"]["settings"], "and the standard one stays as it was"
 
 
@@ -181,14 +181,14 @@ def test_the_ready_made_templates_make_headliner_and_inner_circle_from_the_stand
     buttons, _, _ = mods()
     buttons.load()
     assert [r["key"] for r in buttons.READY_MADE] == ["headliner", "inner_circle", "top10_first", "top10_last"]
-    head = buttons.add(buttons.unique_name("Headliner"), "artists", "template:headliner")
-    assert head["name"] == "Headliner 2" and head["kind"] == "top", "the recipe's kind wins over the one passed"
+    head = buttons.add(buttons.unique_name("Artist + Guests"), "artists", "template:headliner")
+    assert head["name"] == "Artist + Guests 2" and head["kind"] == "top", "the recipe's kind wins over the one passed"
     assert [c["kind"] for c in buttons.configs(head)] == ["top", "artists"] and head["settings"]["TOP_TRACKS_COUNT"] == "12"
     assert head["configs"][0]["settings"]["SIMILAR_ARTIST_LIMIT"] == "5", "the recipe's figures over the standard's"
     circle = buttons.add("Tight", "artists", "template:inner_circle")
     assert circle["kind"] == "artists" and circle["settings"]["INNER_CIRCLE_ARTISTS"] == "1"
     assert circle["settings"]["SIMILAR_ARTIST_LIMIT"] == "7"
-    assert buttons.describe(circle).startswith("Artist Matching, Inner Circle"), buttons.describe(circle)
+    assert buttons.describe(circle).startswith("Artist Matching, Consensus"), buttons.describe(circle)
     for key in ("INNER_CIRCLE_TRACKS", "INNER_CIRCLE_TRACKS_SIZE", "INNER_CIRCLE_TRACKS_AGREE"):
         assert key in buttons.KIND_KEYS["tracks"] and key not in buttons.KIND_KEYS["artists"]
 
@@ -203,8 +203,8 @@ def test_restore_default_buttons_puts_back_only_what_is_missing(app):
     back = buttons.restore_standard()
     assert [b["standard"] or b["made"] for b in back] == ["artists", "top10_first", "top10_last"]
     names = [b["name"] for b in buttons.load()]
-    assert names == ["Similar Tracks", "Artist's Top Tracks", "Top 10, Best First", "Top 10, Best Last", "Headliner",
-                     "Inner Circle", "AI Playlist", "Similar Artists"]
+    assert names == ["Similar Tracks", "Artist's Top Tracks", "Top 10, Best First", "Top 10, Best Last", "Artist + Guests",
+                     "Consensus", "AI Playlist", "Similar Artists"]
     assert buttons.restore_standard() == []
 
 
@@ -244,7 +244,7 @@ def test_headliner_runs_its_two_configs_and_top_tracks_alone_runs_one(app):
     buttons, _, _ = mods()
     by = {b["name"]: b for b in buttons.load()}
     r = app.Lines()
-    buttons.run(by["Headliner"], report=r, seed_info=seed(app, "The Beatles", ""))
+    buttons.run(by["Artist + Guests"], report=r, seed_info=seed(app, "The Beatles", ""))
     assert r.has("Config 1 of 2: Artist's Top Tracks") and r.has("Config 2 of 2: Artist Matching"), r.text()
     assert r.has("Artist's Top Tracks: The Beatles") and r.has("Similar Artists: The Beatles"), r.text()
     r = app.Lines()
@@ -260,7 +260,7 @@ def test_describe_says_what_is_on(app):
     assert buttons.describe(b) == "Artist Matching, Drift, Deep Cuts, Non-stop, Filters"
     assert buttons.describe(buttons.blank("Plain", "tracks")) == "Track Matching"
     by = {x["name"]: x for x in buttons.load()}
-    assert buttons.describe(by["Headliner"]).startswith("Artist's Top Tracks + Artist Matching")
+    assert buttons.describe(by["Artist + Guests"]).startswith("Artist's Top Tracks + Artist Matching")
 
 
 def test_a_build_with_no_button_runs_no_filters(app):
@@ -283,7 +283,7 @@ def test_a_build_with_no_button_runs_no_filters(app):
 def test_add_starts_from_a_button_of_the_same_kind(app):
     buttons, _, _ = mods()
     items = buttons.load()
-    items[3]["filters"] = ["abc"]   # Headliner
+    items[3]["filters"] = ["abc"]   # Artist + Guests
     buttons.save(items)
     head = buttons.load()[3]
     new = buttons.add("Sunday Guests", "top", head["id"])
@@ -355,10 +355,26 @@ def test_set_settings_keeps_only_the_kinds_keys_and_filters_say_who_uses_them(ap
     assert filters.used_by(f["id"]) == []
     buttons.set_filters(head["id"], [f["id"]])
     assert buttons.get(head["id"])["filters"] == [f["id"]]
-    assert filters.used_by(f["id"]) == ["Headliner"]
+    assert filters.used_by(f["id"]) == ["Artist + Guests"]
     buttons.set_shown(head["id"], False)
-    assert buttons.get(head["id"])["shown"] is False and "Headliner" not in [b["name"] for b in buttons.shown()]
+    assert buttons.get(head["id"])["shown"] is False and "Artist + Guests" not in [b["name"] for b in buttons.shown()]
     buttons.set_shown(head["id"], True)
     assert buttons.get(head["id"])["shown"] is True
     buttons.set_filters("no-such-id", [f["id"]])
     assert len(buttons.load()) == 6
+
+
+def test_the_old_shipped_names_become_the_new_ones_on_load_but_a_users_name_stays(app):
+    """2 Nov 2026: Inner Circle became Consensus and Headliner became Artist + Guests. Anyone on 1.29 has
+    playlists with the old names, so load() renames those two if they still carry the shipped name."""
+    buttons, _, _ = mods()
+    items = buttons.load()
+    by = {b["made"]: b for b in items if b.get("made")}
+    assert by["inner_circle"]["name"] == "Consensus" and by["headliner"]["name"] == "Artist + Guests"
+    by["inner_circle"]["name"] = "Inner Circle"   # as 1.29 saved it
+    by["headliner"]["name"] = "My Headliner"      # renamed by the user
+    buttons.save(items)
+    names = {b["made"]: b["name"] for b in buttons.load() if b.get("made")}
+    assert names["inner_circle"] == "Consensus", "the shipped name moves on"
+    assert names["headliner"] == "My Headliner", "the user's name is theirs"
+    assert names["inner_circle"] == next(b["name"] for b in buttons.load() if b.get("made") == "inner_circle"), "saved, not just shown"

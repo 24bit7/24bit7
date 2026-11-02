@@ -22,7 +22,8 @@ SPREADS = {"even": "Spaced evenly", "random": "Mixed randomly"}
 
 
 def _blank():
-    return {"rows": [], "counts": {}, "last_used": {}, "open": False}
+    return {"rows": [], "counts": {}, "last_used": {}, "open": False,
+            "switches": None}   # the row's three override switches (overrides.py); None until seeded
 
 
 def load():

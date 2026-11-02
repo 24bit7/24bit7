@@ -418,7 +418,7 @@ def load_settings():
     SIMILAR_TRACK_VARIETY = os.getenv("SIMILAR_TRACK_VARIETY", "no").strip().lower() not in ("no", "0", "false")
 
     SIMILAR_ARTIST_LIMIT = _int_setting("SIMILAR_ARTIST_LIMIT", 20, 1, 50)
-    # Inner Circle, per matching kind: (on, how many of the seed's closest make the circle, how many of
+    # Consensus, per matching kind: (on, how many of the seed's closest make the circle, how many of
     # their lists a neighbour must be on). Fewer in the circle and more agreeing is tighter.
     INNER_CIRCLE = {g: (os.getenv(f"INNER_CIRCLE_{g.upper()}", "0").strip().lower() in YES,
                         _int_setting(f"INNER_CIRCLE_{g.upper()}_SIZE", 3, 3, 5),
@@ -471,7 +471,7 @@ def load_settings():
     if TOP_TRACKS_ORDER not in ("popular", "reverse", "random"):
         print(t("Note: the setting TOP_TRACKS_ORDER='{top_tracks_order}' isn't recognised, so 'popular' is used.", top_tracks_order=TOP_TRACKS_ORDER))
         TOP_TRACKS_ORDER = "popular"
-    # Guests (Artist's Top Tracks): "third" makes the build a Headliner, a guest every third track
+    # Guests (Artist's Top Tracks): "third" makes the build a Artist + Guests, a guest every third track
     # How long answers are reused: 1 Month, 1 Year or Permanent (an older CACHE_DAYS carries over)
     CACHE_KEEP = os.getenv("CACHE_KEEP", "").strip().lower()
     if CACHE_KEEP not in ("month", "year", "permanent"):
@@ -6254,7 +6254,7 @@ def _same_act(a, b):
 
 def inner_circle(circle, fetch, agree, exclude=(), key=lambda x: x, same_act=True, label=str):
     """
-    Inner Circle: `circle` holds the seed's closest neighbours (or what was sampled from Playing
+    Consensus: `circle` holds the seed's closest neighbours (or what was sampled from Playing
     Now); fetch(member) gives each member's own neighbours, best first. What's on `agree` or more
     of those lists comes back after the circle members themselves, in order of how many lists it's
     on. key(item) is how two items are known to be the same; a neighbour whose name contains a
@@ -6290,19 +6290,19 @@ def inner_circle(circle, fetch, agree, exclude=(), key=lambda x: x, same_act=Tru
 
 def inner_circle_tracks(circle, agree, report):
     """
-    Inner Circle for Track Matching: each circle track's own similar tracks are fetched, and the
+    Consensus for Track Matching: each circle track's own similar tracks are fetched, and the
     tracks on `agree` or more of those lists come back behind the circle itself, as the candidate
     list the build then matches against the library. Returns (candidates, agree as used).
     """
     agree = max(2, min(agree, len(circle))) if len(circle) >= 2 else 1
-    report("  " + t("Inner Circle: {names} (circle of {size}, agree on {agree})",
+    report("  " + t("Consensus: {names} (circle of {size}, agree on {agree})",
                     names="; ".join(f"{a} - {tl}" for a, tl in circle), size=len(circle), agree=agree))
     candidates, _ = inner_circle(circle, lambda m: [p for p, _ in similar_track_candidates([m[0]], m[1], report)[0]],
                                  agree, key=lambda p: (artist_key(p[0]), clean_name(p[1])), same_act=False)
     agreed = len(candidates) - len(circle)
     report("  " + t("{agreed} tracks on {agree} or more of their lists.", agreed=agreed, agree=agree))
     if not agreed:
-        report("  " + t("Note: Inner Circle found no tracks the circle agrees on. A bigger circle or fewer agreeing "
+        report("  " + t("Note: Consensus found no tracks the circle agrees on. A bigger circle or fewer agreeing "
                         "would find more; Drift fills in if it's on."))
     return candidates, agree
 
@@ -6488,7 +6488,7 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
         ic_on, ic_size, ic_agree = INNER_CIRCLE["artists"]
         if ic_on:
             circle = [a for a, _ in similar][:ic_size]
-            report("  " + t("Inner Circle: {names} (circle of {size}, agree on {agree})", names=", ".join(circle),
+            report("  " + t("Consensus: {names} (circle of {size}, agree on {agree})", names=", ".join(circle),
                             size=len(circle), agree=ic_agree))
             similar, same = inner_circle(circle, lambda m: [a for a, _ in blended_similar_artists(m, limit=30, report=report)[0]],
                                          ic_agree, exclude={artist_key(s) for s in seeds}, key=artist_key)
@@ -6496,7 +6496,7 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
             report("  " + t("{agreed} artists on {agree} or more of their lists{same}.", agreed=agreed, agree=ic_agree,
                             same=t("; {same} skipped as the same act", same=same) if same else ""))
             if not agreed:
-                report("  " + t("Note: Inner Circle found no artists the circle agrees on. A bigger circle or fewer "
+                report("  " + t("Note: Consensus found no artists the circle agrees on. A bigger circle or fewer "
                                 "agreeing would find more; Drift fills in if it's on."))
             want = min(want, len(similar))
         else:
@@ -6508,7 +6508,7 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
     elif INNER_CIRCLE["artists"][0]:
         per = figs["PN_ARTISTS_PER_SAMPLE"]
         ic_agree = min(INNER_CIRCLE["artists"][2], len(seeds))
-        report("  " + t("Inner Circle: {names} (circle of {size}, agree on {agree})", names=", ".join(seeds),
+        report("  " + t("Consensus: {names} (circle of {size}, agree on {agree})", names=", ".join(seeds),
                         size=len(seeds), agree=ic_agree))
         circle_labels = []
 
@@ -6524,7 +6524,7 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
         report("  " + t("{agreed} artists on {agree} or more of their lists{same}.", agreed=agreed, agree=ic_agree,
                         same=t("; {same} skipped as the same act", same=same) if same else ""))
         if not agreed:
-            report("  " + t("Note: Inner Circle found no artists the circle agrees on. A bigger circle or fewer "
+            report("  " + t("Note: Consensus found no artists the circle agrees on. A bigger circle or fewer "
                             "agreeing would find more; Drift fills in if it's on."))
         total, _ = take([c for c in candidates if artist_key(c[0]) not in used], per * len(seeds))
         report("  " + t("Similar artists in your library: {total} of {value}.", total=total, value=per * len(seeds)))

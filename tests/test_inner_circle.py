@@ -1,5 +1,5 @@
 """
-Inner Circle (stage B of the playlist builder, 31 Oct 2026): a mode on a matching config. The
+Consensus (stage B of the playlist builder, 31 Oct 2026): a mode on a matching config. The
 seed's closest few (or the artists or tracks sampled from Playing Now) make the circle; each
 member's own similar list is fetched, and only what two or more of those lists agree on goes
 in. It stops short and says so rather than padding, and a neighbour that's really a circle
@@ -46,7 +46,7 @@ def test_current_track_takes_the_seeds_closest_three_and_what_their_lists_agree_
     })
     r = app.Lines()
     app.engine.create_similar_playlist(report=r, seed_info=app.engine.typed_seed_info("The Beatles", "Something"))
-    assert r.has("Inner Circle: The Rolling Stones, Pink Floyd, Jimi Hendrix (circle of 3, agree on 2)"), r.text()
+    assert r.has("Consensus: The Rolling Stones, Pink Floyd, Jimi Hendrix (circle of 3, agree on 2)"), r.text()
     assert r.has("1 artists on 2 or more of their lists; 1 skipped as the same act."), r.text()
     assert r.has("Similar artists in your library: 4 of 4."), r.text()
     assert artists_in(app) - {"The Beatles"} == {STONES, FLOYD, HENDRIX, QUEEN}, app.jriver.titles("Speakers")
@@ -61,7 +61,7 @@ def test_current_track_stops_short_and_says_so_when_nothing_agrees(app):
     })
     r = app.Lines()
     app.engine.create_similar_playlist(report=r, seed_info=app.engine.typed_seed_info("The Beatles", "Something"))
-    assert r.has("Note: Inner Circle found no artists the circle agrees on."), r.text()
+    assert r.has("Note: Consensus found no artists the circle agrees on."), r.text()
     assert r.has("Similar artists in your library: 3 of 3."), r.text()
     assert artists_in(app) - {"The Beatles"} == {STONES, FLOYD, HENDRIX}, app.jriver.titles("Speakers")
 
@@ -71,7 +71,7 @@ def test_off_by_default_leaves_artist_matching_as_it_was(app):
     fake_similar_artists(app, {"The Beatles": [STONES, FLOYD, HENDRIX, QUEEN], STONES: [QUEEN]})
     r = app.Lines()
     app.engine.create_similar_playlist(report=r, seed_info=app.engine.typed_seed_info("The Beatles", "Something"))
-    assert not r.has("Inner Circle") and r.has("Similar artists in your library: 3 of 3."), r.text()
+    assert not r.has("Consensus") and r.has("Similar artists in your library: 3 of 3."), r.text()
 
 
 def test_playing_now_makes_the_sampled_artists_the_circle(app):
@@ -105,7 +105,7 @@ def test_track_matching_current_track_circle_of_three_tracks(app):
     })
     r = app.Lines()
     app.engine.create_similar_tracks_playlist(report=r, seed_info=app.engine.typed_seed_info("The Beatles", "Something"))
-    assert r.has("Inner Circle: The Rolling Stones - The Last Time; Pink Floyd - Fearless; Jimi Hendrix - Crosstown Traffic "
+    assert r.has("Consensus: The Rolling Stones - The Last Time; Pink Floyd - Fearless; Jimi Hendrix - Crosstown Traffic "
                  "(circle of 3, agree on 2)"), r.text()
     assert r.has("2 tracks on 2 or more of their lists."), r.text()
     titles = set(app.jriver.titles("Speakers"))
