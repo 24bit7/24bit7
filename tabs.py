@@ -206,6 +206,30 @@ def logo_partner(accent):
     return tidy_accent(_rgb_hex(colorsys.hls_to_rgb(opposite / 360, l, s)))
 
 
+# Seed on Playing Now has a colour of its own: teal, or a leaf green when the dark theme's accent is
+# itself near teal, so the signal always reads against the accent (Ben, 2 Nov 2026). The light theme's
+# colours are fixed (its blue is twenty degrees off teal and has always read fine), so it stays teal.
+# Review Mode's orange is not covered: an orange accent is on the list.
+SEED_TEAL = {"light": "#0e7490", "dark": "#22d3ee"}
+SEED_GREEN = {"light": "#2f855a", "dark": "#4ade80"}
+SEED_GAP = 15   # an accent within this many degrees of teal's hue is "near teal"
+
+
+def _hue(colour):
+    import colorsys
+    h, _l, s = colorsys.rgb_to_hls(*_hex_rgb(colour))
+    return h * 360, s
+
+
+def seed_colour(theme, accent=None):
+    """The Seed colour for a theme: teal, or leaf green on the dark theme when its accent (ACCENT if none) is near teal."""
+    if theme != "dark":
+        return SEED_TEAL["light"]
+    accent_hue, s = _hue(tidy_accent(accent) if accent else ACCENT)
+    near_teal = s >= 0.2 and _hue_gap(accent_hue, _hue(SEED_TEAL["dark"])[0]) <= SEED_GAP
+    return SEED_GREEN["dark"] if near_teal else SEED_TEAL["dark"]
+
+
 def set_accent(colour):
     """Sets the accent everywhere it's used. Call before apply_theme."""
     global ACCENT, MATRIX_FG, MATRIX_HI
@@ -1327,11 +1351,11 @@ class PickRow(tk.Canvas):
     """
 
     def __init__(self, master, text, fg=None, bg=None, left=None, chosen=False, indent=0, fold=None, on_fold=None,
-                 tag="", fit=False):
+                 tag="", fit=False, edge=None):
         """indent: pixels in from the left (a child row). fold: None, "open" or "closed" (a parent's arrow,
         on_fold called when clicked). tag: small text at the right ("default"). fit: ask for just the width
         the text and tag need, with five spaces between them (a drop-down sized to its rows); otherwise the
-        row takes the width its list gives it."""
+        row takes the width its list gives it. edge: the outline's colour when chosen (the accent if None)."""
         bg = bg or master.cget("bg")
         super().__init__(master, bg=bg, bd=0, highlightthickness=0)
         try:
@@ -1344,6 +1368,7 @@ class PickRow(tk.Canvas):
         self._h = tkfont.Font(root=self, font=self._font).metrics("linespace") + px(10)
         self.configure(height=self._h)
         self._bg, self._fg = bg, fg or PALETTE["text"]
+        self._edge = edge
         self._chosen = bool(chosen)
         self._shape, self._shape_id = None, None
         self.indent, self.fold = indent, fold
@@ -1393,7 +1418,7 @@ class PickRow(tk.Canvas):
         w = width or self.winfo_width()
         if w <= 1:
             return
-        edge = PALETTE["button_fg"] if self._chosen else self._bg
+        edge = (self._edge or PALETTE["button_fg"]) if self._chosen else self._bg
         self.coords(self._tag_id, w - self._px(10), self._h // 2)
         self._shape = rounded_shape(self, w, self._h, self._px(CORNER), self._bg, edge, self._px(2))
         if self._shape_id is None:

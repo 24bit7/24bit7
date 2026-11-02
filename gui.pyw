@@ -395,7 +395,7 @@ class PlayTab(tk.Frame):
         self.more_line = tk.Frame(self.more_box, height=1, bg=PALETTE["line"])
         self.extras_row = tk.Frame(self.more_box, padx=16)
         dark = engine.THEME == "dark"
-        self.seed_colour = "#22d3ee" if dark else "#0e7490"     # teal: Seed on Playing Now
+        self.seed_colour = tabs.seed_colour("dark" if dark else "light")   # teal, or leaf green against a teal accent
         review_colour = "#f28c28" if dark else "#a85400"         # orange: Review Mode
 
         # Seed: where Similar Artists and Similar Tracks start from. Windows (Main) app builds only.
@@ -589,9 +589,10 @@ class PlayTab(tk.Frame):
         parent = buttons.get(parent["id"])
         teal = self._seed_teal()   # rows Seed applies to read in the Seed colour, as the buttons do
         for playlist, text, is_default in buttons.menu_rows(parent):
-            colour = (PALETTE["ai_purple"] if playlist["kind"] == "vibe"
-                      else self.seed_colour if teal and buttons.follows_seed(playlist) else fg)
-            row = tabs.PickRow(inner, text, fg=colour, bg=bg, tag=t("default") if is_default else "", fit=True)
+            seeded = teal and buttons.follows_seed(playlist)
+            colour = PALETTE["ai_purple"] if playlist["kind"] == "vibe" else self.seed_colour if seeded else fg
+            row = tabs.PickRow(inner, text, fg=colour, bg=bg, tag=t("default") if is_default else "", fit=True,
+                               edge=self.seed_colour if seeded else None)   # the hover outline matches the text
             row.configure(cursor="hand2")
             row.pack(fill="x", padx=3, pady=1)
             row.bind("<Enter>", lambda e, r=row: r.set_chosen(True))   # the rounded outline on hover

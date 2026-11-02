@@ -283,6 +283,13 @@ def test_menu_rows_seed_applies_to_read_teal_with_seed_on_playing_now(app, ui):
     assert colours["Similar Artists"] == p.seed_colour, "the parent's own row"
     assert colours["Consensus"] == p.seed_colour and colours["Similar Tracks"] == p.seed_colour
     assert colours["Artist + Guests"] != p.seed_colour
+    edges = {row.text: row._edge for _pl, row, _tag in pop._rows}   # the hover outline (Ben, 2 Nov 2026)
+    assert edges["Similar Tracks"] == p.seed_colour and edges["Consensus"] == p.seed_colour, "teal box, matching the text"
+    assert edges["Artist + Guests"] is None, "the accent, as usual"
+    tracks_row = next(row for _pl, row, _tag in pop._rows if row.text == "Similar Tracks")
+    tracks_row.set_chosen(True)
+    ui.pump(0.2)
+    assert tracks_row._chosen and tracks_row._shape is not None, "drawn with the outline"
     p._close_children()
     p.seed_var.set("Current Track")
     p._sync_seed_bars()
