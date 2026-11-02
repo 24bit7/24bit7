@@ -740,6 +740,11 @@ class FlatButton(tk.Frame):
         self._draw()
         if over and self._command:
             self._command()
+            # A window the command opened (the Add a Playlist window, say) takes the pointer, and its grab
+            # keeps the Leave event from arriving, so the button stayed lit after Cancel. Look again.
+            if self.winfo_exists() and self._inside and not self._over():
+                self._inside = False
+                self._draw()
 
 
 class InfoLine(tk.Text):
