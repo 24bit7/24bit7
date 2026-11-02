@@ -75,7 +75,9 @@ def say_if_newer(report=print):
                  latest=found[0], version=VERSION, link=found[1]))
 
 # The settings a button carries its own copy of (Settings > Buttons), laid over .env by buttons.run
-INNER_CIRCLE = {"artists": (False, 3, 2), "tracks": (False, 3, 2)}   # set by load_settings; see there
+# Consensus per matching kind: (on, circle size, lists that must agree, fall back when short, fewer than how many
+# tracks counts as short). Set by load_settings; see there.
+INNER_CIRCLE = {"artists": (False, 3, 2, False, 10), "tracks": (False, 3, 2, False, 10)}
 COMBINE_TRACE = None   # while a playlist of two or more configs builds: [(config index, keys sent)]; see buttons.run
 COMBINE_INDEX = 0      # which config is building
 
@@ -100,7 +102,8 @@ PROFILE_KEYS = {
                    for part in ("SOURCES_MODE", "ARTIST_SOURCES", "ARTIST_AGREE", "TRACK_SOURCES", "TRACK_AGREE",
                                 "FROM", "MODERATOR")],
                  *[f"NONSTOP_{g}_MODE" for g in ("ARTISTS", "TRACKS", "TOP", "VIBE")],
-                 *[f"INNER_CIRCLE_{g}{part}" for g in ("ARTISTS", "TRACKS") for part in ("", "_SIZE", "_AGREE")],
+                 *[f"INNER_CIRCLE_{g}{part}" for g in ("ARTISTS", "TRACKS")
+                   for part in ("", "_SIZE", "_AGREE", "_FALLBACK", "_FALLBACK_MIN")],
                  "SKIP_LONG_CLOSERS", "LONG_CLOSER_MINUTES",
                  "SKIP_PLAYED_ARTISTS", "SKIP_PLAYED_ARTISTS_DAYS", "SKIP_PLAYED_TRACKS", "SKIP_PLAYED_TRACKS_DAYS",
                  "SKIP_PLAYED_TOP", "SKIP_PLAYED_TOP_DAYS", "SKIP_PLAYED_VIBE", "SKIP_PLAYED_VIBE_DAYS",
@@ -422,7 +425,10 @@ def load_settings():
     # their lists a neighbour must be on). Fewer in the circle and more agreeing is tighter.
     INNER_CIRCLE = {g: (os.getenv(f"INNER_CIRCLE_{g.upper()}", "0").strip().lower() in YES,
                         _int_setting(f"INNER_CIRCLE_{g.upper()}_SIZE", 3, 3, 5),
-                        _int_setting(f"INNER_CIRCLE_{g.upper()}_AGREE", 2, 2, 5))
+                        _int_setting(f"INNER_CIRCLE_{g.upper()}_AGREE", 2, 2, 5),
+                        # 2 Nov 2026 (Ben): finish with plain matching when Consensus finds fewer than N tracks
+                        os.getenv(f"INNER_CIRCLE_{g.upper()}_FALLBACK", "0").strip().lower() in YES,
+                        _int_setting(f"INNER_CIRCLE_{g.upper()}_FALLBACK_MIN", 10, 1, 100))
                     for g in ("artists", "tracks")}
     SIMILAR_ARTIST_TRACK_COUNT = _int_setting("SIMILAR_ARTIST_TRACK_COUNT", 30, 5, 100)
     # Limit total tracks to: unticked, every track found goes in
@@ -6485,7 +6491,8 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
         similar, source_label = blended_similar_artists(seeds, limit=fetch, seed_track=seed_info['Name'],
                                                         report=report)
         labels.append(source_label)
-        ic_on, ic_size, ic_agree = INNER_CIRCLE["artists"]
+        ic_on, ic_size, ic_agree, ic_fallback, ic_min = INNER_CIRCLE["artists"]
+        plain = list(similar)   # the seed's own list, for the fallback
         if ic_on:
             circle = [a for a, _ in similar][:ic_size]
             report("  " + t("Consensus: {names} (circle of {size}, agree on {agree})", names=", ".join(circle),
@@ -6501,10 +6508,16 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
             want = min(want, len(similar))
         else:
             report("  " + t("Similar artists from {replace}: {similar_count} suggested, taking {want} with tracks in your library", replace=source_label.replace(' + ', ', '), similar_count=len(similar), want=want))
+        before = len(collected_keys)
         got, checked = take(similar, want)
         report("  " + (t("Similar artists in your library: {got} of {want} ({skipped} skipped with no tracks in your "
                          "library).", got=got, want=want, skipped=checked - got) if checked > got
                        else t("Similar artists in your library: {got} of {want}.", got=got, want=want)))
+        if ic_on and ic_fallback and len(collected_keys) - before < ic_min:
+            report("  " + t("Consensus found {found} tracks the circle agrees on, fewer than {minimum}: the rest is plain "
+                            "Artist Matching.", found=len(collected_keys) - before, minimum=ic_min))
+            more, _ = take(plain, SIMILAR_ARTIST_LIMIT - got)
+            report("  " + t("Plain Artist Matching: {more} more artists in your library.", more=more))
     elif INNER_CIRCLE["artists"][0]:
         per = figs["PN_ARTISTS_PER_SAMPLE"]
         ic_agree = min(INNER_CIRCLE["artists"][2], len(seeds))
@@ -6526,8 +6539,20 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
         if not agreed:
             report("  " + t("Note: Consensus found no artists the circle agrees on. A bigger circle or fewer "
                             "agreeing would find more; Drift fills in if it's on."))
+        before = len(collected_keys)
         total, _ = take([c for c in candidates if artist_key(c[0]) not in used], per * len(seeds))
         report("  " + t("Similar artists in your library: {total} of {value}.", total=total, value=per * len(seeds)))
+        if INNER_CIRCLE["artists"][3] and len(collected_keys) - before < INNER_CIRCLE["artists"][4]:
+            report("  " + t("Consensus found {found} tracks the circle agrees on, fewer than {minimum}: the rest is plain "
+                            "Artist Matching.", found=len(collected_keys) - before, minimum=INNER_CIRCLE["artists"][4]))
+            more = 0
+            for seed in seeds:
+                similar, source_label = blended_similar_artists(seed, limit=min(50, per * DELIVER_DEPTH), report=report,
+                                                                seed_track=seed_titles.get(artist_key(seed)))
+                if source_label not in labels and source_label != "none":
+                    labels.append(source_label)
+                more += take(similar, per, seed=seed)[0]
+            report("  " + t("Plain Artist Matching: {more} more artists in your library.", more=more))
     else:
         per = figs["PN_ARTISTS_PER_SAMPLE"]
         need, total = 0, 0
@@ -6862,6 +6887,15 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
     plan = [(a, tval, None) for a, tval in samples]
     if ic_on:   # the sampled tracks are the circle: one pass over what they agree on
         agreed, ic_agree = inner_circle_tracks(list(samples), min(INNER_CIRCLE["tracks"][2], len(samples)), report)
+        if INNER_CIRCLE["tracks"][3] and len(agreed) - len(samples) < INNER_CIRCLE["tracks"][4]:
+            report("  " + t("Consensus found {found} tracks the circle agrees on, fewer than {minimum}: the rest is plain "
+                            "Track Matching.", found=max(0, len(agreed) - len(samples)), minimum=INNER_CIRCLE["tracks"][4]))
+            have = {(artist_key(p[0]), clean_name(p[1])) for p, _ in agreed}
+            for a, tval in samples:   # each sampled track's own list, behind what the circle agreed on
+                for p, s in similar_track_candidates([a], tval, report)[0]:
+                    if (artist_key(p[0]), clean_name(p[1])) not in have:
+                        have.add((artist_key(p[0]), clean_name(p[1])))
+                        agreed.append((p, s))
         plan = [(PLAYING_NOW_SESSION, "", agreed)]
         per_sample, extra_each = target, extra
     for i, (artist, title, ready) in enumerate(plan):
@@ -7013,9 +7047,16 @@ def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=Fal
     blended, responding = similar_track_candidates(seeds, track, report)
     seed_keys, playing = {artist_key(s) for s in seeds}, clean_name(track)
     candidates = [(p, s) for p, s in blended if not (artist_key(p[0]) in seed_keys and clean_name(p[1]) == playing)]
-    ic_on, ic_size, ic_agree = INNER_CIRCLE["tracks"]
+    ic_on, ic_size, ic_agree, ic_fallback, ic_min = INNER_CIRCLE["tracks"]
     if ic_on:
+        plain = list(candidates)
         candidates, ic_agree = inner_circle_tracks([p for p, _ in candidates][:ic_size], ic_agree, report)
+        agreed = max(0, len(candidates) - min(ic_size, len(plain)))
+        if ic_fallback and agreed < ic_min:   # the seed's own list follows what the circle agreed on
+            report("  " + t("Consensus found {found} tracks the circle agrees on, fewer than {minimum}: the rest is plain "
+                            "Track Matching.", found=agreed, minimum=ic_min))
+            have = {(artist_key(p[0]), clean_name(p[1])) for p, _ in candidates}
+            candidates = candidates + [(p, s) for p, s in plain if (artist_key(p[0]), clean_name(p[1])) not in have]
     use_stream = bool(output_streaming())
     if use_stream:   # Tidal is slow to ask, so only a little over what's wanted; the rest one by one if needed
         ahead = target + target // 5 + 2 if output_is_tidal() else target * 2
