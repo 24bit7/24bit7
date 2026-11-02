@@ -31,7 +31,7 @@ def artist_of(title):
 def test_a_plain_playlist_has_one_config_and_a_default_mix(app):
     import buttons
     b = buttons.standard("tracks")
-    assert buttons.configs(b) == [{"kind": "tracks", "settings": b["settings"]}]
+    assert buttons.configs(b) == [{"kind": "tracks", "settings": b["settings"], "filters": []}]
     assert b["mix"] == {"combine": "shuffle", "pattern": [1], "drift_from": 0, "continue_as": 0}
     assert buttons.continue_as(b) is b
 

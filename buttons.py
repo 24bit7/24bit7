@@ -129,18 +129,22 @@ def tidy(item):
     out = blank(str(item.get("name") or t("Button")), kind)
     out.update({k: v for k, v in item.items() if k in out})
     settings = {str(k): str(v) for k, v in (item.get("settings") or {}).items()}
+    first_filters = [str(f) for f in (out.get("filters") or [])]
     out["configs"] = [{"kind": c["kind"], "settings": {str(k): str(v) for k, v in (c.get("settings") or {}).items()
-                                                        if k in KIND_KEYS[c["kind"]]}}
+                                                        if k in KIND_KEYS[c["kind"]]},
+                       # 2 Nov 2026: filters belong to each config; a config saved before that takes the playlist's
+                       "filters": [str(f) for f in c["filters"]] if isinstance(c.get("filters"), list) else list(first_filters)}
                       for c in (out.get("configs") or []) if isinstance(c, dict) and c.get("kind") in KIND_NAMES]
     if kind is None and out["configs"]:   # a blank slate carries no configs: the first is its own
         first = out["configs"].pop(0)
         kind, settings = first["kind"], first["settings"]
-        out["kind"] = kind
+        out["kind"], out["filters"] = kind, list(first["filters"])
     if kind == "top" and settings.get("TOP_GUESTS") == "third" and not out["configs"]:
         # Artist + Guests as the dev build of 30 Oct 2026 kept it (a Guests setting): now top tracks + artist matching
         recipe = next(r for r in READY_MADE if r["key"] == "headliner")
         env = _env_values()
-        out["configs"] = [{"kind": k, "settings": dict(settings_from(env.get, k), **extra)} for k, extra in recipe["configs"]]
+        out["configs"] = [{"kind": k, "settings": dict(settings_from(env.get, k), **extra), "filters": list(first_filters)}
+                          for k, extra in recipe["configs"]]
         out["mix"] = dict(recipe["mix"])
     out["settings"] = {k: v for k, v in settings.items() if k in KIND_KEYS.get(kind, [])}
     out["filters"] = [str(f) for f in (out.get("filters") or [])]
@@ -174,10 +178,15 @@ def tidy_mix(mix, count):
 
 
 def configs(button):
-    """A playlist's configs in order: its own kind and settings first, then any added under it. A blank slate has none."""
+    """
+    A playlist's configs in order, each {"kind", "settings", "filters"}: its own kind, settings and
+    filters first, then any added under it. A blank slate has none. Filters are each config's own
+    (2 Nov 2026): the hosts in Artist + Guests can come from the whole library while the guests are stereo only.
+    """
     if button.get("kind") is None:
         return []
-    return [{"kind": button["kind"], "settings": button.get("settings") or {}}] + list(button.get("configs") or [])
+    first = {"kind": button["kind"], "settings": button.get("settings") or {}, "filters": list(button.get("filters") or [])}
+    return [first] + [dict(c, filters=list(c.get("filters") or [])) for c in (button.get("configs") or [])]
 
 
 def follows_seed(button):
@@ -205,7 +214,8 @@ def continue_as(button):
         return button
     i = (button.get("mix") or {}).get("continue_as", 0)
     cfg = cfgs[i] if 0 <= i < len(cfgs) else cfgs[0]
-    return dict(button, kind=cfg["kind"], settings=dict(cfg["settings"]), configs=[], mix=mix_default())
+    return dict(button, kind=cfg["kind"], settings=dict(cfg["settings"]), filters=list(cfg.get("filters") or []),
+                configs=[], mix=mix_default())
 
 
 def add_config(button_id, kind):
@@ -218,7 +228,7 @@ def add_config(button_id, kind):
         b["kind"], b["settings"], b["configs"], b["mix"] = kind, settings, [], mix_default()
         save(items)
         return get(button_id)
-    b["configs"].append({"kind": kind, "settings": settings})
+    b["configs"].append({"kind": kind, "settings": settings, "filters": list(b.get("filters") or [])})
     cfgs = configs(b)
     if not has_drift(cfgs[b["mix"]["drift_from"]]["kind"]) and has_drift(kind):
         b["mix"]["drift_from"] = len(cfgs) - 1   # the first config with Drift gets it
@@ -239,7 +249,7 @@ def remove_config(button_id, index):
     if index == 0:
         if b["configs"]:
             first = b["configs"].pop(0)
-            b["kind"], b["settings"] = first["kind"], first["settings"]
+            b["kind"], b["settings"], b["filters"] = first["kind"], first["settings"], list(first.get("filters") or [])
         else:
             b["kind"], b["settings"] = None, {}
     else:
@@ -568,7 +578,8 @@ def add(name, kind, from_id=None):
             source = next((b for b in items if b["id"] == from_id and b["kind"] == kind), None) or standard(kind)
             if source:
                 new["settings"], new["filters"] = dict(source["settings"]), list(source["filters"])
-                new["configs"] = [{"kind": c["kind"], "settings": dict(c["settings"])} for c in source.get("configs") or []]
+                new["configs"] = [{"kind": c["kind"], "settings": dict(c["settings"]), "filters": list(c.get("filters") or [])}
+                                  for c in source.get("configs") or []]
                 new["mix"] = tidy_mix(source.get("mix"), len(new["configs"]) + 1)
     save(items + [new])
     return new
@@ -685,12 +696,15 @@ def set_settings(button_id, settings):
     save(items)
 
 
-def set_filters(button_id, ids):
-    """The filters ticked on a button's page, in the order shown."""
+def set_filters(button_id, ids, index=0):
+    """The filters ticked on one of a playlist's configs (index 0 is its own), in the order shown."""
     items = load()
     for b in items:
         if b["id"] == button_id:
-            b["filters"] = [str(i) for i in ids]
+            if index == 0:
+                b["filters"] = [str(i) for i in ids]
+            elif 0 < index <= len(b.get("configs") or []):
+                b["configs"][index - 1]["filters"] = [str(i) for i in ids]
     save(items)
 
 
@@ -1049,14 +1063,14 @@ def run(button, report=print, seed_info=None, build=None, extra_filters=(), **op
     if overrides.active() and not (engine.NONSTOP_APPEND or options.get("topup")):   # said once per build, not per top-up
         report(t("More Options: {switches}, over this playlist's own settings.", switches=overrides.summary()))
     if build is not None or len(cfgs) == 1 or engine.NONSTOP_APPEND or options.get("topup"):
-        return _run_one(button, button["kind"], button.get("settings") or {}, report, seed_info, build, extra_filters,
-                        options)
+        return _run_one(button, button["kind"], button.get("settings") or {}, button.get("filters") or [], report,
+                        seed_info, build, extra_filters, options)
     return _run_mix(button, cfgs, report, seed_info, extra_filters, options)
 
 
-def _run_one(button, kind, settings, report, seed_info, build, extra_filters, options):
-    """One config of a playlist, under the playlist's filters."""
-    ids = list(button.get("filters") or [])
+def _run_one(button, kind, settings, filters, report, seed_info, build, extra_filters, options):
+    """One config of a playlist, under that config's filters."""
+    ids = [str(i) for i in filters or []]
     ids += [i for i in extra_filters if i not in ids]
     previous = dict(engine.PROFILE)
     before = engine.BUILD_BUTTON
@@ -1138,7 +1152,7 @@ def _run_mix(button, cfgs, report, seed_info, extra_filters, options):
             else:
                 for key in ("theme", "count", "if_short", "prompt", "check"):
                     opts.pop(key, None)
-            _run_one(button, cfg["kind"], settings, report, seed_info, None, extra_filters, opts)
+            _run_one(button, cfg["kind"], settings, cfg.get("filters") or [], report, seed_info, None, extra_filters, opts)
         by_config = {}
         for i, keys in engine.COMBINE_TRACE:
             by_config.setdefault(i, []).extend(keys)
@@ -1168,6 +1182,6 @@ def describe(button):
     n = cfgs[mix["continue_as"]]
     if n["settings"].get(f"NONSTOP_{n['kind'].upper()}", "0") in engine.YES:
         bits.append("Non-stop")
-    if button.get("filters"):
+    if any(c["filters"] for c in cfgs):
         bits.append(t("Filters"))
     return ", ".join(bits)

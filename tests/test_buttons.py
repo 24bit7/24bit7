@@ -355,7 +355,7 @@ def test_set_settings_keeps_only_the_kinds_keys_and_filters_say_who_uses_them(ap
     assert filters.used_by(f["id"]) == []
     buttons.set_filters(head["id"], [f["id"]])
     assert buttons.get(head["id"])["filters"] == [f["id"]]
-    assert filters.used_by(f["id"]) == ["Artist + Guests"]
+    assert filters.used_by(f["id"]) == ["Artist + Guests (config 1)"], "filters are each config's (2 Nov 2026): a mix names the config"
     buttons.set_shown(head["id"], False)
     assert buttons.get(head["id"])["shown"] is False and "Artist + Guests" not in [b["name"] for b in buttons.shown()]
     buttons.set_shown(head["id"], True)

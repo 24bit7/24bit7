@@ -1403,6 +1403,7 @@
   "{level}, {count} removed": "{level}, {count} entfernt",
   "{model} ${rate_in} in and ${rate_out} out": "{model} ${rate_in} Eingabe und ${rate_out} Ausgabe",
   "{model} isn't installed in Ollama. Run  ollama pull {model}": "{model} ist in Ollama nicht installiert. Führ  ollama pull {model}  aus",
+  "{name} (config {n})": "{name} (Config {n})",
   "{name} (not found)": "{name} (nicht gefunden)",
   "{name} copy": "{name} Kopie",
   "{name} has no config yet. Add one on its page under Settings > Playlists.": "{name} hat noch keine Config. Füge eine auf ihrer Seite unter Einstellungen > Playlists hinzu.",

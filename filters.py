@@ -68,9 +68,18 @@ def save(items):
 
 
 def used_by(filter_id):
-    """[playlist names] with this filter ticked, for Edit Filters' Used by line."""
+    """
+    [playlist names] with this filter ticked, for Edit Filters' Used by line. Filters are each
+    config's own (2 Nov 2026): a playlist of several configs names the config, "Artist + Guests (config 2)".
+    """
     import buttons
-    return [b["name"] for b in buttons.load() if filter_id in (b.get("filters") or [])]
+    out = []
+    for b in buttons.load():
+        cfgs = buttons.configs(b)
+        for i, cfg in enumerate(cfgs):
+            if filter_id in cfg["filters"]:
+                out.append(b["name"] if len(cfgs) == 1 else t("{name} (config {n})", name=b["name"], n=i + 1))
+    return out
 
 
 def by_ids(ids):
