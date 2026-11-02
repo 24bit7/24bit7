@@ -37,12 +37,12 @@ def test_the_three_switches_start_off_and_a_click_saves_and_says(app, ui):
     cbs["deep_cuts"]._step(1)
     ui.pump(0.2)
     assert cbs["deep_cuts"].get() == "Spaced" and overrides.switches()["deep_cuts"] == "spaced"
-    assert "Note: Deep Cuts Spaced for every playlist while this row is open." in log(p)
+    assert "Deep Cuts Spaced" not in log(p), "a click says nothing: the opening line already did (Ben, 2 Nov)"
     cbs["deep_cuts"]._step(1)
     cbs["deep_cuts"]._step(1)
     ui.pump(0.2)
     assert cbs["deep_cuts"].get() == "Off" and overrides.switches()["deep_cuts"] == "off", "Spaced, Shuffled, round to Off"
-    assert "Note: Deep Cuts Off for every playlist while this row is open." in log(p)
+    assert log(p).count("Note:") == 0, "still nothing"
     assert cbs["moderator"]._values == ["Off", "Relaxed", "Balanced", "Strict"], "the 1.28 click-through"
     assert cbs["nonstop"]._values == ["Off", "Keep It Tight", "Wander"]
     import tabs

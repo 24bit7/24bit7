@@ -647,7 +647,6 @@
   "Note: {name} is on the Play tab.": "Hinweis: {name} ist im Abspielen-Tab.",
   "Note: {name} is out of the menu. It's still under Settings > Playlists, and + puts it back.": "Hinweis: {name} ist aus dem Menü. Sie steht weiter unter Einstellungen > Playlists, und + bringt sie zurück.",
   "Note: {name} is ticked but has no key, so it was skipped. {key_help_line}": "Hinweis: {name} ist angehakt, hat aber keinen Schlüssel, daher wurde es übersprungen. {key_help_line}",
-  "Note: {name} {value} for every playlist while this row is open.": "Hinweis: {name} {value} für jede Playlist, solange diese Zeile offen ist.",
   "Note: {name}'s own JRiver Playlists settings are no longer used; every device follows Settings > JRiver Playlists.": "Hinweis: Die eigenen JRiver-Playlists-Einstellungen von {name} werden nicht mehr verwendet; jedes Gerät folgt Einstellungen > JRiver-Playlists.",
   "Note: {note}": "Hinweis: {note}",
   "Note: {service_name} returned no similar artists for {seed}{why}.": "Hinweis: {service_name} hat keine ähnlichen Künstler für {seed}{why} geliefert.",

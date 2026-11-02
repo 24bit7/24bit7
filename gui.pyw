@@ -1146,8 +1146,8 @@ class PlayTab(tk.Frame):
         self.override_cbs[key].selection_clear()
         if key == "moderator" and value != "off":
             warn_moderator_once(self)
-        self._append_log(t("Note: {name} {value} for every playlist while this row is open.",
-                           name=t(overrides.NAMES[key]), value=t(overrides.LABELS[value])))
+        # no console line per click (Ben, 2 Nov 2026): the line on opening the row says what the switches do,
+        # and each build says what the row applied
 
     def _use_settings_of(self, button):
         """The Use Its Settings pill: the three switches take what this playlist's own page has."""
