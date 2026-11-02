@@ -954,17 +954,18 @@ class PlayTab(tk.Frame):
         box = self._drop_box = tk.Frame(self.console_box, bg=strip_bg)
         box.place(relx=0, y=0, relwidth=1)
         inner = tk.Frame(box, bg=strip_bg)
-        inner.pack(pady=px(14))   # packed without a side: centred
+        inner.pack(pady=px(12))   # packed without a side: centred
         self._targets = {}
-        font = ("Segoe UI", 11, "bold")
+        # the pills read at the Play buttons' text size, fifteen percent smaller than before (Ben, 2 Nov 2026)
+        font = ("Segoe UI", tkfont.nametofont("TkDefaultFont").actual("size"), "bold")
         measure = tkfont.Font(root=self, font=font)
-        h = px(56)
+        h = px(48)
         pills = [("settings", "\u2699  " + t("Settings"), PALETTE["button_fg"]),
                  ("remove", "\u2715  " + t("Remove"), PALETTE["brand_orange"])]
         if playmix.is_open():   # the row's switches can take this playlist's settings
             pills.append(("use", "\u2913  " + t("Use Its Settings"), self.seed_colour))
         for key, text, colour in pills:
-            w = max(measure.measure(text) + px(64), px(200))
+            w = max(measure.measure(text) + px(54), px(170))
             cell = tk.Frame(inner, bg=strip_bg, padx=px(14))
             cell.pack(side="left")
             pill = DropPill(cell, w, h, text, colour, strip_bg, font, px)

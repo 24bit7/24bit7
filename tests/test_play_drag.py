@@ -65,7 +65,10 @@ def test_the_strip_has_two_centred_dashed_pills_and_no_caption(app, ui):
             yield from walk(c)
     assert not [w for w in walk(box) if isinstance(w, tk.Label)], "no caption: nothing but the two pills"
     settings, remove = p._targets["settings"][1], p._targets["remove"][1]
-    assert settings._font[1] == 11 and remove._colour == PALETTE["brand_orange"]
+    import tkinter.font as tkfont
+    assert settings._font[1] == tkfont.nametofont("TkDefaultFont").actual("size"), "the Play buttons' text size (2 Nov 2026)"
+    assert settings._ph == settings._px(48) and settings._pw == settings._px(170), "fifteen percent smaller than 56 by 200"
+    assert remove._colour == PALETTE["brand_orange"]
     assert settings.lit is False and settings.itemcget(settings.find_all()[0], "dash") != "", "a dashed outline"
     inner = settings.master.master
     left_gap = inner.winfo_rootx() - box.winfo_rootx()
