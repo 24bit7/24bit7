@@ -250,7 +250,7 @@ class PlayTab(tk.Frame):
         self.search_track = RoundedEntry(fields, width=30, font=("Segoe UI", 9))
         self.search_track.pack(side="left", padx=(4, 0))
         tk.Label(self.search_tab, text=t("Build a playlist from any track, even one you don't own. "
-                                         "Only Similar Tracks needs the track; the other buttons need "
+                                         "Only Track Matching needs the track; the other playlists need "
                                          "just the artist. Press Enter for Similar Artists."),
                  font=("Segoe UI", 8), fg=PALETTE["text_muted"]).grid(row=1, column=0, columnspan=4, sticky="w", pady=(6, 0))
         for entry in (self.search_artist, self.search_track):

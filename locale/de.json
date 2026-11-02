@@ -137,7 +137,7 @@
   "Bring the chosen playlist out of its parent's menu, back onto the row.": "Holt die gewählte Playlist aus dem Menü ihrer übergeordneten Playlist zurück in die Reihe.",
   "Browse...": "Durchsuchen...",
   "Build Playlist": "Playlist erstellen",
-  "Build a playlist from any track, even one you don't own. Only Similar Tracks needs the track; the other buttons need just the artist. Press Enter for Similar Artists.": "Baue eine Playlist aus jedem Titel, auch einem, den du nicht besitzt. Nur Similar Tracks braucht den Titel, die anderen Buttons nur den Künstler. Enter startet Similar Artists.",
+  "Build a playlist from any track, even one you don't own. Only Track Matching needs the track; the other playlists need just the artist. Press Enter for Similar Artists.": "Baue eine Playlist aus jedem Titel, auch einem, den du nicht besitzt. Nur Titel-Abgleich braucht den Titel, die anderen Playlists nur den Künstler. Enter startet Ähnliche Künstler.",
   "Builds playlists from your own JRiver library around whatever is playing, using Last.fm, ListenBrainz, Deezer, Tidal and YouTube Music. It runs without AI; the AI features are optional and need your own key for Anthropic, OpenAI or Google Gemini, or a local model through Ollama.": "Erstellt Playlists aus deiner eigenen JRiver-Bibliothek rund um das, was gerade läuft, mit Last.fm, ListenBrainz, Deezer, Tidal und YouTube Music. Es läuft ohne KI; die KI-Funktionen sind optional und brauchen einen eigenen Schlüssel für Anthropic, OpenAI oder Google Gemini oder ein lokales Modell über Ollama.",
   "Button": "Button",
   "Button name": "Knopfname",

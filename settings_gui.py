@@ -1455,13 +1455,18 @@ class SettingsTab(tk.Frame):
                           indent=indent if parent is not None else 0,
                           fold=("closed" if b["id"] in self._folded else "open") if is_parent else None,
                           on_fold=lambda bt=b: self._fold(bt["id"]),
-                          tag=t("default") if parent is not None and parent.get("default") == b["id"] else "")
+                          tag=t("default") if parent is not None and parent.get("default") == b["id"] else "",
+                          fit=True)   # as wide as its name needs, not Tk's ten centimetres: the page gets the rest
             row.configure(cursor="hand2")
             row.pack(fill="x", padx=3, pady=1)
             row.bind("<Button-1>", lambda e, bt=b: self._pick_button(bt["id"]))
             if parent is not None:
                 row.bind("<Button-3>", lambda e, bt=b, p=parent: self._child_row_menu(e, p, bt))
             self._button_rows.append((b["id"], row, row.left, row, var))
+        if self._button_rows:   # every row the width of the widest, with room for a longer name to come
+            width = max(scaled(self._button_list, 220), max(r.winfo_reqwidth() for _i, r, _l, _r, _v in self._button_rows))
+            for _i, r, _l, _r, _v in self._button_rows:
+                r.configure(width=width)
         if not self._buttons:
             tk.Label(self._button_list, text=t("No playlists yet."), fg=PALETTE["help_fg"], font=HELP_FONT, bg=bg).pack(
                 anchor="w", padx=8, pady=6)

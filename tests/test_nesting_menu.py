@@ -228,3 +228,31 @@ def test_the_drop_down_is_only_as_wide_as_its_rows_need(app, ui):
     assert row.bbox(row._tag_id)[2] <= row.winfo_width(), "and the tag is in view"
     p._close_children()
     assert not ui.errors, ui.errors[0]
+
+
+def test_the_playlists_list_is_only_as_wide_as_its_names_need(app, ui):
+    """2 Nov 2026: the same ten centimetres in Settings > Playlists. The list took about 380 pixels for
+    names that need 200, and the page beside it was clipped at the manual's window width. The rows now
+    ask for their name, with a floor so a longer name has room; the page gets the rest."""
+    import buttons
+    s = ui.settings
+    pick_button(ui, "Similar Artists")
+    rows = [r for _i, r, _l, _r, _v in s._button_rows]
+    widest_name = max(r.bbox(r._text_id)[2] for r in rows)
+    width = rows[0].winfo_width()
+    assert all(r.winfo_width() == width for r in rows), "every row the same width"
+    assert widest_name < width <= max(220, widest_name + 60), f"the list is {width} for names up to {widest_name}"
+    assert width < 300, "not Tk's ten centimetres"
+    page_left = s._button_right.winfo_rootx()
+    assert page_left - ui.root.winfo_rootx() < 360, "so the page starts well inside the left third"
+    assert not ui.errors, ui.errors[0]
+
+
+def test_the_search_hint_names_track_matching_not_a_similar_tracks_button(app, ui):
+    """2 Nov 2026, from the screenshots: the Search tab still said only the Similar Tracks button needs
+    the track. That playlist is Track Matching now, in a menu, so the hint names it and says playlists."""
+    import tkinter as tk
+    hints = [w.cget("text") for w in ui.play.search_tab.winfo_children() if isinstance(w, tk.Label)]
+    hint = next(h for h in hints if "needs the track" in h)
+    assert "Only Track Matching needs the track; the other playlists need just the artist." in hint
+    assert "Similar Tracks" not in hint and "buttons" not in hint
