@@ -47,13 +47,29 @@ def mix_default():
 # playlist of its kind(s) with these settings laid on top. Headliner: the artist's top tracks, two at a
 # time, with one track from a close similar artist between them (Ben, 30 Oct 2026, listening to Zero 7).
 READY_MADE = [
-    {"key": "headliner", "name": N_("Headliner"), "kind": "top", "settings": {},
+    {"key": "headliner", "name": N_("Headliner"), "kind": "top", "settings": {"TOP_TRACKS_COUNT": "12"},
      "configs": [("artists", {"SIMILAR_ARTIST_LIMIT": "5", "SIMILAR_ARTIST_TRACK_COUNT": "6", "TRACKS_PER_ARTIST_PICK": "1"})],
      "mix": {"combine": "alternate", "pattern": [2, 1], "drift_from": 1, "continue_as": 0}},
     {"key": "inner_circle", "name": N_("Inner Circle"), "kind": "artists",
      "settings": {"INNER_CIRCLE_ARTISTS": "1", "INNER_CIRCLE_ARTISTS_SIZE": "3", "INNER_CIRCLE_ARTISTS_AGREE": "2"},
      "configs": [], "mix": None},
+    # The two other ways to take an artist's top tracks, shipped under Artist's Top Tracks (Ben, 2 Nov 2026)
+    {"key": "top10_first", "name": N_("Top 10, Best First"), "kind": "top",
+     "settings": {"TOP_TRACKS_COUNT": "10", "TOP_TRACKS_ORDER": "popular"}, "configs": [], "mix": None},
+    {"key": "top10_last", "name": N_("Top 10, Best Last"), "kind": "top",
+     "settings": {"TOP_TRACKS_COUNT": "10", "TOP_TRACKS_ORDER": "reverse"}, "configs": [], "mix": None},
 ]
+
+# How the playlists are arranged as 24bit7 ships them (Ben, 2 Nov 2026): three buttons, two with menus.
+# Similar Artists, titled Artist Matching in its menu, over the standard Similar Tracks (named Track
+# Matching), Inner Circle and Headliner; Artist's Top Tracks, set to fifteen tracks in random order
+# whatever the user had (only those two settings; the rest stays theirs), titled Top 15, Random, over
+# Top 10, Best First and Top 10, Best Last; AI Playlist alone. The upgrade lays this on (arrange_shipped),
+# and Restore Default Playlists puts back whatever of it has gone (restore_standard).
+SHIPPED_TITLES = {"artists": N_("Artist Matching"), "top": N_("Top 15, Random")}
+SHIPPED_TOP = {"TOP_TRACKS_COUNT": "15", "TOP_TRACKS_ORDER": "random"}
+SHIPPED_TRACKS_NAME = N_("Track Matching")
+SHIPPED_UNDER = {"artists": ["standard:tracks", "inner_circle", "headliner"], "top": ["top10_first", "top10_last"]}
 
 # The settings each kind carries. Every key under Settings > Sources and Playlist
 # belongs to one kind, or stays in .env for every build (GLOBAL_KEYS); tests check that.
@@ -101,7 +117,8 @@ def blank(name, kind):
     return {"id": uuid.uuid4().hex[:8], "name": name, "kind": kind, "settings": {}, "filters": [],
             "shortcut": "", "standard": "", "shown": True, "configs": [], "mix": mix_default(),
             "parent": "", "default": "",   # nested under another playlist; a parent's default child (see nest)
-            "subtitle": ""}                # a parent's alternate title: how its own option reads in its menu
+            "subtitle": "",                # a parent's alternate title: how its own option reads in its menu
+            "made": ""}                    # the ready-made recipe it was made as (READY_MADE key), if any
 
 
 def tidy(item):
@@ -131,6 +148,7 @@ def tidy(item):
     out["parent"] = str(out.get("parent") or "")
     out["default"] = str(out.get("default") or "")
     out["subtitle"] = str(out.get("subtitle") or "").strip()
+    out["made"] = str(out.get("made") or "")
     out["mix"] = tidy_mix(out.get("mix"), len(out["configs"]) + (0 if kind is None else 1))
     return out
 
@@ -791,6 +809,7 @@ def ready_made_button(key, bases):
         base = bases.get(kind)
         return dict(base["settings"]) if base else template_settings(kind)
     b = blank(t(recipe["name"]), recipe["kind"])
+    b["made"] = key
     b["settings"] = dict(start(recipe["kind"]), **recipe["settings"])
     base = bases.get(recipe["kind"])
     b["filters"] = list(base["filters"]) if base else []
@@ -799,14 +818,89 @@ def ready_made_button(key, bases):
     return b
 
 
-def restore_standard():
-    """Restore Default Buttons: puts back any of the standard four that's gone, after the rest."""
+def _shipped_key(button):
+    """How SHIPPED_UNDER names a playlist: "standard:tracks", or a ready-made's key."""
+    if button.get("standard"):
+        return f"standard:{button['standard']}"
+    return button.get("made") or ""
+
+
+def _nest_as_shipped(items, which):
+    """Puts each playlist in `which` under the standard playlist it ships under, when that's there and on the row."""
+    by_std = {b.get("standard"): b for b in items if b.get("standard") and not b.get("parent")}
+    for b in which:
+        for parent_kind, keys in SHIPPED_UNDER.items():
+            parent = by_std.get(parent_kind)
+            if parent is not None and parent is not b and _shipped_key(b) in keys \
+                    and not any(c.get("parent") == b["id"] for c in items):
+                b["parent"] = parent["id"]
+
+
+def arrange_shipped(items):
+    """
+    The shipped arrangement (see SHIPPED_UNDER) laid onto the upgrade's flat list: Artist's Top Tracks
+    set to fifteen in random order, the two Top 10s made from it, Similar Tracks named Track Matching,
+    the two menu titles, and the nesting. Returns the list in tree order.
+    """
+    by_std = {b.get("standard"): b for b in items if b.get("standard")}
+    top = by_std.get("top")
+    if top is not None:
+        top["settings"].update(SHIPPED_TOP)
+        at = next((k for k, b in enumerate(items) if b.get("standard") == "vibe"), len(items))
+        for key in ("top10_first", "top10_last"):
+            child = ready_made_button(key, by_std)
+            child["filters"] = list(top["filters"])
+            items.insert(at, child)
+            at += 1
+    if "tracks" in by_std:
+        by_std["tracks"]["name"] = t(SHIPPED_TRACKS_NAME)
+    for kind, title in SHIPPED_TITLES.items():
+        if kind in by_std:
+            by_std[kind]["subtitle"] = t(title)
+    _nest_as_shipped(items, items)
+    ordered = []   # each parent's children in the shipped order (a stable sort: anything else keeps its place)
+    for b in items:
+        if b.get("parent"):
+            continue
+        ordered.append(b)
+        kids = [c for c in items if c.get("parent") == b["id"]]
+        keys = SHIPPED_UNDER.get(b.get("standard") or "", [])
+        kids.sort(key=lambda c: keys.index(_shipped_key(c)) if _shipped_key(c) in keys else len(keys))
+        ordered += kids
+    return settle(ordered)
+
+
+def missing_shipped():
+    """The names of what Restore Default Playlists would put back: nothing, if everything shipped is there."""
     items = load()
-    have = {b.get("standard") for b in items}
-    missing = [b for b in standard_buttons() if b["standard"] not in have]
-    if missing:
-        save(items + missing)
-    return missing
+    have_std = {b.get("standard") for b in items}
+    have_made = {b.get("made") for b in items}
+    out = [t(SHIPPED_TRACKS_NAME) if kind == "tracks" else t(name) for kind, name in KINDS if kind not in have_std]
+    return out + [t(r["name"]) for r in READY_MADE if r["key"] not in have_made]
+
+
+def restore_standard():
+    """
+    Restore Default Playlists: puts back whatever of what 24bit7 ships has gone, a standard playlist
+    or a ready-made one (Headliner, Inner Circle, the two Top 10s), each under the playlist it ships
+    under when that's there, else after the rest. Nothing already there is touched.
+    """
+    items = load()
+    have_std = {b.get("standard") for b in items}
+    have_made = {b.get("made") for b in items}
+    back = []
+    for b in standard_buttons():
+        if b["standard"] not in have_std:
+            if b["standard"] == "tracks":
+                b["name"] = t(SHIPPED_TRACKS_NAME)
+            back.append(b)
+    bases = {k: next((b for b in items + back if b.get("standard") == k), None) for k in KIND_NAMES}
+    back += [ready_made_button(r["key"], bases) for r in READY_MADE if r["key"] not in have_made]
+    if back:
+        items = items + back
+        _nest_as_shipped(items, back)
+        save(settle(items))
+    return back
 
 
 # --- the upgrade from Settings > Sources and Playlist ------------------------------------------
@@ -845,9 +939,9 @@ def _old_devices():
 
 def upgrade():
     """
-    The first run with playlists: the standard four from .env, Headliner, then a playlist per
-    kind an Alexa device with its own settings changed, which that device's phrases run and
-    which stays off the Play tab. Filters for all devices or Windows (Main) go on the standard
+    The first run with playlists: the standard four from .env, Headliner and Inner Circle, then a
+    playlist per kind an Alexa device with its own settings changed, which that device's phrases
+    run and which stays off the Play tab; then the shipped arrangement (arrange_shipped). Filters for all devices or Windows (Main) go on the standard
     playlists; a device-only filter goes nowhere, said once. Runs once: saving an empty list
     counts as done.
     """
@@ -896,7 +990,7 @@ def upgrade():
             engine.print(t("Note: {name} had settings of its own. They're now playlists of its own under Settings > "
                            "Playlists ({names}), which its voice commands run; they're kept off the Play tab.",
                            name=shown_name, names=", ".join(x["name"] for x in made)))
-    save(items)
+    save(arrange_shipped(items))   # last, so the devices above were compared with the settings the user had
     devices.save(device_data)
 
 

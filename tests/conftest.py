@@ -114,6 +114,12 @@ def app(tmp_path, monkeypatch):
     engine.OUTPUT_HOOK = printed
     library = importlib.import_module("library")
     voice = importlib.import_module("voice")
+    # The fake world starts on the flat row the tests were written against (the standard four with Headliner
+    # and Inner Circle between them), not the nested arrangement 24bit7 ships since 2 Nov 2026, which
+    # tests/test_shipped_layout.py covers with the real arrange_shipped (kept on ns.arrange_shipped).
+    buttons_mod = importlib.import_module("buttons")
+    arrange_shipped = buttons_mod.arrange_shipped
+    monkeypatch.setattr(buttons_mod, "arrange_shipped", lambda items: items)
     saved_playlists = importlib.import_module("saved_playlists")
 
     def set_env(**values):
@@ -126,7 +132,7 @@ def app(tmp_path, monkeypatch):
 
     ns = SimpleNamespace(folder=folder, env=env, set_env=set_env, engine=engine, library=library, voice=voice,
                          saved_playlists=saved_playlists, jriver=jriver, web=web, ai=ai, yt=yt, printed=printed, opened=opened,
-                         Lines=Lines)
+                         Lines=Lines, arrange_shipped=arrange_shipped)
     yield ns
     try:
         voice.stop()

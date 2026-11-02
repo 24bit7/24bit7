@@ -93,11 +93,14 @@ def test_right_click_menu_renames_copies_moves_removes_and_restores(app, ui, mon
     def labels(menu):
         return [menu.entrycget(i, "label") for i in range(menu.index("end") + 1) if menu.type(i) == "command"]
 
+    buttons.restore_standard()   # the fake world starts without the two Top 10s 24bit7 ships (conftest): complete it
+    p.refresh_buttons()
+    ui.pump(0.3)
     p._button_menu(Click(), p.play_buttons[3]._button)   # Headliner
     menu = menus[-1]
     assert labels(menu) == ["Rename", "Duplicate", "Settings", "Move Left", "Move Right", "Remove from the Play Tab",
                             "Restore Default Playlists"]
-    assert menu.entrycget(8, "state") == "disabled", "nothing to restore while the four are there"
+    assert menu.entrycget(8, "state") == "disabled", "nothing to restore while everything shipped is there"
     menu.invoke(4)   # Move Left
     assert names(p)[2:4] == ["Headliner", "Artist's Top Tracks"]
     monkeypatch.setattr(tabs, "ask_name", lambda *a, **k: "Star Turn")
@@ -114,7 +117,7 @@ def test_right_click_menu_renames_copies_moves_removes_and_restores(app, ui, mon
     assert opened[-1] == p.play_buttons[0]._button["id"]
     menus[-1].invoke(6)   # Remove from the Play Tab: no question, nothing deleted
     assert names(p) == ["Similar Tracks", "Star Turn", "Star Turn 2", "Artist's Top Tracks", "Inner Circle", "AI Playlist"]
-    assert buttons.standard("artists")["shown"] is False and len(buttons.load()) == 7
+    assert buttons.standard("artists")["shown"] is False and len(buttons.load()) == 9
     p._button_menu(Click(), None)   # right-click on +
     assert labels(menus[-1]) == ["Restore Default Playlists"] and menus[-1].entrycget(0, "state") == "disabled", \
         "off the row isn't missing"

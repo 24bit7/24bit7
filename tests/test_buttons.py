@@ -63,7 +63,7 @@ def test_every_setting_belongs_to_one_kind_or_is_global(app):
 
 
 def test_first_load_makes_the_standard_four_from_env_then_headliner(app):
-    app.set_env(SIMILAR_ARTIST_LIMIT="7", TOP_TRACKS_COUNT="12", SIMILAR_TRACK_COUNT="8")
+    app.set_env(SIMILAR_ARTIST_LIMIT="7", TOP_TRACKS_COUNT="9", SIMILAR_TRACK_COUNT="8")
     buttons, _, _ = mods()
     items = buttons.load()
     assert [b["name"] for b in items] == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Headliner",
@@ -72,11 +72,12 @@ def test_first_load_makes_the_standard_four_from_env_then_headliner(app):
     by = {b["name"]: b for b in items}
     assert by["Similar Artists"]["settings"]["SIMILAR_ARTIST_LIMIT"] == "7"
     assert by["Similar Tracks"]["settings"]["SIMILAR_TRACK_COUNT"] == "8"
-    assert by["Artist's Top Tracks"]["settings"]["TOP_TRACKS_COUNT"] == "12"
+    assert by["Artist's Top Tracks"]["settings"]["TOP_TRACKS_COUNT"] == "9"
     assert by["Artist's Top Tracks"]["standard"] == "top" and by["Headliner"]["standard"] == ""
     assert [c["kind"] for c in buttons.configs(by["Headliner"])] == ["top", "artists"]
     assert by["Headliner"]["mix"] == {"combine": "alternate", "pattern": [2, 1], "drift_from": 1, "continue_as": 0}
-    assert by["Headliner"]["settings"]["TOP_TRACKS_COUNT"] == "12", "Headliner starts from the standard Top Tracks"
+    assert by["Headliner"]["settings"]["TOP_TRACKS_COUNT"] == "12", "Headliner's own count, over the standard's"
+    assert by["Headliner"]["made"] == "headliner"
     assert by["Headliner"]["configs"][0]["settings"]["SIMILAR_ARTIST_LIMIT"] == "5", "and its guests from Similar Artists"
     assert by["Headliner"]["configs"][0]["settings"]["TRACKS_PER_ARTIST_PICK"] == "1"
     assert "SIMILAR_TRACK_COUNT" not in by["Similar Artists"]["settings"], "a button only holds its kind's keys"
@@ -179,7 +180,7 @@ def test_the_ready_made_templates_make_headliner_and_inner_circle_from_the_stand
     app.set_env(SIMILAR_ARTIST_LIMIT="7", TOP_TRACKS_COUNT="12")
     buttons, _, _ = mods()
     buttons.load()
-    assert [r["key"] for r in buttons.READY_MADE] == ["headliner", "inner_circle"]
+    assert [r["key"] for r in buttons.READY_MADE] == ["headliner", "inner_circle", "top10_first", "top10_last"]
     head = buttons.add(buttons.unique_name("Headliner"), "artists", "template:headliner")
     assert head["name"] == "Headliner 2" and head["kind"] == "top", "the recipe's kind wins over the one passed"
     assert [c["kind"] for c in buttons.configs(head)] == ["top", "artists"] and head["settings"]["TOP_TRACKS_COUNT"] == "12"
@@ -193,14 +194,17 @@ def test_the_ready_made_templates_make_headliner_and_inner_circle_from_the_stand
 
 
 def test_restore_default_buttons_puts_back_only_what_is_missing(app):
+    """The fake world starts flat, without the two Top 10s 24bit7 ships (conftest), so Restore adds those too,
+    under Artist's Top Tracks; tests/test_shipped_layout.py has the full picture."""
     buttons, _, _ = mods()
     items = buttons.load()
     kept = [b for b in items if b["standard"] != "artists"]
     buttons.save(kept)
     back = buttons.restore_standard()
-    assert [b["standard"] for b in back] == ["artists"]
+    assert [b["standard"] or b["made"] for b in back] == ["artists", "top10_first", "top10_last"]
     names = [b["name"] for b in buttons.load()]
-    assert names == ["Similar Tracks", "Artist's Top Tracks", "Headliner", "Inner Circle", "AI Playlist", "Similar Artists"]
+    assert names == ["Similar Tracks", "Artist's Top Tracks", "Top 10, Best First", "Top 10, Best Last", "Headliner",
+                     "Inner Circle", "AI Playlist", "Similar Artists"]
     assert buttons.restore_standard() == []
 
 

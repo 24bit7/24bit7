@@ -18,7 +18,9 @@ def artist_of(title):
 
 def headliner(app):
     import buttons
-    return next(b for b in buttons.load() if b["name"] == "Headliner")
+    h = next(b for b in buttons.load() if b["name"] == "Headliner")
+    buttons.set_settings(h["id"], dict(h["settings"], TOP_TRACKS_COUNT="6"))   # shipped at twelve; these count hosts in sixes
+    return buttons.get(h["id"])
 
 
 def test_weave_alternates_appends_or_shuffles(app):

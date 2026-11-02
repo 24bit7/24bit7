@@ -872,6 +872,8 @@ TEMPLATE_NOTES = {   # what each template is, for the Add a Playlist window
     "headliner": N_("The artist's top tracks, two at a time, with one track from a close similar artist between them."),
     "inner_circle": N_("The seed's three closest artists, then only the artists their own lists agree on. Tight, and "
                        "sometimes short."),
+    "top10_first": N_("The artist's ten most popular tracks that you own, best first."),
+    "top10_last": N_("The artist's ten most popular tracks that you own, least popular first."),
 }
 
 
@@ -1393,7 +1395,8 @@ class SettingsTab(tk.Frame):
         restore = tk.Label(box, text=t("Restore Default Playlists"), fg=PALETTE["button_fg"], font=HELP_FONT, cursor="hand2")
         restore.grid(row=1, column=0, sticky="w", pady=(8, 0))
         restore.bind("<Button-1>", lambda e: self._button_restore())
-        Tooltip(restore, t("Puts back any of the standard playlists that's been deleted."))
+        Tooltip(restore, t("Puts back anything 24bit7 ships that's been deleted: a standard playlist, Headliner, Inner "
+                           "Circle or a Top 10, under the playlist it came under."))
         self._button_right = tk.Frame(outer, pady=12)
         self._button_right.pack(side="left", fill="both", expand=True, padx=(0, 12))
         outer.bind("<Map>", lambda e: self._buttons_refresh())
@@ -1583,7 +1586,7 @@ class SettingsTab(tk.Frame):
     def _button_restore(self):
         missing = buttons.restore_standard()
         if not missing:
-            messagebox.showinfo(t("Restore Default Playlists"), t("Every standard playlist is there already."),
+            messagebox.showinfo(t("Restore Default Playlists"), t("Everything 24bit7 ships is there already."),
                                 parent=self)
             return
         self._button_id = missing[0]["id"]

@@ -53,7 +53,7 @@ def test_from_template_and_new(app, ui):
     win._pick_tab("template")
     ui.pump(0.2)
     assert win.template_list.get(0, "end") == ("Artist Matching", "Track Matching", "Artist's Top Tracks", "AI Playlist",
-                                               "Headliner", "Inner Circle")
+                                               "Headliner", "Inner Circle", "Top 10, Best First", "Top 10, Best Last")
     assert win.ok_button.cget("text") == "Add"
     win.template_list.selection_clear(0, "end")
     win.template_list.selection_set(5)

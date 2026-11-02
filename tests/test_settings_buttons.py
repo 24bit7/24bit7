@@ -286,13 +286,13 @@ def test_the_standard_button_also_writes_env(app, ui):
     import buttons
     import settings_gui
     p = pick_button(ui, "Artist's Top Tracks")
-    p.vars["TOP_TRACKS_COUNT"].set("12")
+    p.vars["TOP_TRACKS_COUNT"].set("13")
     ui.pump(0.3)
-    assert buttons.standard("top")["settings"]["TOP_TRACKS_COUNT"] == "12"
-    assert settings_gui.read_env().get("TOP_TRACKS_COUNT") == "12"
+    assert buttons.standard("top")["settings"]["TOP_TRACKS_COUNT"] == "13"
+    assert settings_gui.read_env().get("TOP_TRACKS_COUNT") == "13"
     app.engine.refresh_settings_if_changed()
-    assert app.engine.TOP_TRACKS_COUNT == 12
-    assert next(b for b in buttons.load() if b["name"] == "Headliner")["settings"].get("TOP_TRACKS_COUNT", "10") != "12"
+    assert app.engine.TOP_TRACKS_COUNT == 13
+    assert next(b for b in buttons.load() if b["name"] == "Headliner")["settings"].get("TOP_TRACKS_COUNT", "10") != "13"
 
 
 def test_deep_cuts_switch_on_every_button_and_the_standard_one_reaches_env(app, ui):
@@ -400,13 +400,18 @@ def test_add_remove_and_restore_from_settings(app, ui, monkeypatch):
     s._buttons_refresh()
     assert s._button_page.button["name"] == "Similar Artists", "back to the first"
     assert "Sunday Guests" not in [b._name for b in ui.play.play_buttons]
+    buttons.restore_standard()   # the fake world starts without the two Top 10s 24bit7 ships (conftest): complete it
+    s._buttons_refresh()
     s._button_restore()
     assert ui.answers[-1][1][0] == "Restore Default Playlists", "nothing missing: it says so"
     buttons.remove(buttons.standard("tracks")["id"])
     s._buttons_refresh()
     s._button_restore()
     ui.pump(0.3)
-    assert s._button_names()[-1] == "Similar Tracks" and s._button_page.button["kind"] == "tracks"
+    tracks = buttons.standard("tracks")
+    assert tracks["name"] == "Track Matching" and s._button_page.button["kind"] == "tracks", "back as it ships"
+    assert tracks["parent"] == buttons.standard("artists")["id"], "under Similar Artists, where it ships"
+    assert "Track Matching" in s._button_names()
     assert not ui.errors, ui.errors[0]
 
 

@@ -1016,9 +1016,7 @@ class PlayTab(tk.Frame):
                              command=lambda: (buttons.move_shown(button["id"], 1), self.refresh_buttons()))
             menu.add_command(label=t("Remove from the Play Tab"), command=lambda: self._remove_button(button))
             menu.add_separator()
-        have = {b.get("standard") for b in buttons.load()}
-        missing = any(kind not in have for kind, _ in buttons.KINDS)
-        menu.add_command(label=t("Restore Default Playlists"), state="normal" if missing else "disabled",
+        menu.add_command(label=t("Restore Default Playlists"), state="normal" if buttons.missing_shipped() else "disabled",
                          command=lambda: (buttons.restore_standard(), self.refresh_buttons()))
         try:
             menu.tk_popup(event.x_root, event.y_root)
