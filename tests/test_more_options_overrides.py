@@ -36,14 +36,18 @@ def test_the_three_switches_start_off_and_a_click_saves_and_says(app, ui):
     ui.pump(0.3)
     cbs["deep_cuts"]._step(1)
     ui.pump(0.2)
-    assert cbs["deep_cuts"].get() == "On" and overrides.switches()["deep_cuts"] is True
-    assert "Deep Cuts on for every build while this row is open." in log(p)
+    assert cbs["deep_cuts"].get() == "Spaced" and overrides.switches()["deep_cuts"] == "spaced"
+    assert "Note: Deep Cuts Spaced for every playlist while this row is open." in log(p)
+    cbs["deep_cuts"]._step(1)
     cbs["deep_cuts"]._step(1)
     ui.pump(0.2)
-    assert cbs["deep_cuts"].get() == "Off" and overrides.switches()["deep_cuts"] is False
-    assert "Deep Cuts off for every build while this row is open." in log(p)
+    assert cbs["deep_cuts"].get() == "Off" and overrides.switches()["deep_cuts"] == "off", "Spaced, Shuffled, round to Off"
+    assert "Note: Deep Cuts Off for every playlist while this row is open." in log(p)
+    assert cbs["moderator"]._values == ["Off", "Relaxed", "Balanced", "Strict"], "the 1.28 click-through"
+    assert cbs["nonstop"]._values == ["Off", "Keep It Tight", "Wander"]
     import tabs
-    assert cbs["moderator"]._lit == {"On": tabs.PALETTE["ai_purple"]}, "the Moderator spends AI credits: magenta"
+    assert cbs["moderator"]._lit == {v: tabs.PALETTE["ai_purple"] for v in ("Relaxed", "Balanced", "Strict")}, \
+        "the Moderator spends AI credits: magenta at any level"
     p._show_more(False)
     assert not ui.errors, ui.errors[0]
 
@@ -57,14 +61,14 @@ def test_opening_the_row_says_one_line_and_the_first_time_a_dialog_too(app, ui, 
     p._end_greeting(keep=False)
     shown = []
     monkeypatch.setattr(gui.messagebox, "showinfo", lambda title, text, **kw: shown.append((title, text)))
-    overrides.set_switches({"moderator": False, "deep_cuts": True, "nonstop": False})
+    overrides.set_switches({"moderator": "off", "deep_cuts": "spaced", "nonstop": "off"})
     line = ("More Options Open: any settings set here override your playlists' own settings. The override ends when "
             "More Options closes.")
     assert overrides.told() is False
     p._show_more(True)
     ui.pump(0.3)
     assert log(p).count(line) == 1
-    assert p.override_cbs["deep_cuts"].get() == "On", "the switches read what's saved when the row opens"
+    assert p.override_cbs["deep_cuts"].get() == "Spaced", "the switches read what's saved when the row opens"
     assert len(shown) == 1 and shown[0][0] == "More Options" and shown[0][1].startswith(line), "the one-off dialog"
     assert "Use Its Settings" in shown[0][1] and overrides.told() is True
     p._show_more(False)
@@ -89,8 +93,8 @@ def test_the_third_pill_shows_only_with_the_row_open_and_sets_the_switches_from_
     buttons.load()
     artists = buttons.standard("artists")
     buttons.set_settings(artists["id"], dict(artists["settings"], AI_MODERATOR_ARTISTS="balanced", DEEP_CUTS_ARTISTS="off",
-                                             NONSTOP_ARTISTS="1"))
-    overrides.set_switches({"moderator": False, "deep_cuts": True, "nonstop": False})
+                                             NONSTOP_ARTISTS="1", NONSTOP_ARTISTS_MODE="tight"))
+    overrides.set_switches({"moderator": "off", "deep_cuts": "spaced", "nonstop": "off"})
     p.refresh_buttons()
     ui.pump(0.3)
     fb = p.play_buttons[0]
@@ -121,9 +125,10 @@ def test_the_third_pill_shows_only_with_the_row_open_and_sets_the_switches_from_
     assert use.lit is True
     p._drag_end(At(ux, uy), fb)
     ui.pump(0.3)
-    assert overrides.switches() == {"moderator": True, "deep_cuts": False, "nonstop": True}, "as its page has them"
-    assert {k: cb.get() for k, cb in p.override_cbs.items()} == {"moderator": "On", "deep_cuts": "Off", "nonstop": "On"}
-    assert "Note: More Options set from Similar Artists: Moderator on, Deep Cuts off, Non-stop on." in log(p)
+    assert overrides.switches() == {"moderator": "balanced", "deep_cuts": "off", "nonstop": "tight"}, "as its page has them"
+    assert {k: cb.get() for k, cb in p.override_cbs.items()} == {"moderator": "Balanced", "deep_cuts": "Off",
+                                                                  "nonstop": "Keep It Tight"}
+    assert "Note: More Options set from Similar Artists: Moderator Balanced, Deep Cuts Off, Non-stop Keep It Tight." in log(p)
     assert [b._name for b in p.play_buttons][0] == "Similar Artists", "the row is as it was"
     p._show_more(False)
     assert not ui.errors, ui.errors[0]

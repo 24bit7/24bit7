@@ -6,13 +6,14 @@ switches beat every playlist's own settings, for every build (the Play tab, voic
 Non-stop's top-ups); closed, the playlists' pages decide and the switches do nothing. The row
 remembers open or closed between launches (playmix), so the override does too.
 
-Each switch is Off or On. Off turns the thing off. On runs it the way the playlist's own page
-says; if its page has it off, the standard playlist of that kind's way; if that's off too, the
-shipped default: Moderator Balanced, Deep Cuts Spaced, Non-stop as the kind's own settings.
+Each switch steps through its settings, as the 1.28 row did: the Moderator Off, Relaxed, Balanced
+or Strict; Deep Cuts Off, Spaced or Shuffled; Non-stop Off, Keep It Tight or Wander. Off turns the
+thing off for every playlist; any other setting runs for every playlist. What a setting leaves
+open (how much Deep Cuts top up by, what Non-stop plays using and reseeds from) stays the
+playlist's own, or the standard playlist of its kind's when the page has it off.
 
-The switches start from the row 1.28 had, whose values are still in .env after the upgrade
-(the Moderator level, the Deep Cuts mode and Non-stop per kind): anything not off is On. A fresh
-install has them off, so the switches start Off. They're kept with the row's open flag.
+The switches start from the row 1.28 had, whose values are still in .env after the upgrade. A
+fresh install has them off, so the switches start Off. They're kept with the row's open flag.
 """
 
 from i18n import N_, t
@@ -22,7 +23,25 @@ import playmix
 
 SWITCHES = ("moderator", "deep_cuts", "nonstop")
 NAMES = {"moderator": N_("Moderator"), "deep_cuts": N_("Deep Cuts"), "nonstop": N_("Non-stop")}
+# each switch's settings in click order, as the code knows them; LABELS is what the switch shows (through t())
+VALUES = {"moderator": ("off", "relaxed", "balanced", "strict"),
+          "deep_cuts": ("off", "spaced", "shuffled"),
+          "nonstop": ("off", "tight", "journey")}
+LABELS = {"off": N_("Off"), "relaxed": N_("Relaxed"), "balanced": N_("Balanced"), "strict": N_("Strict"),
+          "spaced": N_("Spaced"), "shuffled": N_("Shuffled"), "tight": N_("Keep It Tight"), "journey": N_("Wander")}
 GROUPS = {"artists": "ARTISTS", "tracks": "TRACKS", "top": "TOP", "vibe": "VIBE"}
+OPEN_LINE = N_("More Options Open: any settings set here override your playlists' own settings. The override ends "
+               "when More Options closes.")
+
+
+def labels(name):
+    """The switch's faces in click order, English, shown through t() by the switch."""
+    return [LABELS[v] for v in VALUES[name]]
+
+
+def code_for(name, label):
+    """The setting behind a face ('Keep It Tight' -> 'tight')."""
+    return next((v for v in VALUES[name] if LABELS[v] == label), "off")
 
 
 def _getter(values):
@@ -35,33 +54,44 @@ def _env():
 
 
 def _seed(env):
-    """The 1.28 row's values, from .env as it stands: anything not off is On. A fresh .env gives three Offs."""
+    """The 1.28 row's values, from .env as it stands. A fresh .env gives three Offs."""
     get = _getter(env)
     levels = engine.moderator_settings(get)
-    moderator = any(levels.get(g, "off") != "off" for g in engine.MODERATOR_GROUPS)
-    deep = any((get(f"DEEP_CUTS_{g.upper()}", "off") or "off").strip().lower() not in ("off", "")
-               for g in engine.DEEP_CUT_GROUPS)
-    nonstop = any(cfg.get("on") for cfg in engine.nonstop_settings(get).values())
+    moderator = next((levels[g] for g in engine.MODERATOR_GROUPS if levels.get(g, "off") != "off"), "off")
+    deep = next((m for m in ((get(f"DEEP_CUTS_{g.upper()}", "off") or "off").strip().lower() for g in engine.DEEP_CUT_GROUPS)
+                 if m in VALUES["deep_cuts"] and m != "off"), "off")
+    nonstop = next((cfg["mode"] for cfg in engine.nonstop_settings(get).values() if cfg.get("on")), "off")
     return {"moderator": moderator, "deep_cuts": deep, "nonstop": nonstop}
 
 
+def _clean(saved):
+    """Saved values made whole: an unknown setting is off; the first build's True/False become Balanced/Spaced/Wander or off."""
+    out = {}
+    for name in SWITCHES:
+        v = saved.get(name) if isinstance(saved, dict) else None
+        if v is True:
+            v = {"moderator": "balanced", "deep_cuts": "spaced", "nonstop": "journey"}[name]
+        out[name] = v if v in VALUES[name] else "off"
+    return out
+
+
 def switches():
-    """The three switches as last left: {"moderator", "deep_cuts", "nonstop"} -> bool. Seeded once."""
+    """The three switches as last left: {"moderator", "deep_cuts", "nonstop"} -> the setting that runs. Seeded once."""
     data = playmix.load()
     saved = data.get("switches")
     if not isinstance(saved, dict):
         saved = _seed(_env())
         data["switches"] = saved
         playmix._save(data)
-    return {name: bool(saved.get(name)) for name in SWITCHES}
+    return _clean(saved)
 
 
-def set_switch(name, on):
-    if name not in SWITCHES:
-        raise ValueError(name)
+def set_switch(name, value):
+    if name not in SWITCHES or value not in VALUES[name]:
+        raise ValueError((name, value))
     data = playmix.load()
     current = switches()
-    current[name] = bool(on)
+    current[name] = value
     data["switches"] = current
     playmix._save(data)
     return current
@@ -70,13 +100,9 @@ def set_switch(name, on):
 def set_switches(values):
     """All three at once (the Use Its Settings pill)."""
     data = playmix.load()
-    data["switches"] = {name: bool(values.get(name)) for name in SWITCHES}
+    data["switches"] = _clean(values)
     playmix._save(data)
     return dict(data["switches"])
-
-
-OPEN_LINE = N_("More Options Open: any settings set here override your playlists' own settings. The override ends "
-               "when More Options closes.")
 
 
 def told():
@@ -103,81 +129,62 @@ def _merged(button):
 
 def from_playlist(button):
     """
-    What a playlist's own page has: the three switches as that playlist would set them
-    (Moderator level not off, Deep Cuts mode not off, Non-stop on). For Use Its Settings.
+    What a playlist's own page has, as the three switches would show it: its Moderator level, its
+    Deep Cuts mode and its Non-stop mode (off when Non-stop is off). For Use Its Settings.
     """
     import buttons
     kind = button.get("kind")
     if kind is None:
-        return {"moderator": False, "deep_cuts": False, "nonstop": False}
-    merged = _merged(button)
-    get = _getter(merged)
+        return {"moderator": "off", "deep_cuts": "off", "nonstop": "off"}
+    get = _getter(_merged(button))
     level = engine.moderator_settings(get).get(kind, "off") if kind in engine.MODERATOR_GROUPS or kind == "vibe" else "off"
     deep = (get(f"DEEP_CUTS_{GROUPS[kind]}", "off") or "off").strip().lower() if kind in engine.DEEP_CUT_GROUPS else "off"
-    return {"moderator": level != "off", "deep_cuts": deep not in ("off", ""),
-            "nonstop": bool(buttons.nonstop_own(button).get("on"))}   # the page's own, not the switch's
-
-
-def _fallback(kind, key, own, standard_of, shipped, off=("off", "")):
-    """own if it isn't off, else the standard playlist of the kind's value, else the shipped default."""
-    if own not in off:
-        return own
-    if standard_of is not None:
-        value = (dict(_env(), **(standard_of.get("settings") or {})).get(key, "") or "").strip().lower()
-        if value not in off:
-            return value
-    return shipped
+    own = buttons.nonstop_own(button)
+    return _clean({"moderator": level, "deep_cuts": deep, "nonstop": own["mode"] if own.get("on") else "off"})
 
 
 def layer(button, kind, settings=None):
     """
-    The settings the switches lay over one config's for a build, while the row is open:
-    the Moderator level and Deep Cuts mode for the config's kind. Non-stop is applied where it's
-    read (nonstop_config), not here. Empty when the row is closed or the kind has neither.
+    The settings the switches lay over one config's for a build, while the row is open: the
+    Moderator level and Deep Cuts mode for the config's kind, as the switches read. Non-stop is
+    applied where it's read (nonstop_config), not here. Empty when the row is closed or the kind
+    has neither (Artist's Top Tracks).
     """
     if not active():
         return {}
-    import buttons
     on = switches()
-    merged = dict(_env(), **(settings if settings is not None else (button.get("settings") or {})))
-    standard_of = buttons.standard(kind)
     out = {}
     g = GROUPS.get(kind, "")
     if kind in engine.MODERATOR_GROUPS or kind == "vibe":
-        key = f"AI_MODERATOR_{g}"
-        own = engine.moderator_settings(_getter(merged)).get(kind, "off")
-        out[key] = _fallback(kind, key, own, standard_of, "balanced") if on["moderator"] else "off"
+        out[f"AI_MODERATOR_{g}"] = on["moderator"]
     if kind in engine.DEEP_CUT_GROUPS:
-        key = f"DEEP_CUTS_{g}"
-        own = (merged.get(key, "off") or "off").strip().lower()
-        out[key] = _fallback(kind, key, own, standard_of, "spaced") if on["deep_cuts"] else "off"
+        out[f"DEEP_CUTS_{g}"] = on["deep_cuts"]
     return out
 
 
 def nonstop(cfg, button):
     """
-    Non-stop's config for a playlist with the switch laid over it, while the row is open:
-    Off turns it off; On keeps the playlist's own set-up, or the standard playlist of its
-    kind's when the page has it off, or the kind's defaults.
+    Non-stop's config for a playlist with the switch laid over it, while the row is open: Off turns
+    it off; Keep It Tight or Wander turns it on in that mode, playing using and reseeding from what
+    the playlist's own page says, or the standard playlist of its kind's when the page has it off.
     """
     if not active():
         return cfg
-    if not switches()["nonstop"]:
+    mode = switches()["nonstop"]
+    if mode == "off":
         return dict(cfg, on=False)
-    if cfg.get("on"):
-        return cfg
-    import buttons
-    kind = (buttons.continue_as(button) if button else {}).get("kind")
-    standard_of = buttons.standard(kind) if kind else None
-    if standard_of is not None and standard_of.get("id") != (button or {}).get("id"):
-        std = buttons.nonstop_own(standard_of)
-        if std.get("on"):
-            return dict(std, on=True)
-    return dict(cfg, on=True)
+    if not cfg.get("on"):
+        import buttons
+        kind = (buttons.continue_as(button) if button else {}).get("kind")
+        standard_of = buttons.standard(kind) if kind else None
+        if standard_of is not None and standard_of.get("id") != (button or {}).get("id"):
+            std = buttons.nonstop_own(standard_of)
+            if std.get("on"):
+                cfg = std
+    return dict(cfg, on=True, mode=mode)
 
 
 def summary():
-    """One console line saying what the row applies: 'Moderator off, Deep Cuts on, Non-stop off'."""
+    """One console line's worth: 'Moderator Balanced, Deep Cuts Off, Non-stop Wander'."""
     on = switches()
-    parts = [t("{name} on", name=t(NAMES[k])) if on[k] else t("{name} off", name=t(NAMES[k])) for k in SWITCHES]
-    return ", ".join(parts)
+    return ", ".join(f"{t(NAMES[k])} {t(LABELS[on[k]])}" for k in SWITCHES)

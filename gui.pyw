@@ -91,12 +91,12 @@ PLAY_NOTES = {
                  "Tidal (ticked under Settings > Other > Additional Outputs)."),
     "Zone": N_("Which JRiver zone Now Playing shows and seeds from."),
     "Seed": N_("What Similar Artists and Similar Tracks start from: the current track, or every track in Playing Now."),
-    "Moderator": N_("While this row is open: Off turns the Moderator off for every build; On runs it as the playlist's "
-                    "page says, or Balanced if its page has it off. Uses AI credits."),
-    "Deep Cuts": N_("While this row is open: Off turns Deep Cuts off for every build; On adds them as the playlist's "
-                    "page says, or Spaced if its page has them off."),
-    "Non-stop": N_("While this row is open: Off stops Non-stop topping up any playlist; On keeps the music going as "
-                   "the playlist's page says, or as the standard playlist of its kind does."),
+    "Moderator": N_("While this row is open, the Moderator runs at this level for every playlist: Off, Relaxed, "
+                    "Balanced or Strict. Click to step through them. Uses AI credits."),
+    "Deep Cuts": N_("While this row is open, Deep Cuts are added this way for every playlist: Off, Spaced or "
+                    "Shuffled. Click to step through them. How many is each playlist's own."),
+    "Non-stop": N_("While this row is open, Non-stop keeps the music going this way for every playlist: Off, Keep It "
+                   "Tight or Wander. Click to step through them. What it plays using is each playlist's own."),
     "Mode": N_("Play Mode plays the playlist straight away. Review Mode lists it first, so you choose what goes."),
     "+ Add JRiver Playlist": N_("Joins one of your own JRiver playlists to the next build."),
     "Show Credits": N_("Lists the producer, engineer, musicians and other credits for what's playing, from Discogs."),
@@ -415,14 +415,17 @@ class PlayTab(tk.Frame):
         self.behaviour_cb.pack(side="left", padx=(0, 8))
         tk.Frame(self.extras_row, width=1, height=24, bg=PALETTE["line"]).pack(side="left", padx=(8, 16))
         # Moderator, Deep Cuts and Non-stop: overrides (overrides.py). While this row is open they beat every
-        # playlist's own settings; closed, the pages decide (Ben, 2 Nov 2026). Each is Off or On, lit when On.
+        # playlist's own settings; closed, the pages decide (Ben, 2 Nov 2026). Each steps through its settings
+        # as the 1.28 row did (Off, Relaxed, Balanced, Strict; Off, Spaced, Shuffled; Off, Keep It Tight, Wander).
         self.override_vars = {}
         self.override_cbs = {}
         for key, prefix, colour, symbol in (("moderator", "Moderator", PALETTE["ai_purple"], False),
                                             ("deep_cuts", "Deep Cuts", PALETTE["button_fg"], False),
                                             ("nonstop", "\u221e", PALETTE["button_fg"], True)):
             var = tk.StringVar(value="Off")
-            cb = ClickThrough(self.extras_row, prefix, var, ["Off", "On"], symbol=symbol, lit={"On": colour},
+            faces = overrides.labels(key)
+            cb = ClickThrough(self.extras_row, prefix, var, faces, symbol=symbol,
+                              lit={face: colour for face in faces if face != "Off"},
                               command=lambda k=key: self._on_override_changed(k))
             cb.pack(side="left", padx=(0, 8))
             self.override_vars[key], self.override_cbs[key] = var, cb
@@ -1125,27 +1128,26 @@ class PlayTab(tk.Frame):
         if by_hand and not overrides.told():
             overrides.set_told()
             messagebox.showinfo(t("More Options"), t(overrides.OPEN_LINE) + "\n\n"
-                                + t("The Moderator, Deep Cuts and Non-stop switches here are Off or On. Off turns the "
-                                    "thing off for every playlist; On runs it as the playlist's own page says. Drag a "
-                                    "playlist onto Use Its Settings to set the switches from its page."), parent=self)
+                                + t("Click the Moderator, Deep Cuts and Non-stop switches here to step through their "
+                                    "settings. Off turns the thing off for every playlist; any other setting runs for "
+                                    "every playlist. Drag a playlist onto Use Its Settings to set the switches from its "
+                                    "page."), parent=self)
 
     def _sync_override_switches(self):
         """The three switches read what's saved (after a change, a drop on Use Its Settings, or at start-up)."""
         if not getattr(self, "override_vars", None):
             return
-        for key, on in overrides.switches().items():
-            self.override_vars[key].set("On" if on else "Off")
-            self.override_cbs[key].set(self.override_vars[key].get())
+        for key, value in overrides.switches().items():
+            self.override_vars[key].set(overrides.LABELS[value])
 
     def _on_override_changed(self, key):
-        on = self.override_vars[key].get() == "On"
-        overrides.set_switch(key, on)
+        value = overrides.code_for(key, self.override_vars[key].get())
+        overrides.set_switch(key, value)
         self.override_cbs[key].selection_clear()
-        if key == "moderator" and on:
+        if key == "moderator" and value != "off":
             warn_moderator_once(self)
-        name = t(overrides.NAMES[key])
-        self._append_log(t("Note: {name} on for every build while this row is open.", name=name) if on
-                         else t("Note: {name} off for every build while this row is open.", name=name))
+        self._append_log(t("Note: {name} {value} for every playlist while this row is open.",
+                           name=t(overrides.NAMES[key]), value=t(overrides.LABELS[value])))
 
     def _use_settings_of(self, button):
         """The Use Its Settings pill: the three switches take what this playlist's own page has."""
