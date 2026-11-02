@@ -85,7 +85,7 @@ def test_playlists_tab_replaces_sources_playlist_and_filters(app, ui):
     assert s._button_id == s._buttons[0]["id"] and s._button_page.button["name"] == "Similar Artists"
     assert not [w for w in walk(s._button_right) if hasattr(w, "_tabs")], "one page, no inner tabs"
     texts = labels(s._button_inner)
-    assert "Config 1" in texts and "Artist Matching" in texts and "Sources" in texts and "Playlist" in texts, texts[:12]
+    assert "Config 1" in texts and "Artist Matching" in texts and "Sources" in texts and "Playlist Selection" in texts, texts[:12]
     pick_button(ui, "AI Playlist")
     assert "Sources" not in labels(s._button_inner), "an AI Playlist has no sources to pick"
     assert not ui.errors, ui.errors[0]
@@ -297,6 +297,13 @@ def test_deep_cuts_switch_on_every_button_and_the_standard_one_reaches_env(app, 
                 and tuple(w.cget("values")) == ("Off", "Spaced", "Shuffled")]
     pick_button(ui, "Similar Artists")
     page = inner_page(ui, "Playlist")
+    # Deep Cuts is off, so its section is closed (2 Nov 2026): click its header to open it
+    box = next(w for w in walk(page) if isinstance(w, tk.Frame) and hasattr(w, "is_open")
+               and any(c.cget("text") == "Deep Cuts" for c in w.master.winfo_children()[0].winfo_children()
+                       if isinstance(c, tk.Label)))
+    if not box.is_open():
+        box.master.winfo_children()[0].event_generate("<Button-1>")
+        ui.pump(0.3)
     switches = switch(page)
     assert len(switches) == 1
     switches[0].set("Spaced")
@@ -315,17 +322,20 @@ def test_deep_cuts_switch_on_every_button_and_the_standard_one_reaches_env(app, 
     assert not ui.errors, ui.errors[0]
 
 
-def test_review_and_playing_now_columns_only_on_the_standard_button(app, ui):
+def test_the_playing_now_line_and_review_tick_are_only_on_the_standard_button(app, ui):
     import buttons
+    from tkinter import ttk
     pick_button(ui, "Similar Artists")
-    texts = labels(inner_page(ui, "Playlist"))
-    for text in ("SEED", "REVIEW MODE", "Playing Now", "Mirror Playing Now", "Artists sampled from Playing Now"):
+    page = inner_page(ui, "Playlist")
+    texts = labels(page) + [w.cget("text") for w in walk(page) if isinstance(w, ttk.Checkbutton)]
+    for text in ("When Seed is Current Track", "When Seed is Playing Now", "Separate Settings for Review Mode"):
         assert text in texts, text
     buttons.add("Sunday", "artists")
     pick_button(ui, "Sunday")
-    texts = labels(inner_page(ui, "Playlist"))
-    assert "Playing Now" not in texts and "SEED" not in texts and "Mirror Playing Now" not in texts
-    assert "Number of artists" in texts
+    page = inner_page(ui, "Playlist")
+    texts = labels(page) + [w.cget("text") for w in walk(page) if isinstance(w, ttk.Checkbutton)]
+    assert "When Seed is Playing Now" not in texts and "Separate Settings for Review Mode" not in texts
+    assert "When Seed is Current Track" in texts and "tracks, from" in texts
 
 
 def test_filters_tick_on_the_page_and_edit_filters_opens_a_window(app, ui):

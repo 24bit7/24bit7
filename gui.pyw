@@ -42,6 +42,7 @@ import badge
 import console_query
 import playmix
 import overrides
+import mode
 import profiles
 from ai_dialog import AIPlaylistDialog
 import buildlog
@@ -525,6 +526,10 @@ class PlayTab(tk.Frame):
                            text_fg=PALETTE["ai_purple"] if ai else PALETTE["help_fg"] if empty else None,
                            arrow=bool(kids), arrow_command=lambda bt=button: self._open_children(bt))
             b._name, b._kind, b._button = button["name"], face["kind"], button
+            if mode.is_simple() and mode.needs_advanced(face):   # two configs, or Consensus: not itself in Simple
+                b.config(state="disabled")
+                b._needs_advanced = True
+                Tooltip(b, t("Needs Advanced: switch to Advanced under Settings > Playlist Settings to build it."), wrap=wrap)
             for w in (b, b._label):
                 w.bind("<Button-3>", lambda e, bt=button: self._button_menu(e, bt))
                 w.bind("<ButtonPress-1>", lambda e, fb=b: self._drag_start(e, fb), add="+")
@@ -590,8 +595,11 @@ class PlayTab(tk.Frame):
         teal = self._seed_teal()   # rows Seed applies to read in the Seed colour, as the buttons do
         for playlist, text, is_default in buttons.menu_rows(parent):
             seeded = teal and buttons.follows_seed(playlist)
-            colour = PALETTE["ai_purple"] if playlist["kind"] == "vibe" else self.seed_colour if seeded else fg
-            row = tabs.PickRow(inner, text, fg=colour, bg=bg, tag=t("default") if is_default else "", fit=True,
+            needs = mode.is_simple() and mode.needs_advanced(playlist)
+            colour = (PALETTE["help_fg"] if needs else PALETTE["ai_purple"] if playlist["kind"] == "vibe"
+                      else self.seed_colour if seeded else fg)
+            row = tabs.PickRow(inner, text, fg=colour, bg=bg, fit=True,
+                               tag=t("Needs Advanced") if needs else t("default") if is_default else "",
                                edge=self.seed_colour if seeded else None)   # the hover outline matches the text
             row.configure(cursor="hand2")
             row.pack(fill="x", padx=3, pady=1)
