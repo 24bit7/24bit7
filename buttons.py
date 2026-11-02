@@ -747,7 +747,10 @@ def set_shortcut(button_id, combo):
 
 
 def with_shortcuts():
-    """The buttons with a shortcut set, in the order shown."""
+    """The buttons with a shortcut set, in the order shown. None in Simple: Shortcut is an advanced section."""
+    import mode
+    if mode.is_simple():
+        return []
     return [b for b in load() if b.get("shortcut")]
 
 
@@ -756,8 +759,12 @@ def nonstop_config(button):
     Non-stop as a button has it, its settings over .env: {"on", "using", "reseed", "mode"},
     plus "with" for an AI Playlist. A playlist is topped up as the button that built it says.
     """
+    import mode
     import overrides
-    return overrides.nonstop(nonstop_own(button), button)   # the open More Options row's switch, on top
+    cfg = nonstop_own(button)
+    if mode.is_simple():   # Non-stop is an advanced section; the row's switch below still overrides
+        cfg = dict(cfg, on=False)
+    return overrides.nonstop(cfg, button)   # the open More Options row's switch, on top
 
 
 def nonstop_own(button):
@@ -1088,10 +1095,15 @@ def run(button, report=print, seed_info=None, build=None, extra_filters=(), **op
     if not cfgs:   # a blank slate: nothing to build until its page adds a config
         report(t(NO_CONFIG_YET, name=button["name"]))
         return None
+    import mode
     import overrides
+    simple = mode.is_simple()
+    if simple and mode.needs_advanced(button):   # two configs, or Consensus: not itself in Simple, so not built
+        report(t(mode.NEEDS_ADVANCED, name=button["name"]))
+        return None
     if overrides.active() and not (engine.NONSTOP_APPEND or options.get("topup")):   # said once per build, not per top-up
         report(t("More Options: {switches}, over this playlist's own settings.", switches=overrides.summary()))
-    if build is not None or len(cfgs) == 1 or engine.NONSTOP_APPEND or options.get("topup"):
+    if build is not None or len(cfgs) == 1 or engine.NONSTOP_APPEND or options.get("topup") or simple:
         return _run_one(button, button["kind"], button.get("settings") or {}, button.get("filters") or [], report,
                         seed_info, build, extra_filters, options)
     return _run_mix(button, cfgs, report, seed_info, extra_filters, options)
@@ -1103,8 +1115,11 @@ def _run_one(button, kind, settings, filters, report, seed_info, build, extra_fi
     ids += [i for i in extra_filters if i not in ids]
     previous = dict(engine.PROFILE)
     before = engine.BUILD_BUTTON
+    import mode
     import overrides
-    settings = dict(settings or {}, **overrides.layer(button, kind, settings))   # the open row's switches, on top
+    settings = dict(settings or {})
+    settings.update(mode.layer(kind))                        # Simple: the advanced sections off
+    settings.update(overrides.layer(button, kind, settings))   # the open More Options row's switches, on top of all
     engine.use_profile(dict(settings, **previous))
     engine.FILTER_IDS = ids
     engine.BUILD_BUTTON = button["id"]

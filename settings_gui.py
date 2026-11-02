@@ -948,12 +948,17 @@ class AddPlaylistPrompt(PromptWindow):
 
     ok_text = N_("Add")
 
-    def __init__(self, parent):
+    def __init__(self, parent, device=None):
+        """device=(device name, phrase label): the same window giving a device its own playlist for a phrase,
+        From Existing (any playlist, a copy) and From Template only, no New (2 Nov 2026)."""
+        self._device = device
         self._existing = [b for b in buttons.load() if not b.get("device")]   # a device's own aren't buttons
         self._templates = [(kind, t(label), t(TEMPLATE_NOTES[kind])) for kind, label in buttons.KIND_LABELS.items()]
         self._templates += [(r["key"], t(r["name"]), t(TEMPLATE_NOTES[r["key"]])) for r in buttons.READY_MADE]
         self._tab = "existing"
-        super().__init__(parent, t("Add a Playlist"))
+        title = t("Add a Playlist") if device is None else t("Give {device} its own \"{phrase}\" playlist",
+                                                              device=device[0], phrase=device[1])
+        super().__init__(parent, title)
         self._describe()   # the OK button exists now: Add or Create Copy for the first pick
         # Keys from the moment the window opens: Tab and Shift+Tab walk the tabs, Up and Down the current list
         self.bind("<Tab>", lambda e: self._tab_by(1))
@@ -967,8 +972,12 @@ class AddPlaylistPrompt(PromptWindow):
 
     TAB_ORDER = ("existing", "template", "new")
 
+    def _tabs_here(self):
+        return self.TAB_ORDER[:2] if self._device is not None else self.TAB_ORDER
+
     def _tab_by(self, by):
-        self._pick_tab(self.TAB_ORDER[(self.TAB_ORDER.index(self._tab) + by) % len(self.TAB_ORDER)])
+        order = self._tabs_here()
+        self._pick_tab(order[(order.index(self._tab) + by) % len(order)])
         return "break"
 
     def _list_step(self, by):
@@ -983,6 +992,8 @@ class AddPlaylistPrompt(PromptWindow):
         row = tk.Frame(inner, bg=bg)
         row.pack(anchor="w")
         for key, label in (("existing", N_("From Existing")), ("template", N_("From Template")), ("new", N_("New"))):
+            if key not in self._tabs_here():
+                continue
             cell = tk.Frame(row, bg=bg)
             cell.pack(side="left", padx=(0, px(18)))
             tab = tk.Label(cell, text=t(label), font=("Segoe UI", 10, "bold"), bg=bg, cursor="hand2", pady=px(4))
@@ -1043,7 +1054,7 @@ class AddPlaylistPrompt(PromptWindow):
             page.pack_forget()
         self._pages[key].pack(fill="both", expand=True)
         if hasattr(self, "ok_button") and key != "existing":   # From Existing's button follows the pick (_describe)
-            self.set_ok_text(t("Create") if key == "new" else t("Add"))
+            self.set_ok_text(t("Create") if key == "new" else t("Use the Template") if self._device is not None else t("Add"))
         self._describe()
         if hasattr(self, "ok_button"):
             self._focus_first()   # the keyboard follows the tab: a list's own Up and Down bind to the list that has focus
@@ -1058,7 +1069,10 @@ class AddPlaylistPrompt(PromptWindow):
             b = self._chosen(self.existing_list, self._existing)
             if b is not None:
                 parent = next((p for p in self._existing if p["id"] == b.get("parent")), None)
-                if parent is not None:
+                if self._device is not None:
+                    words = t("{name}: {what}. A copy of it becomes {device}'s own for \"{phrase}\".", name=b["name"],
+                              what=buttons.describe(b), device=self._device[0], phrase=self._device[1])
+                elif parent is not None:
                     words = t("{name}: {what}. In the menu of {parent} already; Create Copy makes {copy} beside it.",
                               name=b["name"], what=buttons.describe(b), parent=parent["name"],
                               copy=buttons.unique_name(b["name"]))
@@ -1066,8 +1080,9 @@ class AddPlaylistPrompt(PromptWindow):
                     words = t("{name}: {what}. On the Play tab already; Create Copy makes {copy} right after it.",
                               name=b["name"], what=buttons.describe(b), copy=buttons.unique_name(b["name"]))
                 self.existing_note.config(text=words)
-                if hasattr(self, "ok_button") and self.ok_button.cget("text") != t("Create Copy"):
-                    self.set_ok_text(t("Create Copy"))
+                wanted = t("Use a Copy") if self._device is not None else t("Create Copy")
+                if hasattr(self, "ok_button") and self.ok_button.cget("text") != wanted:
+                    self.set_ok_text(wanted)
         elif self._tab == "template":
             chosen = self._chosen(self.template_list, self._templates)
             if chosen is not None:
@@ -1119,7 +1134,6 @@ class SettingsTab(tk.Frame):
         nb.pack(fill="both", expand=True, padx=8, pady=8)
         self._pane = nb
         self._build_buttons(nb)
-        self._build_devices(nb)
         self._build_search_sites(nb)
         self._build_keys(nb)
         self._build_voice(nb)
@@ -1350,12 +1364,12 @@ class SettingsTab(tk.Frame):
         """
         ttk.Style(self).configure("Big.TCheckbutton", font=("Segoe UI", 11))
         outer = tk.Frame(nb)
-        nb.add(outer, text=t("Playlists"))
+        nb.add(outer, text=t("Playlist Settings"))
         self._buttons_outer = outer
         self._button_id = None
         left = tk.Frame(outer, padx=12, pady=12)
         left.pack(side="left", fill="y")
-        box = section(left, t("Your playlists"),
+        box = section(left, t("Your Playlist Buttons"),
                       t("Each playlist is a recipe of its own: a kind of build, its sources and settings, the "
                         "filters it runs under and a keyboard shortcut. Ticked, it's a button on the Play tab; "
                         "unticked, it's kept here for voice commands and shortcuts. Click a name to change it. A "
@@ -1389,6 +1403,7 @@ class SettingsTab(tk.Frame):
         restore.bind("<Button-1>", lambda e: self._button_restore())
         Tooltip(restore, t("Puts back anything 24bit7 ships that's been deleted: a standard playlist, Artist + Guests, "
                            "Consensus or a Top 10, under the playlist it came under."))
+        self._build_device_box(left)
         self._button_right = tk.Frame(outer, pady=12)
         self._button_right.pack(side="left", fill="both", expand=True, padx=(0, 12))
         outer.bind("<Map>", lambda e: self._buttons_refresh())
@@ -1413,12 +1428,13 @@ class SettingsTab(tk.Frame):
     def _buttons_refresh(self):
         """Lists the playlists as the Play tab has them; rebuilds the right side when the chosen one changed."""
         self._buttons = buttons.buttons_only()
-        ids = [b["id"] for b in self._buttons]
+        ids = [b["id"] for b in self._buttons] + [b["id"] for b in buttons.load() if b.get("device")]
         if self._button_id not in ids:
-            self._button_id = ids[0] if ids else None
+            self._button_id = self._buttons[0]["id"] if self._buttons else None
         page = self._button_page
         rebuild = page is None or page.button is None or page.button["id"] != self._button_id
         self._fill_button_list()
+        self._devices_refresh()
         if rebuild:
             self._button_fill_page()
         elif self._button_id is not None:   # the name may have changed on the Play tab
@@ -1530,7 +1546,7 @@ class SettingsTab(tk.Frame):
             menu.grab_release()
 
     def _pick_button(self, button_id):
-        if button_id != self._button_id and any(b["id"] == button_id for b in self._buttons):
+        if button_id != self._button_id and buttons.get(button_id) is not None:   # a button's or a device's playlist
             self._button_id = button_id
             self._fill_button_list()
             self._button_fill_page()
@@ -1609,7 +1625,12 @@ class SettingsTab(tk.Frame):
         tk.Label(title_row, text=t("click to rename"), fg=PALETTE["help_fg"], font=HELP_FONT).pack(side="left", padx=(10, 0))
         self._button_title.bind("<Button-1>", lambda e: self._button_rename_inline(button))
         about = t("No config yet: add one below.") if kind is None else t(buttons.KIND_LABELS[kind])
-        if button.get("standard"):
+        if button.get("device"):
+            phrase = next((label for ph, label in devices.PHRASES
+                           if devices.for_device(button["device"])["buttons"].get(ph) == button["id"]), None)
+            about = t("{device}'s own playlist for \"{phrase}\": what its voice command runs.",
+                      device=devices.name_of(button["device"]), phrase=t(phrase) if phrase else "")
+        elif button.get("standard"):
             about = t("Standard {kind} playlist: what a device's voice commands run unless Settings > Devices says otherwise.",
                       kind=about)
         tk.Label(head, text=about, fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=1, column=0, sticky="w")
@@ -1970,108 +1991,80 @@ class SettingsTab(tk.Frame):
 
     # --- the Devices page --------------------------------------------------------------------
 
-    def _build_devices(self, nb):
+
+    # --- the Device Playlists box --------------------------------------------------------------------
+
+    def _build_device_box(self, left):
         """
-        Settings > Devices: every Alexa device that has spoken to 24bit7, listed on the left; the
-        chosen one's page on the right: its name, the zone it plays to, whether "switch" can move
-        the music there, and which playlist each voice phrase runs on it.
+        Under the buttons: a tab per Alexa device, the zone it plays to, Enable Switch To, when it was
+        last heard, and the playlist each of its phrases runs (Ben, 2 Nov 2026): the standard playlist
+        of that kind, greyed with a Standard tag, until the device is given its own.
         """
-        outer = tk.Frame(nb)
-        nb.add(outer, text=t("Devices"))
-        self._device_id, self._device_rows = None, []
-        left = tk.Frame(outer, padx=12, pady=12)
-        left.pack(side="left", fill="y")
-        box = section(left, t("Your devices"),
-                      t("Say a command on an Alexa device that isn't set up and it appears here. Give it a name "
-                        "and the zone it plays to, then pick which playlist each phrase runs there. Filters and "
-                        "Non-stop belong to the playlists."))
-        self._device_list = tk.Listbox(box, height=10, width=26, activestyle="none", exportselection=False,
-                                       font=("Segoe UI", 10))
-        self._device_list.grid(row=0, column=0, sticky="w")
-        self._device_list.bind("<<ListboxSelect>>", self._device_picked)
-        tk.Button(box, text=t("Remove"), width=10, command=self._device_remove).grid(row=1, column=0, sticky="w",
-                                                                                      pady=(8, 0))
-        self._device_right = tk.Frame(outer, pady=12)
-        self._device_right.pack(side="left", fill="both", expand=True, padx=(0, 12))
-        outer.bind("<Map>", lambda e: self._devices_refresh())
+        box = section(left, t("Device Playlists"),
+                      t("Each Alexa device that has spoken to 24bit7 and the playlist each of its phrases runs: the "
+                        "standard playlist of that kind, greyed, until you give the device its own. Click a greyed row "
+                        "to make one, right-click the device's own for Back to Standard, and click the device's name "
+                        "to rename it. A new device appears here the first time it speaks."))
+        self._device_id = None
+        self._device_tabs = tk.Frame(box)
+        self._device_tabs.grid(row=0, column=0, sticky="w")
+        self._device_head = tk.Frame(box)
+        self._device_head.grid(row=1, column=0, sticky="we", pady=(6, 4))
+        self._device_rows_box = tk.Frame(box, bd=1, relief="solid", bg=PALETTE.get("field_bg") or box.cget("bg"))
+        self._device_rows_box.grid(row=2, column=0, sticky="we")
+        self._device_rows = []
+        self._device_restore = tk.Label(box, text=t("Restore Default Device Playlists"), fg=PALETTE["button_fg"],
+                                        font=HELP_FONT, cursor="hand2")
+        self._device_restore.grid(row=3, column=0, sticky="w", pady=(8, 0))
+        self._device_restore.bind("<Button-1>", lambda e: self._device_restore_defaults())
+        Tooltip(self._device_restore, t("Every phrase of this device back to the standard playlist of its kind; the "
+                                        "device's own playlists are deleted."))
 
     def _devices_refresh(self):
-        """Lists the devices as Voice Commands has heard them; rebuilds the page for the chosen one."""
-        self._device_rows = voice.devices()
-        ids = [r[0] for r in self._device_rows]
+        """The device tabs, the chosen device's header and its four phrase rows, as things stand."""
+        if not hasattr(self, "_device_tabs") or not self._device_tabs.winfo_exists():
+            return
+        rows = voice.devices()
+        ids = [r[0] for r in rows]
         if self._device_id not in ids:
             self._device_id = ids[0] if ids else None
-        lb = self._device_list
-        lb.delete(0, "end")
-        for _id, name, zone, _heard in self._device_rows:
-            lb.insert("end", name or t("Unnamed device"))
-        if self._device_id is not None:
-            lb.selection_set(ids.index(self._device_id))
-        self._device_fill_page()
-
-    def _device_picked(self, _e=None):
-        chosen = self._device_list.curselection()
-        if chosen and chosen[0] < len(self._device_rows) and self._device_rows[chosen[0]][0] != self._device_id:
-            self._device_id = self._device_rows[chosen[0]][0]
-            self._device_fill_page()
-
-    def _device_remove(self):
-        row = next((r for r in self._device_rows if r[0] == self._device_id), None)
-        if row is None:
+        for frame in (self._device_tabs, self._device_head, self._device_rows_box):
+            for child in frame.winfo_children():
+                child.destroy()
+        self._device_rows = []
+        bg = self._device_rows_box.cget("bg")
+        if not rows:
+            tk.Label(self._device_head, text=t("Say a command on an Alexa device and it appears here."),
+                     fg=PALETTE["help_fg"], font=HELP_FONT).pack(anchor="w")
+            self._device_rows_box.grid_remove()
+            self._device_restore.grid_remove()
             return
-        if not messagebox.askyesno(t("Remove Device"), t("Remove {name}? It comes back the next time it speaks to 24bit7.",
-                                                          name=row[1] or t("Unnamed device")), parent=self):
-            return
-        voice.remove_device(row[0])
-        devices.forget(row[0])
-        self._device_id = None
-        self._devices_refresh()
-
-    def _device_fill_page(self):
-        """The right side: the device's name and zone, its Switch tick, then a playlist per voice phrase."""
-        right = self._device_right
-        for child in right.winfo_children():
-            child.destroy()
-        row = next((r for r in self._device_rows if r[0] == self._device_id), None)
-        if row is None:
-            holder = tk.Frame(right)
-            holder.pack(fill="x")
-            box = section(holder, t("No devices yet"))
-            tk.Label(box, text=t("Say a command on an Alexa device and it appears here."), fg=PALETTE["help_fg"],
-                     font=HELP_FONT).grid(row=0, column=0, sticky="w")
-            return
-        device_id, name, zone, heard = row
-        head = tk.Frame(right)
-        head.pack(fill="x", pady=(0, 8))
-        self._device_title = tk.Label(head, text=name or t("Unnamed device"), font=("Segoe UI", 12, "bold"))
-        self._device_title.grid(row=0, column=0, sticky="w")
-        if heard:
-            tk.Label(head, text=t("Last heard {when}.", when=heard), fg=PALETTE["help_fg"], font=HELP_FONT).grid(
-                row=1, column=0, sticky="w")
-        holder = tk.Frame(right)
-        holder.pack(fill="x")
-
-        box = section(holder, t("Device"))
-        tk.Label(box, text=t("Name"), font=LABEL_FONT).grid(row=0, column=0, sticky="w", pady=4)
-        name_var = tk.StringVar(value=name or "")
-        entry = tk.Entry(box, textvariable=name_var, width=26)
-        entry.grid(row=0, column=1, sticky="w", padx=(12, 0), pady=4)
-
-        def save_name(_e=None):
-            new = name_var.get().strip() or t("Device")
-            voice.update_device(device_id, name=new)
-            self._device_title.config(text=new)
-            self._devices_refresh_list_only()
-        entry.bind("<FocusOut>", save_name)
-        entry.bind("<Return>", save_name)
-        zone_title = tk.Label(box, text=t("Plays to"), font=LABEL_FONT)
-        zone_title.grid(row=1, column=0, sticky="w", pady=4)
+        self._device_rows_box.grid()
+        self._device_restore.grid()
+        for device_id, name, zone, heard in rows:
+            on = device_id == self._device_id
+            cell = tk.Frame(self._device_tabs)
+            cell.pack(side="left", padx=(0, 14))
+            tab = tk.Label(cell, text=name or t("Unnamed device"), font=("Segoe UI", 10, "bold"), cursor="hand2",
+                           fg=PALETTE["button_fg"] if on else PALETTE["help_fg"])
+            tab.pack()
+            bar = tk.Frame(cell, height=2, bg=PALETTE["button_fg"] if on else cell.cget("bg"))
+            bar.pack(fill="x")
+            tab.bind("<Button-1>", lambda e, d=device_id: self._device_pick(d))
+            tab.bind("<Double-Button-1>", lambda e, d=device_id, n=name: self._device_rename(d, n))
+            tab.bind("<Button-3>", lambda e, d=device_id, n=name: self._device_rename(d, n))
+            Tooltip(tab, t("Click to see this device's playlists; double-click to rename it."))
+        device_id, name, zone, heard = next(r for r in rows if r[0] == self._device_id)
+        head = self._device_head
+        line = tk.Frame(head)
+        line.pack(fill="x")
+        tk.Label(line, text=t("Plays to"), font=LABEL_FONT).pack(side="left")
         zones = engine.zone_names()
         zone_var = tk.StringVar(value=zone or "Not set")
-        zone_cb = TCombobox(box, textvariable=zone_var, state="readonly", width=24,
+        zone_cb = TCombobox(line, textvariable=zone_var, state="readonly", width=16,
                             values=[N_("Not set")] + zones + ([zone] if zone and zone not in zones else []))
-        zone_cb.grid(row=1, column=1, sticky="w", padx=(12, 0), pady=4)
-        help_mark(box, t("The JRiver zone this device's commands play in."), on=zone_title)
+        zone_cb.pack(side="left", padx=(8, 0))
+        Tooltip(zone_cb, t("The JRiver zone this device's commands play in."))
 
         def zone_changed(_e=None):
             zone_cb.selection_clear()
@@ -2079,58 +2072,121 @@ class SettingsTab(tk.Frame):
             voice.update_device(device_id, zone=picked)
             self._devices_refresh()   # the Switch tick depends on the zone
         zone_cb.bind("<<ComboboxSelected>>", zone_changed)
+        self._device_zone_cb = zone_cb
+        remove = tk.Label(line, text=t("Remove"), fg=PALETTE["help_fg"], font=HELP_FONT, cursor="hand2")
+        remove.pack(side="right")
+        remove.bind("<Button-1>", lambda e: self._device_remove())
+        Tooltip(remove, t("Forgets this device and its own playlists. It comes back the next time it speaks to 24bit7."))
         switch_var = tk.BooleanVar(value=bool(zone) and zone not in voice.switch_unticked())
-        switch = ttk.Checkbutton(box, text=t("Enable Switch To"), variable=switch_var,
+        switch = ttk.Checkbutton(head, text=t("Enable Switch To"), variable=switch_var,
                                  command=lambda: voice.set_switch_enabled(zone, switch_var.get()))
-        switch.grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
-        help_mark(box, t("Ticked, this device's zone is one you can switch the music to, with \"Alexa, ask "
-                         "needle drop to switch\" or the Switch Zones keyboard shortcut. With two zones "
-                         "ticked, switching moves the music straight to the other one. With three or more, "
-                         "Alexa asks which zone, or you can say \"switch to\" and the zone name; the "
-                         "shortcut steps through them in turn. The music carries on from the same track, "
-                         "and the zone it left stops. Two devices on the same zone share one tick."), on=switch)
+        switch.pack(anchor="w", pady=(4, 0))
+        Tooltip(switch, t("Ticked, this device's zone is one you can switch the music to, with \"Alexa, ask needle drop "
+                          "to switch\" or the Switch Zones keyboard shortcut. With two zones ticked, switching moves the "
+                          "music straight to the other one. With three or more, Alexa asks which zone, or you can say "
+                          "\"switch to\" and the zone name; the shortcut steps through them in turn. The music carries "
+                          "on from the same track, and the zone it left stops. Two devices on the same zone share one tick."))
         if not zone:
             switch.state(["disabled"])
+        self._device_switch = switch
+        if heard:
+            tk.Label(head, text=t("Last heard {when}.", when=heard), fg=PALETTE["help_fg"], font=HELP_FONT).pack(anchor="w")
+        for phrase, label, playlist, own in devices.rows(device_id):
+            text = t("{phrase}: {name}", phrase=t(label), name=playlist["name"]) if playlist else t(label)
+            colour = (PALETTE["ai_purple"] if playlist and playlist["kind"] == "vibe" else PALETTE["text"]) if own \
+                else PALETTE["help_fg"]
+            row = PickRow(self._device_rows_box, text, fg=colour, bg=bg, fit=True,
+                          chosen=bool(playlist) and playlist["id"] == self._button_id,
+                          tag="" if own else t("Standard"))
+            row.configure(cursor="hand2")
+            row.pack(fill="x", padx=3, pady=1)
+            if own:
+                row.bind("<Button-1>", lambda e, p=playlist: self._pick_device_playlist(p["id"]))
+                row.bind("<Button-3>", lambda e, ph=phrase, p=playlist: self._device_row_menu(e, ph, p))
+                Tooltip(row, t("{device}'s own playlist for \"{phrase}\". Click for its page; right-click for Back to Standard.",
+                               device=name or t("Device"), phrase=t(label)))
+            else:
+                row.bind("<Button-1>", lambda e, ph=phrase, lb=label: self._device_make_own(ph, lb))
+                Tooltip(row, t("Runs the standard {name} when {device} asks. Click to give {device} its own.",
+                               name=playlist["name"] if playlist else t(label), device=name or t("Device")))
+            self._device_rows.append((phrase, row, playlist, own))
+        if self._device_rows:
+            width = max(scaled(self._device_rows_box, 220), max(r.winfo_reqwidth() for _p, r, _b, _o in self._device_rows))
+            for _p, r, _b, _o in self._device_rows:
+                r.configure(width=width)
 
-        box = section(holder, t("Voice Commands"),
-                      t("Which playlist each phrase runs when this device asks. Unset, it's the standard playlist "
-                        "of that kind."))
-        for r, (phrase, label) in enumerate(devices.PHRASES):
-            kind = devices.PHRASE_KINDS[phrase]
-            options = buttons.of_kind(kind)
-            title = tk.Label(box, text=t(label), anchor="w")
-            title.grid(row=r, column=0, sticky="w", pady=3)
-            if kind == "vibe":
-                title.config(fg=PALETTE["ai_purple"])
-            chosen = devices.playlist_for(device_id, phrase)
-            var = tk.StringVar(value=chosen["name"] if chosen else "")
-            cb = TCombobox(box, textvariable=var, values=[b["name"] for b in options], state="readonly", width=28)
-            cb.grid(row=r, column=1, sticky="w", padx=(12, 0), pady=3)
-            cb.bind("<<ComboboxSelected>>", lambda e, p=phrase, c=cb, o=options: self._device_phrase_changed(p, c, o))
-            if not options:
-                cb.state(["disabled"])
+    def _device_pick(self, device_id):
+        if device_id != self._device_id:
+            self._device_id = device_id
+            self._devices_refresh()
 
-    def _devices_refresh_list_only(self):
-        """A rename: the list follows without rebuilding the page (the entry keeps focus)."""
-        self._device_rows = voice.devices()
-        lb = self._device_list
-        lb.delete(0, "end")
-        for _id, name, _zone, _heard in self._device_rows:
-            lb.insert("end", name or t("Unnamed device"))
-        ids = [r[0] for r in self._device_rows]
-        if self._device_id in ids:
-            lb.selection_set(ids.index(self._device_id))
+    def _device_rename(self, device_id, name):
+        new = tabs.ask_name(self, t("Rename Device"), t("A name for this device:"), initial=name or "")
+        if new is None:
+            return
+        new = new.strip() or t("Device")
+        voice.update_device(device_id, name=new)
+        self._devices_refresh()
 
-    def _device_phrase_changed(self, phrase, combo, options):
-        """A phrase's playlist: the standard one of the kind is kept as unset, so Restore Default Playlists finds it."""
-        combo.selection_clear()
-        i = combo.current()
-        chosen = options[i] if 0 <= i < len(options) else None
-        record = devices.for_device(self._device_id)
-        record["buttons"][phrase] = None if chosen is None or chosen.get("standard") else chosen["id"]
-        devices.update(self._device_id, buttons=record["buttons"])
+    def _device_remove(self):
+        if self._device_id is None:
+            return
+        name = devices.name_of(self._device_id)
+        if not messagebox.askyesno(t("Remove Device"), t("Remove {name}? Its own playlists go with it. It comes back the "
+                                                          "next time it speaks to 24bit7.", name=name), parent=self):
+            return
+        gone = {b["id"] for b in buttons.of_device(self._device_id)}
+        voice.remove_device(self._device_id)
+        devices.forget(self._device_id)
+        if self._button_id in gone:
+            self._button_id = None
+        self._buttons_refresh()
 
-    # --- Edit Filters, a window ---
+    def _device_restore_defaults(self):
+        if self._device_id is None:
+            return
+        name = devices.name_of(self._device_id)
+        if not messagebox.askyesno(t("Restore Default Device Playlists"),
+                                   t("Every phrase of {name} back to the standard playlist of its kind? Its own playlists "
+                                     "are deleted.", name=name), parent=self):
+            return
+        gone = {b["id"] for b in buttons.of_device(self._device_id)}
+        devices.restore_defaults(self._device_id)
+        if self._button_id in gone:
+            self._button_id = None
+        self._buttons_refresh()
+
+    def _device_make_own(self, phrase, label):
+        """A greyed row clicked: the Add window, for a copy or a template to become the device's own for the phrase."""
+        if self._device_id is None:
+            return
+        name = devices.name_of(self._device_id)
+        prompt = AddPlaylistPrompt(self, device=(name, t(label)))
+        self.wait_window(prompt)
+        answer = prompt.result
+        if answer is None:
+            return
+        how, what = answer
+        made = devices.make_own(self._device_id, phrase, (how, what) if how in ("copy", "template") else ("standard", None))
+        self._pick_device_playlist(made["id"])
+
+    def _device_row_menu(self, event, phrase, playlist):
+        menu = tk.Menu(self, tearoff=0)
+        menu.add_command(label=t("Back to Standard"), command=lambda: self._device_back_to_standard(phrase, playlist))
+        menu.tk_popup(event.x_root, event.y_root)
+
+    def _device_back_to_standard(self, phrase, playlist):
+        devices.reset(self._device_id, phrase)
+        if self._button_id == playlist["id"]:
+            self._button_id = None
+        self._buttons_refresh()
+
+    def _pick_device_playlist(self, playlist_id):
+        """A device's own playlist opens on the right like any other; the buttons list shows no pick."""
+        self._button_id = playlist_id
+        self._fill_button_list()
+        self._devices_refresh()
+        self._button_fill_page()
 
     def _open_filters(self):
         """Edit Filters: a window with the named filters on the left and the chosen one's rules on the right."""

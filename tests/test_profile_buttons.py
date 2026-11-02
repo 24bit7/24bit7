@@ -35,7 +35,6 @@ def test_loading_brings_playlists_and_devices_back_and_keeps_the_pcs_shortcuts(a
     p, buttons, devices = mods()
     sunday = buttons.add("Sunday", "tracks")
     buttons.set_settings(sunday["id"], dict(sunday["settings"], SIMILAR_TRACK_COUNT="7"))
-    buttons.set_shown(sunday["id"], False)
     record = devices.for_device(KITCHEN)
     record["buttons"]["tracks_like"] = sunday["id"]
     devices.update(KITCHEN, buttons=record["buttons"])
@@ -50,7 +49,7 @@ def test_loading_brings_playlists_and_devices_back_and_keeps_the_pcs_shortcuts(a
     buttons.remove(sunday["id"])
     p.apply(p.read("DJ"))
     back = buttons.get(sunday["id"])
-    assert back and back["settings"]["SIMILAR_TRACK_COUNT"] == "7" and back["shown"] is False
+    assert back and back["settings"]["SIMILAR_TRACK_COUNT"] == "7"
     assert back["shortcut"] == "", "a playlist that was gone has no shortcut on this PC"
     assert devices.playlist_for(KITCHEN, "tracks_like")["id"] == sunday["id"]
     assert not p.changed("DJ")

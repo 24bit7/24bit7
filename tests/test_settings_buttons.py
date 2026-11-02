@@ -56,7 +56,7 @@ def buttons_page(ui):
     s = ui.settings
     pane = settings_pane(ui)
     ui.nb.select(s)
-    pane.select(pane._pages[tab_titles(pane).index("Playlists")])
+    pane.select(pane._pages[tab_titles(pane).index("Playlist Settings")])
     ui.pump(0.3)
     return s
 
@@ -79,8 +79,8 @@ def inner_page(ui, title):
 def test_playlists_tab_replaces_sources_playlist_and_filters(app, ui):
     s = buttons_page(ui)
     titles = tab_titles(settings_pane(ui))
-    assert "Playlists" in titles and not {"Sources", "Playlist", "Filters", "Buttons", "Zones"} & set(titles), titles
-    assert "Devices" in titles
+    assert "Playlist Settings" in titles and not {"Sources", "Playlist", "Filters", "Buttons", "Playlists", "Devices", "Zones"} & set(titles), titles
+    assert "Devices" not in titles, "folded into the Device Playlists box (2 Nov 2026)"
     assert s._button_names() == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Artist + Guests", "Consensus", "AI Playlist"]
     assert s._button_id == s._buttons[0]["id"] and s._button_page.button["name"] == "Similar Artists"
     assert not [w for w in walk(s._button_right) if hasattr(w, "_tabs")], "one page, no inner tabs"

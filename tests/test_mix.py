@@ -83,9 +83,9 @@ def test_add_from_choice_covers_the_windows_three_ways_in(app):
     import buttons
     buttons.load()
     head = next(x for x in buttons.load() if x["name"] == "Artist + Guests")
-    buttons.set_shown(head["id"], False)
     back, wants_page = buttons.add_from_choice(("existing", head["id"]))
-    assert back["id"] == head["id"] and back["shown"] is True and wants_page is False
+    assert back["name"] == "Artist + Guests 2" and wants_page is False, "From Existing copies (2 Nov 2026)"
+    buttons.remove(back["id"])
     made, wants_page = buttons.add_from_choice(("template", "inner_circle"))
     assert made["name"] == "Consensus 2" and made["settings"]["INNER_CIRCLE_ARTISTS"] == "1" and wants_page is False
     made, _ = buttons.add_from_choice(("template", "tracks"))

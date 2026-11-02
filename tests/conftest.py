@@ -22,7 +22,7 @@ REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 import fakes  # noqa: E402
 
-APP_MODULES = ["i18n", "engine", "library", "deepcuts", "voice", "saved_playlists", "nonstop", "playmix", "overrides", "filters", "buttons", "devices", "buildlog", "blend",
+APP_MODULES = ["i18n", "engine", "library", "deepcuts", "voice", "saved_playlists", "nonstop", "playmix", "overrides", "mode", "filters", "buttons", "devices", "buildlog", "blend",
                "console_query", "ai_usage", "support_gui", "window_chrome", "hotkeys", "tray", "tabs", "mix_gui", "review_gui", "profiles", "ai_dialog", "discover_gui", "settings_gui", "gui", "source_test"]
 
 BASE_ENV = {
@@ -120,6 +120,7 @@ def app(tmp_path, monkeypatch):
     buttons_mod = importlib.import_module("buttons")
     arrange_shipped = buttons_mod.arrange_shipped
     monkeypatch.setattr(buttons_mod, "arrange_shipped", lambda items: items)
+    importlib.import_module("mode").set_current("advanced")   # the fake world runs Advanced: its tests set every section
     saved_playlists = importlib.import_module("saved_playlists")
 
     def set_env(**values):

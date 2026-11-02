@@ -24,7 +24,8 @@ SPREADS = {"even": "Spaced evenly", "random": "Mixed randomly"}
 def _blank():
     return {"rows": [], "counts": {}, "last_used": {}, "open": False,
             "switches": None,   # the row's three override switches (overrides.py); None until seeded
-            "told": False}      # the one-off dialog about them has been shown
+            "told": False,      # the one-off dialog about them has been shown
+            "mode": None}       # the playlist pages' Simple or Advanced (mode.py); None until first worked out
 
 
 def load():
