@@ -312,7 +312,7 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 - **Each config is a box**: sources across, Must agree under them, Playlist Selection as sentences ("Limit To 30 tracks, from 20 artists, pick 3 of each artist's top 5 tracks"), one tick for Separate Settings for Review Mode, and Filters of its own at the end. **Name**, **Title in Menu** and a **Preview** of the button top every page.
 - **More Options** gets its **Moderator**, **Deep Cuts** and **Non-stop** switches back as overrides: open, they beat every playlist's settings; closed, the pages decide. A third drop pill, **Use Its Settings**, sets them from a playlist.
 - **Consensus** (was Inner Circle) can finish a short playlist with plain matching; **Artist + Guests** was Headliner. Seed on Playing Now colours what follows it in teal, or leaf green if your accent is teal.
-- **Rounded corners** on every box in Settings.
+- **Rounded corners** on every box in Settings, rows that wrap when the page is narrow, and a German fix: the Mix section's Pattern row shows and saves the right Combine.
 
 ### Earlier: 1.29.0
 

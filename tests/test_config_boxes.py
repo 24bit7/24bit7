@@ -46,7 +46,8 @@ def test_each_config_is_a_bordered_box_with_sources_across_and_its_own_filters(a
         strips.setdefault(t_.master.master, set()).add(name(t_))
     top = min(strips, key=lambda f: f.winfo_rooty())   # the Sources strip; Drift's Custom Sources repeat the names lower down
     assert strips[top] == {"Last.fm", "Deezer", "YouTube", "Tidal"}, "one row"
-    assert all(line.pack_info()["side"] == "left" for line in top.winfo_children()), "the lines read across"
+    ys = {int(line.place_info()["y"]) for line in top.winfo_children() if line.winfo_manager() == "place"}
+    assert 1 <= len(ys) < len(top.winfo_children()), "the lines read across, wrapping only when the room runs out"
     texts = labels(page)
     assert "Must agree" in texts and "Playlist Selection" in texts
     assert not ui.errors, ui.errors[0]

@@ -815,8 +815,12 @@ TOP_TARGET_HELP = N_("This is the target number of tracks. The playlist may come
 
 
 def option_code(options, label):
-    """A dropdown's label back to the value saved in .env (the first option if it's not recognised)."""
-    return next((code for code, shown in options if shown == label), options[0][0])
+    """
+    A dropdown's label back to the value saved in .env (the first option if it's not recognised). The
+    label may be the English or its translation: a German Mix read Abwechseln as the first option,
+    Shuffle, so the Pattern row never showed and a change saved the wrong combine (2 Nov 2026).
+    """
+    return next((code for code, shown in options if shown == label or t(shown) == label), options[0][0])
 
 
 def option_label(options, code):
@@ -1764,7 +1768,7 @@ class SettingsTab(tk.Frame):
             about = t("{device}'s own playlist for \"{phrase}\": what its voice command runs.",
                       device=devices.name_of(button["device"]), phrase=t(phrase) if phrase else "")
         elif button.get("standard"):
-            about = t("Standard {kind} playlist: what a device's voice commands run unless Settings > Devices says otherwise.",
+            about = t("Standard {kind} playlist: what a device's voice commands run unless the device has its own under Device Playlists.",
                       kind=about)
         tk.Label(fields, text=about, fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w", justify="left",
                  wraplength=scaled(fields, 420)).grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
@@ -1863,6 +1867,7 @@ class SettingsTab(tk.Frame):
         edge = PALETTE["button_fg"]
         block = tk.Frame(inner, highlightthickness=1, highlightbackground=edge, highlightcolor=edge)   # a box per config
         block.grid(row=inner.grid_size()[1], column=0, sticky="ew", pady=(0, 10))
+        inner.grid_columnconfigure(0, weight=1)   # so a narrow page shrinks the box and its rows wrap, rather than overflowing
         block.grid_columnconfigure(0, weight=1)
         tint = tabs.mix_colour(inner, edge, inner.cget("bg"), 0.12)
         tabs.corner_tiles(block, top=tint)
@@ -3111,6 +3116,8 @@ class SettingsTab(tk.Frame):
                 cb.bind("<<ComboboxSelected>>", p.save)
                 help_mark(line, t(lb_notes)).pack(side="left", padx=(8, 0))
                 p.lb_cbs.append((v, cb))
+        if not scores:
+            tabs.flow(frame, gap=14, within=box)   # across in one row, wrapping when the page is narrower
         return r + 1
 
     # --- Test My Sources: scores beside the sources, the start window and Full Results ---------------
@@ -3841,6 +3848,7 @@ class SettingsTab(tk.Frame):
                     pending.trace_add("write", lambda *a, f=follow: f())
                     follow()
                     pending = None
+            tabs.flow(row, within=box)   # the sentence wraps like a paragraph when the page is narrower than it
             return boxes
 
         def review_block(group, current_parts, pn_parts):

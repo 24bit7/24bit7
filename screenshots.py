@@ -52,7 +52,7 @@ SHOTS = [
     ("discover", ["Discover"], ["discover_gui.py", "tabs.py"], None),
     # Settings > Buttons: a button of your own with a filter and a shortcut, the standard Similar Artists'
     # Playlist page with its columns, an AI Playlist's page, the Edit Filters window, and the Kitchen zone
-    ("settings_buttons", ["Settings", "Playlist Settings"], ["settings_gui.py", "buttons.py"], "button:Kitchen Tracks:Sources"),
+    ("settings_buttons", ["Settings", "Playlist Settings"], ["settings_gui.py", "buttons.py"], "button:Artist + Guests:Sources"),
     ("settings_buttons_playlist", ["Settings", "Playlist Settings"], ["settings_gui.py", "buttons.py"],
      "button:Similar Artists:Playlist"),
     ("settings_buttons_ai_playlist", ["Settings", "Playlist Settings"], ["settings_gui.py", "buttons.py"],
@@ -452,6 +452,12 @@ def build_window(gui):
     scale = root.winfo_fpixels("1i") / 96.0
     global SCALE
     SCALE = scale   # 1 once drawn at 100%; kept so a shot is never saved at another size
+    if root.winfo_screenwidth() < 1180 * scale + 80 or root.winfo_screenheight() < 820 * scale + 120:
+        # the shots are 1180 by 820 at 100%; a smaller screen would give the manual shots of another size
+        # (2 Nov 2026: the TV off left Windows with a 1365 by 720 stand-in screen)
+        root.destroy()
+        sys.exit(f"The screen is {root.winfo_screenwidth()}x{root.winfo_screenheight()}, too small for the shots. "
+                 "Is the TV on, and on the PC's input?")
     w = min(int(1180 * scale), root.winfo_screenwidth() - 80)
     h = min(int(820 * scale), root.winfo_screenheight() - 120)
     root.geometry(f"{w}x{h}+40+40")
@@ -565,19 +571,34 @@ def open_ai_window(gui, root, play, mode):
     return dialog
 
 
-def grab_window(window):
+def grab_box(window, bbox):
+    """
+    A screen grab of bbox, or, when there's no screen to grab (the TV off, so Windows reports no monitor
+    and a screen grab fails; 2 Nov 2026), the window as Windows itself draws it, cropped to the same box.
+    """
     from PIL import ImageGrab
+    try:
+        return ImageGrab.grab(bbox=bbox)
+    except OSError:
+        import ctypes
+        hwnd = ctypes.windll.user32.GetAncestor(window.winfo_id(), 2)
+        image = ImageGrab.grab(window=hwnd)   # the window's client area, whose origin Tk reports
+        left, top = window.winfo_toplevel().winfo_rootx(), window.winfo_toplevel().winfo_rooty()
+        x0, y0, x1, y1 = bbox
+        return image.crop((max(0, x0 - left), max(0, y0 - top), min(image.width, x1 - left), min(image.height, y1 - top)))
+
+
+def grab_window(window):
     window.update_idletasks()
     x, y = window.winfo_rootx(), window.winfo_rooty()
-    return ImageGrab.grab(bbox=(x - 1, y - 1, x + window.winfo_width() + 1, y + window.winfo_height() + 1))
+    return grab_box(window, (x - 1, y - 1, x + window.winfo_width() + 1, y + window.winfo_height() + 1))
 
 
 def grab(root):
-    from PIL import ImageGrab
     root.lift()
     settle(root, 0.2)
     x, y = root.winfo_rootx(), root.winfo_rooty()
-    return ImageGrab.grab(bbox=(x, y, x + root.winfo_width(), y + root.winfo_height()))   # the window sits on the main screen
+    return grab_box(root, (x, y, x + root.winfo_width(), y + root.winfo_height()))   # the window sits on the main screen
 
 
 def scroll_canvas(page):

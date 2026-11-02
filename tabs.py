@@ -645,6 +645,7 @@ def corner_tiles(widget, radius=8, top=None, bottom=None, edge=None, outside=Non
         photo = _corner_tile(widget, r, corner, edge, outside, within)
         tile = tk.Label(widget.master, image=photo, bd=0, highlightthickness=0, padx=0, pady=0, takefocus=0)
         tile.image = photo
+        tile.corner_tile = True   # not content: a flowed row leaves it to follow its widget
         tile.place(in_=widget, relx=relx, rely=rely, anchor=anchor)
         tiles.append(tile)
     widget.bind("<Destroy>", lambda e: [tl.destroy() for tl in tiles if tl.winfo_exists()], add="+")
@@ -691,6 +692,72 @@ def dashed_round_rect(canvas, x0, y0, x1, y1, radius, colour, dash=(4, 3), width
     ids += [canvas.create_line(x0 + r, y0, x1 - r, y0, **line), canvas.create_line(x0 + r, y1, x1 - r, y1, **line),
             canvas.create_line(x0, y0 + r, x0, y1 - r, **line), canvas.create_line(x1, y0 + r, x1, y1 - r, **line)]
     return ids
+
+
+def flow(frame, gap=4, within=None):
+    """
+    Lays frame's children out left to right, wrapping onto a new line when the room runs out, like words
+    in a paragraph (2 Nov 2026: a Playlist Selection sentence with its boxes, or a row of sources, is
+    wider than the page in German and on a narrow window, and Tk's pack can't wrap). The children are
+    placed by pixel, so a second line's words don't line up in columns under the first's; the frame takes
+    the size of what it holds. The room is the width of within (the box the frame sits in, by default its
+    master) less the frame's own x in it and the box's padding. Re-laid whenever the box or a child changes
+    size. Returns a function that re-lays by hand.
+    """
+    within = within or frame.master
+    state = {"plan": None}
+    try:
+        pad = int(str(within.cget("padx")).split()[-1])
+    except (tk.TclError, ValueError, IndexError):
+        pad = 8
+
+    def relayout(_e=None):
+        try:
+            room = within.winfo_width() - frame.winfo_x() - pad
+            children = [w for w in frame.winfo_children() if w.winfo_manager() in ("pack", "grid", "place")
+                        and not getattr(w, "corner_tile", False)]   # a number box's corner tiles follow it by themselves
+            sizes = [(w, w.winfo_reqwidth(), w.winfo_reqheight()) for w in children]
+        except tk.TclError:
+            return
+        if room < 40:
+            room = 10 ** 6   # not laid out yet: one line, laid again on the first real width
+        lines, line, x = [], [], 0
+        for w, ww, wh in sizes:
+            if line and x + ww > room:
+                lines.append(line)
+                line, x = [], 0
+            line.append((w, ww, wh))
+            x += ww + gap
+        if line:
+            lines.append(line)
+        plan, y, widest = [], 0, 0
+        for n, line in enumerate(lines):
+            tall = max(wh for _w, _ww, wh in line)
+            x = 0
+            for w, ww, wh in line:
+                plan.append((w, x, y + (tall - wh) // 2))
+                x += ww + gap
+            widest = max(widest, x - gap)
+            y += tall + (3 if n < len(lines) - 1 else 0)
+        if (plan, widest, y) == state["plan"]:
+            return
+        state["plan"] = (plan, widest, y)
+        for w, _x, _y in plan:   # every packed or gridded child goes first: the managers can't share a frame
+            if w.winfo_manager() == "pack":
+                w.pack_forget()
+            elif w.winfo_manager() == "grid":
+                w.grid_forget()
+        for w, px_, py_ in plan:
+            w.place(x=px_, y=py_)
+        frame.pack_propagate(False)
+        frame.grid_propagate(False)
+        frame.configure(width=max(1, widest), height=max(1, y))
+    relayout()
+    within.bind("<Configure>", relayout, add="+")
+    for w in frame.winfo_children():   # a child that grows later (a source's score arriving) re-lays the line too
+        w.bind("<Configure>", relayout, add="+")
+    frame.reflow = relayout
+    return relayout
 
 
 def round_fields(widget, radius=3):

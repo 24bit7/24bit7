@@ -1073,7 +1073,7 @@
   "Spaced": "Verteilt",
   "Spread": "Weit",
   "Standard": "Standard",
-  "Standard {kind} playlist: what a device's voice commands run unless Settings > Devices says otherwise.": "Standard-Playlist {kind}: Das starten die Sprachbefehle eines Geräts, sofern Einstellungen > Geräte nichts anderes sagt.",
+  "Standard {kind} playlist: what a device's voice commands run unless the device has its own under Device Playlists.": "Standard-Playlist {kind}: Das starten die Sprachbefehle eines Geräts, sofern das Gerät unter Geräte-Playlists keine eigene hat.",
   "Start": "Start",
   "Start a track in JRiver first, then try again.": "Starte zuerst einen Titel in JRiver und versuch es dann nochmal.",
   "Start a track in this zone to seed from it": "Starte einen Titel in dieser Zone, um ihn als Seed zu verwenden",
