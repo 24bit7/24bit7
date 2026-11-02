@@ -184,7 +184,7 @@ def test_the_default_row_does_not_drag_and_a_parent_page_has_the_alternate_title
     ui.pump(0.3)
     settings = ui.settings
     box = settings._subtitle_box
-    assert box is not None and box.winfo_manager(), "a parent's page has the Alternate Title box"
+    assert box is not None and box.winfo_manager(), "a parent's page has the Title in Menu box"
     settings._subtitle_var.set("Top 12, Random Order")
     box.focus_force()   # a generated key goes to the focus widget
     ui.pump(0.2)
@@ -193,7 +193,7 @@ def test_the_default_row_does_not_drag_and_a_parent_page_has_the_alternate_title
     assert buttons.get(top["id"])["subtitle"] == "Top 12, Random Order"
     pick_button(ui, "Artist + Guests")
     ui.pump(0.3)
-    assert settings._subtitle_box is None, "not on a playlist with nothing nested under it"
+    assert settings._subtitle_box is not None, "every playlist has one now (2 Nov 2026): a child's row reads by it too"
     assert not ui.errors, ui.errors[0]
 
 

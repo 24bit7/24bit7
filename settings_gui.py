@@ -30,6 +30,7 @@ import devices
 import ai_usage
 import i18n
 import tabs
+import mode
 from tabs import TabbedPane, PALETTE, FlatButton, TCombobox, NamePrompt, PromptWindow, PickRow
 from datetime import datetime
 from i18n import N_, t, tn
@@ -282,7 +283,7 @@ def warn_moderator_once(parent):
 
 HEADING_FONT = ("Segoe UI", 10, "bold")
 # the sections for the whole playlist, under its configs, in this order (English titles: see _fill_playlist)
-WHOLE_SECTIONS = ("Drift", "Deep Cuts", "Non-stop", "Hidden Tracks", "If All Else Fails", "Run After Building")
+WHOLE_SECTIONS = ("Drift", "Deep Cuts", "Non-stop", "Shortcut", "Hidden Tracks", "If All Else Fails", "Run After Building")
 HELP_FONT = ("Segoe UI", 8)
 HELP_FG = "#666"
 LABEL_FONT = ("Segoe UI", 9, "bold")
@@ -1615,15 +1616,49 @@ class SettingsTab(tk.Frame):
             return
         kind = button["kind"]
         head = tk.Frame(right)
-        head.pack(fill="x", padx=(0, 0), pady=(0, 8))
-        title_row = tk.Frame(head)
-        title_row.grid(row=0, column=0, sticky="w")
-        self._button_title = tk.Label(title_row, text=button["name"], font=("Segoe UI", 12, "bold"), cursor="hand2")
-        if kind == "vibe":   # magenta: uses AI credit
-            self._button_title.config(fg=PALETTE["ai_purple"])
-        self._button_title.pack(side="left")
-        tk.Label(title_row, text=t("click to rename"), fg=PALETTE["help_fg"], font=HELP_FONT).pack(side="left", padx=(10, 0))
-        self._button_title.bind("<Button-1>", lambda e: self._button_rename_inline(button))
+        head.pack(fill="x", pady=(0, 8))
+        head.grid_columnconfigure(1, weight=1)
+        fields = tk.Frame(head)
+        fields.grid(row=0, column=0, sticky="nw")
+        # Name: the playlist's name everywhere (its button, the list, the console, what Alexa says)
+        tk.Label(fields, text=t("Name"), font=LABEL_FONT).grid(row=0, column=0, sticky="w", pady=(0, 6))
+        self._name_var = tk.StringVar(value=button["name"])
+        self._name_box = ttk.Entry(fields, textvariable=self._name_var, width=30)
+        self._name_box.grid(row=0, column=1, sticky="w", padx=(10, 0), pady=(0, 6))
+        Tooltip(self._name_box, t("The playlist's name: on its button, in the list, in the console and in what Alexa says."))
+
+        def save_name(_e=None, bid=button["id"]):
+            current = (buttons.get(bid) or {}).get("name", "")
+            name = self._name_var.get().strip()
+            if not name:
+                self._name_var.set(current)
+            elif name != current:
+                buttons.rename(bid, name)
+                button["name"] = name
+                self._buttons = buttons.buttons_only()
+                self._fill_button_list()
+                self._devices_refresh()
+                self._draw_preview()
+                self._buttons_changed()
+        self._name_box.bind("<FocusOut>", save_name)
+        self._name_box.bind("<Return>", save_name)
+        self._name_box.bind("<Escape>", lambda e, bid=button["id"]: self._name_var.set((buttons.get(bid) or {}).get("name", "")))
+        # Title in Menu: how its row reads in a menu, a parent's own row or a child's (2 Nov 2026: any playlist)
+        tk.Label(fields, text=t("Title in Menu"), font=LABEL_FONT).grid(row=1, column=0, sticky="w")
+        self._subtitle_var = tk.StringVar(value=button.get("subtitle") or "")
+        self._subtitle_box = ttk.Entry(fields, textvariable=self._subtitle_var, width=30)
+        self._subtitle_box.grid(row=1, column=1, sticky="w", padx=(10, 0))
+        Tooltip(self._subtitle_box, t("How this playlist's row reads in a menu: its own row at the top of its menu when "
+                                      "playlists are nested under it, or its row in its parent's menu. Blank, the name is used."))
+
+        def save_subtitle(_e=None, bid=button["id"]):
+            if self._subtitle_var.get().strip() != (buttons.get(bid) or {}).get("subtitle", ""):
+                buttons.set_subtitle(bid, self._subtitle_var.get())
+                self._buttons = buttons.buttons_only()
+                self._draw_preview()
+                self._buttons_changed()
+        self._subtitle_box.bind("<FocusOut>", save_subtitle)
+        self._subtitle_box.bind("<Return>", save_subtitle)
         about = t("No config yet: add one below.") if kind is None else t(buttons.KIND_LABELS[kind])
         if button.get("device"):
             phrase = next((label for ph, label in devices.PHRASES
@@ -1633,41 +1668,32 @@ class SettingsTab(tk.Frame):
         elif button.get("standard"):
             about = t("Standard {kind} playlist: what a device's voice commands run unless Settings > Devices says otherwise.",
                       kind=about)
-        tk.Label(head, text=about, fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=1, column=0, sticky="w")
-        if buttons.is_parent(button):   # a parent: how its own option reads in its drop-down
-            alt = tk.Frame(head)
-            alt.grid(row=2, column=0, sticky="w", pady=(8, 0))
-            tk.Label(alt, text=t("Alternate Title")).pack(side="left")
-            self._subtitle_var = tk.StringVar(value=button.get("subtitle") or "")
-            box_ = self._subtitle_box = ttk.Entry(alt, textvariable=self._subtitle_var, width=28)
-            box_.pack(side="left", padx=(8, 0))
-
-            def save_subtitle(_e=None, bid=button["id"]):
-                if self._subtitle_var.get().strip() != (buttons.get(bid) or {}).get("subtitle", ""):
-                    buttons.set_subtitle(bid, self._subtitle_var.get())
-                    self._buttons = buttons.buttons_only()
-                    self._buttons_changed()
-            box_.bind("<FocusOut>", save_subtitle)
-            box_.bind("<Return>", save_subtitle)
-            help_mark(alt, t("How this playlist's own option reads in its drop-down, beside the playlists nested "
-                             "under it: \"Top 12, Random Order\", say. The button keeps the name."),
-                      on=box_).pack(side="left", padx=(8, 0))
-        self._button_filter_row = tk.Frame(head)
-        self._button_filter_row.grid(row=3, column=0, sticky="w", pady=(8, 0))
-        self._button_filters_refresh()
+        tk.Label(fields, text=about, fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w", justify="left",
+                 wraplength=scaled(fields, 420)).grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        # the Preview: the button with its menu, this playlist's row outlined (a child shows its parent's button)
+        self._preview_frame = tk.Frame(head)
+        self._preview_frame.grid(row=0, column=1, sticky="n", padx=(24, 0))
+        self._preview_button = button
+        self._draw_preview()
+        # Simple / Advanced, one setting for the listener (mode.py)
+        pill = tk.Frame(head, highlightthickness=1, highlightbackground=PALETTE["button_fg"], highlightcolor=PALETTE["button_fg"])
+        pill.grid(row=0, column=2, sticky="ne")
+        self._mode_labels = {}
+        current = mode.current()
+        for key, text, note in (("simple", N_("Simple"), N_("Simple: one config with its Sources, Playlist Selection and "
+                                                                "Filters. The advanced sections are off for every playlist.")),
+                                ("advanced", N_("Advanced"), N_("Advanced: every section, open when it's on and closed when "
+                                                                    "it's off. Take a Tour walks through them."))):
+            on = key == current
+            lab = tk.Label(pill, text=t(text), font=("Segoe UI", 9, "bold"), padx=12, pady=3, cursor="hand2",
+                           bg=PALETTE["button_fg"] if on else pill.cget("bg"),
+                           fg=PALETTE.get("window_bg", "#ffffff") if on else PALETTE["button_fg"])
+            lab.pack(side="left")
+            lab.bind("<Button-1>", lambda e, k=key: self._set_mode(k))
+            Tooltip(lab, t(note))
+            self._mode_labels[key] = lab
         for old in [c for c in self.hotkey_vars if hotkeys.is_button(c)]:   # the page before this one's box
             del self.hotkey_vars[old], self.hotkey_notes[old]
-        if kind != "vibe" and hotkeys.AVAILABLE:   # an AI Playlist needs a theme typed, so no key can run it
-            short = tk.Frame(head)
-            short.grid(row=4, column=0, sticky="w", pady=(8, 0))
-            widgets = self._shortcut_row(short, 0, hotkeys.button_code(button["id"]), N_("Shortcut"),
-                                         button.get("shortcut") or "")
-            help_mark(short, t("Keys that run this playlist from anywhere in Windows, even with 24bit7 in the tray, "
-                               "on the zone chosen under Settings > Other > Keyboard Shortcuts. Click the box and "
-                               "press the keys; Esc cancels."), on=widgets[0]).grid(row=0, column=4, sticky="w",
-                                                                                     padx=(8, 0))
-            self.refresh_hotkey_notes()
-
         inner = self._button_inner = self._scroll_page(right)
         cfgs = buttons.configs(button)
         mix = buttons.tidy_mix(button.get("mix"), len(cfgs))
@@ -1698,6 +1724,8 @@ class SettingsTab(tk.Frame):
             places[title] = tk.Frame(whole)
             places[title].grid(row=len(places), column=0, sticky="ew")
             places[title].grid_columnconfigure(0, weight=1)
+        if button["kind"] != "vibe" and hotkeys.AVAILABLE:   # an AI Playlist needs a theme typed, so no key can run it
+            self._shortcut_section(places["Shortcut"], button)
         resyncs = []
         for n, (p, block) in enumerate(pages):
             kind = cfgs[n]["kind"]
@@ -1881,7 +1909,14 @@ class SettingsTab(tk.Frame):
         self._mix_controls = (combine_cb, pattern_vars, drift_cb, cont_cb)
 
     def _button_rename_inline(self, button):
-        """The name at the top becomes a box to type in; Enter or clicking away saves, Esc leaves it."""
+        """A new playlist's page opens with the Name box ready to type in (2 Nov 2026: the name is a box now)."""
+        box = getattr(self, "_name_box", None)
+        if box is not None and box.winfo_exists():
+            box.focus_set()
+            box.selection_range(0, "end")
+        return
+
+    def _button_rename_inline_old(self, button):
         title = self._button_title
         if not title.winfo_exists():
             return
@@ -2187,6 +2222,83 @@ class SettingsTab(tk.Frame):
         self._fill_button_list()
         self._devices_refresh()
         self._button_fill_page()
+
+    def _draw_preview(self):
+        """
+        The Preview beside Name and Title in Menu: the button with its menu open and this playlist's row
+        outlined, at three quarters size in a dashed frame. A parent shows its own button; a child its
+        parent's; a plain button shows the button alone over two greyed placeholder rows, so the menu's
+        place is clear (Ben, 2 Nov 2026).
+        """
+        frame = getattr(self, "_preview_frame", None)
+        if frame is None or not frame.winfo_exists():
+            return
+        for child in frame.winfo_children():
+            child.destroy()
+        button = buttons.get(self._preview_button["id"]) if self._preview_button else None
+        if button is None:
+            return
+        parent = buttons.get(button["parent"]) if button.get("parent") else None
+        face = parent or button
+        if buttons.is_parent(face):
+            rows = [(pl, text, is_default, pl["id"] == button["id"]) for pl, text, is_default in buttons.menu_rows(face)]
+        else:
+            rows = [(button, button.get("subtitle") or button["name"], True, True),
+                    (None, t("playlist button abc"), False, False), (None, t("playlist button xyz"), False, False)]
+        px = lambda n: scaled(frame, n)
+        w, row_h, face_h = px(190), px(22), px(27)
+        h = px(10) + face_h + len(rows) * row_h + px(14)
+        canvas = tk.Canvas(frame, width=w + px(20), height=h + px(20), highlightthickness=0, bd=0, bg=frame.cget("bg"))
+        canvas.pack()
+        canvas.create_rectangle(px(1), px(1), w + px(19), h + px(19), dash=(4, 3), outline=PALETTE["section_edge"])
+        tk.Label(frame, text=t("Preview"), fg=PALETTE["help_fg"], font=HELP_FONT, bg=frame.cget("bg")).place(x=px(8), y=0)
+        x0, y0 = px(10), px(14)
+        accent = PALETTE["ai_purple"] if face.get("kind") == "vibe" else PALETTE["button_accent"]
+        canvas.create_rectangle(x0, y0, x0 + w, y0 + face_h, fill=PALETTE.get("button_bg") or PALETTE.get("field_bg") or "#ffffff",
+                                outline=PALETTE["section_edge"])
+        canvas.create_rectangle(x0, y0 + face_h - px(3), x0 + w, y0 + face_h, fill=accent, outline=accent)
+        canvas.create_line(x0 + w - px(22), y0, x0 + w - px(22), y0 + face_h - px(3), fill=PALETTE["section_edge"])
+        canvas.create_text(x0 + (w - px(22)) // 2, y0 + face_h // 2 - px(1), text=face["name"], font=("Segoe UI", 8, "bold"),
+                           fill=PALETTE["ai_purple"] if face.get("kind") == "vibe" else PALETTE["button_fg"])
+        canvas.create_text(x0 + w - px(11), y0 + face_h // 2 - px(1), text="\u25be", font=("Segoe UI", 6), fill=PALETTE["button_fg"])
+        y = y0 + face_h + px(2)
+        canvas.create_rectangle(x0, y, x0 + w, y + len(rows) * row_h + px(4), fill=PALETTE.get("field_bg") or "#ffffff",
+                                outline=PALETTE["section_edge"])
+        self._preview_rows = []
+        for pl, text, is_default, mine in rows:
+            ry = y + px(2) + len(self._preview_rows) * row_h
+            if mine:
+                canvas.create_rectangle(x0 + px(3), ry + px(1), x0 + w - px(3), ry + row_h - px(1), outline=PALETTE["button_fg"], width=2)
+            fill = PALETTE["text"] if pl is not None else PALETTE["help_fg"]
+            font = ("Segoe UI", 8) if pl is not None else ("Segoe UI", 8, "italic")
+            canvas.create_text(x0 + px(10), ry + row_h // 2, text=text, anchor="w", font=font, fill=fill)
+            if is_default and pl is not None and buttons.is_parent(face):
+                canvas.create_text(x0 + w - px(8), ry + row_h // 2, text=t("default"), anchor="e", font=("Segoe UI", 7),
+                                   fill=PALETTE["button_fg"])
+            self._preview_rows.append(text)
+        self._preview = canvas
+
+    def _set_mode(self, key):
+        """The Simple / Advanced pill: Simple asks first when it turns things off (mode.py)."""
+        if key == mode.current():
+            return
+        if key == mode.SIMPLE:
+            counts = mode.turns_off()
+            if counts and not messagebox.askyesno(
+                    t("Simple"), t("Simple turns off {summary}. Switch back to Advanced and they return as they were.",
+                                   summary=mode.summary_of(counts)), parent=self):
+                return
+        mode.set_current(key)
+        self._button_fill_page()
+        self._buttons_changed()
+
+    def _shortcut_section(self, place, button):
+        """Shortcut as a section of its own (2 Nov 2026), open when one is set and closed when none is."""
+        box = section(place, t("Shortcut"),
+                      t("Keys that run this playlist from anywhere in Windows, even with 24bit7 in the tray, on the "
+                        "zone chosen under Settings > Other > Keyboard Shortcuts. Click the box and press the keys; Esc cancels."))
+        self._shortcut_row(box, 0, hotkeys.button_code(button["id"]), N_("Shortcut"), button.get("shortcut") or "")
+        self.refresh_hotkey_notes()
 
     def _open_filters(self):
         """Edit Filters: a window with the named filters on the left and the chosen one's rules on the right."""

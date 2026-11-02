@@ -126,20 +126,19 @@ def test_the_chosen_row_is_a_border_and_the_help_line_is_gone(app, ui):
     assert not ui.errors, ui.errors[0]
 
 
-def test_the_name_at_the_top_renames_in_place(app, ui):
+def test_the_name_box_at_the_top_renames(app, ui):
+    """2 Nov 2026: the name is a box at the top of the page, beside Title in Menu, not a click-to-rename label."""
     import buttons
     pick_button(ui, "Artist + Guests")
     s = ui.settings
-    s._button_title.event_generate("<Button-1>")
-    ui.pump(0.3)
-    entry = next(w for w in walk(s._button_right) if isinstance(w, tk.Entry) and w.get() == "Artist + Guests")
-    entry.delete(0, "end")
-    entry.insert(0, "Star Turn")
+    entry = s._name_box
+    assert entry.get() == "Artist + Guests"
+    s._name_var.set("Star Turn")
     entry.focus_force()   # Tk sends a generated key press to the focus widget
     ui.pump(0.2)
     entry.event_generate("<Return>")
     ui.pump(0.3)
-    assert s._button_title.cget("text") == "Star Turn" and s._button_names()[3] == "Star Turn"
+    assert s._name_var.get() == "Star Turn" and s._button_names()[3] == "Star Turn"
     assert buttons.get(s._button_id)["name"] == "Star Turn"
     assert [b._name for b in ui.play.play_buttons][3] == "Star Turn", "the Play tab follows"
     assert not ui.errors, ui.errors[0]
@@ -417,7 +416,7 @@ def test_the_list_follows_the_play_tab(app, ui, monkeypatch):
     monkeypatch.setattr(tabs, "ask_name", lambda *a, **k: "Star Turn")
     ui.play._rename_button(buttons.get(s._button_id))
     s._buttons_refresh()   # as opening the page does
-    assert s._button_names()[3] == "Star Turn" and s._button_title.cget("text") == "Star Turn"
+    assert s._button_names()[3] == "Star Turn"
     assert s._button_page.button["id"] == s._button_id, "the page wasn't rebuilt for a rename"
 
 
