@@ -52,13 +52,13 @@ SHOTS = [
     ("discover", ["Discover"], ["discover_gui.py", "tabs.py"], None),
     # Settings > Buttons: a button of your own with a filter and a shortcut, the standard Similar Artists'
     # Playlist page with its columns, an AI Playlist's page, the Edit Filters window, and the Kitchen zone
-    ("settings_buttons", ["Settings", "Playlists"], ["settings_gui.py", "buttons.py"], "button:Kitchen Tracks:Sources"),
-    ("settings_buttons_playlist", ["Settings", "Playlists"], ["settings_gui.py", "buttons.py"],
+    ("settings_buttons", ["Settings", "Playlist Settings"], ["settings_gui.py", "buttons.py"], "button:Kitchen Tracks:Sources"),
+    ("settings_buttons_playlist", ["Settings", "Playlist Settings"], ["settings_gui.py", "buttons.py"],
      "button:Similar Artists:Playlist"),
-    ("settings_buttons_ai_playlist", ["Settings", "Playlists"], ["settings_gui.py", "buttons.py"],
+    ("settings_buttons_ai_playlist", ["Settings", "Playlist Settings"], ["settings_gui.py", "buttons.py"],
      "button:AI Playlist:Playlist"),
-    ("edit_filters", ["Settings", "Playlists"], ["settings_gui.py", "filters.py"], "edit_filters"),
-    ("settings_devices", ["Settings", "Devices"], ["settings_gui.py", "devices.py"], "device:demo-kitchen"),
+    ("edit_filters", ["Settings", "Playlist Settings"], ["settings_gui.py", "filters.py"], "edit_filters"),
+    ("settings_devices", ["Settings", "Playlist Settings"], ["settings_gui.py", "devices.py"], "device:demo-kitchen"),
     ("settings_discover_sites", ["Settings", "Discover"], ["settings_gui.py"], None),
     ("settings_keys", ["Settings", "Keys"], ["settings_gui.py"], None),
     ("settings_voice_commands", ["Settings", "Voice Commands"], ["settings_gui.py", "voice.py"], None),
@@ -395,7 +395,11 @@ def start_demo(gui, temp):
     buttons.set_settings(kitchen["id"], dict(kitchen["settings"], AI_MODERATOR_TRACKS="balanced", SIMILAR_TRACK_COUNT="20"))
     buttons.set_filters(kitchen["id"], [stereo["id"]])
     buttons.set_shortcut(kitchen["id"], "Ctrl+Alt+2")
-    buttons.set_shown(kitchen["id"], False)   # a device's playlist lives off the Play tab, as the upgrade leaves them
+    items = buttons.load()   # the Kitchen Echo's own playlist: off the Play tab, in the Device Playlists box (1.30)
+    for b in items:
+        if b["id"] == kitchen["id"]:
+            b["device"] = "demo-kitchen"
+    buttons.save(items)
     record = devices.for_device("demo-kitchen")
     record["buttons"]["tracks_like"] = kitchen["id"]
     devices.update("demo-kitchen", buttons=record["buttons"])
@@ -718,9 +722,14 @@ def main():
                 play.settings._button_id = target["id"]
                 play.settings._buttons_refresh()
                 settle(root, 0.5)
-            elif action and action.startswith("device:"):
+            elif action and action.startswith("device:"):   # the Device Playlists box on that device's tab, its first own playlist open
+                import buttons
                 play.settings._device_id = action.split(":")[1]
-                play.settings._devices_refresh()
+                own = buttons.of_device(play.settings._device_id)
+                if own:
+                    play.settings._button_id = own[0]["id"]
+                play.settings._buttons_refresh()
+                settle(root, 0.5)
             elif action == "edit_filters":
                 dialog = play.settings._open_filters()
             if action == "review":

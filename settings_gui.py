@@ -16,6 +16,7 @@ import re
 import sys
 import threading
 import tkinter as tk
+import tkinter.font as tkfont
 import webbrowser
 from tkinter import ttk, messagebox, filedialog
 
@@ -31,6 +32,7 @@ import ai_usage
 import i18n
 import tabs
 import mode
+import tour
 from tabs import TabbedPane, PALETTE, FlatButton, TCombobox, NamePrompt, PromptWindow, PickRow
 from datetime import datetime
 from i18n import N_, t, tn
@@ -330,6 +332,7 @@ def section_fold(box, fold):
     for w in (head, arrow, title_label):
         w.bind("<Button-1>", header_clicked)
     box.is_open = lambda: state["open"]
+    box.open = lambda: show(True)
     refold()
     return refold
 
@@ -445,6 +448,11 @@ def _place_note(anchor):
     _note_on(anchor, mark)
 
 
+def _english():
+    """A translated section title back to its English (read when asked, after the language is set)."""
+    return {t(k): k for k in tour.SECTION_NOTES}
+
+
 def section(parent, title, help_text=None, row=None, title_fg=None, fold=None):
     """
     A Settings section: a solid header bar with its title (and optional ?), black in
@@ -458,6 +466,7 @@ def section(parent, title, help_text=None, row=None, title_fg=None, fold=None):
     """
     edge = PALETTE["section_edge"]
     outer = tk.Frame(parent, bd=0, highlightthickness=1, highlightbackground=edge, highlightcolor=edge)
+    outer.section_title = _english().get(title, title)   # for Take a Tour, which lights sections by title (tour.py)
     head_bg = PALETTE.get("head_bg") or outer.cget("bg")
     head = tk.Frame(outer, bg=head_bg)
     head.pack(fill="x")
@@ -476,6 +485,7 @@ def section(parent, title, help_text=None, row=None, title_fg=None, fold=None):
         row = parent.grid_size()[1]
     outer.grid(row=row, column=0, sticky="ew", pady=(0, 14))
     parent.grid_columnconfigure(0, weight=1)
+    tabs.corner_tiles(outer, top=head_bg)   # the cheat: corner tiles over the one-pixel edge (2 Nov 2026)
     if fold is not None:
         state = {"open": True}
 
@@ -500,6 +510,7 @@ def section(parent, title, help_text=None, row=None, title_fg=None, fold=None):
             w.bind("<Button-1>", header_clicked)
         box.refold = refold
         box.is_open = lambda: state["open"]
+        box.open = lambda: show(True)
         refold()
     else:   # always on: refold is a no-op, and there's no is_open, so a test can tell the folding sections apart
         box.refold = lambda: None
@@ -612,6 +623,8 @@ class ProfilePage:
                 out[f"INNER_CIRCLE_{g}"] = "1" if v[f"INNER_CIRCLE_{g}"].get() else "0"
                 out[f"INNER_CIRCLE_{g}_SIZE"] = v[f"INNER_CIRCLE_{g}_SIZE"].get()
                 out[f"INNER_CIRCLE_{g}_AGREE"] = v[f"INNER_CIRCLE_{g}_AGREE"].get()
+                out[f"INNER_CIRCLE_{g}_FALLBACK"] = "1" if v[f"INNER_CIRCLE_{g}_FALLBACK"].get() else "0"
+                out[f"INNER_CIRCLE_{g}_FALLBACK_MIN"] = v[f"INNER_CIRCLE_{g}_FALLBACK_MIN"].get().strip() or "10"
         if "FALLBACK_SPOKEN" in v:
             out["FALLBACK_SPOKEN"] = "1" if v["FALLBACK_SPOKEN"].get() else "0"
         for group in engine.PLAYED_GROUPS:
@@ -1216,6 +1229,7 @@ class SettingsTab(tk.Frame):
         self._build_saved(nb)   # after Voice Commands: these settings only apply to playlists asked for by voice
         self._build_other(nb)
         self._build_about(nb)
+        tabs.round_fields(self)   # the number boxes on every tab
 
         self._loading = False
         self._refresh_key_marks()
@@ -1776,6 +1790,11 @@ class SettingsTab(tk.Frame):
             lab.bind("<Button-1>", lambda e, k=key: self._set_mode(k))
             Tooltip(lab, t(note))
             self._mode_labels[key] = lab
+        lit = PALETTE["button_fg"]   # the lit half is filled, so that end's corners are lit inside
+        left, right_ = (lit if current == "simple" else None), (lit if current == "advanced" else None)
+        tabs.corner_tiles(pill, radius=6, corners={"nw": left, "sw": left, "ne": right_, "se": right_})
+        if current == "advanced":   # Take a Tour: a dashed box under the pill (tour.py)
+            self._tour_box(head)
         for old in [c for c in self.hotkey_vars if hotkeys.is_button(c)]:   # the page before this one's box
             del self.hotkey_vars[old], self.hotkey_notes[old]
         inner = self._button_inner = self._scroll_page(right)
@@ -1836,6 +1855,7 @@ class SettingsTab(tk.Frame):
             resyncs.append(p.resync)
             self._sync_moderator_box(p)
         pages[0][0].resync = lambda: [r() for r in resyncs]
+        tabs.round_fields(right)   # the number boxes
         self._refresh_key_marks()
 
     def _config_block(self, inner, button, n, cfg):
@@ -1845,6 +1865,7 @@ class SettingsTab(tk.Frame):
         block.grid(row=inner.grid_size()[1], column=0, sticky="ew", pady=(0, 10))
         block.grid_columnconfigure(0, weight=1)
         tint = tabs.mix_colour(inner, edge, inner.cget("bg"), 0.12)
+        tabs.corner_tiles(block, top=tint)
         head = tk.Frame(block, bg=tint, padx=8, pady=4)
         head.grid(row=0, column=0, sticky="ew")
         body = tk.Frame(block, padx=8, pady=6)
@@ -1936,11 +1957,7 @@ class SettingsTab(tk.Frame):
 
     def _mix_section(self, inner, button, cfgs, mix):
         """Mix: how two or more configs come together, which config Drift runs from and which Non-stop carries on as."""
-        box = section(inner, t("Mix"),
-                      t("How the configs come together. Shuffle mixes every config's tracks in together; Append plays "
-                        "one config's tracks, then the next's; Alternate takes turns, by the pattern. Each config "
-                        "finds its own number of tracks. Drift from names the config Drift carries on from, and "
-                        "Continue as the one Non-stop carries on as."))
+        box = section(inner, t("Mix"), tour.note_for("Mix"))
         names = [t("Config {n} \u00b7 {kind}", n=i + 1, kind=t(buttons.KIND_LABELS[c["kind"]])) for i, c in enumerate(cfgs)]
         row = self._line(box, 0, t("Combine"), pady=(0, 0))
         combine_var = tk.StringVar(value=t(dict(buttons.COMBINES)[mix["combine"]]))
@@ -2070,10 +2087,7 @@ class SettingsTab(tk.Frame):
     def _config_filters(self, body, button, n):
         """Filters at the end of a config's box: a tick per filter for this config, then Edit Filters (2 Nov 2026)."""
         cfg = buttons.configs(button)[n]
-        box = section(body, t("Filters"),
-                      t("Tracks this config finds must pass each ticked filter, Drift and Non-stop top-ups that carry "
-                        "on as it included. Each config has its own, so one can draw on the whole library while "
-                        "another is stereo only. A filter that's off is kept for later and doesn't apply."),
+        box = section(body, t("Filters"), tour.note_for("Filters"),
                       fold=(lambda: False) if mode.is_simple() else None)   # closed in Simple; a click opens it
         row = tk.Frame(box)
         row.grid(row=0, column=0, sticky="w")
@@ -2356,7 +2370,7 @@ class SettingsTab(tk.Frame):
         h = px(10) + face_h + len(rows) * row_h + px(14)
         canvas = tk.Canvas(frame, width=w + px(20), height=h + px(20), highlightthickness=0, bd=0, bg=frame.cget("bg"))
         canvas.pack()
-        canvas.create_rectangle(px(1), px(1), w + px(19), h + px(19), dash=(4, 3), outline=PALETTE["section_edge"])
+        tabs.dashed_round_rect(canvas, px(1), px(1), w + px(19), h + px(19), px(8), PALETTE["section_edge"])
         tk.Label(frame, text=t("Preview"), fg=PALETTE["help_fg"], font=HELP_FONT, bg=frame.cget("bg")).place(x=px(8), y=0)
         x0, y0 = px(10), px(14)
         accent = PALETTE["ai_purple"] if face.get("kind") == "vibe" else PALETTE["button_accent"]
@@ -2384,6 +2398,37 @@ class SettingsTab(tk.Frame):
             self._preview_rows.append(text)
         self._preview = canvas
 
+    def _tour_box(self, head):
+        """The Take a Tour box under the Simple / Advanced pill: a dashed rounded frame round the words."""
+        px = lambda n: scaled(head, n)
+        text = t("Take a Tour")
+        font = ("Segoe UI", 9, "bold")
+        width = tkfont.Font(head, font).measure(text) + px(28)
+        box = tk.Canvas(head, width=width, height=px(26), highlightthickness=0, bd=0, bg=head.cget("bg"), cursor="hand2")
+        box.grid(row=1, column=2, sticky="ne", pady=(8, 0))
+        tabs.dashed_round_rect(box, px(1), px(1), width - px(2), px(24), px(7), PALETTE["button_fg"])
+        box.create_text(width // 2, px(13), text=text, fill=PALETTE["button_fg"], font=font)
+        box.bind("<Button-1>", lambda e: self._start_tour())
+        Tooltip(box, t("A walk through the advanced sections, one at a time, on Artist + Guests: the playlist that "
+                       "blends two matching rules."))
+        self._tour_button = box
+
+    def _start_tour(self):
+        """Opens Artist + Guests (or the nearest thing to it) and starts the tour over its page."""
+        if getattr(self, "_tour", None) is not None and self._tour.running:
+            self._tour.close()
+        items = buttons.buttons_only()
+        names = {"Artist + Guests", t("Artist + Guests")}
+        target = (next((b for b in items if b["name"] in names and len(buttons.configs(b)) > 1), None)
+                  or next((b for b in items if len(buttons.configs(b)) > 1), None)
+                  or buttons.get(self._button_id))
+        if target is None:
+            return
+        if target["id"] != self._button_id:
+            self._pick_button(target["id"])
+        self.update_idletasks()
+        self._tour = tour.Tour(self._button_inner, on_close=lambda: setattr(self, "_tour", None))
+
     def _set_mode(self, key):
         """The Simple / Advanced pill: Simple asks first when it turns things off (mode.py)."""
         if key == mode.current():
@@ -2402,9 +2447,7 @@ class SettingsTab(tk.Frame):
 
     def _shortcut_section(self, place, button):
         """Shortcut as a section of its own (2 Nov 2026), open when one is set and closed when none is."""
-        box = section(place, t("Shortcut"),
-                      t("Keys that run this playlist from anywhere in Windows, even with 24bit7 in the tray, on the "
-                        "zone chosen under Settings > Other > Keyboard Shortcuts. Click the box and press the keys; Esc cancels."),
+        box = section(place, t("Shortcut"), tour.note_for("Shortcut"),
                       fold=lambda bid=button["id"]: bool((buttons.get(bid) or {}).get("shortcut")))
         self._page_folds.append(box.refold)
         self._shortcut_row(box, 0, hotkeys.button_code(button["id"]), N_("Shortcut"), button.get("shortcut") or "")
@@ -3322,12 +3365,7 @@ class SettingsTab(tk.Frame):
         """Consensus for a matching config: On or Off, the circle's size, and how many lists must agree."""
         g = group.upper()
         what = t("artists") if group == "artists" else t("tracks")
-        box = section(page, t("Consensus"),
-                      t("Instead of the seed's own list of similar {what}, Consensus takes the seed's closest few, "
-                        "fetches each one's own similar {what}, and keeps what two or more of those lists agree on: "
-                        "what the things you're listening to have in common. With Seed on Playing Now, the "
-                        "sampled {what} are the circle. Fewer in the circle and more agreeing is tighter, and can "
-                        "come up short; the console says so, and Drift fills in if it's on.", what=what))
+        box = section(page, t("Consensus"), tour.note_for("Consensus"))
         on_key, size_key, agree_key = f"INNER_CIRCLE_{g}", f"INNER_CIRCLE_{g}_SIZE", f"INNER_CIRCLE_{g}_AGREE"
         p.vars[on_key] = tk.BooleanVar(value=p.env.get(on_key, "0").strip().lower() in engine.YES)
         box.refold = section_fold(box, lambda: bool(p.vars[on_key].get()))
@@ -3345,6 +3383,24 @@ class SettingsTab(tk.Frame):
         agree_cb = TCombobox(row, textvariable=p.vars[agree_key], values=["2", "3", "4", "5"], state="readonly", width=4)
         agree_cb.pack(side="left")
         tk.Label(row, text=t("of their lists"), fg=PALETTE["help_fg"], font=HELP_FONT).pack(side="left", padx=(8, 0))
+        # the fallback: when the circle agrees on too little, the rest of the playlist is plain matching
+        fb_key, min_key = f"INNER_CIRCLE_{g}_FALLBACK", f"INNER_CIRCLE_{g}_FALLBACK_MIN"
+        p.vars[fb_key] = tk.BooleanVar(value=p.env.get(fb_key, "0").strip().lower() in engine.YES)
+        p.vars[min_key] = tk.StringVar(value=p.env.get(min_key, "10").strip() or "10")
+        row = tk.Frame(box)
+        row.grid(row=3, column=0, columnspan=6, sticky="w", pady=(8, 0))
+        fb_tick = ttk.Checkbutton(row, text=t("If Consensus finds fewer than"), variable=p.vars[fb_key],
+                                  command=lambda: (sync(), p.save()))
+        fb_tick.pack(side="left")
+        fb_sb = tk.Spinbox(row, from_=1, to=100, textvariable=p.vars[min_key], width=3, command=p.save)
+        fb_sb.pack(side="left", padx=(4, 4))
+        p.vars[min_key].trace_add("write", p.save)
+        plain = t("Artist Matching") if group == "artists" else t("Track Matching")
+        tk.Label(row, text=t("tracks, finish the playlist with plain {kind}", kind=plain)).pack(side="left")
+        help_mark(row, t("Off, a short Consensus stays short and the console says so (Drift fills in if it's on). "
+                         "Ticked, when the circle agrees on fewer tracks than this, the rest of the playlist is found "
+                         "the ordinary way, from the seed's own list, and the console says how many came from each."),
+                  on=fb_tick)
 
         def sync(*_):
             size = int(p.vars[size_key].get() or 3)
@@ -3354,6 +3410,8 @@ class SettingsTab(tk.Frame):
             on = p.vars[on_key].get()
             for cb in (size_cb, agree_cb):
                 cb.state(["!disabled"] if on else ["disabled"])
+            fb_tick.state(["!disabled"] if on else ["disabled"])
+            fb_sb.config(state="normal" if on and p.vars[fb_key].get() else "disabled")
 
         def size_changed(_e=None):
             size_cb.selection_clear()
@@ -3365,12 +3423,7 @@ class SettingsTab(tk.Frame):
 
     def _moderator_section(self, p, page, group):
         """A Moderator tick for one Play option, greyed out until the AI is set up."""
-        box = section(page, t("Moderator"),
-                      t("Checks each playlist (and each Drift round) once with your AI's quick model, and "
-                      "removes tracks that clash with the seed's tone, energy and mood. "
-                      "Logs each removal with its reason. Uses a little AI credit each time, a fraction of a "
-                      "penny per playlist (nothing with Ollama)."),
-                      title_fg=PALETTE["ai_purple"])
+        box = section(page, t("Moderator"), tour.note_for("Moderator"), title_fg=PALETTE["ai_purple"])
         key = f"AI_MODERATOR_{group.upper()}"
         p.vars[key] = tk.StringVar(value=engine.moderator_settings(p.env.get)[group].title())
         box.refold = section_fold(box, lambda: p.vars[key].get() != "Off")
@@ -3408,11 +3461,7 @@ class SettingsTab(tk.Frame):
 
         # --- Similar Artists ---
         if kind == "artists":
-            box = section(pages["artists"], t("Sources"),
-                                   t("YouTube suggests from the playing track, using YouTube Music's up next queue. "
-                                   "No key needed. Ticked on its own, it plays YouTube's queue as is, matched against "
-                                   "your library. Ticked with other sources, its artists join the blend. It's an "
-                                   "unofficial route, so it may break now and then."))
+            box = section(pages["artists"], t("Sources"), tour.note_for("Sources"))
             r = self._source_ticks(p, box, 0, "SIMILAR_SOURCES", SOURCE_NAMES, "lastfm", similar_changed, "similar",
                                    hint=None if simple else "artists", lb_key="LISTENBRAINZ_ALGORITHM",
                                    lb_notes=N_("alltime: from all listening history; leans toward well-known artists.\n"
@@ -3435,9 +3484,7 @@ class SettingsTab(tk.Frame):
 
         # --- Similar Tracks: its own sources and agreement ---
         if kind == "tracks":
-            box = section(pages["tracks"], t("Sources"),
-                          t("Tracks like the seed track, for the Similar Tracks button. No key needed for "
-                          "ListenBrainz or YouTube."))
+            box = section(pages["tracks"], t("Sources"), tour.note_for("Sources"))
             r = self._source_ticks(p, box, 0, "SIMILAR_TRACK_SOURCES", TRACK_SOURCE_NAMES, "lastfm,listenbrainz,youtube",
                                    tracks_changed, "similar", hint=None if simple else "tracks", lb_key="LISTENBRAINZ_TRACK_ALGORITHM",
                                    lb_notes=N_("alltime: from all listening history.\n"
@@ -3458,10 +3505,7 @@ class SettingsTab(tk.Frame):
 
         # --- Artist's Top Tracks ---
         if kind == "top":
-            box = section(pages["top"], t("Sources"),
-                          t("More services means richer, more varied playlists, but slower; fewer is quicker. "
-                               "ListenBrainz is the slowest source on a first run, because its lookups are limited "
-                          "to one a second. Repeat runs are quick."))
+            box = section(pages["top"], t("Sources"), tour.note_for("Sources"))
             self._source_ticks(p, box, 0, "TOP_TRACK_SOURCES", TOP_SOURCE_NAMES, "lastfm", p.save, "top")
 
         p.resync = lambda: (sync_agreement(p, "SIMILAR_SOURCES", "SIMILAR_MIN_AGREEMENT", "agree_cb", 5),
@@ -3822,6 +3866,7 @@ class SettingsTab(tk.Frame):
                              "review."), on=tick)
             frame = tk.Frame(box, highlightthickness=1, highlightbackground=review_fg, highlightcolor=review_fg, padx=8, pady=4)
             frame.grid(row=where["r"], column=0, columnspan=6, sticky="w", pady=(4, 2))
+            tabs.corner_tiles(frame)
             where["r"] += 1
             outer_box, outer_r = where["box"], where["r"]
             where["box"], where["r"] = frame, 0
@@ -3866,9 +3911,7 @@ class SettingsTab(tk.Frame):
 
         def drift(group):
             """The Drift section: its tick box, then Drift using and Rounds."""
-            note = t("If a playlist comes up short, search again using what's already been found, "
-                    "until the playlist reaches its length. More rounds fill more gaps but can "
-                    "wander further from where you started.")
+            note = tour.note_for("Drift")
             if group == "vibe":
                 note = t("Tops the playlist up from your music sources (Last.fm and the others you've ticked), "
                         "not the AI, unless Drift using is set to AI. AI asks again with your description, "
@@ -4034,20 +4077,7 @@ class SettingsTab(tk.Frame):
                 share = min(100, max(10, int(p.env.get(f"DEEP_CUTS_{g}_SHARE") or 10) // 10 * 10))
             except ValueError:
                 share = 10
-            if group == "artists":
-                what = t("Tops the playlist up with the artists in the seed's genre you've played least lately, "
-                         "then their top tracks, so the corners of your collection get a turn.")
-            elif group == "vibe":
-                what = t("Tops the playlist up with the tracks in the seed's genre you've played least (the genre "
-                         "most of the AI's picks share, as there's no seed track), so the corners of your "
-                         "collection get a turn.")
-            else:
-                what = t("Tops the playlist up with the tracks in the seed's genre you've played least, so the "
-                         "corners of your collection get a turn.")
-            switch = t("Switch it on, Spaced or Shuffled, here.")
-            begin(group, t("Deep Cuts"),
-                  what + " " + switch + " " + t("The genre comes from your own Genre tags, so this works best when "
-                                                "they're well organised."))
+            begin(group, t("Deep Cuts"), tour.note_for("Deep Cuts"))
             row = tk.Frame(where["box"])
             mode = (p.env.get(f"DEEP_CUTS_{g}") or "off").strip().lower()
             tk.Label(row, text=t("Deep Cuts")).pack(side="left")
@@ -4077,11 +4107,7 @@ class SettingsTab(tk.Frame):
         def nonstop(group):
             """The Non-stop section: its tick box, then how this option's playlists carry on."""
             g, cfg = group.upper(), nonstop_cfg[group]
-            begin(group, t("Non-stop"),
-                  t("When the last track of a playlist 24bit7 built starts playing, more are added to the end, "
-                  "so the music doesn't stop. A playlist keeps following these settings all evening, even "
-                  "after it carries on as Similar Tracks or Similar Artists. Only playlists 24bit7 sent are "
-                  "topped up: an album or playlist you start in JRiver yourself ends as normal."))
+            begin(group, t("Non-stop"), tour.note_for("Non-stop"))
             box = where["box"]
             p.vars[f"NONSTOP_{g}"] = tk.BooleanVar(value=cfg["on"])
             p.vars[f"NONSTOP_{g}_MODE"] = tk.StringVar(value=cfg.get("mode", "journey"))
@@ -4177,7 +4203,7 @@ class SettingsTab(tk.Frame):
             """The Hidden Tracks section for one Play option."""
             g = group.upper()
             on, minutes = closer_cfg[group]
-            begin(group, t("Hidden Tracks"))
+            begin(group, t("Hidden Tracks"), tour.note_for("Hidden Tracks"))
             row = tk.Frame(where["box"])
             p.vars[f"SKIP_LONG_CLOSERS_{g}"] = tk.BooleanVar(value=on)
             p.vars[f"LONG_CLOSER_MINUTES_{g}"] = tk.StringVar(value=str(minutes))
@@ -4200,7 +4226,7 @@ class SettingsTab(tk.Frame):
         def fallback(group):
             """The If All Else Fails section: when a build finds nothing, shuffle, run a file or play a playlist."""
             key = f"IF_ALL_ELSE_FAILS_{group.upper()}"
-            begin(group, t("If All Else Fails"))
+            begin(group, t("If All Else Fails"), tour.note_for("If All Else Fails"))
             p.vars[key] = tk.BooleanVar(value=str(p.env.get(key, "0")).strip().lower() in ("1", "true", "yes"))
             mode = tk.StringVar(value=option_label(FALLBACK_MODE_OPTIONS,
                                                    p.env.get(f"{key}_MODE", "shuffle").strip().lower()))
@@ -4270,7 +4296,7 @@ class SettingsTab(tk.Frame):
         def run_after(group):
             """The Run After Building section: a file to run once the playlist is in JRiver."""
             key = f"RUN_AFTER_{group.upper()}"
-            begin(group, t("Run After Building"))
+            begin(group, t("Run After Building"), tour.note_for("Run After Building"))
             p.vars[key] = tk.BooleanVar(value=p.env.get(key, "0") in ("1", "true", "yes"))
             p.vars[f"{key}_PATH"] = tk.StringVar(value=p.env.get(f"{key}_PATH", ""))
             row = tk.Frame(where["box"])
@@ -4297,7 +4323,7 @@ class SettingsTab(tk.Frame):
 
         # --- Similar Artists ---
         if kind == "artists":
-            begin("artists", t("Playlist Selection"))
+            begin("artists", t("Playlist Selection"), tour.note_for("Playlist Selection"))
             current = [("tick", "SIMILAR_ARTIST_TRACK_LIMIT", "1"), t("Limit To"), ("SIMILAR_ARTIST_TRACK_COUNT", "30", 5, 100),
                        t("tracks, from"), ("SIMILAR_ARTIST_LIMIT", "20", 1, 50), t("artists, pick"),
                        ("TRACKS_PER_ARTIST_PICK", "3", 1, 20), t("of each artist's top"), ("TRACKS_PER_ARTIST_POOL", "5", 1, 20),
@@ -4331,7 +4357,7 @@ class SettingsTab(tk.Frame):
 
         # --- Similar Tracks ---
         if kind == "tracks":
-            begin("tracks", t("Playlist Selection"))
+            begin("tracks", t("Playlist Selection"), tour.note_for("Playlist Selection"))
             current = [t("Find"), ("SIMILAR_TRACK_COUNT", "30", 5, 100), t("tracks, at most"), ("SIMILAR_TRACK_PER_ARTIST", "3", 1, 20),
                        t("per artist")]
             pn = [t("Sample"), ("PN_SAMPLE_TRACKS", "5", 1, 20), t("tracks from Playing Now, take"), ("PN_TRACKS_PER_SAMPLE", "6", 1, 50),
@@ -4367,7 +4393,7 @@ class SettingsTab(tk.Frame):
 
         # --- Artist's Top Tracks ---
         if kind == "top":
-            begin("top", t("Playlist Selection"))
+            begin("top", t("Playlist Selection"), tour.note_for("Playlist Selection"))
             review_header("top")
             spin(t("Number of tracks (1-20)"), "TOP_TRACKS_COUNT", "10", 1, 20, t(TOP_TARGET_HELP))
             review_twin("top", "TOP_TRACKS_COUNT", "10", 1, 20)
@@ -4381,7 +4407,7 @@ class SettingsTab(tk.Frame):
 
         # --- Vibe Playlist ---
         if kind == "vibe":
-            begin("vibe", t("Playlist Selection"))
+            begin("vibe", t("Playlist Selection"), tour.note_for("Playlist Selection"))
             spin(t("Number of tracks"), "VIBE_TRACK_COUNT", "20", 5, 100, t(TARGET_HELP))
             spin(t("Most tracks per artist"), "VIBE_PER_ARTIST", "3", 1, 20,
                  t("The AI often suggests several songs by one artist. Once an artist has this many, the rest "
