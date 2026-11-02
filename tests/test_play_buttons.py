@@ -149,7 +149,7 @@ def test_more_options_switches_are_overrides_and_a_click_always_builds(app, ui, 
     ui.pump(0.2)
     assert ran == ["Similar Tracks"], "one click builds"
     text = p.log.get("1.0", "end")
-    assert "override every playlist's own settings" in text, "opening the bar said what the switches do"
+    assert "More Options Open: any settings set here override" in text, "opening the bar said what the switches do"
     assert "showing" not in text and "armed" not in text, "and nothing about arming"
     p._show_more(False, save=False)
     assert not ui.errors, ui.errors[0]

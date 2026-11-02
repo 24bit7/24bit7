@@ -48,26 +48,36 @@ def test_the_three_switches_start_off_and_a_click_saves_and_says(app, ui):
     assert not ui.errors, ui.errors[0]
 
 
-def test_opening_the_row_says_it_overrides_and_closing_says_the_pages_decide(app, ui):
+def test_opening_the_row_says_one_line_and_the_first_time_a_dialog_too(app, ui, monkeypatch):
+    """Ben, 2 Nov 2026: the long note went unread. One short line each time the row opens, nothing on closing,
+    and the first time it's opened by hand a dialog says it properly. Start-up restoring an open row: the line only."""
+    import gui
     import overrides
     p = ui.play
     p._end_greeting(keep=False)
+    shown = []
+    monkeypatch.setattr(gui.messagebox, "showinfo", lambda title, text, **kw: shown.append((title, text)))
     overrides.set_switches({"moderator": False, "deep_cuts": True, "nonstop": False})
+    line = ("More Options Open: any settings set here override your playlists' own settings. The override ends when "
+            "More Options closes.")
+    assert overrides.told() is False
     p._show_more(True)
     ui.pump(0.3)
-    assert ("Note: Moderator, Deep Cuts and Non-stop here override every playlist's own settings while this row is "
-            "open (Moderator off, Deep Cuts on, Non-stop off). Close the row and the playlists' pages decide again.") in log(p)
+    assert log(p).count(line) == 1
     assert p.override_cbs["deep_cuts"].get() == "On", "the switches read what's saved when the row opens"
+    assert len(shown) == 1 and shown[0][0] == "More Options" and shown[0][1].startswith(line), "the one-off dialog"
+    assert "Use Its Settings" in shown[0][1] and overrides.told() is True
     p._show_more(False)
     ui.pump(0.3)
-    assert "Note: More Options closed. Each playlist's own settings decide again." in log(p)
-    before = log(p)
-    p._show_more(True, save=False)   # as start-up restores a row left open: said then too
+    assert "closed" not in log(p), "nothing said on closing: the line already said when the override ends"
+    p._show_more(True)
     ui.pump(0.3)
-    assert log(p).count("override every playlist's own settings") == before.count("override every playlist's own settings") + 1
+    assert log(p).count(line) == 2 and len(shown) == 1, "the line again, the dialog never again"
+    p._show_more(False)
+    p._show_more(True, save=False)   # as start-up restores a row left open
+    ui.pump(0.3)
+    assert log(p).count(line) == 3 and len(shown) == 1, "the line at start-up too, never the dialog"
     p._show_more(False, save=False)
-    ui.pump(0.3)
-    assert log(p).count("More Options closed") == 1, "start-up restoring a closed row says nothing"
     assert not ui.errors, ui.errors[0]
 
 

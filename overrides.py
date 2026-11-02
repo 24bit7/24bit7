@@ -75,6 +75,21 @@ def set_switches(values):
     return dict(data["switches"])
 
 
+OPEN_LINE = N_("More Options Open: any settings set here override your playlists' own settings. The override ends "
+               "when More Options closes.")
+
+
+def told():
+    """Whether the one-off dialog about the switches has been shown (the first time the row is opened by hand)."""
+    return bool(playmix.load().get("told"))
+
+
+def set_told():
+    data = playmix.load()
+    data["told"] = True
+    playmix._save(data)
+
+
 def active():
     """Whether the switches are in force: the More Options row is open."""
     return playmix.is_open()

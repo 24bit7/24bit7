@@ -1115,17 +1115,19 @@ class PlayTab(tk.Frame):
         if save:
             playmix.set_open(open_)
         self._update_more_label()
-        if save or open_:   # opened or closed by hand, or found open at start-up: say what the row does
-            self.after_idle(lambda: self._say_overrides(open_))
+        if open_:   # opened by hand, or found open at start-up: one line saying what the row does
+            self.after_idle(lambda: self._say_overrides(by_hand=save))
 
-    def _say_overrides(self, open_):
-        if open_:
-            self._sync_override_switches()
-            self._append_log(t("Note: Moderator, Deep Cuts and Non-stop here override every playlist's own settings "
-                               "while this row is open ({switches}). Close the row and the playlists' pages decide again.",
-                               switches=overrides.summary()))
-        else:
-            self._append_log(t("Note: More Options closed. Each playlist's own settings decide again."))
+    def _say_overrides(self, by_hand):
+        """One console line each time the row opens; the first time it's opened by hand, a dialog too (Ben, 2 Nov 2026)."""
+        self._sync_override_switches()
+        self._append_log(t(overrides.OPEN_LINE))
+        if by_hand and not overrides.told():
+            overrides.set_told()
+            messagebox.showinfo(t("More Options"), t(overrides.OPEN_LINE) + "\n\n"
+                                + t("The Moderator, Deep Cuts and Non-stop switches here are Off or On. Off turns the "
+                                    "thing off for every playlist; On runs it as the playlist's own page says. Drag a "
+                                    "playlist onto Use Its Settings to set the switches from its page."), parent=self)
 
     def _sync_override_switches(self):
         """The three switches read what's saved (after a change, a drop on Use Its Settings, or at start-up)."""
