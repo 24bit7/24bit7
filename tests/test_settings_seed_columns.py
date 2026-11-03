@@ -42,7 +42,7 @@ def test_the_standard_playlist_has_both_seed_lines_and_the_review_tick(app, ui):
     page, p = option_pair(ui)
     texts = texts_in(page)
     for text in ("Playlist Selection", "When Seed is Current Track", "When Seed is Playing Now", "Limit To", "tracks, from",
-                 "artists, pick", "of each artist's top", "artists from Playing Now, take", "Separate Settings for Review Mode"):
+                 "artists, pick", "of each artist's top", "artists from Playing Now, take", "Review Mode uses the same settings"):
         assert text in texts, text
     assert not {"SEED", "REVIEW MODE", "Mirror Playing Now", "Artists sampled from Playing Now"} & set(texts), "the columns are gone"
     assert set(p.seed_boxes) == {"current", "pn", "review_current", "review_pn"}
@@ -72,22 +72,29 @@ def test_playing_now_figures_save_to_env(app, ui):
     assert app.engine.playing_now_artist_figures()["PN_SAMPLE_ARTISTS"] == 7
 
 
-def test_separate_review_settings_show_the_orange_box_and_save_as_review_keys(app, ui):
+def test_review_mode_uses_the_same_settings_unticked_shows_the_orange_box_and_saves_as_review_keys(app, ui):
+    """Ben, 3 Nov 2026: "[x] Review Mode uses the same settings" on its own line under Skip tracks; unticked, the
+    orange box with Review Mode's own lines opens."""
     import settings_gui
+    from tkinter import ttk
     page, p = option_pair(ui)
     s = ui.settings
-    var, frame = s._review_vars["separate"], None
-    assert var.get() is False and all(v.get() for v in s._review_vars["same"].values()), "mirroring to start"
+    var = s._review_vars["same"]["artists"]
+    assert var.get() is True, "the same settings to start"
+    ticks = {w.cget("text"): w for w in walk(page) if isinstance(w, ttk.Checkbutton)}
+    assert "Review Mode uses the same settings" in ticks and "Separate Settings for Review Mode" not in ticks
+    skip = ticks["Skip tracks played in the last"]
+    assert ticks["Review Mode uses the same settings"].winfo_rooty() > skip.winfo_rooty(), "on a line below Skip tracks"
     sb = p.seed_boxes["review_pn"]["PN_ARTISTS_PER_SAMPLE"]
-    assert not sb.winfo_ismapped(), "the review lines are hidden while mirroring"
-    var.set(True)
+    assert not sb.winfo_ismapped(), "the review lines are hidden while it's the same"
+    var.set(False)
     ui.pump(0.3)
     assert settings_gui.read_env().get("REVIEW_SAME_ARTISTS") == "0" and settings_gui.read_env().get("REVIEW_SAME_ARTISTS_PN") == "0"
-    assert sb.winfo_ismapped() and not any(v.get() for v in s._review_vars["same"].values())
+    assert sb.winfo_ismapped()
     set_box(sb, "2", ui)
     assert app.engine.playing_now_artist_figures(review=True)["PN_ARTISTS_PER_SAMPLE"] == 2
     assert app.engine.playing_now_artist_figures(review=False)["PN_ARTISTS_PER_SAMPLE"] == 4
-    var.set(False)
+    var.set(True)
     ui.pump(0.3)
     assert settings_gui.read_env().get("REVIEW_SAME_ARTISTS") == "1" and not sb.winfo_ismapped()
     assert not ui.errors, ui.errors

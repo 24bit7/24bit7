@@ -121,7 +121,8 @@ def blank(name, kind):
             "parent": "", "default": "",   # nested under another playlist; a parent's default child (see nest)
             "subtitle": "",                # Title in Menu: how its row reads in a menu (a parent's own row, or a child's)
             "made": "",                    # the ready-made recipe it was made as (READY_MADE key), if any
-            "device": ""}                  # the Alexa device whose phrase it is: off the Play tab, in the Device Playlists box
+            "device": "",                  # the Alexa device whose phrase it is: off the Play tab, in the Devices box
+            "copied_from": ""}             # a device's own: the playlist it was copied from, for Copy Settings From
 
 
 def tidy(item):
@@ -157,6 +158,7 @@ def tidy(item):
     out["subtitle"] = str(out.get("subtitle") or "").strip()
     out["made"] = str(out.get("made") or "")
     out["device"] = str(out.get("device") or "")
+    out["copied_from"] = str(out.get("copied_from") or "")   # a device's own: the playlist it was copied from (3 Nov 2026)
     out["mix"] = tidy_mix(out.get("mix"), len(out["configs"]) + (0 if kind is None else 1))
     return out
 

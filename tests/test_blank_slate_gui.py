@@ -41,7 +41,7 @@ def test_a_blank_slates_page_adds_its_first_config_and_can_lose_it_again(app, ui
     assert "Config 1" not in labels(s._button_inner) and s._button_page is None
     s._config_add(buttons.get(new["id"]), "tracks")
     ui.pump(0.5)
-    texts = labels(s._button_inner)   # the scrolling page, inside a canvas
+    texts = [t_ for child in s._button_inner.winfo_children()[1:] for t_ in labels(child)]   # the page below its header
     assert "Config 1" in texts and "Track Matching" not in texts, "the kind sits in the heading's dropdown, not a label"
     assert s._button_page is not None and s._button_page.config_kind == "tracks"
     assert "Remove" in texts, "a made playlist's Config 1 can be removed"
@@ -52,7 +52,7 @@ def test_a_blank_slates_page_adds_its_first_config_and_can_lose_it_again(app, ui
     std = buttons.standard("artists")
     s.show_playlist(std["id"])
     ui.pump(0.5)
-    first_block = s._button_inner.winfo_children()[0]
+    first_block = s._button_inner.winfo_children()[1]   # after the header
     assert "Config 1" in shown_labels(first_block), "the standard playlist's page is up"
     assert "Remove" not in shown_labels(first_block), "a standard playlist keeps its own config"
     assert not ui.errors, ui.errors[0]

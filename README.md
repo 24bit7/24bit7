@@ -216,7 +216,7 @@ Each playlist's page can run a file of your choice once its playlist is in JRive
 
 24bit7 can take commands from an Alexa skill you host yourself. This is not a one-click setup: you need your own Amazon developer account and Alexa-hosted skill, a Tailscale Funnel (or similar) to let Amazon reach 24bit7 on your PC, and 24bit7 left running, which Start with Windows and the tray take care of. The skill's code and interaction model are in the `alexa` folder of this repository. The user manual's **[Voice Commands](docs/MANUAL.md#voice-commands)** chapter explains what it does, and **[Setting up the Alexa skill](docs/MANUAL.md#setting-up-the-alexa-skill)** takes you through every step. Both are linked from Settings > Voice Commands and Settings > About too.
 
-Settings > Voice Commands holds the key the skill sends. Each Alexa device has a tab in the Device Playlists box under Settings > Playlist Settings: its name, the zone it plays to, and the playlist each phrase runs (the standard playlist of that kind until you give the device its own). Two rooms can run two sets of settings side by side, for A/B testing or for different people.
+Settings > Voice Commands holds the key the skill sends. Each Alexa device has a tab in the Devices box under Settings > Playlist Settings: its name, the zone it plays to, and the playlist each phrase runs (any of your playlists as it is, or the device's own copy). Two rooms can run two sets of settings side by side, for A/B testing or for different people.
 
 Once it is set up, each device plays to its zone:
 
@@ -305,14 +305,21 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.30.0
+## What's new in 1.30.1
+
+- **Playlist Settings in smaller text**, the size of its notes, with **A-** and **A+** at the top right for the text size of every Settings screen. The left column and the page each scroll as one piece, header included.
+- **Consensus** and **Moderator** sit under the configs with the other whole-playlist sections. The Preview is half the size, beside Name, Take a Tour sits under Simple / Advanced, and the corners are square again.
+- **Devices** (was Device Playlists): a row opens a page with **Copy Settings From:** and a list of your playlists. Ticked, the phrase runs that playlist as it is, any kind; untick it for the device's own copy to change.
+- **Review Mode uses the same settings**, a tick under Skip tracks, replaces Separate Settings for Review Mode and the Review Mode column on Artist's Top Tracks.
+
+### Earlier: 1.30.0
 
 - **Playlist Settings** replaces Settings > Playlists and Settings > Devices: **Your Playlist Buttons** (no ticks: a playlist is a button or a device's) over **Device Playlists**, a tab per Alexa device with its zone, Switch To and the playlist each phrase runs, greyed as Standard until the device has its own.
 - **Simple or Advanced**, one switch for you. Simple shows each playlist as one config with Sources, Playlist Selection and Filters, and nothing else runs. Advanced shows every section, open when it's on and closed when it's off, each header with a two-sentence note, and **Take a Tour** walks them on Artist + Guests.
 - **Each config is a box**: sources across, Must agree under them, Playlist Selection as sentences ("Limit To 30 tracks, from 20 artists, pick 3 of each artist's top 5 tracks"), one tick for Separate Settings for Review Mode, and Filters of its own at the end. **Name**, **Title in Menu** and a **Preview** of the button top every page.
 - **More Options** gets its **Moderator**, **Deep Cuts** and **Non-stop** switches back as overrides: open, they beat every playlist's settings; closed, the pages decide. A third drop pill, **Use Its Settings**, sets them from a playlist.
 - **Consensus** (was Inner Circle) can finish a short playlist with plain matching; **Artist + Guests** was Headliner. Seed on Playing Now colours what follows it in teal, or leaf green if your accent is teal.
-- **Rounded corners** on every box in Settings, rows that wrap when the page is narrow, and a German fix: the Mix section's Pattern row shows and saves the right Combine.
+- Rows that wrap when the page is narrow, and a German fix: the Mix section's Pattern row shows and saves the right Combine.
 
 ### Earlier: 1.29.0
 

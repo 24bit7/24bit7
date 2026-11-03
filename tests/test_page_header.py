@@ -28,7 +28,7 @@ def test_title_in_menu_on_a_child_and_the_preview_shows_the_parents_menu(app, ui
     assert s._preview_rows == ["Artist's Top Tracks", "Ten, Best First"], "the child's preview is its parent's menu"
     texts = [s._preview.itemcget(i, "text") for i in s._preview.find_all() if s._preview.type(i) == "text"]
     assert "Artist's Top Tracks" in texts and "Ten, Best First" in texts and "default" in texts, texts
-    assert "Preview" in labels(s._preview_frame)
+    assert "Preview:" in labels(s._preview_frame), "Preview: to the left of the picture (Ben, 3 Nov 2026)"
     pick_button(ui, "Artist's Top Tracks")
     assert s._preview_rows == ["Artist's Top Tracks", "Ten, Best First"], "the parent's preview is its own menu"
     pick_button(ui, "Similar Tracks")
@@ -70,7 +70,7 @@ def test_shortcut_is_a_section_below_the_configs_and_a_new_page_opens_on_the_nam
     texts = labels(s._button_right)
     assert "Shortcut" in texts
     heads = [w for w in walk(s._button_inner) if isinstance(w, tk.Label) and w.cget("text") in ("Non-stop", "Shortcut", "Hidden Tracks")
-             and "bold" in str(w.cget("font"))]
+             and str(w.cget("font")) == settings_gui.HEADING_FONT]
     order = []
     for w in sorted(heads, key=lambda w: w.winfo_rooty()):   # the section headers, top to bottom, each once
         if w.cget("text") not in order:

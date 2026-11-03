@@ -104,7 +104,7 @@ def rows(device_id):
         chosen = record["buttons"].get(phrase)
         b = buttons.get(chosen) if chosen else None
         own = b is not None and b.get("device") == str(device_id)
-        if b is None or not (own or buttons.has_kind(b, PHRASE_KINDS[phrase])):
+        if b is None:
             b, own = buttons.standard(PHRASE_KINDS[phrase]), False
         out.append((phrase, label, b, own))
     return out
@@ -136,6 +136,7 @@ def make_own(device_id, phrase, source=("standard", None)):
     for b in items:
         if b["id"] == made["id"]:
             b["device"], b["parent"], b["default"] = str(device_id), "", ""
+            b["copied_from"] = what if how == "copy" else ""   # shown greyed in Copy Settings From while it's the device's own
             b["name"] = buttons.unique_name(f"{name_of(device_id)} {t(buttons.KIND_NAMES[b['kind']])}")                 if b["kind"] is not None else buttons.unique_name(name_of(device_id))
         elif b.get("default") == made["id"]:
             b["default"] = ""
@@ -160,6 +161,22 @@ def reset(device_id, phrase):
         buttons.remove(chosen)
 
 
+def link(device_id, phrase, button_id):
+    """
+    Copy Settings From, ticked (Ben, 3 Nov 2026): the phrase runs this playlist as it is, any kind; the standard of
+    the phrase's kind is stored as no choice. A device's own playlist for the phrase is deleted.
+    """
+    import buttons
+    reset(device_id, phrase)
+    standard = buttons.standard(PHRASE_KINDS[phrase])
+    if button_id and not (standard and standard["id"] == button_id):
+        data = load()
+        record = data.get(str(device_id)) or blank()
+        record["buttons"][phrase] = button_id
+        data[str(device_id)] = record
+        save(data)
+
+
 def restore_defaults(device_id):
     """Restore Default Device Playlists: every slot back to the standard."""
     for phrase in PHRASE_KINDS:
@@ -175,8 +192,7 @@ def playlist_for(device_id, phrase):
         return None
     chosen = for_device(device_id)["buttons"].get(phrase) if device_id else None
     button = buttons.get(chosen) if chosen else None
-    own = button is not None and button.get("device") == str(device_id)   # the device's own runs whatever kind it is
-    return button if button and (own or buttons.has_kind(button, kind)) else buttons.standard(kind)
+    return button or buttons.standard(kind)   # any kind: the device's own, or a playlist it copies settings from (3 Nov 2026)
 
 
 def used_by(button_id):

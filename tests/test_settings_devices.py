@@ -1,8 +1,9 @@
 """
-The Device Playlists box under Settings > Playlist Settings (Ben, 2 Nov 2026), in place of the Devices
-tab: a tab per Alexa device; Plays to, Remove, Enable Switch To and Last heard; four phrase rows, each
-the playlist that phrase runs, greyed with a Standard tag until the device has its own; Restore Default
-Device Playlists. The Zones section stays under Other and Voice Commands keeps the switch timing.
+The Devices box under Settings > Playlist Settings (Ben, 2 Nov 2026; renamed from Device Playlists and Last
+heard dropped, 3 Nov 2026), in place of the Devices tab: a tab per Alexa device; Plays to, Remove and Enable
+Switch To; four phrase rows, each the playlist that phrase runs, greyed until the device has its own (tagged
+Standard while it's the standard); Restore Default Device Playlists. A row opens its page with "Copy Settings
+From:" on the first row. The Zones section stays under Other and Voice Commands keeps the switch timing.
 """
 
 import tkinter as tk
@@ -35,39 +36,67 @@ def test_the_box_lists_the_devices_as_tabs_with_the_standards_greyed(app, ui):
                             ("Tracks like this: Similar Tracks", "Standard"), ("Genre: AI Playlist", "Standard")]
     texts = labels(s._device_head)
     assert "Plays to" in texts and "Remove" in texts and "Enable Switch To" in texts
-    assert any(x.startswith("Last heard") for x in texts)
-    assert "Your Playlist Buttons" in labels(s._buttons_outer) and "Device Playlists" in labels(s._buttons_outer)
+    assert not any(x.startswith("Last heard") for x in texts), "Last heard went (Ben, 3 Nov 2026)"
+    outer = labels(s._buttons_outer)
+    assert "Your Playlist Buttons" in outer and "Devices" in outer and "Device Playlists" not in outer, "renamed Devices"
     assert not ui.errors, ui.errors[0]
 
 
-def test_a_greyed_row_makes_the_devices_own_and_right_click_puts_the_standard_back(app, ui, monkeypatch):
+def test_copy_settings_from_links_hides_the_page_and_unticking_makes_the_devices_own(app, ui, monkeypatch):
+    """Ben, 3 Nov 2026: a row opens a page whose first row is "[x] Copy Settings From: [playlist]", no explanation.
+    Ticked, the phrase runs that playlist as it is (any kind, chosen in the dropdown) and nothing shows below.
+    Unticked, the device gets its own copy, set up below, with the dropdown greyed at what it was copied from.
+    Ticking again asks, then deletes the device's own."""
     import buttons
     import devices
-    import settings_gui
+    from tkinter import messagebox
     s = box_page(ui)
-    opened = []
-
-    class FakePrompt:
-        def __init__(self, parent, device=None):
-            opened.append(device)
-            self.result = ("template", "inner_circle")
-    monkeypatch.setattr(settings_gui, "AddPlaylistPrompt", FakePrompt)
-    monkeypatch.setattr(s, "wait_window", lambda w: None)
-    s._device_make_own("music_like", "Music like")
+    standard = buttons.standard("top")
+    s._device_rows[1][1].event_generate("<Button-1>")   # Songs by, greyed
     ui.pump(0.4)
-    assert opened == [("Kitchen Echo", "Music like")]
+    assert s._from_device == (KITCHEN, "songs_by") and s._button_id == standard["id"], "the playlist it runs"
+    assert [row.chosen for _p, row, _b, _o in s._device_rows] == [False, True, False, False], "the clicked row is outlined"
+    assert not any(r[1].chosen for r in s._button_rows), "only the device row is outlined, not the button it copies"
+    assert s._device_strip_tick.cget("text") == "Copy Settings From:" and s._device_strip_tick.instate(["selected"])
+    assert labels(s._device_strip) == ["Copy Settings From:"], "the tick alone, no explanation (Ben, 3 Nov 2026)"
+    assert s._device_strip_from.get() == "Artist's Top Tracks" and "Similar Artists" in s._device_strip_from.cget("values")
+    assert s._button_page is None and not s._name_box.winfo_ismapped(), "ticked: nothing below the line"
+    assert s._preview is None and s._preview_frame is None, "no Preview on a device's page (Ben, 3 Nov 2026)"
+    # another playlist in the dropdown, any kind: linked as it is, no copy
+    s._device_strip_from.set("Similar Artists")
+    s._device_strip_from.event_generate("<<ComboboxSelected>>")
+    ui.pump(0.4)
+    linked = buttons.standard("artists")
+    assert devices.playlist_for(KITCHEN, "songs_by")["id"] == linked["id"] and buttons.of_device(KITCHEN) == []
+    assert row_texts(s)[1] == ("Songs by: Similar Artists", "Standard") and s._button_page is None
+    # unticked: the device's own, copied from the chosen one, its settings below
+    s._device_strip_tick.invoke()
+    ui.pump(0.5)
     own = buttons.of_device(KITCHEN)
-    assert [b["name"] for b in own] == ["Kitchen Echo Similar Artists"] and own[0]["made"] == "inner_circle"
-    assert row_texts(s)[0] == ("Music like: Kitchen Echo Similar Artists", ""), "its own: full colour, no tag"
-    assert s._button_id == own[0]["id"] and s._button_page.button["id"] == own[0]["id"], "its page opened on the right"
-    assert "Kitchen Echo's own playlist for \"Music like\"" in " ".join(labels(s._button_right))
-    assert "Kitchen Echo Similar Artists" not in s._button_names(), "not in the buttons list"
-    assert "Kitchen Echo Similar Artists" not in [b._name for b in ui.play.play_buttons], "nor on the Play tab"
-    assert devices.playlist_for(KITCHEN, "music_like")["id"] == own[0]["id"]
-    s._device_back_to_standard("music_like", own[0])
+    assert len(own) == 1 and own[0]["kind"] == "artists" and own[0]["copied_from"] == linked["id"]
+    assert devices.playlist_for(KITCHEN, "songs_by")["id"] == own[0]["id"] and s._button_id == own[0]["id"]
+    assert row_texts(s)[1] == (f"Songs by: {own[0]['name']}", ""), "its own: full colour, no tag"
+    assert not s._device_strip_tick.instate(["selected"]) and s._device_strip_from.instate(["disabled"])
+    assert s._device_strip_from.get() == "Similar Artists", "greyed at what it was copied from"
+    assert s._button_page is not None and s._name_box.winfo_ismapped(), "its settings show"
+    assert s._preview is None, "no Preview on the device's own page either"
+    assert own[0]["name"] not in s._button_names(), "not in the buttons list"
+    asked = []
+    monkeypatch.setattr(messagebox, "askyesno", lambda *a, **k: asked.append(a[1]) or False)
+    s._device_strip_tick.invoke()
     ui.pump(0.3)
-    assert buttons.of_device(KITCHEN) == [] and row_texts(s)[0][1] == "Standard"
-    assert s._button_id == buttons.buttons_only()[0]["id"], "the page falls back to the first button"
+    assert asked and buttons.of_device(KITCHEN), "a no keeps it"
+    assert not s._device_strip_tick.instate(["selected"])
+    monkeypatch.setattr(messagebox, "askyesno", lambda *a, **k: True)
+    s._device_strip_tick.invoke()
+    ui.pump(0.4)
+    assert buttons.of_device(KITCHEN) == [] and devices.playlist_for(KITCHEN, "songs_by")["id"] == linked["id"]
+    assert s._from_device == (KITCHEN, "songs_by") and s._device_strip_tick.instate(["selected"])
+    pick = next(r for r in s._button_rows if r[0] == buttons.standard("tracks")["id"])
+    s._pick_button(pick[0])
+    ui.pump(0.4)
+    assert s._from_device is None and s._device_strip is None, "a list row leaves the device's page"
+    assert not any(row.chosen for _p, row, _b, _o in s._device_rows), "no device row outlined"
     assert not ui.errors, ui.errors[0]
 
 
@@ -100,7 +129,7 @@ def test_zone_switch_rename_and_remove_live_in_the_box(app, ui, monkeypatch):
     assert not ui.errors, ui.errors[0]
 
 
-def test_restore_default_device_playlists_and_the_add_window_for_a_device(app, ui, monkeypatch):
+def test_restore_default_device_playlists(app, ui, monkeypatch):
     import buttons
     import devices
     import settings_gui
@@ -115,18 +144,11 @@ def test_restore_default_device_playlists_and_the_add_window_for_a_device(app, u
     s._device_restore_defaults()
     ui.pump(0.3)
     assert buttons.of_device(KITCHEN) == [] and [tag for _t, tag in row_texts(s)] == ["Standard"] * 4
-    win = settings_gui.AddPlaylistPrompt(ui.settings, device=("Kitchen Echo", "Songs by"))
-    ui.pump(0.5)
-    assert win.title() == 'Give Kitchen Echo its own "Songs by" playlist'
-    assert set(win._tabs) == {"existing", "template"}, "no New for a device"
-    assert win.ok_button.cget("text") == "Use a Copy"
-    assert "A copy of it becomes Kitchen Echo's own for \"Songs by\"" in win.existing_note.cget("text")
-    win._pick_tab("template")
-    ui.pump(0.2)
-    assert win.ok_button.cget("text") == "Use the Template"
-    win._tab_by(1)
-    assert win._tab == "existing", "round the two"
-    win.destroy()
+    s._device_slot_page(KITCHEN, "music_like")
+    devices.make_own(KITCHEN, "music_like")
+    s._device_restore_defaults()
+    ui.pump(0.3)
+    assert s._from_device == (KITCHEN, "music_like") and s._button_id == buttons.standard("artists")["id"],         "the open device page shows the standard after a restore"
     assert not ui.errors, ui.errors[0]
 
 

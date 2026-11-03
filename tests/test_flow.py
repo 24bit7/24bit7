@@ -21,7 +21,7 @@ def root():
 
 
 def words_of(frame):
-    return [w for w in frame.winfo_children() if not getattr(w, "corner_tile", False)]
+    return list(frame.winfo_children())
 
 
 def rows_of(frame):
@@ -43,7 +43,6 @@ def test_words_wrap_when_the_box_is_narrow_and_unwrap_when_it_widens(root):
     root.update_idletasks()
     root.update()
     assert set(rows_of(row)) == {0}, "room enough: one line"
-    tiles = tabs.corner_tiles(words[1], radius=3)   # a number box's tiles sit in the row too, but aren't words
     xs = [int(w.place_info()["x"]) for w in words_of(row)]
     assert xs == sorted(xs) and xs[0] == 0, "left to right from the edge"
     box.configure(width=300)
@@ -54,7 +53,6 @@ def test_words_wrap_when_the_box_is_narrow_and_unwrap_when_it_widens(root):
     assert row.winfo_reqwidth() <= 300, "the frame is no wider than its room"
     second = [w for w in words_of(row) if rows_of(row)[words_of(row).index(w)] == 1]
     assert int(second[0].place_info()["x"]) == 0, "a new line starts at the edge, not under the first line's columns"
-    assert all(str(tl.place_info()["in"]) == str(words[1]) for tl in tiles), "the tiles still ride on their widget"
     box.configure(width=900)
     root.update_idletasks()
     root.update()

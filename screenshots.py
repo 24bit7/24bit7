@@ -395,10 +395,12 @@ def start_demo(gui, temp):
     buttons.set_settings(kitchen["id"], dict(kitchen["settings"], AI_MODERATOR_TRACKS="balanced", SIMILAR_TRACK_COUNT="20"))
     buttons.set_filters(kitchen["id"], [stereo["id"]])
     buttons.set_shortcut(kitchen["id"], "Ctrl+Alt+2")
-    items = buttons.load()   # the Kitchen Echo's own playlist: off the Play tab, in the Device Playlists box (1.30)
+    items = buttons.load()   # the Kitchen Echo's own playlist: off the Play tab, in the Devices box (1.30)
+    copied = buttons.standard("tracks")
     for b in items:
         if b["id"] == kitchen["id"]:
             b["device"] = "demo-kitchen"
+            b["copied_from"] = copied["id"] if copied else ""   # Copy Settings From shows it greyed (1.30.1)
     buttons.save(items)
     record = devices.for_device("demo-kitchen")
     record["buttons"]["tracks_like"] = kitchen["id"]
@@ -743,13 +745,13 @@ def main():
                 play.settings._button_id = target["id"]
                 play.settings._buttons_refresh()
                 settle(root, 0.5)
-            elif action and action.startswith("device:"):   # the Device Playlists box on that device's tab, its first own playlist open
-                import buttons
-                play.settings._device_id = action.split(":")[1]
-                own = buttons.of_device(play.settings._device_id)
-                if own:
-                    play.settings._button_id = own[0]["id"]
+            elif action and action.startswith("device:"):   # the device's tab, its first own playlist open as its row opens it
+                import devices
+                device_id = action.split(":")[1]
+                play.settings._device_id = device_id
                 play.settings._buttons_refresh()
+                phrase = next((ph for ph, _l, _b, own in devices.rows(device_id) if own), "music_like")
+                play.settings._device_slot_page(device_id, phrase)   # with the strip at the top (3 Nov 2026)
                 settle(root, 0.5)
             elif action == "edit_filters":
                 dialog = play.settings._open_filters()

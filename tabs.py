@@ -614,86 +614,6 @@ def rounded_shape(widget, w, h, radius, fill, edge, line, bar=None, bar_h=0, ope
     return photo
 
 
-_CORNERS = {}       # corner tiles, one image per colour set and interpreter
-
-
-def corner_tiles(widget, radius=8, top=None, bottom=None, edge=None, outside=None, corners=None):
-    """
-    Softens the corners of a widget drawn with a one-pixel highlight edge (a Settings section,
-    a config box, a number box). Tk can't curve a frame, so this is the cheat (Ben, 2 Nov
-    2026): four small images laid over the corners, each the page colour outside the curve,
-    the edge colour along it (blended a pixel either side, so it reads smooth) and the
-    widget's inside colour within. They're placed at the corners, so they follow the widget
-    as it grows, fold away with it and go when it's destroyed. radius is in pixels at 100%
-    scaling. top and bottom are the colours inside the top and bottom corners (a header
-    bar's tint over a plain body); both default to the widget's own background. edge
-    defaults to the widget's highlight colour, outside to its parent's background. corners names
-    the colour inside one corner at a time ({"nw": ..., "se": ...}), for a box lit at one end.
-    """
-    try:
-        scale = max(1.0, widget.winfo_fpixels("1i") / 96.0)
-    except tk.TclError:
-        return []
-    r = max(2, int(round(radius * scale)))
-    edge = edge or widget.cget("highlightbackground")
-    outside = outside or widget.master.cget("bg")
-    inside = widget.cget("bg")
-    tiles = []
-    for corner, (relx, rely, anchor) in zip(("nw", "ne", "sw", "se"),
-                                            ((0, 0, "nw"), (1, 0, "ne"), (0, 1, "sw"), (1, 1, "se"))):
-        within = (corners or {}).get(corner) or (top if corner in ("nw", "ne") else bottom) or inside
-        photo = _corner_tile(widget, r, corner, edge, outside, within)
-        tile = tk.Label(widget.master, image=photo, bd=0, highlightthickness=0, padx=0, pady=0, takefocus=0)
-        tile.image = photo
-        tile.corner_tile = True   # not content: a flowed row leaves it to follow its widget
-        tile.place(in_=widget, relx=relx, rely=rely, anchor=anchor)
-        tiles.append(tile)
-    widget.bind("<Destroy>", lambda e: [tl.destroy() for tl in tiles if tl.winfo_exists()], add="+")
-    widget.corner_tiles = tiles
-    return tiles
-
-
-def _corner_tile(widget, r, corner, edge, outside, inside):
-    """One corner's image, r + 1 pixels square: the arc of a circle of radius r, one pixel wide."""
-    key = (id(widget.tk), r, corner, edge, outside, inside)
-    if key in _CORNERS:
-        return _CORNERS[key]
-    from PIL import Image, ImageTk
-    size = r + 1
-    e, o, i = (_rgba(widget, c)[:3] for c in (edge, outside, inside))
-    img = Image.new("RGB", (size, size), o)
-    px = img.load()
-    cx = cy = r   # the circle's centre is the pixel diagonally inside the arc
-    for x in range(size):
-        for y in range(size):
-            # the far column and row carry the straight edge on, so the tile joins the widget's own outline
-            d = ((x - cx) ** 2 + (y - cy) ** 2) ** 0.5
-            cover = max(0.0, 1.0 - abs(d - r))     # 1 on the arc, fading over a pixel either side
-            base = i if d < r else o
-            px[x, y] = tuple(round(base[k] + (e[k] - base[k]) * cover) for k in range(3))
-    flip = {"nw": None, "ne": Image.FLIP_LEFT_RIGHT, "sw": Image.FLIP_TOP_BOTTOM, "se": Image.ROTATE_180}[corner]
-    if flip is not None:
-        img = img.transpose(flip)
-    photo = ImageTk.PhotoImage(img, master=widget)
-    photo.pil = img   # the pixels, for tests
-    _CORNERS[key] = photo
-    return photo
-
-
-def dashed_round_rect(canvas, x0, y0, x1, y1, radius, colour, dash=(4, 3), width=1):
-    """A dashed rounded rectangle on a canvas (the Preview's frame, the Take a Tour box): four arcs and four lines."""
-    r = max(1, min(radius, (x1 - x0) // 2, (y1 - y0) // 2))
-    kw = dict(outline=colour, dash=dash, width=width, style="arc")
-    ids = [canvas.create_arc(x0, y0, x0 + 2 * r, y0 + 2 * r, start=90, extent=90, **kw),
-           canvas.create_arc(x1 - 2 * r, y0, x1, y0 + 2 * r, start=0, extent=90, **kw),
-           canvas.create_arc(x0, y1 - 2 * r, x0 + 2 * r, y1, start=180, extent=90, **kw),
-           canvas.create_arc(x1 - 2 * r, y1 - 2 * r, x1, y1, start=270, extent=90, **kw)]
-    line = dict(fill=colour, dash=dash, width=width)
-    ids += [canvas.create_line(x0 + r, y0, x1 - r, y0, **line), canvas.create_line(x0 + r, y1, x1 - r, y1, **line),
-            canvas.create_line(x0, y0 + r, x0, y1 - r, **line), canvas.create_line(x1, y0 + r, x1, y1 - r, **line)]
-    return ids
-
-
 def flow(frame, gap=4, within=None):
     """
     Lays frame's children out left to right, wrapping onto a new line when the room runs out, like words
@@ -714,8 +634,7 @@ def flow(frame, gap=4, within=None):
     def relayout(_e=None):
         try:
             room = within.winfo_width() - frame.winfo_x() - pad
-            children = [w for w in frame.winfo_children() if w.winfo_manager() in ("pack", "grid", "place")
-                        and not getattr(w, "corner_tile", False)]   # a number box's corner tiles follow it by themselves
+            children = [w for w in frame.winfo_children() if w.winfo_manager() in ("pack", "grid", "place")]
             sizes = [(w, w.winfo_reqwidth(), w.winfo_reqheight()) for w in children]
         except tk.TclError:
             return
@@ -760,13 +679,65 @@ def flow(frame, gap=4, within=None):
     return relayout
 
 
-def round_fields(widget, radius=3):
-    """Softens the corners of every number box under widget that hasn't been done yet."""
-    for w in widget.winfo_children():
-        if isinstance(w, tk.Spinbox) and not hasattr(w, "corner_tiles") and int(w.cget("highlightthickness")) > 0:
-            corner_tiles(w, radius=radius)
-        else:
-            round_fields(w, radius)
+SETTINGS_FONT_DEFAULT, SETTINGS_FONT_MIN, SETTINGS_FONT_MAX = 8, 6, 14
+_FONT_KINDS = {"S24.body": (0, "normal"), "S24.bold": (0, "bold"), "S24.heading": (1, "bold"), "S24.small": (-1, "normal"),
+               "S24.tiny": (-2, "normal"), "S24.tinybold": (-2, "bold")}   # tiny: the Preview, two points under the page
+_FONTS = {}   # the Font objects, kept: a named font is deleted when its Python object goes
+
+
+def settings_fonts(widget, size=None):
+    """
+    The named fonts the Settings screens are drawn in (3 Nov 2026): body, bold, heading (a point
+    bigger, bold) and small (a point less), at the listener's size, so A- and A+ move every label at
+    once. Made the first time for this interpreter; after that a size given resizes them, and None
+    leaves them. Returns the body size.
+    """
+    for name, (step, weight) in _FONT_KINDS.items():
+        key = (id(widget.tk), name)
+        try:
+            font = tkfont.nametofont(name, root=widget)
+            if size is not None:
+                font.configure(size=size + step)
+        except tk.TclError:
+            _FONTS[key] = tkfont.Font(root=widget, name=name, family="Segoe UI",
+                                      size=(size if size is not None else SETTINGS_FONT_DEFAULT) + step, weight=weight)
+    return tkfont.nametofont("S24.body", root=widget).cget("size")
+
+
+_TTK_WITH_TEXT = ("TCheckbutton", "TRadiobutton", "TEntry", "TSpinbox", "TCombobox", "TLabel", "TButton", "TMenubutton")
+_TK_WITH_TEXT = (tk.Label, tk.Button, tk.Checkbutton, tk.Radiobutton, tk.Entry, tk.Spinbox, tk.Listbox, tk.Menubutton)
+
+
+def use_fonts(widget, body="S24.body"):
+    """
+    Gives every widget under widget that's still in Tk's default font the Settings body font: a classic
+    widget through its font option, a ttk one through a style of its own ("S24." before its style) that
+    sets only the font, so the theme's colours, layout and tick images carry over. A style with a size of
+    its own (Big.TCheckbutton) is left alone. Safe to run again after a rebuild.
+    """
+    style = ttk.Style(widget)
+    todo = [widget]
+    while todo:
+        w = todo.pop()
+        todo.extend(w.winfo_children())
+        try:
+            if isinstance(w, ttk.Widget):
+                cls = w.winfo_class()
+                if cls in ("TEntry", "TSpinbox", "TCombobox"):   # the text widgets take a font of their own, not the style's
+                    if str(w.cget("font")) in ("", "TkTextFont", "TkDefaultFont"):
+                        w.configure(font=body)
+                    continue
+                if cls not in _TTK_WITH_TEXT:
+                    continue
+                st = str(w.cget("style")) or cls
+                if st.startswith("S24.") or str(style.lookup(st, "font")) not in ("", "TkDefaultFont", "TkTextFont"):
+                    continue   # done, or a style with a size of its own (Big.TCheckbutton); the base style only names Tk's default
+                style.configure("S24." + st, font=body)
+                w.configure(style="S24." + st)
+            elif isinstance(w, _TK_WITH_TEXT) and str(w.cget("font")) in ("TkDefaultFont", "TkTextFont"):
+                w.configure(font=body)
+        except tk.TclError:
+            pass
 
 
 class FlatButton(tk.Frame):
@@ -1506,11 +1477,12 @@ class PickRow(tk.Canvas):
     """
 
     def __init__(self, master, text, fg=None, bg=None, left=None, chosen=False, indent=0, fold=None, on_fold=None,
-                 tag="", fit=False, edge=None):
+                 tag="", fit=False, edge=None, font=None, tag_font=None):
         """indent: pixels in from the left (a child row). fold: None, "open" or "closed" (a parent's arrow,
         on_fold called when clicked). tag: small text at the right ("default"). fit: ask for just the width
         the text and tag need, with five spaces between them (a drop-down sized to its rows); otherwise the
-        row takes the width its list gives it. edge: the outline's colour when chosen (the accent if None)."""
+        row takes the width its list gives it. edge: the outline's colour when chosen (the accent if None).
+        font, tag_font: the text's and the tag's (Segoe UI 10 and 8 unless given; Settings gives its named fonts)."""
         bg = bg or master.cget("bg")
         super().__init__(master, bg=bg, bd=0, highlightthickness=0)
         try:
@@ -1519,7 +1491,8 @@ class PickRow(tk.Canvas):
             scale = 1.0
         self._px = lambda n: max(1, int(round(n * scale)))
         px = self._px
-        self._font = ("Segoe UI", 10)
+        self._font = font or ("Segoe UI", 10)
+        self._tag_font = tag_font or ("Segoe UI", 8)
         self._h = tkfont.Font(root=self, font=self._font).metrics("linespace") + px(10)
         self.configure(height=self._h)
         self._bg, self._fg = bg, fg or PALETTE["text"]
@@ -1531,7 +1504,7 @@ class PickRow(tk.Canvas):
         self._fold_id = None
         if fold is not None:
             self._fold_id = self.create_text(x + px(4), self._h // 2, text="\u25be" if fold == "open" else "\u25b8",
-                                             anchor="w", font=("Segoe UI", 8), fill=PALETTE["help_fg"])
+                                             anchor="w", font=self._tag_font, fill=PALETTE["help_fg"])
             if on_fold is not None:
                 self.tag_bind(self._fold_id, "<Button-1>", lambda e: (on_fold(), "break")[1])
             x += px(16)
@@ -1540,11 +1513,11 @@ class PickRow(tk.Canvas):
             self.create_window(x, self._h // 2, window=self.left, anchor="w")
             x += self.left.winfo_reqwidth() + px(2)
         self._text_id = self.create_text(x + px(4), self._h // 2, text=text, anchor="w", font=self._font, fill=self._fg)
-        self._tag_id = self.create_text(0, self._h // 2, text=tag, anchor="e", font=("Segoe UI", 8),
+        self._tag_id = self.create_text(0, self._h // 2, text=tag, anchor="e", font=self._tag_font,
                                         fill=PALETTE["button_fg"])
         if fit:
             text_w = tkfont.Font(root=self, font=self._font).measure(text + " " * 5)
-            tag_w = tkfont.Font(root=self, font=("Segoe UI", 8)).measure(tag) if tag else 0
+            tag_w = tkfont.Font(root=self, font=self._tag_font).measure(tag) if tag else 0
             self.configure(width=x + px(4) + text_w + tag_w + px(14))   # a little over: drawn text runs wider than measured
         self.bind("<Configure>", lambda e: self._redraw(e.width))
 

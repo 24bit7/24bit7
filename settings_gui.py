@@ -283,12 +283,13 @@ def warn_moderator_once(parent):
     engine.MODERATOR_WARNED = True
 
 
-HEADING_FONT = ("Segoe UI", 10, "bold")
+HEADING_FONT = "S24.heading"   # the Settings named fonts (tabs.settings_fonts), sized by A- and A+ (3 Nov 2026)
 # the sections for the whole playlist, under its configs, in this order (English titles: see _fill_playlist)
-WHOLE_SECTIONS = ("Drift", "Deep Cuts", "Non-stop", "Shortcut", "Hidden Tracks", "If All Else Fails", "Run After Building")
-HELP_FONT = ("Segoe UI", 8)
+WHOLE_SECTIONS = ("Consensus", "Moderator", "Drift", "Deep Cuts", "Non-stop", "Shortcut", "Hidden Tracks", "If All Else Fails",
+                  "Run After Building")
+HELP_FONT = "S24.body"
 HELP_FG = "#666"
-LABEL_FONT = ("Segoe UI", 9, "bold")
+LABEL_FONT = "S24.bold"
 SECTION_FG = "#1f4e8c"    # section titles, in the logo blue
 SECTION_EDGE = "#aab4c3"  # the thin line round each section
 HELP_MARK_BG = "#8a97aa"
@@ -453,6 +454,23 @@ def _english():
     return {t(k): k for k in tour.SECTION_NOTES}
 
 
+def settings_text_size():
+    """SETTINGS_FONT_SIZE from .env, within bounds: the size the Settings screens are drawn at (3 Nov 2026)."""
+    try:
+        size = int(read_env().get("SETTINGS_FONT_SIZE", tabs.SETTINGS_FONT_DEFAULT))
+    except ValueError:
+        size = tabs.SETTINGS_FONT_DEFAULT
+    return max(tabs.SETTINGS_FONT_MIN, min(tabs.SETTINGS_FONT_MAX, size))
+
+
+def ensure_fonts(widget):
+    """The Settings named fonts, made now if this interpreter hasn't got them yet (a section built before the tab)."""
+    try:
+        tkfont.nametofont("S24.body", root=widget)
+    except tk.TclError:
+        tabs.settings_fonts(widget, settings_text_size())
+
+
 def section(parent, title, help_text=None, row=None, title_fg=None, fold=None):
     """
     A Settings section: a solid header bar with its title (and optional ?), black in
@@ -464,6 +482,7 @@ def section(parent, title, help_text=None, row=None, title_fg=None, fold=None):
     a closed one opens when its header is clicked, so it can be switched on; there's no
     fold of the user's own. box.refold() re-reads the state (after a save).
     """
+    ensure_fonts(parent)
     edge = PALETTE["section_edge"]
     outer = tk.Frame(parent, bd=0, highlightthickness=1, highlightbackground=edge, highlightcolor=edge)
     outer.section_title = _english().get(title, title)   # for Take a Tour, which lights sections by title (tour.py)
@@ -485,7 +504,6 @@ def section(parent, title, help_text=None, row=None, title_fg=None, fold=None):
         row = parent.grid_size()[1]
     outer.grid(row=row, column=0, sticky="ew", pady=(0, 14))
     parent.grid_columnconfigure(0, weight=1)
-    tabs.corner_tiles(outer, top=head_bg)   # the cheat: corner tiles over the one-pixel edge (2 Nov 2026)
     if fold is not None:
         state = {"open": True}
 
@@ -1041,17 +1059,12 @@ class AddPlaylistPrompt(PromptWindow):
 
     ok_text = N_("Add")
 
-    def __init__(self, parent, device=None):
-        """device=(device name, phrase label): the same window giving a device its own playlist for a phrase,
-        From Existing (any playlist, a copy) and From Template only, no New (2 Nov 2026)."""
-        self._device = device
+    def __init__(self, parent):
         self._existing = [b for b in buttons.load() if not b.get("device")]   # a device's own aren't buttons
         self._templates = [(kind, t(label), t(TEMPLATE_NOTES[kind])) for kind, label in buttons.KIND_LABELS.items()]
         self._templates += [(r["key"], t(r["name"]), t(TEMPLATE_NOTES[r["key"]])) for r in buttons.READY_MADE]
         self._tab = "existing"
-        title = t("Add a Playlist") if device is None else t("Give {device} its own \"{phrase}\" playlist",
-                                                              device=device[0], phrase=device[1])
-        super().__init__(parent, title)
+        super().__init__(parent, t("Add a Playlist"))
         self._describe()   # the OK button exists now: Add or Create Copy for the first pick
         # Keys from the moment the window opens: Tab and Shift+Tab walk the tabs, Up and Down the current list
         self.bind("<Tab>", lambda e: self._tab_by(1))
@@ -1066,7 +1079,7 @@ class AddPlaylistPrompt(PromptWindow):
     TAB_ORDER = ("existing", "template", "new")
 
     def _tabs_here(self):
-        return self.TAB_ORDER[:2] if self._device is not None else self.TAB_ORDER
+        return self.TAB_ORDER
 
     def _tab_by(self, by):
         order = self._tabs_here()
@@ -1147,7 +1160,7 @@ class AddPlaylistPrompt(PromptWindow):
             page.pack_forget()
         self._pages[key].pack(fill="both", expand=True)
         if hasattr(self, "ok_button") and key != "existing":   # From Existing's button follows the pick (_describe)
-            self.set_ok_text(t("Create") if key == "new" else t("Use the Template") if self._device is not None else t("Add"))
+            self.set_ok_text(t("Create") if key == "new" else t("Add"))
         self._describe()
         if hasattr(self, "ok_button"):
             self._focus_first()   # the keyboard follows the tab: a list's own Up and Down bind to the list that has focus
@@ -1162,10 +1175,7 @@ class AddPlaylistPrompt(PromptWindow):
             b = self._chosen(self.existing_list, self._existing)
             if b is not None:
                 parent = next((p for p in self._existing if p["id"] == b.get("parent")), None)
-                if self._device is not None:
-                    words = t("{name}: {what}. A copy of it becomes {device}'s own for \"{phrase}\".", name=b["name"],
-                              what=buttons.describe(b), device=self._device[0], phrase=self._device[1])
-                elif parent is not None:
+                if parent is not None:
                     words = t("{name}: {what}. In the menu of {parent} already; Create Copy makes {copy} beside it.",
                               name=b["name"], what=buttons.describe(b), parent=parent["name"],
                               copy=buttons.unique_name(b["name"]))
@@ -1173,7 +1183,7 @@ class AddPlaylistPrompt(PromptWindow):
                     words = t("{name}: {what}. On the Play tab already; Create Copy makes {copy} right after it.",
                               name=b["name"], what=buttons.describe(b), copy=buttons.unique_name(b["name"]))
                 self.existing_note.config(text=words)
-                wanted = t("Use a Copy") if self._device is not None else t("Create Copy")
+                wanted = t("Create Copy")
                 if hasattr(self, "ok_button") and self.ok_button.cget("text") != wanted:
                     self.set_ok_text(wanted)
         elif self._tab == "template":
@@ -1216,6 +1226,7 @@ class SettingsTab(tk.Frame):
     def __init__(self, master):
         super().__init__(master)
         self.env = read_env()
+        self._text_size = tabs.settings_fonts(self, settings_text_size())   # the named fonts, at the listener's size
         self.vars = {}
         self._source_boxes = []   # (tick, code, label, purpose) for the "(no key yet)" marks
         self._loading = True   # suppress auto-save while building controls
@@ -1233,7 +1244,7 @@ class SettingsTab(tk.Frame):
         self._build_saved(nb)   # after Voice Commands: these settings only apply to playlists asked for by voice
         self._build_other(nb)
         self._build_about(nb)
-        tabs.round_fields(self)   # the number boxes on every tab
+        tabs.use_fonts(self)   # every tick box, dropdown and number box in the Settings body font
 
         self._loading = False
         self._refresh_key_marks()
@@ -1407,8 +1418,11 @@ class SettingsTab(tk.Frame):
         nb.add(outer, text=t(text))
         return self._scroll_page(outer, fill_outer=False)
 
-    def _scroll_page(self, outer, fill_outer=True):
-        """The scrolling part of _scroll_tab, in any frame (a page with no tab row of its own)."""
+    def _scroll_page(self, outer, fill_outer=True, fit_width=False):
+        """
+        The scrolling part of _scroll_tab, in any frame (a page with no tab row of its own). fit_width: the
+        canvas asks for the width its content needs (a column), rather than taking what it's given (a page).
+        """
         if fill_outer:
             holder = tk.Frame(outer)
             holder.pack(fill="both", expand=True)
@@ -1420,7 +1434,8 @@ class SettingsTab(tk.Frame):
         canvas.pack(side="left", fill="both", expand=True)
         inner = tk.Frame(canvas, padx=12, pady=12)
         window = canvas.create_window((0, 0), window=inner, anchor="nw")
-        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        inner.bind("<Configure>", lambda e: (canvas.configure(scrollregion=canvas.bbox("all")),
+                                             fit_width and canvas.configure(width=inner.winfo_reqwidth())))
         canvas.bind("<Configure>", lambda e: canvas.itemconfigure(window, width=e.width))
 
         def wheel(e):
@@ -1456,13 +1471,14 @@ class SettingsTab(tk.Frame):
         filters and shortcut, then its config's sources and settings. Each playlist carries one
         kind's settings. The standard playlist of each kind also writes .env.
         """
-        ttk.Style(self).configure("Big.TCheckbutton", font=("Segoe UI", 11))
+        ttk.Style(self).configure("Big.TCheckbutton", font="S24.body")   # the Settings size, like every other tick (3 Nov 2026)
         outer = tk.Frame(nb)
         nb.add(outer, text=t("Playlist Settings"))
         self._buttons_outer = outer
         self._button_id = None
-        left = tk.Frame(outer, padx=12, pady=12)
-        left.pack(side="left", fill="y")
+        column = tk.Frame(outer)
+        column.pack(side="left", fill="y")
+        left = self._scroll_page(column, fit_width=True)   # the whole column scrolls as one (Ben, 3 Nov 2026)
         box = section(left, t("Your Playlist Buttons"),
                       t("Each playlist is a recipe of its own: a kind of build, its sources and settings, the "
                         "filters it runs under and a keyboard shortcut. Ticked, it's a button on the Play tab; "
@@ -1509,6 +1525,9 @@ class SettingsTab(tk.Frame):
         rename: the name box opens at once, cursor in it, for a playlist that's just been made.
         """
         self._button_id = button_id
+        if getattr(self, "_from_device", None):   # from the Play tab: the list's page, not a device's
+            self._from_device = None
+            self._button_page = None   # so the refresh rebuilds it without the strip
         self._pane.select(self._buttons_outer)
         self._buttons_refresh()
         if rename:
@@ -1547,11 +1566,12 @@ class SettingsTab(tk.Frame):
         for b in self._buttons:
             if b.get("parent") in self._folded:
                 continue   # folded away under its parent
-            on = b["id"] == self._button_id   # the chosen row: a rounded outline in the accent colour, no fill
+            on = b["id"] == self._button_id and not getattr(self, "_from_device", None)   # the chosen row, outlined; a
+            # device's page open outlines its Devices row instead, even when the phrase copies this playlist
             is_parent = b["id"] in parents
             parent = next((p for p in self._buttons if p["id"] == b.get("parent")), None)
             row = PickRow(self._button_list, b["name"], fg=PALETTE["ai_purple"] if b["kind"] == "vibe" else None, bg=bg,
-                          chosen=on, indent=indent if parent is not None else 0,   # no tick: everything here is on the Play tab
+                          font=HELP_FONT, tag_font="S24.small", chosen=on, indent=indent if parent is not None else 0,   # no tick: everything here is on the Play tab
                           fold=("closed" if b["id"] in self._folded else "open") if is_parent else None,
                           on_fold=lambda bt=b: self._fold(bt["id"]),
                           tag=t("Needs Advanced") if mode.is_simple() and mode.needs_advanced(b)
@@ -1641,9 +1661,12 @@ class SettingsTab(tk.Frame):
             menu.grab_release()
 
     def _pick_button(self, button_id):
-        if button_id != self._button_id and buttons.get(button_id) is not None:   # a button's or a device's playlist
+        left_device = getattr(self, "_from_device", None) is not None
+        if (button_id != self._button_id or left_device) and buttons.get(button_id) is not None:   # a button's or a device's
             self._button_id = button_id
+            self._from_device = None   # the page is the list's now: no device strip, no device row outlined
             self._fill_button_list()
+            self._devices_refresh()
             self._button_fill_page()
 
     def _button_move(self, by):
@@ -1717,11 +1740,17 @@ class SettingsTab(tk.Frame):
                      font=HELP_FONT).grid(row=0, column=0, sticky="w")
             return
         kind = button["kind"]
-        head = tk.Frame(right)
-        head.pack(fill="x", pady=(0, 8))
-        head.grid_columnconfigure(1, weight=1)
+        inner = self._button_inner = self._scroll_page(right)   # the whole page scrolls, header included (Ben, 3 Nov 2026)
+        inner.grid_columnconfigure(0, weight=1)
+        head = tk.Frame(inner)
+        head.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        head.grid_columnconfigure(2, weight=1)
+        self._device_strip, self._device_linked = None, False
+        if getattr(self, "_from_device", None):   # opened from a Devices row: Copy Settings From on the first row
+            self._build_device_strip(head, button)
         fields = tk.Frame(head)
-        fields.grid(row=0, column=0, sticky="nw")
+        if not self._device_linked:   # copying settings: nothing below the line to set (Ben, 3 Nov 2026)
+            fields.grid(row=1 if self._device_strip else 0, column=0, sticky="nw", pady=(8, 0) if self._device_strip else 0)
         # Name: the playlist's name everywhere (its button, the list, the console, what Alexa says)
         tk.Label(fields, text=t("Name"), font=LABEL_FONT).grid(row=0, column=0, sticky="w", pady=(0, 6))
         self._name_var = tk.StringVar(value=button["name"])
@@ -1768,18 +1797,29 @@ class SettingsTab(tk.Frame):
             about = t("{device}'s own playlist for \"{phrase}\": what its voice command runs.",
                       device=devices.name_of(button["device"]), phrase=t(phrase) if phrase else "")
         elif button.get("standard"):
-            about = t("Standard {kind} playlist: what a device's voice commands run unless the device has its own under Device Playlists.",
+            about = t("Standard {kind} playlist: what a device's voice commands run unless the device has its own under Devices.",
                       kind=about)
-        tk.Label(fields, text=about, fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w", justify="left",
-                 wraplength=scaled(fields, 420)).grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        if self._device_strip is None:   # the device strip says it already
+            tk.Label(head, text=about, fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w", justify="left",   # under the row, so
+                     wraplength=scaled(head, 700)).grid(row=2, column=0, columnspan=3, sticky="w", pady=(6, 0))   # it never squeezes the Preview
         # the Preview: the button with its menu, this playlist's row outlined (a child shows its parent's button)
         self._preview_frame = tk.Frame(head)
-        self._preview_frame.grid(row=0, column=1, sticky="n", padx=(24, 0))
+        if self._device_strip is None:   # a device's page has no Preview: its phrase isn't a button (Ben, 3 Nov 2026)
+            self._preview_frame.grid(row=0, column=1, rowspan=2, sticky="nw", padx=(24, 0))
+        else:
+            self._preview_frame, self._preview = None, None
         self._preview_button = button
         self._draw_preview()
+        controls = tk.Frame(head)   # top right: A- A+ and Simple | Advanced, Take a Tour under Advanced (Ben, 3 Nov 2026)
+        controls.grid(row=0, column=2, rowspan=2, sticky="ne")
+        top = tk.Frame(controls)
+        top.pack(anchor="e")
+        self._size_buttons(top)
         # Simple / Advanced, one setting for the listener (mode.py)
-        pill = tk.Frame(head, highlightthickness=1, highlightbackground=PALETTE["button_fg"], highlightcolor=PALETTE["button_fg"])
-        pill.grid(row=0, column=2, sticky="ne")
+        pill = tk.Frame(top, highlightthickness=1, highlightbackground=PALETTE["button_fg"], highlightcolor=PALETTE["button_fg"])
+        pill.pack(side="left")
+        if mode.current() == "advanced":   # Take a Tour: a dashed box under the pill, beside the Preview (tour.py)
+            self._tour_box(controls)
         self._mode_labels = {}
         current = mode.current()
         for key, text, note in (("simple", N_("Simple"), N_("Simple: one config with its Sources, Playlist Selection and "
@@ -1794,20 +1834,20 @@ class SettingsTab(tk.Frame):
             lab.bind("<Button-1>", lambda e, k=key: self._set_mode(k))
             Tooltip(lab, t(note))
             self._mode_labels[key] = lab
-        lit = PALETTE["button_fg"]   # the lit half is filled, so that end's corners are lit inside
-        left, right_ = (lit if current == "simple" else None), (lit if current == "advanced" else None)
-        tabs.corner_tiles(pill, radius=6, corners={"nw": left, "sw": left, "ne": right_, "se": right_})
-        if current == "advanced":   # Take a Tour: a dashed box under the pill (tour.py)
-            self._tour_box(head)
         for old in [c for c in self.hotkey_vars if hotkeys.is_button(c)]:   # the page before this one's box
             del self.hotkey_vars[old], self.hotkey_notes[old]
-        inner = self._button_inner = self._scroll_page(right)
+        if self._device_linked:   # Copy Settings From ticked: the playlist it copies is set up on its own page
+            tabs.use_fonts(right)
+            self._button_page, self._button_pages = None, []
+            self._refresh_key_marks()
+            return
         simple = mode.is_simple()   # Simple: the first config alone, with Sources, Playlist Selection and Filters (2 Nov 2026)
         cfgs = buttons.configs(button)
         mix = buttons.tidy_mix(button.get("mix"), len(cfgs))
         if simple:
             cfgs = cfgs[:1]
         base_env = dict(read_env())
+        self._matching_configs = sum(1 for c in cfgs if c["kind"] in ("artists", "tracks"))   # past one, Consensus is titled by kind
         pages = []
         for n, cfg in enumerate(cfgs):
             block = self._config_block(inner, button, n, cfg)
@@ -1841,7 +1881,7 @@ class SettingsTab(tk.Frame):
         for n, (p, block) in enumerate(pages):
             kind = cfgs[n]["kind"]
             if kind != "vibe":   # an AI Playlist's tracks come from the AI, so it has no sources to pick
-                self._fill_sources(block, p, kind)
+                self._fill_sources(block, p, kind, where_=places)
                 resyncs.append(p.resync)
             if simple:
                 self._fill_playlist(block, p, kind, parts={"Playlist Selection"}, where_=places)
@@ -1859,7 +1899,7 @@ class SettingsTab(tk.Frame):
             resyncs.append(p.resync)
             self._sync_moderator_box(p)
         pages[0][0].resync = lambda: [r() for r in resyncs]
-        tabs.round_fields(right)   # the number boxes
+        tabs.use_fonts(right)   # the page's tick boxes, dropdowns and number boxes
         self._refresh_key_marks()
 
     def _config_block(self, inner, button, n, cfg):
@@ -1870,7 +1910,6 @@ class SettingsTab(tk.Frame):
         inner.grid_columnconfigure(0, weight=1)   # so a narrow page shrinks the box and its rows wrap, rather than overflowing
         block.grid_columnconfigure(0, weight=1)
         tint = tabs.mix_colour(inner, edge, inner.cget("bg"), 0.12)
-        tabs.corner_tiles(block, top=tint)
         head = tk.Frame(block, bg=tint, padx=8, pady=4)
         head.grid(row=0, column=0, sticky="ew")
         body = tk.Frame(block, padx=8, pady=6)
@@ -2152,19 +2191,20 @@ class SettingsTab(tk.Frame):
     # --- the Devices page --------------------------------------------------------------------
 
 
-    # --- the Device Playlists box --------------------------------------------------------------------
+    # --- the Devices box ----------------------------------------------------------------------------
 
     def _build_device_box(self, left):
         """
-        Under the buttons: a tab per Alexa device, the zone it plays to, Enable Switch To, when it was
-        last heard, and the playlist each of its phrases runs (Ben, 2 Nov 2026): the standard playlist
-        of that kind, greyed with a Standard tag, until the device is given its own.
+        Under the buttons: a tab per Alexa device, the zone it plays to, Enable Switch To, and the
+        playlist each of its phrases runs (Ben, 2 Nov 2026; Devices, no Last heard, 3 Nov 2026): a
+        playlist it copies settings from, greyed (tagged Standard when it's the standard of that kind),
+        or the device's own.
         """
-        box = section(left, t("Device Playlists"),
-                      t("Each Alexa device that has spoken to 24bit7 and the playlist each of its phrases runs: the "
-                        "standard playlist of that kind, greyed, until you give the device its own. Click a greyed row "
-                        "to make one, right-click the device's own for Back to Standard, and click the device's name "
-                        "to rename it. A new device appears here the first time it speaks."))
+        box = section(left, t("Devices"),
+                      t("Each Alexa device that has spoken to 24bit7 and the playlist each of its phrases runs. Greyed, "
+                        "the phrase copies the settings of a playlist you have; in full colour, the device has its own. "
+                        "Click a row for its page, and click the device's name to rename it. A new device appears here "
+                        "the first time it speaks."))
         self._device_id = None
         self._device_tabs = tk.Frame(box)
         self._device_tabs.grid(row=0, column=0, sticky="w")
@@ -2205,7 +2245,7 @@ class SettingsTab(tk.Frame):
             on = device_id == self._device_id
             cell = tk.Frame(self._device_tabs)
             cell.pack(side="left", padx=(0, 14))
-            tab = tk.Label(cell, text=name or t("Unnamed device"), font=("Segoe UI", 10, "bold"), cursor="hand2",
+            tab = tk.Label(cell, text=name or t("Unnamed device"), font=HEADING_FONT, cursor="hand2",
                            fg=PALETTE["button_fg"] if on else PALETTE["help_fg"])
             tab.pack()
             bar = tk.Frame(cell, height=2, bg=PALETTE["button_fg"] if on else cell.cget("bg"))
@@ -2249,31 +2289,28 @@ class SettingsTab(tk.Frame):
         if not zone:
             switch.state(["disabled"])
         self._device_switch = switch
-        if heard:
-            tk.Label(head, text=t("Last heard {when}.", when=heard), fg=PALETTE["help_fg"], font=HELP_FONT).pack(anchor="w")
         for phrase, label, playlist, own in devices.rows(device_id):
             text = t("{phrase}: {name}", phrase=t(label), name=playlist["name"]) if playlist else t(label)
             colour = (PALETTE["ai_purple"] if playlist and playlist["kind"] == "vibe" else PALETTE["text"]) if own \
                 else PALETTE["help_fg"]
-            row = PickRow(self._device_rows_box, text, fg=colour, bg=bg, fit=True,
-                          chosen=bool(playlist) and playlist["id"] == self._button_id,
-                          tag="" if own else t("Standard"))
+            row = PickRow(self._device_rows_box, text, fg=colour, bg=bg, fit=True, font=HELP_FONT, tag_font="S24.small",
+                          chosen=getattr(self, "_from_device", None) == (device_id, phrase),   # the row whose page is open
+                          tag=t("Standard") if not own and playlist and playlist.get("standard") else "")
             row.configure(cursor="hand2")
             row.pack(fill="x", padx=3, pady=1)
+            row.bind("<Button-1>", lambda e, ph=phrase: self._device_slot_page(self._device_id, ph))
             if own:
-                row.bind("<Button-1>", lambda e, p=playlist: self._pick_device_playlist(p["id"]))
-                row.bind("<Button-3>", lambda e, ph=phrase, p=playlist: self._device_row_menu(e, ph, p))
-                Tooltip(row, t("{device}'s own playlist for \"{phrase}\". Click for its page; right-click for Back to Standard.",
+                Tooltip(row, t("{device}'s own playlist for \"{phrase}\". Click for its page.",
                                device=name or t("Device"), phrase=t(label)))
             else:
-                row.bind("<Button-1>", lambda e, ph=phrase, lb=label: self._device_make_own(ph, lb))
-                Tooltip(row, t("Runs the standard {name} when {device} asks. Click to give {device} its own.",
-                               name=playlist["name"] if playlist else t(label), device=name or t("Device")))
+                Tooltip(row, t("Runs {name} as it is when {device} asks. Click for its page, where you can give "
+                               "{device} its own.", name=playlist["name"] if playlist else t(label), device=name or t("Device")))
             self._device_rows.append((phrase, row, playlist, own))
         if self._device_rows:
             width = max(scaled(self._device_rows_box, 220), max(r.winfo_reqwidth() for _p, r, _b, _o in self._device_rows))
             for _p, r, _b, _o in self._device_rows:
                 r.configure(width=width)
+        tabs.use_fonts(self._device_head)
 
     def _device_pick(self, device_id):
         if device_id != self._device_id:
@@ -2296,11 +2333,14 @@ class SettingsTab(tk.Frame):
                                                           "next time it speaks to 24bit7.", name=name), parent=self):
             return
         gone = {b["id"] for b in buttons.of_device(self._device_id)}
+        if (getattr(self, "_from_device", None) or (None,))[0] == self._device_id:
+            self._from_device = None   # its page goes with it
         voice.remove_device(self._device_id)
         devices.forget(self._device_id)
         if self._button_id in gone:
             self._button_id = None
         self._buttons_refresh()
+        self._button_fill_page()
 
     def _device_restore_defaults(self):
         if self._device_id is None:
@@ -2312,46 +2352,88 @@ class SettingsTab(tk.Frame):
             return
         gone = {b["id"] for b in buttons.of_device(self._device_id)}
         devices.restore_defaults(self._device_id)
+        opened = getattr(self, "_from_device", None)
+        if opened and opened[0] == self._device_id:   # its page now shows the standard, strip and all
+            self._device_slot_page(*opened)
+            return
         if self._button_id in gone:
             self._button_id = None
         self._buttons_refresh()
 
-    def _device_make_own(self, phrase, label):
-        """A greyed row clicked: the Add window, for a copy or a template to become the device's own for the phrase."""
-        if self._device_id is None:
+    def _device_slot_page(self, device_id, phrase):
+        """
+        A Devices row clicked (Ben, 3 Nov 2026): the page on the right opens with Copy Settings From on its
+        first row; the device's own playlist shows its settings below, a copied one stops there. No pop-up.
+        """
+        if device_id is None:
             return
-        name = devices.name_of(self._device_id)
-        prompt = AddPlaylistPrompt(self, device=(name, t(label)))
-        self.wait_window(prompt)
-        answer = prompt.result
-        if answer is None:
-            return
-        how, what = answer
-        made = devices.make_own(self._device_id, phrase, (how, what) if how in ("copy", "template") else ("standard", None))
-        self._pick_device_playlist(made["id"])
-
-    def _device_row_menu(self, event, phrase, playlist):
-        menu = tk.Menu(self, tearoff=0)
-        menu.add_command(label=t("Back to Standard"), command=lambda: self._device_back_to_standard(phrase, playlist))
-        menu.tk_popup(event.x_root, event.y_root)
-
-    def _device_back_to_standard(self, phrase, playlist):
-        devices.reset(self._device_id, phrase)
-        if self._button_id == playlist["id"]:
-            self._button_id = None
-        self._buttons_refresh()
-
-    def _pick_device_playlist(self, playlist_id):
-        """A device's own playlist opens on the right like any other; the buttons list shows no pick."""
-        self._button_id = playlist_id
+        self._from_device = (device_id, phrase)
+        playlist = next((b for ph, _l, b, _o in devices.rows(device_id) if ph == phrase), None)
+        self._button_id = playlist["id"] if playlist else None
         self._fill_button_list()
         self._devices_refresh()
         self._button_fill_page()
 
+    def _build_device_strip(self, head, button):
+        """
+        The first row of a page opened from a Devices row (Ben, 3 Nov 2026): "Copy Settings From: [playlist]".
+        Ticked, the phrase runs the playlist chosen as it is, any kind, and the page stops there; the playlist it
+        runs now is chosen. Unticked, the device has its own copy of it, set up below; the list shows what it was
+        copied from, greyed. Unticking makes the copy; ticking again asks, then deletes the device's own.
+        """
+        device_id, phrase = self._from_device
+        label = dict(devices.PHRASES).get(phrase, phrase)
+        name = devices.name_of(device_id)
+        own = button.get("device") == str(device_id)
+        line = tk.Frame(head)
+        line.grid(row=0, column=0, sticky="nw")
+        self._device_strip, self._device_linked = line, not own
+        var = tk.BooleanVar(value=not own)
+        tick = ttk.Checkbutton(line, text=t("Copy Settings From:"), variable=var)
+        tick.pack(side="left")
+        choices = buttons.buttons_only()
+        names = [b["name"] for b in choices]
+        if own:
+            source = buttons.get(button.get("copied_from") or "")
+            shown_name = source["name"] if source is not None and not source.get("device") else ""
+        else:
+            shown_name = button["name"]
+        pick = tk.StringVar(value=shown_name)
+        cb = TCombobox(line, textvariable=pick, values=names, state="disabled" if own else "readonly",
+                       width=max(14, max((len(n) for n in names), default=10) + 2))
+        cb.pack(side="left", padx=(6, 0))
+        self._device_strip_tick, self._device_strip_from = tick, cb
+
+        def chosen_id():
+            return next((b["id"] for b in buttons.buttons_only() if b["name"] == pick.get()), None)
+
+        def picked(_e=None):
+            cb.selection_clear()
+            if var.get():
+                devices.link(device_id, phrase, chosen_id())
+                self._device_slot_page(device_id, phrase)
+        cb.bind("<<ComboboxSelected>>", picked)
+
+        def ticked():
+            if not var.get() and not own:   # its own copy, to set up below
+                made = devices.make_own(device_id, phrase, ("copy", chosen_id() or button["id"]))
+                self._device_slot_page(device_id, phrase)
+            elif var.get() and own:
+                target = buttons.get(chosen_id() or "") or buttons.standard(devices.PHRASE_KINDS[phrase])
+                if not messagebox.askyesno(t("Copy Settings From"), t(
+                        "{device}'s own playlist for \"{phrase}\" is deleted, and \"{phrase}\" runs {name}.",
+                        device=name, phrase=t(label), name=target["name"] if target else t(label)), parent=self):
+                    var.set(False)
+                    return
+                devices.link(device_id, phrase, target["id"] if target else None)
+                self._device_slot_page(device_id, phrase)
+        tick.configure(command=ticked)
+
     def _draw_preview(self):
         """
-        The Preview beside Name and Title in Menu: the button with its menu open and this playlist's row
-        outlined, at three quarters size in a dashed frame. A parent shows its own button; a child its
+        The Preview beside Name and Title in Menu (not on a device's page): "Preview:" then the button
+        with its menu open and this playlist's row outlined, at half its first size, in text two points under
+        the page's so it follows A- and A+ (Ben, 3 Nov 2026). A parent shows its own button; a child its
         parent's; a plain button shows the button alone over two greyed placeholder rows, so the menu's
         place is clear (Ben, 2 Nov 2026).
         """
@@ -2370,22 +2452,26 @@ class SettingsTab(tk.Frame):
         else:
             rows = [(button, button.get("subtitle") or button["name"], True, True),
                     (None, t("playlist button abc"), False, False), (None, t("playlist button xyz"), False, False)]
-        px = lambda n: scaled(frame, n)
-        w, row_h, face_h = px(190), px(22), px(27)
-        h = px(10) + face_h + len(rows) * row_h + px(14)
-        canvas = tk.Canvas(frame, width=w + px(20), height=h + px(20), highlightthickness=0, bd=0, bg=frame.cget("bg"))
-        canvas.pack()
-        tabs.dashed_round_rect(canvas, px(1), px(1), w + px(19), h + px(19), px(8), PALETTE["section_edge"])
-        tk.Label(frame, text=t("Preview"), fg=PALETTE["help_fg"], font=HELP_FONT, bg=frame.cget("bg")).place(x=px(8), y=0)
-        x0, y0 = px(10), px(14)
+        tk.Label(frame, text=t("Preview:"), fg=PALETTE["help_fg"], font=HELP_FONT).pack(side="left", anchor="n")
+        px = lambda n: scaled(frame, n * 0.5)
+        small, bold = tkfont.nametofont("S24.tiny", root=frame), tkfont.nametofont("S24.tinybold", root=frame)
+        line = small.metrics("linespace")
+        row_h, face_h = line + px(6), line + px(12)
+        tag = t("default") if buttons.is_parent(face) else ""
+        need = max([small.measure(text + "   " + tag) for _pl, text, _d, _m in rows] + [bold.measure(face["name"]) + px(40)])
+        w = max(px(190), need + px(24))
+        h = face_h + px(4) + len(rows) * row_h + px(4)
+        canvas = tk.Canvas(frame, width=w + px(4), height=h + px(4), highlightthickness=0, bd=0, bg=frame.cget("bg"))
+        canvas.pack(side="left", padx=(6, 0))
+        x0, y0 = px(2), px(2)
         accent = PALETTE["ai_purple"] if face.get("kind") == "vibe" else PALETTE["button_accent"]
         canvas.create_rectangle(x0, y0, x0 + w, y0 + face_h, fill=PALETTE.get("button_bg") or PALETTE.get("field_bg") or "#ffffff",
                                 outline=PALETTE["section_edge"])
         canvas.create_rectangle(x0, y0 + face_h - px(3), x0 + w, y0 + face_h, fill=accent, outline=accent)
         canvas.create_line(x0 + w - px(22), y0, x0 + w - px(22), y0 + face_h - px(3), fill=PALETTE["section_edge"])
-        canvas.create_text(x0 + (w - px(22)) // 2, y0 + face_h // 2 - px(1), text=face["name"], font=("Segoe UI", 8, "bold"),
+        canvas.create_text(x0 + (w - px(22)) // 2, y0 + face_h // 2 - px(1), text=face["name"], font="S24.tinybold",
                            fill=PALETTE["ai_purple"] if face.get("kind") == "vibe" else PALETTE["button_fg"])
-        canvas.create_text(x0 + w - px(11), y0 + face_h // 2 - px(1), text="\u25be", font=("Segoe UI", 6), fill=PALETTE["button_fg"])
+        canvas.create_text(x0 + w - px(11), y0 + face_h // 2 - px(1), text="\u25be", font="S24.tiny", fill=PALETTE["button_fg"])
         y = y0 + face_h + px(2)
         canvas.create_rectangle(x0, y, x0 + w, y + len(rows) * row_h + px(4), fill=PALETTE.get("field_bg") or "#ffffff",
                                 outline=PALETTE["section_edge"])
@@ -2395,23 +2481,22 @@ class SettingsTab(tk.Frame):
             if mine:
                 canvas.create_rectangle(x0 + px(3), ry + px(1), x0 + w - px(3), ry + row_h - px(1), outline=PALETTE["button_fg"], width=2)
             fill = PALETTE["text"] if pl is not None else PALETTE["help_fg"]
-            font = ("Segoe UI", 8) if pl is not None else ("Segoe UI", 8, "italic")
-            canvas.create_text(x0 + px(10), ry + row_h // 2, text=text, anchor="w", font=font, fill=fill)
-            if is_default and pl is not None and buttons.is_parent(face):
-                canvas.create_text(x0 + w - px(8), ry + row_h // 2, text=t("default"), anchor="e", font=("Segoe UI", 7),
+            canvas.create_text(x0 + px(10), ry + row_h // 2, text=text, anchor="w", font="S24.tiny", fill=fill)
+            if is_default and pl is not None and tag:
+                canvas.create_text(x0 + w - px(8), ry + row_h // 2, text=tag, anchor="e", font="S24.tiny",
                                    fill=PALETTE["button_fg"])
             self._preview_rows.append(text)
         self._preview = canvas
 
-    def _tour_box(self, head):
-        """The Take a Tour box under the Simple / Advanced pill: a dashed rounded frame round the words."""
-        px = lambda n: scaled(head, n)
+    def _tour_box(self, parent):
+        """The Take a Tour box under the Simple / Advanced pill, at the right: a dashed frame round the words."""
+        px = lambda n: scaled(parent, n)
         text = t("Take a Tour")
         font = ("Segoe UI", 9, "bold")
-        width = tkfont.Font(head, font).measure(text) + px(28)
-        box = tk.Canvas(head, width=width, height=px(26), highlightthickness=0, bd=0, bg=head.cget("bg"), cursor="hand2")
-        box.grid(row=1, column=2, sticky="ne", pady=(8, 0))
-        tabs.dashed_round_rect(box, px(1), px(1), width - px(2), px(24), px(7), PALETTE["button_fg"])
+        width = tkfont.Font(parent, font).measure(text) + px(28)
+        box = tk.Canvas(parent, width=width, height=px(26), highlightthickness=0, bd=0, bg=parent.cget("bg"), cursor="hand2")
+        box.pack(anchor="e", pady=(8, 0))
+        box.create_rectangle(px(1), px(1), width - px(2), px(24), outline=PALETTE["button_fg"], dash=(4, 3))
         box.create_text(width // 2, px(13), text=text, fill=PALETTE["button_fg"], font=font)
         box.bind("<Button-1>", lambda e: self._start_tour())
         Tooltip(box, t("A walk through the advanced sections, one at a time, on Artist + Guests: the playlist that "
@@ -2433,6 +2518,33 @@ class SettingsTab(tk.Frame):
             self._pick_button(target["id"])
         self.update_idletasks()
         self._tour = tour.Tour(self._button_inner, on_close=lambda: setattr(self, "_tour", None))
+
+    def _size_buttons(self, parent):
+        """A- and A+ before the pill: the text size of every Settings screen, one setting for the listener (3 Nov 2026)."""
+        frame = tk.Frame(parent)
+        frame.pack(side="left", padx=(0, 12))
+        self._size_labels = {}
+        for key, text, note, step in (("smaller", "A-", N_("Smaller text on every Settings screen."), -1),
+                                      ("larger", "A+", N_("Larger text on every Settings screen."), 1)):
+            lab = tk.Label(frame, text=text, font=("Segoe UI", 9, "bold"), fg=PALETTE["button_fg"], cursor="hand2",
+                           padx=6, pady=3)
+            lab.pack(side="left")
+            lab.bind("<Button-1>", lambda e, st=step: self._text_size_step(st))
+            Tooltip(lab, t(note))
+            self._size_labels[key] = lab
+
+    def _text_size_step(self, step):
+        """One point up or down, kept in .env; the named fonts follow at once and the drawn rows are rebuilt."""
+        size = max(tabs.SETTINGS_FONT_MIN, min(tabs.SETTINGS_FONT_MAX, self._text_size + step))
+        if size == self._text_size:
+            return
+        self._text_size = size
+        write_env({"SETTINGS_FONT_SIZE": str(size)})
+        tabs.settings_fonts(self, size)
+        self._fill_button_list()   # the list and device rows draw their text at creation
+        self._devices_refresh()
+        self._button_fill_page()
+        tabs.use_fonts(self)
 
     def _set_mode(self, key):
         """The Simple / Advanced pill: Simple asks first when it turns things off (mode.py)."""
@@ -3095,7 +3207,7 @@ class SettingsTab(tk.Frame):
             tick = ttk.Checkbutton(line, text=label, variable=v, command=ticked,
                                    style="AI.Big.TCheckbutton" if code == "ai" else "Big.TCheckbutton")
             if code == "ai":   # magenta: uses AI credit
-                ttk.Style(line).configure("AI.Big.TCheckbutton", font=("Segoe UI", 11),
+                ttk.Style(line).configure("AI.Big.TCheckbutton", font="S24.body",
                                           foreground=PALETTE["ai_purple"])
             tick.pack(side="left")
             self._source_boxes.append((tick, code, label, purpose))
@@ -3372,7 +3484,7 @@ class SettingsTab(tk.Frame):
         """Consensus for a matching config: On or Off, the circle's size, and how many lists must agree."""
         g = group.upper()
         what = t("artists") if group == "artists" else t("tracks")
-        box = section(page, t("Consensus"), tour.note_for("Consensus"))
+        box = section(page, self._by_kind(t("Consensus"), N_("Consensus for {kind}"), group), tour.note_for("Consensus"))
         on_key, size_key, agree_key = f"INNER_CIRCLE_{g}", f"INNER_CIRCLE_{g}_SIZE", f"INNER_CIRCLE_{g}_AGREE"
         p.vars[on_key] = tk.BooleanVar(value=p.env.get(on_key, "0").strip().lower() in engine.YES)
         box.refold = section_fold(box, lambda: bool(p.vars[on_key].get()))
@@ -3428,9 +3540,16 @@ class SettingsTab(tk.Frame):
         agree_cb.bind("<<ComboboxSelected>>", lambda e: (agree_cb.selection_clear(), p.save()))
         sync()
 
+    def _by_kind(self, title, titled, group):
+        """A section's title, with its config's kind when the playlist has more than one matching config."""
+        if getattr(self, "_matching_configs", 0) > 1:
+            return t(titled, kind=t(buttons.KIND_LABELS[group]))
+        return title
+
     def _moderator_section(self, p, page, group):
         """A Moderator tick for one Play option, greyed out until the AI is set up."""
-        box = section(page, t("Moderator"), tour.note_for("Moderator"), title_fg=PALETTE["ai_purple"])
+        box = section(page, self._by_kind(t("Moderator"), N_("Moderator for {kind}"), group), tour.note_for("Moderator"),
+                      title_fg=PALETTE["ai_purple"])
         key = f"AI_MODERATOR_{group.upper()}"
         p.vars[key] = tk.StringVar(value=engine.moderator_settings(p.env.get)[group].title())
         box.refold = section_fold(box, lambda: p.vars[key].get() != "Off")
@@ -3450,8 +3569,8 @@ class SettingsTab(tk.Frame):
         Tooltip(cb, t(NO_KEY_TEXT), when=lambda: not self._ai_set_up())
         p.moderator_boxes.append(cb)
 
-    def _fill_sources(self, tab, p, kind):
-        """A button's Sources page: its kind's sources, how many must agree, and its Moderator."""
+    def _fill_sources(self, tab, p, kind, where_=None):
+        """A config's Sources section, and its Consensus and Moderator in where_ (the whole-playlist frames under the configs)."""
         p.loading = True
         p.moderator_boxes = []
         simple = mode.is_simple()   # Simple: the sources and Must agree alone, no scores
@@ -3485,9 +3604,9 @@ class SettingsTab(tk.Frame):
             help_mark(row, t("How many sources must agree before an artist is picked. Higher means a smoother "
                            "playlist with fewer wildcards, but less chance of discovering something new. "
                            "Tip: try single sources on their own before blending.")).pack(side="left", padx=(8, 0))
-            if not simple:
-                self._inner_circle_section(p, pages["artists"], "artists")
-                self._moderator_section(p, pages["artists"], "artists")
+            if not simple:   # under the configs, with the other whole-playlist sections (Ben, 3 Nov 2026)
+                self._inner_circle_section(p, where_["Consensus"] if where_ else pages["artists"], "artists")
+                self._moderator_section(p, where_["Moderator"] if where_ else pages["artists"], "artists")
 
         # --- Similar Tracks: its own sources and agreement ---
         if kind == "tracks":
@@ -3506,9 +3625,9 @@ class SettingsTab(tk.Frame):
             help_mark(row, t("How many sources must agree on a track before it's used. If too few agreed tracks "
                            "are in your library, the agreement is relaxed a step at a time, and the log says so.")
                       ).pack(side="left", padx=(8, 0))
-            if not simple:
-                self._inner_circle_section(p, pages["tracks"], "tracks")
-                self._moderator_section(p, pages["tracks"], "tracks")
+            if not simple:   # under the configs, with the other whole-playlist sections (Ben, 3 Nov 2026)
+                self._inner_circle_section(p, where_["Consensus"] if where_ else pages["tracks"], "tracks")
+                self._moderator_section(p, where_["Moderator"] if where_ else pages["tracks"], "tracks")
 
         # --- Artist's Top Tracks ---
         if kind == "top":
@@ -3614,124 +3733,6 @@ class SettingsTab(tk.Frame):
         seed_fg = tabs.seed_colour("dark" if engine.THEME == "dark" else "light")   # Playing Now's colour, as on the Play tab
         p.seed_boxes = {}   # "current" / "pn" / "review_current" / "review_pn" -> {key: its number box}
         ROW_PAD = 7   # a little more room between rows than other pages: four columns are a lot to scan
-
-        def review_header(group):
-            """Current Track | Review Mode column headings, with Review Mode's Mirror tick (standard button only)."""
-            if not p.columns:
-                return
-            box, r = where["box"], where["r"]
-            tk.Label(box, text=t("Current Track"), font=LABEL_FONT, fg=PALETTE["help_fg"]).grid(
-                row=r, column=1, sticky="w", padx=(12, 0))
-            cell = tk.Frame(box)
-            cell.grid(row=r, column=2, sticky="w", padx=(24, 0))
-            var = tk.BooleanVar(value=read_env().get(f"REVIEW_SAME_{group.upper()}", "1").strip().lower()
-                                not in ("0", "false", "no"))
-            review["same"][group] = var
-            title = tk.Label(cell, text=t("Review Mode"), font=LABEL_FONT, fg=review_fg)
-            title.pack(side="left", padx=(0, 10))
-            ttk.Checkbutton(cell, text=t("Mirror Current Track"), variable=var).pack(side="left")
-            var.trace_add("write", lambda *a, g=group: review_same_changed(g))   # saves however it's changed
-            help_mark(cell, t("In Review Mode you're choosing from a list, so a shortlist is often better than a "
-                            "full playlist. Untick Mirror Current Track to give Review Mode its own figures "
-                            "for this section; everything else here (sources, Drift, hidden tracks) is shared. "
-                            "Standard button only, as voice builds never review."), on=title)
-            where["r"] += 1
-
-        def seed_header(group):
-            """
-            The four columns for Similar Artists and Similar Tracks (standard button only): Seed over Current Track and
-            Playing Now, Review Mode over its own Current Track and Playing Now, each Review Mode column with
-            a Mirror tick above its heading.
-            """
-            if not p.columns:
-                return
-            box, r = where["box"], where["r"]
-            for text, col, colour in ((t("SEED"), 1, PALETTE["help_fg"]), (t("REVIEW MODE"), 3, review_fg)):
-                cell = tk.Frame(box)
-                cell.grid(row=r, column=col, columnspan=2, sticky="ew", padx=(12 if col == 1 else 24, 0),
-                          pady=(0, 6))
-                tk.Label(cell, text=text, font=("Segoe UI", 8, "bold"), fg=colour).pack(anchor="w")
-                tk.Frame(cell, height=1, bg=colour).pack(fill="x")
-            for col, key, text in ((3, f"REVIEW_SAME_{group.upper()}", t("Mirror Current Track")),
-                                   (4, f"REVIEW_SAME_{group.upper()}_PN", t("Mirror Playing Now"))):
-                var = tk.BooleanVar(value=read_env().get(key, "1").strip().lower() not in ("0", "false", "no"))
-                name = group if col == 3 else f"{group}_pn"
-                review["same"][name] = var
-                ttk.Checkbutton(box, text=text, variable=var).grid(row=r + 1, column=col, sticky="w",
-                                                                   padx=(24, 0))
-                var.trace_add("write", lambda *a, g=name, k=key: review_same_changed(g, k))
-            heads = ((1, t("Current Track"), PALETTE["help_fg"]), (2, t("Playing Now"), PALETTE["help_fg"]),
-                     (3, t("Current Track"), review_fg), (4, t("Playing Now"), review_fg))
-            for col, text, colour in heads:
-                label = tk.Label(box, text=text, font=LABEL_FONT, fg=colour)
-                label.grid(row=r + 2, column=col, sticky="w", padx=(12 if col == 1 else 24, 0), pady=(10, 4))
-                if col == 2:
-                    help_mark(box, t("Playing Now: the Play tab's Seed set to Playing Now. A few artists or tracks "
-                                   "are picked at random from the whole list, and each in turn brings its own "
-                                   "share of similar ones, so the results are usually broader than Current "
-                                   "Track. Tracks already in Playing Now are left out. Standard button only."),
-                              on=label)
-                if col == 3:
-                    help_mark(box, t("In Review Mode you're choosing from a list, so a shortlist is often better "
-                                   "than a full playlist. Untick a Mirror tick to give Review Mode its own "
-                                   "figures for that seed; everything else here (sources, Drift, hidden "
-                                   "tracks) is shared. Standard button only, as voice builds never review."),
-                              on=label)
-            where["r"] += 3
-
-        def review_same_changed(group, key=None):
-            same = review["same"][group].get()
-            write_env({key or f"REVIEW_SAME_{group.upper()}": "1" if same else "0"})
-            for sb in review["boxes"].get(group, []):
-                sb.config(state="disabled" if same else "normal")
-
-        def review_twin(group, key, default, lo, hi, row=None, col=2):
-            """A Review Mode spinbox for key, saved as REVIEW_<key> (standard button only)."""
-            if not p.columns:
-                return None
-            box = where["box"]
-            r = where["r"] - 1 if row is None else row
-            rkey = f"REVIEW_{key}"
-            var = tk.StringVar(value=read_env().get(rkey, "").strip() or read_env().get(key, "").strip()
-                               or p.env.get(key, default))
-            cell = tk.Frame(box)
-            cell.grid(row=r, column=col, sticky="w", padx=(24, 0), pady=ROW_PAD)
-            sb = tk.Spinbox(cell, from_=lo, to=hi, textvariable=var, width=6,
-                            command=lambda k=rkey, v=var: write_env({k: v.get().strip()}))
-            sb.pack(side="left")
-            var.trace_add("write", lambda *a, k=rkey, v=var: write_env({k: v.get().strip()}))
-            review["boxes"].setdefault(group, []).append(sb)
-            if review["same"].get(group) is not None and review["same"][group].get():
-                sb.config(state="disabled")
-            return cell
-
-        def pn_cell(key, default, lo, hi, row=None, note=None):
-            """A Playing Now spinbox for key (PN_...), saved straight to .env (standard button only)."""
-            if not p.columns:
-                return None
-            box = where["box"]
-            r = where["r"] - 1 if row is None else row
-            var = tk.StringVar(value=read_env().get(key, "").strip() or default)
-            cell = tk.Frame(box)
-            cell.grid(row=r, column=2, sticky="w", padx=(24, 0), pady=ROW_PAD)
-            tk.Spinbox(cell, from_=lo, to=hi, textvariable=var, width=6,
-                       command=lambda k=key, v=var: write_env({k: v.get().strip()})).pack(side="left")
-            var.trace_add("write", lambda *a, k=key, v=var: write_env({k: v.get().strip()}))
-            if note:
-                tk.Label(cell, text=note, fg=PALETTE["help_fg"]).pack(side="left", padx=(8, 0))
-            return cell
-
-        def limit_tick(cell, key, group=None):
-            """A Limit tick after a column's number, saved as key ("1" or "0"), ticked to start."""
-            var = tk.BooleanVar(value=read_env().get(key, "1").strip().lower() in ("1", "true", "yes"))
-            tick = ttk.Checkbutton(cell, text=t("Limit"), variable=var)
-            var.trace_add("write", lambda *a: write_env({key: "1" if var.get() else "0"}))
-            tick.pack(side="left", padx=(8, 0))
-            if group is not None:
-                review["boxes"].setdefault(group, []).append(tick)
-                if review["same"].get(group) is not None and review["same"][group].get():
-                    tick.config(state="disabled")
-            return var
 
         def spin(label, key, default, lo, hi, help_text=None):
             box, r = where["box"], where["r"]
@@ -3851,47 +3852,45 @@ class SettingsTab(tk.Frame):
             tabs.flow(row, within=box)   # the sentence wraps like a paragraph when the page is narrower than it
             return boxes
 
-        def review_block(group, current_parts, pn_parts):
+        def review_block(group, lines):
             """
-            Separate Settings for Review Mode (standard playlist only): one tick; ticked, an orange-edged box
-            holds the two seed lines again, saved as REVIEW_ keys; unticked, Review Mode mirrors the figures above.
+            Review Mode uses the same settings (Ben, 3 Nov 2026), under Skip tracks on every kind that reviews, on
+            the standard playlist: ticked to start; unticked, an orange-edged box opens with Review Mode's own
+            lines (label, parts), saved as REVIEW_ keys. Saved as REVIEW_SAME_<GROUP> (and _PN for the matching
+            kinds), as before.
             """
             if not p.columns or mode.is_simple():
                 return
             G = group.upper()
-            keys = (f"REVIEW_SAME_{G}", f"REVIEW_SAME_{G}_PN")
-            separate = any(read_env().get(k, "1").strip().lower() in ("0", "false", "no") for k in keys)
-            var = tk.BooleanVar(value=separate)
-            same_ct, same_pn = tk.BooleanVar(value=not separate), tk.BooleanVar(value=not separate)
-            review["same"][group], review["same"][f"{group}_pn"] = same_ct, same_pn
+            keys = (f"REVIEW_SAME_{G}", f"REVIEW_SAME_{G}_PN") if group in ("artists", "tracks") else (f"REVIEW_SAME_{G}",)
+            same = all(read_env().get(k, "1").strip().lower() not in ("0", "false", "no") for k in keys)
+            var = tk.BooleanVar(value=same)
+            review["same"][group] = var
             box = where["box"]
-            tick = ttk.Checkbutton(box, text=t("Separate Settings for Review Mode"), variable=var)
-            tick.grid(row=where["r"], column=0, columnspan=6, sticky="w", pady=(10, 0))
+            tick = ttk.Checkbutton(box, text=t("Review Mode uses the same settings"), variable=var)
+            tick.grid(row=where["r"], column=0, columnspan=6, sticky="w", pady=(8, 0))
             where["r"] += 1
             help_mark(box, t("In Review Mode you're choosing from a list, so a shortlist is often better than a full "
-                             "playlist. Ticked, Review Mode gets its own figures for this config; everything else here "
-                             "(sources, Drift, hidden tracks) is shared. Standard playlist only, as voice builds never "
-                             "review."), on=tick)
+                             "playlist. Untick it and Review Mode gets its own figures for this config; everything else "
+                             "here (sources, Drift, hidden tracks) is shared. Standard playlist only, as voice builds "
+                             "never review."), on=tick)
             frame = tk.Frame(box, highlightthickness=1, highlightbackground=review_fg, highlightcolor=review_fg, padx=8, pady=4)
             frame.grid(row=where["r"], column=0, columnspan=6, sticky="w", pady=(4, 2))
-            tabs.corner_tiles(frame)
             where["r"] += 1
             outer_box, outer_r = where["box"], where["r"]
             where["box"], where["r"] = frame, 0
-            p.seed_boxes["review_current"] = seed_line(t("When Seed is Current Track"), review_fg, current_parts, store="review", pady=(2, 0))
-            p.seed_boxes["review_pn"] = seed_line(t("When Seed is Playing Now"), review_fg, pn_parts, store="review", pady=(6, 0))
+            for n, (name, label, parts) in enumerate(lines):
+                p.seed_boxes[name] = seed_line(label, review_fg, parts, store="review", pady=(2 if n == 0 else 6, 0))
             where["box"], where["r"] = outer_box, outer_r
 
             def sync(*_):
                 on = var.get()
-                same_ct.set(not on)
-                same_pn.set(not on)
-                write_env({keys[0]: "0" if on else "1", keys[1]: "0" if on else "1"})
-                frame.grid() if on else frame.grid_remove()
+                write_env({k: "1" if on else "0" for k in keys})
+                frame.grid_remove() if on else frame.grid()
             var.trace_add("write", sync)
-            frame.grid() if separate else frame.grid_remove()
+            frame.grid_remove() if same else frame.grid()
             review["frames"][group] = (var, frame)
-            self._review_vars = {"same": review["same"], "separate": var}
+            self._review_vars = review   # {"same": {group: tick}, "frames": {group: (tick, box)}}
 
         def recent(group):
             """Skip tracks played in the last [n] days (1 by default), with its ?."""
@@ -4354,8 +4353,9 @@ class SettingsTab(tk.Frame):
                                                       "random from the whole list, and each in turn brings its own share of "
                                                       "similar artists, so the results are usually broader than Current "
                                                       "Track. Tracks already in Playing Now are left out. Standard playlist only."))
-                review_block("artists", current, pn)
             recent("artists")
+            review_block("artists", [("review_current", t("When Seed is Current Track"), current),
+                                  ("review_pn", t("When Seed is Playing Now"), pn)])
             drift("artists")
             deep_cuts("artists")
             nonstop("artists")
@@ -4378,7 +4378,6 @@ class SettingsTab(tk.Frame):
                                                note=t("The Play tab's Seed set to Playing Now: a few tracks are picked at random "
                                                       "from the whole list, each from a different artist while there are artists "
                                                       "left, and each in turn finds its share of similar tracks. Standard playlist only."))
-                review_block("tracks", current, pn)
             tk.Frame(where["box"], height=1, bg=PALETTE["section_edge"]).grid(row=where["r"], column=0, columnspan=6,
                                                                                sticky="ew", pady=(10, 4))
             where["r"] += 1
@@ -4392,6 +4391,8 @@ class SettingsTab(tk.Frame):
                    "Now, each sampled track's best match comes first, then each one's second best, and so on. "
                    "Shuffled mixes them up."))
             recent("tracks")
+            review_block("tracks", [("review_current", t("When Seed is Current Track"), current),
+                                  ("review_pn", t("When Seed is Playing Now"), pn)])
             drift("tracks")
             deep_cuts("tracks")
             nonstop("tracks")
@@ -4402,12 +4403,11 @@ class SettingsTab(tk.Frame):
         # --- Artist's Top Tracks ---
         if kind == "top":
             begin("top", t("Playlist Selection"), tour.note_for("Playlist Selection"))
-            review_header("top")
             spin(t("Number of tracks (1-20)"), "TOP_TRACKS_COUNT", "10", 1, 20, t(TOP_TARGET_HELP))
-            review_twin("top", "TOP_TRACKS_COUNT", "10", 1, 20)
             choice(t("Order"), "TOP_TRACKS_ORDER", "popular", [N_("popular"), N_("reverse"), N_("random")],
                    t("popular: most played first\nreverse: least played first\nrandom: shuffled"))
             recent("top")
+            review_block("top", [("review_current", t("Review Mode"), [t("Number of tracks"), ("TOP_TRACKS_COUNT", "10", 1, 20)])])
             nonstop("top")
             hidden("top")
             fallback("top")
@@ -5779,7 +5779,7 @@ class SettingsTab(tk.Frame):
     def _build_search_sites(self, nb):
         """Discover search sites: which stores and reference sites to open per row."""
         tab = self._scroll_tab(nb, N_("Discover"))
-        ttk.Style(self).configure("Big.TCheckbutton", font=("Segoe UI", 11))
+        ttk.Style(self).configure("Big.TCheckbutton", font="S24.body")   # the Settings size, like every other tick (3 Nov 2026)
         cols = 4
 
         def ticks(box, group, options, chosen):

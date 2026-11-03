@@ -75,3 +75,29 @@ def test_restore_defaults_and_forget_take_the_devices_playlists_with_them(app):
     devices.forget(ECHO)
     assert buttons.of_device(ECHO) == [] and ECHO not in devices.load()
     assert buttons.standard("vibe") is not None, "only the device's own went"
+
+
+def test_copy_settings_from_links_a_phrase_to_any_playlist_as_it_is(app):
+    """
+    Copy Settings From, ticked (Ben, 3 Nov 2026): the phrase runs the chosen playlist itself, any kind, with no
+    copy made. Before this a linked playlist of another kind fell back to the standard. Linking deletes the
+    device's own for the slot; linking to the standard stores no choice.
+    """
+    import buttons
+    import devices
+    echo(app)
+    consensus = next(b for b in buttons.load() if b["name"] == "Consensus")
+    devices.link(ECHO, "songs_by", consensus["id"])
+    assert devices.playlist_for(ECHO, "songs_by")["id"] == consensus["id"], "an Artist Matching playlist for Songs by"
+    assert buttons.of_device(ECHO) == [], "no copy made"
+    row = next(r for r in devices.rows(ECHO) if r[0] == "songs_by")
+    assert row[2]["id"] == consensus["id"] and row[3] is False, "shown greyed, not the device's own"
+    own = devices.make_own(ECHO, "songs_by", ("copy", consensus["id"]))
+    assert own["copied_from"] == consensus["id"], "Copy Settings From shows what it was copied from, greyed"
+    devices.link(ECHO, "songs_by", buttons.standard("top")["id"])
+    assert buttons.get(own["id"]) is None, "ticking again deletes the device's own"
+    assert devices.for_device(ECHO)["buttons"]["songs_by"] is None, "the standard is stored as no choice"
+    assert devices.playlist_for(ECHO, "songs_by")["standard"] == "top"
+    buttons.remove(consensus["id"])
+    devices.link(ECHO, "music_like", buttons.standard("tracks")["id"])
+    assert devices.playlist_for(ECHO, "music_like")["kind"] == "tracks"

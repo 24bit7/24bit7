@@ -328,13 +328,13 @@ def test_the_playing_now_line_and_review_tick_are_only_on_the_standard_button(ap
     pick_button(ui, "Similar Artists")
     page = inner_page(ui, "Playlist")
     texts = labels(page) + [w.cget("text") for w in walk(page) if isinstance(w, ttk.Checkbutton)]
-    for text in ("When Seed is Current Track", "When Seed is Playing Now", "Separate Settings for Review Mode"):
+    for text in ("When Seed is Current Track", "When Seed is Playing Now", "Review Mode uses the same settings"):
         assert text in texts, text
     buttons.add("Sunday", "artists")
     pick_button(ui, "Sunday")
     page = inner_page(ui, "Playlist")
     texts = labels(page) + [w.cget("text") for w in walk(page) if isinstance(w, ttk.Checkbutton)]
-    assert "When Seed is Playing Now" not in texts and "Separate Settings for Review Mode" not in texts
+    assert "When Seed is Playing Now" not in texts and "Review Mode uses the same settings" not in texts
     assert "When Seed is Current Track" in texts and "tracks, from" in texts
 
 
