@@ -1,7 +1,8 @@
 """
-The page's sections are open when their thing is on and closed when it's off, with no fold of the user's
-own (Ben, 2 Nov 2026): a closed section opens when its header is clicked so it can be switched on; left off,
-it's closed again next time. Sources and Playlist Selection are always on, so always open.
+The page's sections are open when their thing is on and closed when it's off (Ben, 2 Nov 2026). Revised
+6 Nov: the header opens and closes a section either way, and one opened while off closes by itself at the
+next click outside it if nothing in it was switched on. Sources and Playlist Selection are always on, so
+always open.
 """
 
 import tkinter as tk
@@ -58,4 +59,52 @@ def test_sections_open_when_on_and_closed_when_off(app, ui):
     s._buttons_changed()
     ui.pump(0.2)
     assert boxes["Shortcut"].is_open() is True, "a shortcut set opens the section"
+    assert not ui.errors, ui.errors[0]
+
+
+def test_a_section_opened_while_off_closes_at_a_click_elsewhere_and_any_header_folds(app, ui):
+    """Ben, 6 Nov 2026: opening Consensus with nothing switched on left it open with no way to close it."""
+    import buttons
+    artists = buttons.standard("artists")
+    buttons.set_settings(artists["id"], dict(artists["settings"], INNER_CIRCLE_ARTISTS="0", NONSTOP_ARTISTS="0",
+                                             DEEP_CUTS_ARTISTS="spaced"))
+    pick_button(ui, "Similar Artists")
+    s = ui.settings
+    s._button_fill_page()
+    ui.pump(0.4)
+    boxes = section_boxes(s._button_inner)
+    consensus, nonstop, deep = boxes["Consensus"], boxes["Non-stop"], boxes["Deep Cuts"]
+    head = lambda box: box.master.winfo_children()[0]
+    assert consensus.is_open() is False
+    head(consensus).event_generate("<Button-1>")
+    ui.pump(0.2)
+    assert consensus.is_open() is True, "opened to look"
+    head(consensus).event_generate("<Button-1>")
+    ui.pump(0.2)
+    assert consensus.is_open() is False, "its header closes it again"
+    head(consensus).event_generate("<Button-1>")
+    ui.pump(0.2)
+    s._name_box.event_generate("<Button-1>")   # a click on another setting
+    ui.pump(0.2)
+    assert consensus.is_open() is False, "nothing switched on: it closes by itself"
+    head(consensus).event_generate("<Button-1>")
+    ui.pump(0.2)
+    head(nonstop).event_generate("<Button-1>")   # opening another section counts as a click elsewhere
+    ui.pump(0.2)
+    assert consensus.is_open() is False and nonstop.is_open() is True
+    page = s._button_page
+    page.vars["NONSTOP_ARTISTS"].set(True)   # switched on inside: it stays open after a click elsewhere
+    s._name_box.event_generate("<Button-1>")
+    ui.pump(0.2)
+    assert nonstop.is_open() is True
+    assert deep.is_open() is True
+    head(deep).event_generate("<Button-1>")
+    ui.pump(0.2)
+    assert deep.is_open() is False, "a section that's on folds too"
+    page.save()
+    ui.pump(0.3)
+    assert deep.is_open() is False, "and stays folded after a save"
+    head(deep).event_generate("<Button-1>")
+    ui.pump(0.2)
+    assert deep.is_open() is True
     assert not ui.errors, ui.errors[0]

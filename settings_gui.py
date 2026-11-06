@@ -298,20 +298,41 @@ HELP_MARK_BG = "#8a97aa"
 NOTE_TITLES = (tk.Label, ttk.Label, tk.Checkbutton, ttk.Checkbutton)
 
 
-def section_fold(box, fold):
+_FOLDS = []   # (outer, tidy) for every folding section built: a click elsewhere tidies the open ones that are off
+
+
+def _fold_click(event):
+    """A click anywhere in a Settings window: each folding section that's open but off, and wasn't clicked in,
+    closes (Ben, 6 Nov 2026: an opened Consensus with nothing switched on had no way to close)."""
+    widget = event.widget
+    if isinstance(widget, str):
+        return
+    for item in list(_FOLDS):
+        outer, tidy = item
+        try:
+            if not outer.winfo_exists():
+                _FOLDS.remove(item)
+                continue
+            if outer.winfo_toplevel() is not widget.winfo_toplevel():
+                continue
+        except (tk.TclError, KeyError):
+            _FOLDS.remove(item)
+            continue
+        w = widget
+        while w is not None and w is not outer:
+            w = getattr(w, "master", None)
+        if w is None:
+            tidy()
+
+
+def _make_fold(outer, head, arrow, title_label, box, fold):
     """
-    Gives a section built by section() its fold after the fact, once the values it reads exist:
-    the same open-when-on rule, arrow and header click. Returns the refold function.
+    The fold of a section (2 Nov 2026, revised 6 Nov): open when its thing is on and closed when it's off;
+    the header (arrow or title) opens and closes it either way, and a section opened while off closes by
+    itself at the next click outside it if it's still off. A section you've closed while on stays closed
+    until you open it again or the page is built again. Returns refold, run after a save.
     """
-    outer = box.master
-    head = outer.winfo_children()[0]
-    head_bg = head.cget("bg")
-    title_label = next(w for w in head.winfo_children() if isinstance(w, tk.Label))
-    arrow = tk.Label(head, text="\u25be", font=("Segoe UI", 8), fg=title_label.cget("fg"), bg=head_bg, cursor="hand2")
-    arrow.pack(side="left", padx=(8, 0), pady=4, before=title_label)
-    title_label.pack_configure(padx=(4, 0))
-    title_label.config(cursor="hand2")
-    state = {"open": True}
+    state = {"open": True, "shut": False}   # shut: closed by hand while on
 
     def show(open_):
         if open_ and not state["open"]:
@@ -321,21 +342,57 @@ def section_fold(box, fold):
         state["open"] = open_
         arrow.config(text="\u25be" if open_ else "\u25b8")
 
+    def is_on():
+        try:
+            return bool(fold())
+        except (tk.TclError, KeyError, AttributeError):
+            return state["open"]
+
     def refold():
         try:
-            show(bool(fold()))
-        except (tk.TclError, KeyError, AttributeError):
+            on = is_on()
+            if not on:
+                state["shut"] = False
+            show(on and not state["shut"])
+        except tk.TclError:
             pass
 
+    def tidy():
+        if state["open"] and not is_on():
+            show(False)
+
     def header_clicked(_e=None):
-        if not state["open"]:
-            show(True)
+        opening = not state["open"]
+        state["shut"] = not opening and is_on()
+        show(opening)   # the window's own click runs next and tidies the other sections, not this one
     for w in (head, arrow, title_label):
         w.bind("<Button-1>", header_clicked)
+    top = outer.winfo_toplevel()
+    if not getattr(top, "_fold_watch", False):
+        top._fold_watch = True
+        top.bind("<Button-1>", _fold_click, add="+")
+    _FOLDS.append((outer, tidy))
     box.is_open = lambda: state["open"]
     box.open = lambda: show(True)
+    box.refold = refold
     refold()
     return refold
+
+
+def section_fold(box, fold):
+    """
+    Gives a section built by section() its fold after the fact, once the values it reads exist:
+    the same rule, arrow and header click as section(fold=). Returns the refold function.
+    """
+    outer = box.master
+    head = outer.winfo_children()[0]
+    head_bg = head.cget("bg")
+    title_label = next(w for w in head.winfo_children() if isinstance(w, tk.Label))
+    arrow = tk.Label(head, text="\u25be", font=("Segoe UI", 8), fg=title_label.cget("fg"), bg=head_bg, cursor="hand2")
+    arrow.pack(side="left", padx=(8, 0), pady=4, before=title_label)
+    title_label.pack_configure(padx=(4, 0))
+    title_label.config(cursor="hand2")
+    return _make_fold(outer, head, arrow, title_label, box, fold)
 
 
 def help_mark(parent, text, on=None):
@@ -477,10 +534,10 @@ def section(parent, title, help_text=None, row=None, title_fg=None, fold=None):
     dark and grey in light, over a thin-edged box. Returns the box to build the
     section's controls in. Stacked with grid in column 0 of parent, one under
     another, or at row if given.
-    fold (2 Nov 2026): a function saying whether the section's thing is on. Given, the
-    section is open when it's on and closed when it's off, with an arrow in the header:
-    a closed one opens when its header is clicked, so it can be switched on; there's no
-    fold of the user's own. box.refold() re-reads the state (after a save).
+    fold (2 Nov 2026, revised 6 Nov): a function saying whether the section's thing is on.
+    Given, the section is open when it's on and closed when it's off, with an arrow in the
+    header that opens and closes it; one opened while off closes at the next click outside
+    it if still off (_make_fold). box.refold() re-reads the state (after a save).
     """
     ensure_fonts(parent)
     edge = PALETTE["section_edge"]
@@ -505,31 +562,7 @@ def section(parent, title, help_text=None, row=None, title_fg=None, fold=None):
     outer.grid(row=row, column=0, sticky="ew", pady=(0, 14))
     parent.grid_columnconfigure(0, weight=1)
     if fold is not None:
-        state = {"open": True}
-
-        def show(open_):
-            if open_ and not state["open"]:
-                box.pack(fill="both", expand=True)
-            elif not open_ and state["open"]:
-                box.pack_forget()
-            state["open"] = open_
-            arrow.config(text="\u25be" if open_ else "\u25b8")
-
-        def refold():
-            try:
-                show(bool(fold()))
-            except (tk.TclError, KeyError, AttributeError):
-                pass
-
-        def header_clicked(_e=None):
-            if not state["open"]:   # closed means off: open it so it can be switched on
-                show(True)
-        for w in (head, arrow, title_label):
-            w.bind("<Button-1>", header_clicked)
-        box.refold = refold
-        box.is_open = lambda: state["open"]
-        box.open = lambda: show(True)
-        refold()
+        _make_fold(outer, head, arrow, title_label, box, fold)
     else:   # always on: refold is a no-op, and there's no is_open, so a test can tell the folding sections apart
         box.refold = lambda: None
     return box
