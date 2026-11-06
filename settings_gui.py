@@ -678,6 +678,9 @@ class ProfilePage:
                 out[f"INNER_CIRCLE_{g}_FALLBACK_MIN"] = v[f"INNER_CIRCLE_{g}_FALLBACK_MIN"].get().strip() or "10"
         if "FALLBACK_SPOKEN" in v:
             out["FALLBACK_SPOKEN"] = "1" if v["FALLBACK_SPOKEN"].get() else "0"
+        for group in engine.TEMPO_GROUPS:   # Match Tempo: off, prefer or strict
+            if f"MATCH_TEMPO_{group.upper()}" in v:
+                out[f"MATCH_TEMPO_{group.upper()}"] = v[f"MATCH_TEMPO_{group.upper()}"].get()
         for group in engine.PLAYED_GROUPS:
             g = group.upper()
             if f"SKIP_PLAYED_{g}" not in v:   # another kind's section: not on this page
@@ -861,6 +864,16 @@ def table_colours():
 
 # The ? beside each Number of tracks
 LIMIT_HELP = N_("Ticked, the playlist stops at this many tracks, picked at random from everything found. Unticked, every track found goes in: Number of artists times Tracks per artist selection, plus the seed artist's, so the playlist can run long, and Drift doesn't run as there's no target to fall short of. When Non-stop adds more, it keeps to this number.\nTo switch the random pick off altogether, set Tracks per artist selection to the same as Number of artist's top tracks (say 5 of 5) and untick this.")
+TEMPO_CHOICES = [("off", N_("Off")), ("prefer", N_("Prefer")), ("strict", N_("Strict"))]   # Match Tempo (5 Nov 2026)
+TEMPO_HELP = N_("Uses your files' BPM tags to keep the playlist near the seed track's tempo. Half and double time "
+                "count as a match.\nPrefer: where there's a choice, such as which of an artist's top tracks to "
+                "pick, the closest tempos go first. Nothing is left out.\nStrict: only tracks within ten per cent "
+                "of the seed's BPM. Tracks with no BPM tag are left out too, so the playlist may come up short, and "
+                "the console says how many went.\nJRiver can fill BPM tags in for the whole library: Tools > "
+                "Library Tools > Analyze Audio.")
+SIMPLE_TEMPO_HELP = N_("Uses your files' BPM tags to pick, where there's a choice, the tracks closest to the seed "
+                       "track's tempo. Half and double time count as a match. Nothing is left out. JRiver can fill "
+                       "BPM tags in for the whole library: Tools > Library Tools > Analyze Audio.")
 TARGET_HELP = N_('This is the target number of tracks. The playlist may come out shorter, depending on how many matches are in your library. If your playlists are often too short, tick Drift to fill them out.')
 TOP_TARGET_HELP = N_("This is the target number of tracks. The playlist may come out shorter, depending on how many of the artist's top tracks are in your library.")
 
@@ -4013,6 +4026,41 @@ class SettingsTab(tk.Frame):
             p.played_boxes[group] = days
             place(row, pady=(8, 4))
 
+        def tempo(group):
+            """Match Tempo (Ben, 5 Nov 2026): a tick in Simple (Prefer or Off), Off / Prefer / Strict in Advanced.
+            A Strict playlist shows ticked in Simple and builds as Prefer there."""
+            key = f"MATCH_TEMPO_{group.upper()}"
+            value = (p.env.get(key) or "off").strip().lower()
+            value = value if value in dict(TEMPO_CHOICES) else "off"
+            p.vars[key] = tk.StringVar(value=value)
+            row = tk.Frame(where["box"])
+            if mode.is_simple():
+                on = tk.BooleanVar(value=value != "off")
+
+                def ticked():
+                    p.vars[key].set("prefer" if on.get() else "off")
+                    p.save()
+                tick = ttk.Checkbutton(row, text=t("Match Tempo"), variable=on, command=ticked)
+                tick.pack(side="left")
+                help_mark(row, t(SIMPLE_TEMPO_HELP), on=tick).pack(side="left", padx=(8, 0))
+                p.tempo_tick = tick
+            else:
+                title = tk.Label(row, text=t("Match Tempo"))
+                title.pack(side="left")
+                labels = {code: t(label) for code, label in TEMPO_CHOICES}
+                shown = tk.StringVar(value=labels[value])
+                cb = TCombobox(row, textvariable=shown, values=list(labels.values()), state="readonly", width=8)
+                cb.pack(side="left", padx=(8, 0))
+
+                def chosen(_e=None):
+                    p.vars[key].set(next(c for c, label in labels.items() if label == shown.get()))
+                    cb.selection_clear()
+                    p.save()
+                cb.bind("<<ComboboxSelected>>", chosen)
+                help_mark(row, t(TEMPO_HELP), on=title).pack(side="left", padx=(8, 0))
+                p.tempo_choice = cb
+            place(row, pady=(4, 4))
+
         def drift(group):
             """The Drift section: its tick box, then Drift using and Rounds."""
             note = tour.note_for("Drift")
@@ -4451,6 +4499,7 @@ class SettingsTab(tk.Frame):
                                                       "similar artists, so the results are usually broader than Current "
                                                       "Track. Tracks already in Playing Now are left out. Standard playlist only."))
             recent("artists")
+            tempo("artists")
             review_block("artists", [("review_current", t("When Seed is Current Track"), current),
                                   ("review_pn", t("When Seed is Playing Now"), pn)])
             drift("artists")
@@ -4488,6 +4537,7 @@ class SettingsTab(tk.Frame):
                    "Now, each sampled track's best match comes first, then each one's second best, and so on. "
                    "Shuffled mixes them up."))
             recent("tracks")
+            tempo("tracks")
             review_block("tracks", [("review_current", t("When Seed is Current Track"), current),
                                   ("review_pn", t("When Seed is Playing Now"), pn)])
             drift("tracks")

@@ -106,6 +106,7 @@ PROFILE_KEYS = {
                    for part in ("", "_SIZE", "_AGREE", "_FALLBACK", "_FALLBACK_MIN")],
                  "SKIP_LONG_CLOSERS", "LONG_CLOSER_MINUTES",
                  "SKIP_PLAYED_ARTISTS", "SKIP_PLAYED_ARTISTS_DAYS", "SKIP_PLAYED_TRACKS", "SKIP_PLAYED_TRACKS_DAYS",
+                 "MATCH_TEMPO_ARTISTS", "MATCH_TEMPO_TRACKS",
                  "SKIP_PLAYED_TOP", "SKIP_PLAYED_TOP_DAYS", "SKIP_PLAYED_VIBE", "SKIP_PLAYED_VIBE_DAYS",
                  "NONSTOP", "NONSTOP_USING", "NONSTOP_RESEED", "NONSTOP_TOP_REST", "NONSTOP_TOP_REST_COUNT",
                  "NONSTOP_VIBE",
@@ -118,6 +119,10 @@ PROFILE_KEYS = {
                  "RUN_AFTER_ARTISTS", "RUN_AFTER_ARTISTS_PATH", "RUN_AFTER_TRACKS", "RUN_AFTER_TRACKS_PATH",
                  "RUN_AFTER_TOP", "RUN_AFTER_TOP_PATH", "RUN_AFTER_VIBE", "RUN_AFTER_VIBE_PATH"],
 }
+BPM_CEILING = 400    # a BPM tag above this is a mistake (Ben's library has about forty), so it counts as untagged
+TEMPO_BAND = 0.10    # Match Tempo's Strict: within ten per cent of the seed's BPM, as If All Else Fails uses
+TEMPO_GROUPS = ("artists", "tracks")
+MATCH_TEMPO = {g: "off" for g in TEMPO_GROUPS}
 PLAYED_GROUPS = ("artists", "tracks", "top", "vibe")
 DEEP_CUT_GROUPS = ("artists", "tracks", "vibe")   # Top Tracks has no Deep Cuts: it's one artist's list
 DEEP_CUT_MODES = ("off", "spaced", "shuffled")   # Similar Artists, Similar Tracks, Artist's Top Tracks, Vibe
@@ -340,7 +345,7 @@ def load_settings():
     global LISTEN_SITES, CUSTOM_SITES, PLAYLIST_SITES, EXTRA_OUTPUTS, TIDAL_OPEN
     global SKIP_LONG_CLOSERS, LONG_CLOSER_MINUTES
     global SIMILAR_ARTIST_TRACK_COUNT, SIMILAR_ARTIST_TRACK_LIMIT, DRIFT, DEEP_CUTS
-    global AI_MODERATOR, MODERATOR_WARNED, SKIP_PLAYED
+    global AI_MODERATOR, MODERATOR_WARNED, SKIP_PLAYED, MATCH_TEMPO
     global NONSTOP, NONSTOP_USING, NONSTOP_RESEED, NONSTOP_TOP_REST, NONSTOP_TOP_REST_COUNT, NONSTOP_VIBE
     global NONSTOP_BY, LONG_CLOSERS, AI_MODERATOR_BY, RUN_AFTER, INNER_CIRCLE
     global CONSOLE_QUERY, USE_AI, CREDITS_SCOPE, CREDITS_FIRST
@@ -503,6 +508,11 @@ def load_settings():
         name = f"SKIP_PLAYED_{group.upper()}"
         SKIP_PLAYED[group] = (os.getenv(name, "0").strip().lower() in ("1", "true", "yes"),
                               _int_setting(f"{name}_DAYS", 1, 1, 365))
+    # Match Tempo, per config of Similar Artists and Similar Tracks: off, prefer or strict (5 Nov 2026)
+    MATCH_TEMPO = {}
+    for group in TEMPO_GROUPS:
+        value = os.getenv(f"MATCH_TEMPO_{group.upper()}", "off").strip().lower()
+        MATCH_TEMPO[group] = value if value in ("prefer", "strict") else "off"
     # Non-stop (Settings > Playlist): top up a 24bit7 playlist when its last track starts
     NONSTOP = os.getenv("NONSTOP", "0").strip().lower() in ("1", "true", "yes")
     NONSTOP_USING = "artists" if os.getenv("NONSTOP_USING", "tracks").strip().lower() == "artists" else "tracks"
@@ -701,6 +711,9 @@ SKIP_PLAYED_TOP=0
 SKIP_PLAYED_TOP_DAYS=1
 SKIP_PLAYED_VIBE=0
 SKIP_PLAYED_VIBE_DAYS=1
+# Match Tempo for Similar Artists and Similar Tracks: off, prefer or strict
+MATCH_TEMPO_ARTISTS=off
+MATCH_TEMPO_TRACKS=off
 # Every playlist: skip an album's last track when it's longer than this many
 # minutes, as those files often carry a hidden track after a long silence
 SKIP_LONG_CLOSERS=1
@@ -1046,6 +1059,7 @@ _nonstop_ids = _itertools.count(1)
 def nonstop_begin(mode, seed_info=None):
     """Called as each build starts: remembers what kind of build it is."""
     global NONSTOP_CONTEXT
+    _tempo_here.match = None   # a build of another kind on this thread doesn't inherit one
     seed_info = seed_info or {}
     NONSTOP_CONTEXT = {"build": next(_nonstop_ids), "kind": NONSTOP_KINDS.get(mode, "artists"),
                        "button": BUILD_BUTTON,
@@ -4030,7 +4044,18 @@ def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
     if not names:
         report("    " + t("No top tracks returned for {artist}.", artist=artist))
         return [], 0
-    chosen = random.sample(names, min(pick, len(names)))
+    tempo = current_tempo() if defer is None else None
+    if tempo is not None:
+        import library   # here rather than at the top: library imports engine
+        owned = {n: library.find_track_key(artist, n) for n in names}
+        if tempo.mode == "strict":
+            names = [n for n in names if owned[n] is None or tempo.fits(owned[n])]   # not owned: a miss, as ever
+            if not names:
+                return [], 0
+        else:
+            names = tempo.order(names, owned.get)
+    chosen = (names[:pick] if tempo is not None and tempo.mode == "prefer"
+              else random.sample(names, min(pick, len(names))))
     if defer is not None:
         # YouTube output: the caller looks every pick up together at the end (much faster)
         defer.extend((artist, tval, suggested_by, session_id) for tval in chosen)
@@ -5143,6 +5168,9 @@ class PlayedFilter:
                 return False
         if self.filters is not None and not self.filters.allows(key):
             return False
+        tempo = current_tempo()
+        if tempo is not None and not tempo.fits(key):
+            return False
         return not self._recent(key)
 
     def _recent(self, key):
@@ -5179,6 +5207,9 @@ class PlayedFilter:
         return self.filters is None or self.filters.passes(key)
 
     def done(self):
+        tempo = current_tempo()
+        if tempo is not None:
+            tempo.done()   # Match Tempo's own count, beside the other things left out
         if self.filters is not None:
             self.filters.done()
         if self.skipped:
@@ -6480,6 +6511,7 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
     first_key = typed_seed_key(seed_info, seeds, session_id, report)
     fast.play(first_key)
     played = PlayedFilter("artists", keep=[seed_info.get("FileKey"), first_key], report=report, filters=True)
+    tempo = TempoMatch("artists", [seed_info.get("FileKey"), first_key], report)
     drift = Drift("artists", target, session_id, report, per_artist=pick,
                   exclude_keys=[seed_info.get("FileKey"), first_key, *pn_keys], seed=label, played=played)
     for seed in seeds:
@@ -6854,6 +6886,19 @@ def similar_track_candidates(seeds, track, report=print):
 VARIETY_POOL = 2   # Similar Tracks collects up to this many times the matches it needs, then picks at random
 
 
+def pick_in_order(pool, n, per, per_artist, keep=None):
+    """pick_varied with no chance in it: the first n of pool that fit at most per_artist per artist, keep first."""
+    per, chosen = dict(per), []
+    for item in sorted(pool, key=lambda item: str(item[2]) != str(keep)) if keep else pool:
+        if len(chosen) >= n:
+            break
+        if per.get(item[4], 0) >= per_artist:
+            continue
+        chosen.append(item)
+        per[item[4]] = per.get(item[4], 0) + 1
+    return chosen
+
+
 def pick_varied(pool, n, per, per_artist, keep=None):
     """
     Similar Tracks' variety: n entries from pool (most similar first), drawn at random with
@@ -7108,6 +7153,7 @@ def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=Fal
     first_key = typed_seed_key(seed_info, seeds, session_id, report)
     fast.play(first_key)
     played = PlayedFilter("tracks", keep=[seed_info.get("FileKey"), first_key], report=report, filters=True)
+    tempo = TempoMatch("tracks", [seed_info.get("FileKey"), first_key], report)
     drift = Drift("tracks", target, session_id, report, per_artist=per_artist,
                   exclude_keys=[seed_info.get("FileKey"), first_key], seed=f"{seed_info['Artist']} - {track}",
                   played=played)
@@ -7145,7 +7191,7 @@ def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=Fal
     # Variety off: collect just what's wanted, so the closest matches go in, in order.
     variety = VARIETY_POOL if SIMILAR_TRACK_VARIETY else 1
     pool, pool_keys, pool_per = [], set(), dict(per)   # pool: (artist, title, key, sources, owner), best first
-    pool_size = wanted * variety
+    pool_size = wanted * (VARIETY_POOL if tempo.mode == "prefer" else variety)   # Prefer: a choice of tempos
     while candidates:
         for (artist, title), sources in candidates:
             if len(keys) + len(pool) >= pool_size:
@@ -7172,7 +7218,12 @@ def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=Fal
             break
         report("  " + t("{value} tracks with {need} or more sources agreeing, so relaxed to {value2}.", value=len(keys) + len(pool), need=need, value2=need - 1))
         need -= 1
-    picks = pick_varied(pool, wanted - len(keys), per, per_artist, keep=fast.key)
+    if tempo.mode == "prefer":   # closest tempos first; with Variety off, the closest are taken in that order
+        pool = tempo.order(pool, lambda item: item[2])
+    if tempo.mode == "prefer" and not SIMILAR_TRACK_VARIETY:
+        picks = pick_in_order(pool, wanted - len(keys), per, per_artist, keep=fast.key)
+    else:
+        picks = pick_varied(pool, wanted - len(keys), per, per_artist, keep=fast.key)
     for artist, title, key, sources, owner in picks:
         keys.append(key)
         per[owner] = per.get(owner, 0) + 1
@@ -7287,10 +7338,93 @@ def library_bpm(key):
         library.ensure_loaded()
         value = (library.track_row(key) or {}).get("BPM") or ""
         bpm = float(str(value).strip())
-        return bpm if bpm > 0 else None
+        return bpm if 0 < bpm <= BPM_CEILING else None
     except (ValueError, TypeError, AttributeError):
         return None
 
+
+TEMPO_HOW_TO = N_("JRiver can fill BPM tags in for the whole library: Tools > Library Tools > Analyze Audio.")
+_tempo_here = _db_threading.local()   # the build running on this thread's Match Tempo, if any
+
+
+def tempo_gap(bpm, seed_bpm):
+    """How far a tempo is from the seed's, as a share of the seed's. Half and double time count as the same."""
+    return min(abs(b - seed_bpm) for b in (bpm, bpm * 2, bpm / 2)) / seed_bpm
+
+
+def current_tempo():
+    """The Match Tempo of the build running on this thread, or None."""
+    return getattr(_tempo_here, "match", None)
+
+
+class TempoMatch:
+    """
+    Match Tempo (Ben, 5 Nov 2026), for one build of Similar Artists or Similar Tracks. Prefer: where
+    there's a choice (each artist's top tracks, Similar Tracks' pool), the tempos closest to the seed's go
+    first and nothing is left out. Strict: only tracks within TEMPO_BAND of the seed's BPM; the rest, and
+    tracks with no BPM, are left out and counted. Off without a seed BPM, after a line saying so.
+    """
+
+    def __init__(self, group, seed_keys, report=print):
+        self.mode, self.report, self.seed = MATCH_TEMPO.get(group, "off"), report, None
+        self.off_tempo, self.untagged = set(), set()
+        if self.mode == "strict":
+            try:
+                import mode as app_mode   # Simple is a mode: Strict builds as Prefer there
+                if app_mode.is_simple():
+                    self.mode = "prefer"
+            except Exception:
+                pass
+        _tempo_here.match = None
+        if self.mode == "off" or output_streaming():
+            self.mode = "off"
+            return
+        bpm = next((b for b in (library_bpm(k) for k in seed_keys if k) if b), None)
+        if bpm is None:
+            report("  " + t("Note: Match Tempo isn't in effect, as the seed track has no BPM tag.") + " " + t(TEMPO_HOW_TO))
+            self.mode = "off"
+            return
+        self.seed = bpm
+        _tempo_here.match = self
+        report("  " + (t("Match Tempo, Strict: within {band}% of the seed's {bpm} BPM, half and double time included.",
+                         band=int(TEMPO_BAND * 100), bpm=f"{bpm:.0f}") if self.mode == "strict" else
+                       t("Match Tempo, Prefer: tempos closest to the seed's {bpm} BPM first.", bpm=f"{bpm:.0f}")))
+
+    @property
+    def on(self):
+        return self.mode != "off"
+
+    def gap(self, key):
+        bpm = library_bpm(key) if key else None
+        return None if bpm is None else tempo_gap(bpm, self.seed)
+
+    def fits(self, key):
+        """Strict: True only for a track within the band (counted when not). Prefer and Off: always True."""
+        if self.mode != "strict" or not key:
+            return True
+        gap = self.gap(key)
+        if gap is None:
+            self.untagged.add(str(key))
+            return False
+        if gap > TEMPO_BAND:
+            self.off_tempo.add(str(key))
+            return False
+        return True
+
+    def order(self, items, key_of):
+        """Prefer: items closest in tempo first, untagged last, otherwise in the order given."""
+        if self.mode != "prefer":
+            return list(items)
+        gaps = [(self.gap(key_of(item)), n) for n, item in enumerate(items)]
+        ranked = sorted(range(len(items)), key=lambda n: (gaps[n][0] is None, gaps[n][0] or 0, n))
+        return [items[n] for n in ranked]
+
+    def done(self):
+        if self.mode == "strict" and (self.off_tempo or self.untagged):
+            self.report("  " + t("Match Tempo left out {off} off tempo and {untagged} with no BPM tag.",
+                                 off=tn("{count} track", "{count} tracks", len(self.off_tempo)),
+                                 untagged=len(self.untagged)))
+        _tempo_here.match = None
 
 class BpmCheck:
     """
