@@ -121,6 +121,29 @@ def by_ids(ids):
     return [x for x in load() if (x["id"] in wanted or x.get("every")) and x.get("on")]
 
 
+def skipped_list():
+    """
+    What Skipped Tracks leaves out now, for its page: ([(key, artist, title, skips)] tracks skipped twice or
+    more, A to Z, and {artist as tagged: [keys]} for the artists left out, with their skipped tracks' keys).
+    """
+    import library
+    library.ensure_loaded()
+    keys, artists = skipped_sets()
+    tracks, by_artist = [], {}
+    for key in keys:
+        row = library.track_row(key) or {}
+        try:
+            n = int(float(str(row.get(engine.SKIP_FIELD) or "0") or 0))
+        except ValueError:
+            n = 0
+        tracks.append((key, row.get("Artist") or "", row.get("Name") or "", n))
+        a = engine.artist_key(row.get("Artist") or "")
+        if a in artists:
+            by_artist.setdefault(row.get("Artist") or a, []).append(key)
+    tracks.sort(key=lambda x: (x[1].lower(), x[2].lower()))
+    return tracks, by_artist
+
+
 def skipped_sets():
     """(keys, artist keys) the Skipped Tracks filter leaves out, from the library held in memory."""
     import library

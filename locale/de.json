@@ -1505,5 +1505,11 @@
   "What It Leaves Out": "Was er weglässt",
   "{name} comes with 24bit7, so it stays. Untick On to switch it off.": "{name} gehört zu 24bit7 und bleibt deshalb. Nimm den Haken bei An weg, um ihn auszuschalten.",
   "(every playlist)": "(jede Playlist)",
-  "Set to Every playlist in Edit Filters.": "In Filter bearbeiten auf Jede Playlist gestellt."
+  "Set to Every playlist in Edit Filters.": "In Filter bearbeiten auf Jede Playlist gestellt.",
+  "Left Out Now": "Jetzt weggelassen",
+  "Nothing yet: no track has been skipped by voice twice.": "Noch nichts: Kein Titel wurde zweimal per Sprache übersprungen.",
+  "{artist}, every track (three or more skipped)": "{artist}, jeder Titel (drei oder mehr übersprungen)",
+  "Let Back In": "Wieder zulassen",
+  "{artist} - {title}, skipped {count} time": "{artist} - {title}, {count}-mal übersprungen",
+  "{artist} - {title}, skipped {count} times": "{artist} - {title}, {count}-mal übersprungen"
 }

@@ -7369,6 +7369,26 @@ def record_voice_skip(key):
         return None
 
 
+def clear_voice_skips(keys):
+    """Let back in (Skipped Tracks): each track's voice skip count back to nothing. Returns how many were cleared."""
+    import library   # here rather than at the top: it imports engine
+    cleared = 0
+    for key in keys:
+        try:
+            r = requests.get(f"{JRIVER_BASE}/File/SetInfo", params={"File": str(key), "FileType": "Key",
+                             "Field": SKIP_FIELD, "Value": "", "Dirty": "0"}, auth=AUTH, timeout=10)
+        except Exception as e:
+            debug(f"Voice skips not cleared for {key}: {e}")
+            continue
+        if r.status_code == 200:
+            cleared += 1
+            row = library.track_row(key)
+            if row is not None:
+                with library._lock:
+                    row[SKIP_FIELD] = ""
+    return cleared
+
+
 def library_bpm(key):
     """A library track's BPM as a number, or None when it isn't tagged."""
     import library   # here rather than at the top: it imports engine

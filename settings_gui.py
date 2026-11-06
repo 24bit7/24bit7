@@ -2814,6 +2814,7 @@ class SettingsTab(tk.Frame):
             box = section(right, t("What It Leaves Out"))
             tk.Label(box, text=t(filters.SKIPPED_TEXT), wraplength=scaled(box, 560), justify="left").grid(
                 row=0, column=0, sticky="w")
+            self._skipped_box(right)
             right.keep = keep
             return
 
@@ -2947,6 +2948,33 @@ class SettingsTab(tk.Frame):
         tk.Button(box, text=t("Add rule"), width=max(10, len(t("Add rule")) + 2), command=add_rule).grid(
             row=2, column=0, sticky="w", pady=(8, 0))
         right.keep = keep   # hold the variables while the page shows
+
+    def _skipped_box(self, right):
+        """Skipped Tracks' page: what it leaves out now, each with Let Back In, which clears the count."""
+        tracks, artists = filters.skipped_list()
+        box = section(right, t("Left Out Now"))
+        if not tracks:
+            tk.Label(box, text=t("Nothing yet: no track has been skipped by voice twice."), fg=PALETTE["help_fg"],
+                     font=HELP_FONT).grid(row=0, column=0, sticky="w")
+            return
+        r = 0
+        for artist, keys in sorted(artists.items(), key=lambda x: x[0].lower()):
+            tk.Label(box, text=t("{artist}, every track (three or more skipped)", artist=artist),
+                     font=LABEL_FONT).grid(row=r, column=0, sticky="w", pady=2)
+            tk.Button(box, text=t("Let Back In"), command=lambda k=keys: self._skipped_let_in(k)).grid(
+                row=r, column=1, sticky="w", padx=(12, 0))
+            r += 1
+        for key, artist, title, n in tracks:
+            tk.Label(box, text=tn("{artist} - {title}, skipped {count} time", "{artist} - {title}, skipped {count} times",
+                                  n, artist=artist, title=title)).grid(row=r, column=0, sticky="w", pady=2)
+            tk.Button(box, text=t("Let Back In"), command=lambda k=key: self._skipped_let_in([k])).grid(
+                row=r, column=1, sticky="w", padx=(12, 0))
+            r += 1
+        self._skipped_rows = r
+
+    def _skipped_let_in(self, keys):
+        engine.clear_voice_skips(keys)
+        self._filter_fill_editor()
 
     def _filter_new(self):
         name = tabs.ask_name(self._filter_win, t("New Filter"), t("Name for the new filter:"))

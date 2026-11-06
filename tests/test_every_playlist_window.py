@@ -45,3 +45,40 @@ def test_every_playlist_tick_and_skipped_tracks_in_edit_filters(app, ui, monkeyp
     row = checks(s._button_filter_row)
     assert row["Stereo   (every playlist)"].instate(["disabled", "selected"]), row.keys()
     assert not ui.errors, ui.errors[0]
+
+
+def test_skipped_tracks_lists_whats_left_out_and_lets_it_back_in(app, ui):
+    import filters
+    import library
+    from tkinter import ttk  # noqa: F401
+    j = app.jriver
+    beatles = [r["Key"] for r in j.tracks if r["Artist"] == "The Beatles"][:3]
+    other = next(r for r in j.tracks if r["Artist"] != "The Beatles")
+    for k in beatles:
+        j.by_key[k]["24bit7 Voice Skips"] = "2"
+    j.by_key[other["Key"]]["24bit7 Voice Skips"] = "3"
+    library.load()
+    s = ui.settings
+    win = s._open_filters()
+    ui.pump(0.3)
+    s._filter_i = [x["name"] for x in s._filters].index("Skipped Tracks")
+    s._filter_fill_editor()
+    ui.pump(0.2)
+    texts = labels(win)
+    assert "The Beatles, every track (three or more skipped)" in texts, texts
+    line = f"{other['Artist']} - {other['Name']}, skipped 3 times"
+    assert line in texts
+    import tkinter as tk
+    button = next(w for w in walk(win) if isinstance(w, tk.Button) and w.cget("text") == "Let Back In"
+                  and w.grid_info().get("row") == next(x for x in walk(win) if isinstance(x, tk.Label)
+                                                        and x.cget("text") == line).grid_info()["row"])
+    button.invoke()
+    ui.pump(0.3)
+    assert j.by_key[other["Key"]]["24bit7 Voice Skips"] == "" and line not in labels(win)
+    artist_button = next(w for w in walk(win) if isinstance(w, tk.Button) and w.cget("text") == "Let Back In")
+    artist_button.invoke()
+    ui.pump(0.3)
+    assert all(j.by_key[k]["24bit7 Voice Skips"] == "" for k in beatles)
+    assert "Nothing yet: no track has been skipped by voice twice." in labels(win)
+    win.destroy()
+    assert not ui.errors, ui.errors[0]
