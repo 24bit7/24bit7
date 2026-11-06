@@ -77,6 +77,8 @@ ACTIONS = [
     ("stop", N_("Stop Song, Play Now"), N_("The current song stops and these play straight away. "
                                            "Playing Now holds only these.")),
 ]
+TOP_UP_TIP = N_("Shuffled in with what's left of Playing Now: the track playing carries on. These are only the "
+                 "tracks that aren't in Playing Now already.")
 YOUTUBE_TIP = N_("Opens the ticked tracks, in tick order, as a YouTube playlist in your browser.")
 TIDAL_TIP = N_("Puts the ticked tracks, in tick order, into your Tidal playlist called 24bit7, in place of "
                "what was there. Rename it in Tidal to keep it.")
@@ -300,6 +302,12 @@ class ReviewPanel:
         row.pack(fill="x")
         self.jriver_actions = tk.Frame(row, bg=p["bg"])   # the four, for a zone
         self.jriver_actions.pack(side="left")
+        self.top_up_actions = tk.Frame(self.jriver_actions, bg=p["bg"])   # a Top-Up build's own Send, first
+        self._buttons["topup"] = self._action_button(self.top_up_actions, t("Top-Up"), lambda: self._act("topup"),
+                                                     t(TOP_UP_TIP))
+        self._buttons["topup"].pack(side="left", padx=(0, 8))
+        tk.Frame(self.top_up_actions, bg=p["line"], width=1, height=self._px(24)).pack(side="left", padx=(2, 10))
+        self.top_up = False
         for n, (how, text, tip) in enumerate(ACTIONS):
             if n == 2:   # the two Adds, then the two Load as New
                 tk.Frame(self.jriver_actions, bg=p["line"], width=1, height=self._px(24)).pack(side="left",
@@ -553,8 +561,14 @@ class ReviewPanel:
 
     # --- the list ---
 
-    def load(self, rows, title="", zone=None):
-        """A Review build finished: its tracks replace the list, nothing ticked, and Review shows."""
+    def load(self, rows, title="", zone=None, top_up=False):
+        """A Review build finished: its tracks replace the list, nothing ticked, and Review shows.
+        top_up: a Top-Up build, whose Top-Up Send comes first."""
+        self.top_up = top_up
+        if top_up:
+            self.top_up_actions.pack(side="left", before=self.jriver_actions.winfo_children()[1])
+        else:
+            self.top_up_actions.pack_forget()
         self.stop_preview(quiet=True)
         self.rows = [dict(r) for r in rows or []]
         self.order, self.title, self.zone = [], title, zone

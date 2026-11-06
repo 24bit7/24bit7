@@ -4332,12 +4332,64 @@ MIX_KEEP = set()         # keys from those playlists: the hidden-track check lea
 REVIEW_MODE = False      # True while an app build runs as Review: tracks are collected, JRiver is left alone
 REVIEW_KEYS = []         # the tracks a Review build found, in order, for the Review view
 REVIEW_ZONE = None       # the zone they'd go to (the Output zone)
+TOP_UP = False           # True while an app build runs as a Top-Up (the More Options row, Ben, 5 Nov 2026)
+REVIEW_HAVE = None       # a Top-Up in Review: what the zone's Playing Now already holds, read once per build
 
 
 def review_reset():
     """Called as a Review build starts: an empty list, and nothing in JRiver touched."""
     globals()["REVIEW_KEYS"] = []
     globals()["REVIEW_ZONE"] = None
+    globals()["REVIEW_HAVE"] = None
+
+
+def top_up_merge(keys, zone, more=False):
+    """
+    Top-Up (Ben, 5 Nov 2026): a playlist goes into what's left of a zone's Playing Now instead of
+    replacing it. The playing track and everything before it stay as they are. The unplayed rest and
+    the new tracks (none already anywhere in Playing Now) are shuffled together with the usual artist
+    spread and queued after the playing track. more: a later part of the same build (a mix's next
+    config, a Drift round). Returns (the console line, the merged queue).
+    """
+    keys = [str(k) for k in keys if k]
+    info = get_playing_info(zone) or {}
+    try:
+        pos = int(info["PlayingNowPosition"])
+        count = int(info["PlayingNowTracks"])
+    except (KeyError, ValueError, TypeError):
+        queue_tracks(keys, zone)
+        return t("Top-Up: couldn't read where {zone} is in its Playing Now, so the tracks went on the end.",
+                 zone=zone_label(zone)), keys
+    rows = playing_now_rows(zone)
+    have = {str(r.get("Key")) for r in rows}
+    new = []
+    for k in keys:
+        if k not in have and k not in new:
+            new.append(k)
+    already = len(set(keys)) - len(new)
+    rest = [str(r.get("Key")) for r in rows[pos + 1:]]
+    label = zone_label(zone)
+    if not new:
+        return t("Top-Up: every track found is already in Playing Now in {zone}, so nothing changed.", zone=label), rest
+    merged = rest + new
+    random.shuffle(merged)
+    current = str(rows[pos].get("Key")) if 0 <= pos < len(rows) else None
+    merged = spread_artists(merged, after=current)
+    for idx in range(count - 1, pos, -1):   # from the end backwards, so the positions stay right
+        remove_from_playing_now(idx, zone)
+        time.sleep(0.05)
+    queue_tracks(merged, zone)
+    tracks = tn("{count} new track", "{count} new tracks", len(new))
+    if more:
+        return t("Top-Up: another {tracks} shuffled in.", tracks=tracks), merged
+    if not rest:
+        line = t("Top-Up: {tracks} added after the track playing in {zone}.", tracks=tracks, zone=label)
+    else:
+        line = t("Top-Up: {tracks} joined the {left} still to play in {zone}, shuffled together.",
+                 tracks=tracks, left=len(rest), zone=label)
+    if already:
+        line += " " + tn("{count} was already there.", "{count} were already there.", already)
+    return line + " " + t("The track playing carries on."), merged
     globals()["REVIEW_ROWS"] = []
 
 
@@ -4383,6 +4435,7 @@ def review_send(keys, how, zone):
       end     after everything already in Playing Now
       finish  the current song finishes, then Playing Now holds only these
       stop    the current song stops and these play now; Playing Now holds only these
+      topup   shuffled in with what's left of Playing Now (a Top-Up build); a stopped zone loads them as new
     A stopped zone: the Adds just add; both Load as New choices start these playing.
     Returns the console line.
     """
@@ -4399,6 +4452,10 @@ def review_send(keys, how, zone):
         queue_tracks(keys, zone)
         return t("Review: {tracks} added to the end of Playing Now in {zone}.", tracks=n, zone=label)
     was_playing = not jriver_is_stopped(zone)
+    if how == "topup" and was_playing:
+        return "Review: " + top_up_merge(keys, zone)[0]
+    if how == "topup":
+        how = "stop"
     if was_playing and how == "finish":
         clear_around_current(zone)
         queue_tracks(keys, zone)
@@ -4628,6 +4685,10 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
             append = True
     if REVIEW_MODE and not VOICE_TAKEOVER and not NONSTOP_APPEND:   # Review: collect, send nothing
         globals()["REVIEW_ZONE"] = zone
+        if TOP_UP:   # a Top-Up lists only what isn't in Playing Now already
+            if REVIEW_HAVE is None:
+                globals()["REVIEW_HAVE"] = {str(r.get("Key")) for r in playing_now_rows(zone)}
+            keys = [k for k in keys if k not in REVIEW_HAVE]
         for k in keys:
             if k not in REVIEW_KEYS:
                 REVIEW_KEYS.append(k)
@@ -4650,6 +4711,17 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
             report("  " + (t("Non-stop: {zone} was paused, so nothing was added.", zone=zone_label(zone)) if held == "paused"
                            else t("Non-stop: {zone} was stopped, so nothing was added.", zone=zone_label(zone))))
             return
+    if TOP_UP and not NONSTOP_APPEND and not VOICE_TAKEOVER:
+        if not jriver_is_stopped(zone):
+            if not keys:
+                return
+            line, merged = top_up_merge(keys, zone, more=append)
+            report("  " + line)
+            # the whole queue counts as sent, so Non-stop follows on from it and repeats none of it
+            nonstop_record(zone, [r.get("Key") for r in playing_now_rows(zone)] or merged, append)
+            return
+        if not append:
+            report("  " + t("Top-Up: {zone} was stopped, so the playlist plays as usual.", zone=zone_label(zone)))
     nonstop_record(zone, keys, append)
     if append:
         if keys:

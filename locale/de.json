@@ -1471,5 +1471,21 @@
   "Runs {name} as it is when {device} asks. Click for its page, where you can give {device} its own.": "Startet {name} unverändert, wenn {device} fragt. Klick für ihre Seite, wo du {device} eine eigene geben kannst.",
   "Review Mode uses the same settings": "Review-Modus nutzt dieselben Einstellungen",
   "Preview:": "Vorschau:",
-  "{device}'s own playlist for \"{phrase}\" is deleted, and \"{phrase}\" runs {name}.": "Die eigene Playlist von {device} für \"{phrase}\" wird gelöscht, und \"{phrase}\" startet {name}."
+  "{device}'s own playlist for \"{phrase}\" is deleted, and \"{phrase}\" runs {name}.": "Die eigene Playlist von {device} für \"{phrase}\" wird gelöscht, und \"{phrase}\" startet {name}.",
+  "Top-Up: couldn't read where {zone} is in its Playing Now, so the tracks went on the end.": "Top-Up: Die Position in der Aktuellen Wiedergabe von {zone} ließ sich nicht lesen, also kamen die Titel ans Ende.",
+  "Top-Up: every track found is already in Playing Now in {zone}, so nothing changed.": "Top-Up: Jeder gefundene Titel ist schon in der Aktuellen Wiedergabe in {zone}, also hat sich nichts geändert.",
+  "{count} new track": "{count} neuer Titel",
+  "{count} new tracks": "{count} neue Titel",
+  "Top-Up: another {tracks} shuffled in.": "Top-Up: weitere {tracks} eingemischt.",
+  "Top-Up: {tracks} added after the track playing in {zone}.": "Top-Up: {tracks} nach dem laufenden Titel in {zone} eingereiht.",
+  "Top-Up: {tracks} joined the {left} still to play in {zone}, shuffled together.": "Top-Up: {tracks} zu den {left} noch offenen in {zone} dazugemischt.",
+  "{count} was already there.": "{count} war schon da.",
+  "{count} were already there.": "{count} waren schon da.",
+  "The track playing carries on.": "Der laufende Titel spielt weiter.",
+  "Top-Up: {zone} was stopped, so the playlist plays as usual.": "Top-Up: {zone} war gestoppt, also läuft die Playlist wie gewohnt.",
+  "Click Top-Up, then a playlist: it goes into what's left of Playing Now instead of replacing it. The track playing carries on, nothing already there is added twice, and the rest is shuffled together. Lasts one playlist; click Top-Up again to cancel.": "Klick auf Top-Up, dann auf eine Playlist: Sie kommt in den Rest der Aktuellen Wiedergabe, statt sie zu ersetzen. Der laufende Titel spielt weiter, nichts, was schon da ist, kommt doppelt dazu, und der Rest wird zusammen gemischt. Gilt für eine Playlist; ein zweiter Klick auf Top-Up bricht ab.",
+  "Top-Up": "Top-Up",
+  "Top-Up adds to a JRiver zone's Playing Now, so it's off while Output is YouTube or Tidal.": "Top-Up ergänzt die Aktuelle Wiedergabe einer JRiver-Zone und ist deshalb aus, solange die Ausgabe YouTube oder Tidal ist.",
+  "Top-Up is on: the next playlist you click goes into what's left of Playing Now. Click Top-Up again to cancel.": "Top-Up ist an: Die nächste Playlist, die du anklickst, kommt in den Rest der Aktuellen Wiedergabe. Klick noch mal auf Top-Up, um abzubrechen.",
+  "Shuffled in with what's left of Playing Now: the track playing carries on. These are only the tracks that aren't in Playing Now already.": "In den Rest der Aktuellen Wiedergabe gemischt: Der laufende Titel spielt weiter. Hier stehen nur Titel, die noch nicht in der Aktuellen Wiedergabe sind."
 }

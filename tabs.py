@@ -768,6 +768,7 @@ class FlatButton(tk.Frame):
         self._text_fg = text_fg  # a text colour other than the usual, while the button can be pressed
         self._state = "normal"
         self._dim = False        # drawn like a disabled button but still clickable (the Play tab's unarmed playlists)
+        self._armed = None       # a colour: drawn with a two-pixel edge and its text in that colour (Top-Up, 5 Nov 2026)
         self._inside = False
         self._pressed = False
         self._chars, self._lines = width, height
@@ -821,6 +822,8 @@ class FlatButton(tk.Frame):
         w, h = self._size
         edge, line = (PALETTE["button_fg"], self._px(2)) if self._target else (PALETTE["button_outline"], self._px(1))
         fg = (self._text_fg or PALETTE["button_fg"]) if lit else PALETTE["button_off_fg"]
+        if self._armed and lit:
+            edge, line, fg = self._armed, self._px(2), self._armed
         if self._arrow is not None:   # one shape, the bar across the whole of it, a black line before the arrow
             image, part = split_shape(self, w, h, self._px(CORNER), fill, edge, line, bar, self._px(BUTTON_BAR),
                                       w - self._arrow_w)
@@ -839,6 +842,9 @@ class FlatButton(tk.Frame):
             redraw = True
         if "target" in kw:
             self._target = bool(kw.pop("target"))
+            redraw = True
+        if "armed" in kw:
+            self._armed = kw.pop("armed") or None
             redraw = True
         if "text" in kw:
             text = kw.pop("text")

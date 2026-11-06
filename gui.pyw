@@ -100,6 +100,9 @@ PLAY_NOTES = {
                    "Tight or Wander. Click to step through them. What it plays using is each playlist's own."),
     "Mode": N_("Play Mode plays the playlist straight away. Review Mode lists it first, so you choose what goes."),
     "+ Add JRiver Playlist": N_("Joins one of your own JRiver playlists to the next build."),
+    "Top-Up": N_("Click Top-Up, then a playlist: it goes into what's left of Playing Now instead of replacing it. "
+                 "The track playing carries on, nothing already there is added twice, and the rest is shuffled "
+                 "together. Lasts one playlist; click Top-Up again to cancel."),
     "Show Credits": N_("Lists the producer, engineer, musicians and other credits for what's playing, from Discogs."),
     "Help": N_("Hover notes for the Play tab: on, hovering over anything here explains it; off, no pop-ups."),
 }
@@ -433,6 +436,15 @@ class PlayTab(tk.Frame):
         self._moderator_tip = Tooltip(self.override_cbs["moderator"], t(NO_KEY_TEXT), when=lambda: not engine.ai_enabled())
         self._sync_override_switches()
         tk.Frame(self.extras_row, width=1, height=24, bg=PALETTE["line"]).pack(side="left", padx=(8, 16))
+        # Top-Up (Ben, 5 Nov 2026): armed by a click, teal; the next playlist clicked goes into what's left of
+        # Playing Now and releases it. Greyed while Output is YouTube or Tidal.
+        self.top_up_armed = False
+        self.top_up_button = FlatButton(self.extras_row, text=t("Top-Up"), quiet=True, height=1,
+                                        width=max(9, len(t("Top-Up")) + 2), command=self._toggle_top_up)
+        self.top_up_button._name = "Top-Up"
+        self.top_up_button.pack(side="left", padx=(0, 8))
+        Tooltip(self.top_up_button, t("Top-Up adds to a JRiver zone's Playing Now, so it's off while Output is "
+                                      "YouTube or Tidal."), when=self._top_up_greyed)
         # Add playlist: JRiver playlists joined to the next build from the app (not voice)
         self.add_playlist_button = FlatButton(self.extras_row, text=t("+ Add JRiver Playlist"), quiet=True,
                                               width=max(18, len(t("+ Add JRiver Playlist")) + 1),
@@ -452,6 +464,7 @@ class PlayTab(tk.Frame):
         self._sync_seed_bars()
         self.mix_rows = MixRows(self.more_box, padx=16)
         self.mix_rows.on_change = self._on_mix_rows_changed
+        self._sync_top_up()
         self._show_more(playmix.is_open(), save=False)
 
     def help_on(self):
@@ -480,6 +493,7 @@ class PlayTab(tk.Frame):
         for widget, name in ((self.more_button, "More Options"), (self.add_button, "+"), (self.output_cb, "Output"),
                              (self.zone_cb, "Zone"), (self.seed_cb, "Seed"), (self.behaviour_cb, "Mode"),
                              (self.add_playlist_button, "+ Add JRiver Playlist"), (self.help_cb, "Help"),
+                             (self.top_up_button, "Top-Up"),
                              (self.override_cbs["deep_cuts"], "Deep Cuts"), (self.override_cbs["nonstop"], "Non-stop")):
             Tooltip(widget, t(PLAY_NOTES[name]), when=on, wrap=wrap)
         Tooltip(self.override_cbs["moderator"], t(PLAY_NOTES["Moderator"]), when=lambda: on() and engine.ai_enabled(),
@@ -1098,19 +1112,21 @@ class PlayTab(tk.Frame):
             self._append_log(t(buttons.NO_CONFIG_YET, name=button["name"]))
             self.open_playlist_settings(button["id"])
             return
+        top_up = bool(getattr(self, "top_up_armed", False))   # let go of when the build starts
         if button["kind"] == "vibe":
-            return self.on_vibe(button)
+            return self.on_vibe(button, top_up=top_up)
         if self._seed_is_search():
             seed = self._typed_seed(need_track=buttons.needs_track(button),
                                     why=engine.SIMILAR_NEEDS_TRACK_TEXT if button["kind"] == "artists" else None)
             if seed:
-                self._run_typed(lambda **kw: buttons.run(button, **kw), seed, lambda: self.on_button(button))
+                self._run_typed(lambda **kw: buttons.run(button, **kw), seed, lambda: self.on_button(button),
+                                top_up=top_up)
             return
         options = {}
         if buttons.follows_seed(button):
             options["playing_now"] = engine.play_seed_is_playing_now()   # the Seed setting
         self._run_job(lambda: self._seeded(lambda **kw: buttons.run(button, **kw), **options),
-                      needs_playing=False, review=True)
+                      needs_playing=False, review=True, top_up=top_up)
 
     def _toggle_more(self):
         self._show_more(not self.extras_row.winfo_manager())
@@ -1122,6 +1138,7 @@ class PlayTab(tk.Frame):
             self.extras_row.pack(fill="x", pady=(12, 2))   # the console below has its own top margin
             self.mix_rows.pack(fill="x")
         else:
+            self._set_top_up(False)   # it's on the row: closing the row lets go of it
             self.mix_rows.pack_forget()
             self.extras_row.pack_forget()
             self.more_line.pack_forget()
@@ -1225,9 +1242,41 @@ class PlayTab(tk.Frame):
             messagebox.showinfo("Tidal", t("To send playlists to Tidal, sign in first: Settings > Keys, "
                                            "Sign In to Tidal."), parent=self)
         self._sync_behaviour()
+        self._sync_top_up()
         panel = getattr(self, "review_panel", None)
         if panel is not None:
             panel.output_changed()   # Review's actions go wherever Output now says
+
+    # --- Top-Up -----------------------------------------------------------------------------------
+
+    def _top_up_greyed(self):
+        return self.output_var.get() in ("YouTube", "Tidal")
+
+    def _sync_top_up(self):
+        """Greyed, and let go of, while Output is YouTube or Tidal."""
+        if self._top_up_greyed():
+            self._set_top_up(False)
+            self.top_up_button.config(state="disabled")
+        else:
+            self.top_up_button.config(state="normal")
+
+    def _toggle_top_up(self):
+        self._set_top_up(not self.top_up_armed)
+
+    def _set_top_up(self, armed):
+        """Armed: teal edge and text, and a line saying what happens next. Let go: back to plain, the line gone."""
+        if armed == getattr(self, "top_up_armed", False):
+            return
+        self.top_up_armed = armed
+        self.top_up_button.config(armed=self.seed_colour if armed else None)
+        line = getattr(self, "_top_up_line", None)
+        if armed:
+            self._top_up_line = t("Top-Up is on: the next playlist you click goes into what's left of Playing Now. "
+                                  "Click Top-Up again to cancel.")
+            self._notice(self._top_up_line)
+        elif line:
+            self._top_up_line = None
+            self._drop_notice(line)
 
     def _sync_behaviour(self):
         """Review works with any Output, YouTube included (it opens the ticked tracks there)."""
@@ -1557,6 +1606,23 @@ class PlayTab(tk.Frame):
         """A line that tells you about something you did (a note, the More Options line), not part of a build:
         closing More Options takes these away and leaves the build's own lines (Ben, 6 Nov 2026)."""
         return self._append_log(line, notice=True)
+
+    def _drop_notice(self, line):
+        """Takes one notice off the console (Top-Up cancelled); the others stay."""
+        notices = getattr(self, "_notices", [])
+        if line not in notices:
+            return
+        notices.remove(line)
+        for kept in (self._live, self._held):
+            if line in kept:
+                del kept[len(kept) - 1 - kept[::-1].index(line)]
+        self.log.config(state="normal")
+        ranges = self.log.tag_ranges("notice")
+        for start, end in reversed(list(zip(ranges[0::2], ranges[1::2]))):
+            if line in self.log.get(start, end):
+                self.log.delete(start, end)
+                break
+        self.log.config(state="disabled")
 
     def _clear_notices(self):
         """Takes the notices off the console and out of the kept lines; a build's lines stay as they are."""
@@ -2210,7 +2276,7 @@ class PlayTab(tk.Frame):
         else:
             self._append_query(answer + "\n")
 
-    def _run_job(self, target, needs_playing=True, mix=True, origin=None, review=False):
+    def _run_job(self, target, needs_playing=True, mix=True, origin=None, review=False, top_up=False):
         if self.running:
             return
         if needs_playing and not self.last_playing:
@@ -2233,6 +2299,10 @@ class PlayTab(tk.Frame):
         rows = (playmix.rows() or None) if mix else None   # added playlists: app builds only
         review = review and bool(mix) and self._review_mode()   # Review: app builds, never voice
         self._job_review = review
+        top_up = bool(top_up and origin is None and getattr(self, "top_up_armed", False))
+        if top_up:
+            self._set_top_up(False)   # one playlist: the button lets go as it starts
+        self._job_top_up = top_up
         if origin is None and getattr(self, "review_panel", None) is not None:
             self.review_panel.show_console()   # a build from the window: watch it run in the console
 
@@ -2243,6 +2313,7 @@ class PlayTab(tk.Frame):
             engine.SENT_ANY = False
             engine.MIX_ROWS, engine.MIX_KEEP, engine.MIX_FAST_KEY, engine.MIX_NOTED = rows, set(), None, False
             engine.REVIEW_MODE = review
+            engine.TOP_UP = top_up
             overrides = {}
             engine.BUILD_STARTED, engine.LAST_OUTPUT = time.time(), None
             engine.LAST_OUTPUT_ID, engine.LAST_BUILD = None, None
@@ -2266,6 +2337,7 @@ class PlayTab(tk.Frame):
                 if overrides:
                     engine.use_profile({})   # back to Windows (Main)'s own figures
                 engine.REVIEW_MODE = False
+                engine.TOP_UP = False
                 engine.BUILD_STARTED = None
                 if engine.CANCEL_REQUESTED.is_set():
                     self._job_cancelled = True   # a voice build catches its own cancel and says so
@@ -2311,7 +2383,7 @@ class PlayTab(tk.Frame):
         if getattr(self, "_job_review", False):   # a Review build: its tracks go to the Review list
             self._job_review = False
             self.review_panel.load(getattr(engine, "REVIEW_ROWS", []), self._review_title(),
-                                   engine.REVIEW_ZONE)
+                                   engine.REVIEW_ZONE, top_up=getattr(self, "_job_top_up", False))
 
     def _review_title(self):
         """The build's first line, without its time or the settings in brackets after it."""
@@ -2336,7 +2408,7 @@ class PlayTab(tk.Frame):
         if button:
             self.on_button(button)
 
-    def _run_typed(self, build, seed, again):
+    def _run_typed(self, build, seed, again, top_up=False):
         """
         A build from a typed seed. Afterwards, if the artist isn't in the library but one close to it
         is ('eleven finger' for Finger Eleven), the console offers it: a click types it in and runs
@@ -2352,7 +2424,7 @@ class PlayTab(tk.Frame):
                 artist = None
             if artist:
                 self._suggestion = (seed["Artist"], artist, again)
-        self._run_job(target, needs_playing=False, review=True)
+        self._run_job(target, needs_playing=False, review=True, top_up=top_up)
 
     def _append_suggestion(self):
         """'No "eleven finger" in your library. Did you mean Finger Eleven?', the question a link."""
@@ -2393,7 +2465,7 @@ class PlayTab(tk.Frame):
     def on_credits(self):
         self._run_job(lambda: engine.explore_credits(report=self.report))
 
-    def on_vibe(self, button=None):
+    def on_vibe(self, button=None, top_up=False):
         problem = engine.vibe_blocker()
         if problem:
             self.report(problem)
@@ -2403,11 +2475,11 @@ class PlayTab(tk.Frame):
             return
         AIPlaylistDialog(self.root, play=self, on_create=lambda theme, count, if_short: self._run_job(
             lambda: buttons.run(button, theme=theme, count=count, if_short=if_short, report=self.report),
-            needs_playing=False, review=True), on_steer=lambda spec: self._run_job(
+            needs_playing=False, review=True, top_up=top_up), on_steer=lambda spec: self._run_job(
             lambda: engine.steer_playlist(engine.steer_seed_pairs(all_tracks=spec["seed_kind"] == "all"),
                                           spec["directions"], spec["own_words"], spec["strength"], spec["tone"],
                                           spec["count"], report=self.report, if_short=spec["if_short"]),
-            needs_playing=False, review=True))
+            needs_playing=False, review=True, top_up=top_up))
 
 
 def _enable_dpi_awareness():
