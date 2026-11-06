@@ -76,6 +76,8 @@ def config_for(zone_name, entry):
     """Non-stop's {"on", "using", "reseed", "mode"} for a playlist: its saved row's, or its button's."""
     import buttons
     origin = entry.get("origin") or entry.get("kind") or "artists"
+    if origin == "radio":   # Radio always carries on: a fresh round from other pillars
+        return {"on": True}
     if origin == "saved":
         cfg = entry.get("saved_cfg")
         return dict(cfg, on=True) if cfg else {"on": False}
@@ -216,6 +218,11 @@ def _job(zone, zone_name, info):
                 return
             kind = entry.get("kind")
             origin = entry.get("origin") or kind
+            if origin == "radio":   # never from Radio's own picks: from the lane's pillars, so it stays in the lane
+                import radio
+                report("  " + t("{zone} is on its last track, so Radio plays on.", zone=zone_name))
+                radio.build(entry.get("radio_lane"), report=report)
+                return
             cfg = config_for(zone_name, entry)
             if origin == "saved":
                 button = None

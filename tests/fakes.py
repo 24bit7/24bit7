@@ -359,6 +359,21 @@ class FakeJRiver:
 # Artists the sources know that aren't in the library, and the names sources use
 # that differ from the library's tags (credit matching both ways).
 NOT_IN_LIBRARY = ["The Zombies", "Harry Nilsson", "The Move"]
+# Last.fm's genres for the fake world (Radio): two families, sixties rock and the rest
+TAGS = {"the beatles": [("rock", 100), ("classic rock", 90), ("60s", 60), ("pop", 40)],
+        "the hollies": [("rock", 80), ("classic rock", 70), ("pop", 60)],
+        "the kinks": [("classic rock", 100), ("rock", 90), ("british", 40)],
+        "the byrds": [("folk rock", 100), ("classic rock", 80), ("rock", 70)],
+        "badfinger": [("rock", 100), ("power pop", 80), ("classic rock", 70)],
+        "george harrison": [("rock", 100), ("classic rock", 90), ("singer-songwriter", 50)],
+        "the rolling stones": [("rock", 100), ("classic rock", 100), ("blues rock", 50)],
+        "simon & garfunkel": [("folk", 100), ("folk rock", 80), ("classic rock", 50)],
+        "the jimi hendrix experience": [("classic rock", 100), ("blues rock", 90), ("psychedelic", 60)],
+        "queen": [("classic rock", 100), ("rock", 90), ("hard rock", 60)],
+        "pink floyd": [("progressive rock", 100), ("psychedelic", 80), ("classic rock", 70)],
+        "sigur rós": [("post-rock", 100), ("ambient", 80), ("icelandic", 60)],
+        "david guetta": [("dance", 100), ("electronic", 90), ("house", 70)],
+        "angus & julia stone": [("folk", 100), ("indie folk", 80), ("acoustic", 50)]}
 SOURCE_NAME = {"Jimi Hendrix": "The Jimi Hendrix Experience", "Kinks, The": "The Kinks",
                "Simon & Garfunkel": "Simon and Garfunkel"}
 
@@ -430,6 +445,14 @@ class FakeWeb:
                 names = [] if empty else self.top_tracks(artist)
                 return Resp(data={"toptracks": {"track": [{"name": n, "playcount": 1000 - i}
                                                           for i, n in enumerate(names)]}})
+            if m == "artist.gettoptags":
+                tags = [] if empty else TAGS.get(artist.lower(), [])
+                return Resp(data={"toptags": {"tag": [{"name": g, "count": w} for g, w in tags]}})
+            if m == "tag.gettopartists":
+                tag = params.get("tag", "").lower()
+                names = [] if empty else sorted((a for a, tags in TAGS.items() if any(g == tag for g, _ in tags)),
+                                                key=lambda a: -dict(TAGS[a])[tag])
+                return Resp(data={"topartists": {"artist": [{"name": n} for n in names]}})
             if m == "track.getsimilar":
                 pairs = [] if empty else self.similar_tracks(artist, params.get("track", ""))
                 return Resp(data={"similartracks": {"track": [{"name": t, "artist": {"name": a}} for a, t in pairs]}})

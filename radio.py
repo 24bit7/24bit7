@@ -1,0 +1,598 @@
+"""
+24bit7 - Radio (Ben, 5 Nov 2026; built 6 Nov 2026). A playlist with no seed: lanes from what you play.
+
+Analysis (once, then by hand with Re-analyse)
+  Played artists    every artist with MIN_PLAYS or more plays in JRiver (Number Plays, the whole library)
+  Genre rule        the sources' genres first (Last.fm's weighted tags for the artist); your own Genre tag
+                    only when no source knows the artist; neither, and the artist isn't a data point
+  Lanes             artists clustered by their genres (average linkage on cosine similarity), cut into at
+                    most LANES_MAX groups; a group of fewer than LANE_MIN artists folds into its nearest
+                    neighbour. A lane is named by its two strongest genres, weighted by plays
+  Split             a lane's own two halves one level down the same tree: no new analysis. Offered when
+                    both halves have LANE_MIN artists and PILLARS_TO_SPLIT pillars of their own
+  Pillars           the sources' canon for the lane (Last.fm's top artists for its genres) that you own
+                    (PILLAR_OWNED tracks or more), about twelve, blended with about eight of your own most
+                    played in the lane, each side filling the other's gap. Compilations (every track named
+                    "Artist - Title", or Various Artists) are never pillars
+  Resting           too little played yet (fewer than MIN_ARTISTS played artists with genres): Radio rests
+                    and says how far off it is
+
+A build
+  Consensus over three random pillars: artists on two or more of their similar-artist lists, each giving
+  its top tracks you own, with a couple of each circle pillar's own. Short of TARGET_MINUTES, another
+  pillar joins (still two or more lists, against everything pulled so far), up to six. A pillar song goes
+  first so music starts at once. Non-stop carries on with a fresh round from other random pillars, never
+  from what Radio itself played, so it stays in the lane.
+"""
+
+import json
+import random
+import re
+import time
+from collections import Counter, defaultdict
+from datetime import datetime
+
+import requests
+
+import engine
+from i18n import t, tn
+
+MIN_PLAYS = 10          # an artist with this many plays counts as played
+MIN_ARTISTS = 40        # played artists with genres needed before Radio wakes
+TAG_MIN = 10            # a Last.fm tag's weight (0 to 100) to count
+TAGS_PER_ARTIST = 8
+LANES_MAX = 24
+LANE_MIN = 5
+PILLAR_OWNED = 5
+PILLARS_CANON = 12
+PILLARS_OWN = 8
+PILLARS_TO_SPLIT = 6
+ARTISTS_MAX = 1500      # the most played artists analysed, for a very big library
+TARGET_MINUTES = 60
+CIRCLE_START = 3
+CIRCLE_MAX = 6
+AGREE = 2
+PILLAR_SONGS = 5
+ANALYSIS_KEY = "radio_analysis"
+TAGS_KEY = "radio_tags"
+NOT_GENRE = re.compile(
+    r"^(seen live|favou?rites?|love|loved|awesome|beautiful|male vocalists?|female vocalists?|\d{2,4}s?|"
+    r"british|uk|american|usa|english|german|french|canadian|australian|irish|scottish|swedish|norwegian|"
+    r"icelandic|japanese|danish|dutch|new zealand|kiwi|all|my|albums i own|under \d+ listeners|spotify|"
+    r"check out|good|cool|amazing|genius|legend|legends|classic|best|favorite artists|favourite artists|"
+    r"compilation|various artists|mix|dj mix|seen in concert)$", re.I)
+COMPILATION_NAMES = {"various artists", "various", "va", "soundtrack", "original soundtrack"}
+
+
+# --- what's kept ------------------------------------------------------------------------------------
+
+def _meta(key, default):
+    try:
+        row = engine.db().execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        return json.loads(row[0]) if row and row[0] else default
+    except Exception:
+        return default
+
+
+def _set_meta(key, value):
+    con = engine.db()
+    con.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (key, json.dumps(value)))
+    con.commit()
+
+
+def analysis():
+    """The last analysis: {"when", "lanes": [lane], "resting": None or why}, or None before the first."""
+    return _meta(ANALYSIS_KEY, None)
+
+
+def lanes(include_children=False):
+    """Every lane, top level first; with include_children, the Split halves too (depth first)."""
+    out = []
+
+    def walk(items):
+        for lane in items:
+            out.append(lane)
+            if include_children:
+                walk(lane.get("children") or [])
+    walk((analysis() or {}).get("lanes") or [])
+    return out
+
+
+def lane(lane_id):
+    return next((x for x in lanes(include_children=True) if x["id"] == lane_id), None)
+
+
+# --- the library ------------------------------------------------------------------------------------
+
+def _plays(row):
+    try:
+        return int(float(row.get("Number Plays") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def library_view():
+    """
+    {artist key: {"name", "plays", "owned", "genres": Counter, "named": tracks named "X - Y"}} from the
+    library held in memory.
+    """
+    import library
+    library.ensure_loaded()
+    with library._lock:
+        rows = list(library._tracks)
+    out = {}
+    for r in rows:
+        name = r.get("Artist") or ""
+        a = engine.artist_key(name)
+        if not a:
+            continue
+        v = out.setdefault(a, {"name": name, "plays": 0, "owned": 0, "genres": Counter(), "named": 0})
+        v["owned"] += 1
+        v["plays"] += _plays(r)
+        if " - " in str(r.get("Name") or ""):
+            v["named"] += 1
+        for g in str(r.get("Genre") or "").split(";"):
+            if g.strip():
+                v["genres"][g.strip()] += 1
+    return out
+
+
+def is_compilation(view_row):
+    """
+    Not an act to build a lane on: Various Artists, a compilation series (every track named "Artist -
+    Title"), or two acts in one tag ("Dope;Angus Stone").
+    """
+    if view_row["name"].strip().lower() in COMPILATION_NAMES or ";" in view_row["name"]:
+        return True
+    return view_row["owned"] >= 3 and view_row["named"] * 2 >= view_row["owned"]
+
+
+# --- the sources ------------------------------------------------------------------------------------
+
+def _lastfm(params):
+    r = requests.get("http://ws.audioscrobbler.com/2.0/",
+                     params=dict(params, api_key=engine.LASTFM_KEY, format="json"), timeout=15)
+    return r.json()
+
+
+def artist_tags(names, report, cache=None):
+    """
+    {artist key: [(genre, weight)]} from Last.fm, for the artists not already cached. Kept between
+    analyses, so a Re-analyse only asks about new artists. None for an artist Last.fm couldn't answer.
+    """
+    cache = dict(_meta(TAGS_KEY, {})) if cache is None else cache
+    todo = [(a, n) for a, n in names if a not in cache]
+    if todo:
+        report("  " + t("Asking Last.fm for the genres of {count} artists. The first time takes a few minutes.",
+                        count=len(todo)))
+    failed = 0
+    for i, (a, name) in enumerate(todo, 1):
+        engine.check_cancelled()
+        try:
+            data = _lastfm({"method": "artist.gettoptags", "artist": name, "autocorrect": 1})
+            cache[a] = [(x["name"].lower().strip(), int(x.get("count", 0)))
+                        for x in data.get("toptags", {}).get("tag", [])]
+        except Exception as e:
+            engine.debug(f"Radio: no tags for {name} ({e})")
+            failed += 1
+            continue   # not cached, so the next analysis asks again
+        if i % 100 == 0:
+            _set_meta(TAGS_KEY, cache)
+            report("    " + t("{done} of {count}...", done=i, count=len(todo)))
+        time.sleep(0.2)
+    _set_meta(TAGS_KEY, cache)
+    if failed:
+        report("  " + t("Note: Last.fm didn't answer for {count} artists; their own Genre tags stood in.", count=failed))
+    return cache
+
+
+def tag_top_artists(tag, limit=100):
+    """Last.fm's top artists for a genre, best first."""
+    try:
+        data = _lastfm({"method": "tag.gettopartists", "tag": tag, "limit": limit})
+        return [x["name"] for x in data.get("topartists", {}).get("artist", [])]
+    except Exception as e:
+        engine.debug(f"Radio: no top artists for {tag} ({e})")
+        return []
+
+
+def genres_for(a, view_row, cache):
+    """The genre rule: sources first, then your own tag, else nothing. Returns ({genre: weight}, case)."""
+    src = [(g, w) for g, w in (cache.get(a) or []) if w >= TAG_MIN and not NOT_GENRE.match(g)]
+    if src:
+        return dict(src[:TAGS_PER_ARTIST]), "sources"
+    if view_row["genres"]:
+        return {g.lower(): 100 for g, _ in view_row["genres"].most_common(2)}, "own"
+    return {}, "none"
+
+
+# --- lanes ------------------------------------------------------------------------------------------
+
+def _cosine(u, v):
+    if len(u) > len(v):
+        u, v = v, u
+    dot = sum(w * v.get(g, 0.0) for g, w in u.items())
+    return dot
+
+
+def _unit(vec):
+    norm = sum(w * w for w in vec.values()) ** 0.5 or 1.0
+    return {g: w / norm for g, w in vec.items()}
+
+
+def cluster(vectors):
+    """
+    Average-linkage clustering of unit vectors (the nearest-neighbour chain). Returns the merges as
+    (similarity, cluster a, cluster b, new cluster) in the order a tree is built, most similar first;
+    clusters 0..n-1 are the items themselves.
+    """
+    n = len(vectors)
+    sim = [[0.0] * n for _ in range(n)]
+    for i in range(n):
+        for j in range(i + 1, n):
+            sim[i][j] = sim[j][i] = _cosine(vectors[i], vectors[j])
+    size = [1] * n
+    active = set(range(n))
+    label = list(range(n))   # the cluster id now held at each row of sim
+    merges, chain = [], []
+    next_id = n
+    while len(active) > 1:
+        if not chain:
+            chain.append(min(active))
+        a = chain[-1]
+        prev = chain[-2] if len(chain) > 1 else None
+        best, best_sim = None, -2.0
+        for c in active:
+            if c == a:
+                continue
+            s = sim[a][c]
+            if s > best_sim or (s == best_sim and c == prev):
+                best, best_sim = c, s
+        if best == prev:
+            chain.pop()
+            chain.pop()
+            # rows a and prev merge into row a; Lance-Williams for average linkage
+            for c in active:
+                if c not in (a, prev):
+                    s = (size[a] * sim[a][c] + size[prev] * sim[prev][c]) / (size[a] + size[prev])
+                    sim[a][c] = sim[c][a] = s
+            merges.append((best_sim, label[a], label[prev], next_id))
+            size[a] += size[prev]
+            active.discard(prev)
+            label[a] = next_id
+            next_id += 1
+        else:
+            chain.append(best)
+    # the chain finds merges out of order. Average linkage never merges at a higher similarity than the
+    # merges below it, so most similar first puts every merge after the two it joins
+    merges.sort(key=lambda m: (-m[0], m[3]))
+    return merges
+
+
+def _tree(n, merges):
+    """{node: (left, right)} and each node's leaves."""
+    kids, leaves = {}, {i: [i] for i in range(n)}
+    for _s, a, b, new in merges:
+        kids[new] = (a, b)
+        leaves[new] = leaves[a] + leaves[b]
+    return kids, leaves
+
+
+def _cut(n, merges, k):
+    """The roots left once all but the last k - 1 merges are made: k groups (fewer if there are fewer items)."""
+    keep = merges[:max(0, n - k)]
+    roots = set(range(n))
+    for _s, a, b, new in keep:
+        roots.discard(a)
+        roots.discard(b)
+        roots.add(new)
+    return roots
+
+
+def _name(genres, prefer=None):
+    """The lane's two strongest genres; the sources' own genres first, so a lane isn't named after your tag."""
+    ranked = [g for g, _ in genres.most_common()]
+    if prefer:
+        ranked = [g for g in ranked if g in prefer] + [g for g in ranked if g not in prefer]
+    top = ranked[:2]
+    return " / ".join(g.title() if g.islower() else g for g in top) or t("Radio")
+
+
+def _lane_info(members, artists, vecs, view):
+    genres = Counter()
+    for i in members:
+        for g, w in vecs[i].items():
+            genres[g] += w * max(1, view[artists[i]]["plays"])
+    return genres
+
+
+def _canon(genres, view, owned_ok, report):
+    """The sources' canon for a lane: Last.fm's top artists for its top genres that you own. Artist keys, best first."""
+    tags = [g for g, _ in genres.most_common(2)]
+    ranked = []
+    lists = [tag_top_artists(g) for g in tags]
+    lists = [x for x in lists if x]
+    if len(lists) == 2:   # both genres: artists high in both first, by their summed rank
+        a_rank = {engine.artist_key(n): i for i, n in enumerate(lists[0])}
+        b_rank = {engine.artist_key(n): i for i, n in enumerate(lists[1])}
+        both = sorted(set(a_rank) & set(b_rank), key=lambda k: a_rank[k] + b_rank[k])
+        ranked = both + [engine.artist_key(n) for n in lists[0] + lists[1]]
+    elif lists:
+        ranked = [engine.artist_key(n) for n in lists[0]]
+    out = []
+    for a in ranked:
+        if a in owned_ok and a not in out:
+            out.append(a)
+    return out
+
+
+def pillars_for(members_keys, genres, view, report, elsewhere=(), own_keys=None):
+    """
+    About twelve canon and eight of your own most played in the lane, each side filling the other's gap.
+    elsewhere: artists you play that the analysis put in another lane, so the canon doesn't pull them in.
+    """
+    elsewhere = set(elsewhere)
+    owned_ok = {a for a, v in view.items() if v["owned"] >= PILLAR_OWNED and not is_compilation(v)
+                and a not in elsewhere}
+    canon = _canon(genres, view, owned_ok, report)
+    own = sorted((a for a in (members_keys if own_keys is None else own_keys) if a in owned_ok),
+                 key=lambda a: -view[a]["plays"])   # a stray folded in from a tiny group isn't one of the lane's own
+    total = PILLARS_CANON + PILLARS_OWN
+    take_canon = min(len(canon), max(PILLARS_CANON, total - len(own)))
+    picked = canon[:take_canon]
+    for a in own:
+        if len(picked) >= total:
+            break
+        if a not in picked:
+            picked.append(a)
+    for a in canon[take_canon:]:
+        if len(picked) >= total:
+            break
+        if a not in picked:
+            picked.append(a)
+    return [view[a]["name"] for a in picked]
+
+
+def _make_lane(lane_id, node, kids, leaves, artists, vecs, view, report, depth, prefer=None, extra=()):
+    members = list(leaves[node]) + list(extra)
+    keys = [artists[i] for i in members]
+    genres = _lane_info(members, artists, vecs, view)
+    elsewhere = set(artists) - set(keys)
+    lane_ = {"id": lane_id, "name": _name(genres, prefer), "genres": [g for g, _ in genres.most_common(6)],
+             "artists": len(keys), "plays": sum(view[a]["plays"] for a in keys),
+             "pillars": pillars_for(keys, genres, view, report, elsewhere,
+                                    own_keys=[artists[i] for i in leaves[node]]), "children": [],
+             "centroid": dict(Counter({g: w for g, w in genres.items()}).most_common(12))}
+    split = node
+    while split in kids and min(len(leaves[c]) for c in kids[split]) < LANE_MIN:
+        split = max(kids[split], key=lambda c: len(leaves[c]))   # a sliver isn't a half: look further down
+    if depth < 3 and split in kids:
+        halves = []
+        for side, child in zip("ab", kids[split]):
+            if len(leaves[child]) < LANE_MIN:
+                halves = []
+                break
+            halves.append(_make_lane(f"{lane_id}{side}", child, kids, leaves, artists, vecs, view, report, depth + 1,
+                                     prefer))
+        if len(halves) == 2 and all(len(h["pillars"]) >= PILLARS_TO_SPLIT for h in halves) \
+                and halves[0]["name"] != halves[1]["name"]:
+            lane_["children"] = halves
+    return lane_
+
+
+def analyse(report=print):
+    """Reads plays, asks the sources for genres, makes the lanes and their pillars, and keeps the lot."""
+    started = time.time()
+    view = library_view()
+    played = sorted((a for a, v in view.items() if v["plays"] >= MIN_PLAYS), key=lambda a: -view[a]["plays"])
+    played = played[:ARTISTS_MAX]
+    report(t("Radio: analysing what you play. {count} artists have {plays} or more plays.", count=len(played),
+             plays=MIN_PLAYS))
+    cache = artist_tags([(a, view[a]["name"]) for a in played], report)
+    artists, vecs, cases, prefer = [], [], Counter(), set()
+    for a in played:
+        genres, case = genres_for(a, view[a], cache)
+        cases[case] += 1
+        if case == "sources":
+            prefer |= set(genres)
+        if genres:
+            artists.append(a)
+            vecs.append(_unit(genres))
+    report("  " + t("Genres from the sources for {sources} artists, from your own tags for {own}, none for {none}.",
+                    sources=cases["sources"], own=cases["own"], none=cases["none"]))
+    if len(artists) < MIN_ARTISTS:
+        result = {"when": datetime.now().strftime("%Y-%m-%d %H:%M"), "lanes": [],
+                  "resting": {"have": len(artists), "need": MIN_ARTISTS}}
+        _set_meta(ANALYSIS_KEY, result)
+        report(t("Radio is resting: it needs {need} artists you've played {plays} or more times, and there are "
+                 "{have} so far. It wakes once there are enough.", need=MIN_ARTISTS, plays=MIN_PLAYS,
+                 have=len(artists)))
+        return result
+    merges = cluster(vecs)
+    kids, leaves = _tree(len(artists), merges)
+    k = max(2, min(LANES_MAX, len(artists) // 20))
+    roots = _cut(len(artists), merges, k)
+    big = [r for r in roots if len(leaves[r]) >= LANE_MIN]
+    small = [r for r in roots if len(leaves[r]) < LANE_MIN]
+    if not big:
+        big, small = [max(roots, key=lambda r: len(leaves[r]))], [r for r in roots if r != max(roots, key=lambda r: len(leaves[r]))]
+    # a small group folds into the big one whose genres are nearest
+    centroids = {r: _unit(Counter({g: w for i in leaves[r] for g, w in vecs[i].items()})) for r in big}
+    extra = defaultdict(list)
+    for r in small:
+        mine = _unit(Counter({g: w for i in leaves[r] for g, w in vecs[i].items()}))
+        target = max(big, key=lambda b: _cosine(mine, centroids[b]))
+        extra[target] += leaves[r]
+    out = []
+    ordered = sorted(big, key=lambda r: -sum(view[artists[i]]["plays"] for i in leaves[r] + extra[r]))
+    for n, r in enumerate(ordered, 1):
+        engine.check_cancelled()
+        # the folded-in artists count in the lane, though Split keeps to the tree's halves
+        out.append(_make_lane(str(n), r, kids, leaves, artists, vecs, view, report, depth=0, prefer=prefer,
+                              extra=extra[r]))
+    names = Counter(x["name"] for x in out)
+    for x in out:   # two lanes can't share a name: the second takes its third genre instead
+        if names[x["name"]] > 1 and len(x["genres"]) > 2:
+            x["name"] = " / ".join(g.title() for g in (x["genres"][0], x["genres"][2]))
+    result = {"when": datetime.now().strftime("%Y-%m-%d %H:%M"), "lanes": out, "resting": None,
+              "known": [a for a in played]}
+    _set_meta(ANALYSIS_KEY, result)
+    report(tn("Radio: {count} lane, from {artists} artists, {seconds} s.",
+              "Radio: {count} lanes, from {artists} artists, {seconds} s.", len(out), artists=len(artists),
+              seconds=max(0, round(time.time() - started))))
+    for x in out:
+        report("  " + t("{name}: {artists} artists; pillars {pillars}.", name=x["name"], artists=x["artists"],
+                        pillars=", ".join(x["pillars"][:6]) + ("..." if len(x["pillars"]) > 6 else "")))
+    return result
+
+
+def join_new_artists(report, limit=10):
+    """
+    Artists played enough since the analysis join the lane nearest in genre, as pillars of their own when
+    they qualify, without a Re-analyse. A few at a time, at the start of a build.
+    """
+    result = analysis()
+    if not result or not result.get("lanes"):
+        return
+    view = library_view()
+    known = set(result.get("known") or [])
+    new = [a for a, v in view.items() if v["plays"] >= MIN_PLAYS and a not in known][:limit]
+    if not new:
+        return
+    cache = artist_tags([(a, view[a]["name"]) for a in new], lambda line: None)
+    joined = []
+    for a in new:
+        known.add(a)
+        genres, _case = genres_for(a, view[a], cache)
+        if not genres or view[a]["owned"] < PILLAR_OWNED or is_compilation(view[a]):
+            continue
+        mine = _unit(genres)
+        target = max(result["lanes"], key=lambda x: _cosine(mine, _unit(x.get("centroid") or {})))
+        if view[a]["name"] not in target["pillars"]:
+            target["pillars"].append(view[a]["name"])
+            joined.append((view[a]["name"], target["name"]))
+    result["known"] = sorted(known)
+    _set_meta(ANALYSIS_KEY, result)
+    for name, lane_name in joined:
+        report("  " + t("Radio: {artist} joins {lane} as a pillar.", artist=name, lane=lane_name))
+
+
+# --- a build ----------------------------------------------------------------------------------------
+
+def _owned_top(artist, have, played, limit):
+    """An artist's top tracks you own (the sources' order), then your most played of theirs, up to limit."""
+    import library
+    out = []
+    top, _label = engine.blended_top_tracks(artist, limit=max(limit, engine.TRACKS_PER_ARTIST_POOL))
+    for title, _sources in top:
+        key = library.find_track_key(artist, title)
+        key = played.pick(key) if key and str(key) not in have else None
+        if key and str(key) not in have and str(key) not in out:
+            out.append(str(key))
+        if len(out) >= limit:
+            return out
+    a = engine.artist_key(artist)
+    with library._lock:
+        rows = [r for r in library._tracks if engine.artist_key(r.get("Artist") or "") == a]
+    for r in sorted(rows, key=lambda r: -_plays(r)):
+        key = str(r.get("Key"))
+        if key not in have and key not in out and played.pick(key):
+            out.append(key)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _minutes(keys):
+    import library
+    total = 0.0
+    for k in keys:
+        try:
+            total += float((library.track_row(k) or {}).get("Duration") or 0)
+        except (TypeError, ValueError):
+            pass
+    return total / 60.0
+
+
+def find(lane_, report, minutes=TARGET_MINUTES, avoid=()):
+    """The tracks for one round: (keys, the pillars used). avoid: keys already sent (Non-stop's rounds)."""
+    pillars = list(lane_["pillars"])
+    random.shuffle(pillars)
+    if not pillars:
+        return [], []
+    have = {str(k) for k in avoid}
+    played = engine.PlayedFilter("artists", report=report, filters=True)
+    circle, lists, picks, seen_artists = [], {}, [], set()
+    try:
+        while pillars and len(circle) < CIRCLE_MAX and (not picks or _minutes(picks) < minutes):
+            engine.check_cancelled()
+            joining = pillars[:CIRCLE_START] if not circle else pillars[:1]
+            pillars = pillars[len(joining):]
+            if circle:
+                report("  " + t("Short of {minutes} minutes: {artist} joins ({count} of {most} pillars).",
+                                minutes=minutes, artist=joining[0], count=len(circle) + 1, most=CIRCLE_MAX))
+            for p in joining:
+                found, _label = engine.blended_similar_artists(p, limit=30, report=report)
+                lists[engine.artist_key(p)] = [a for a, _ in found]
+            circle += joining
+            agreed, _same = engine.inner_circle(circle, lambda m: lists[engine.artist_key(m)],
+                                                min(AGREE, len(circle)), key=engine.artist_key)
+            for p in joining:   # a couple of each pillar's own
+                for key in _owned_top(p, have, played, 2):
+                    have.add(key)
+                    picks.append(key)
+            for artist, _why in agreed[len(circle):]:
+                a = engine.artist_key(artist)
+                if a in seen_artists:
+                    continue
+                seen_artists.add(a)
+                for key in _owned_top(artist, have, played, engine.TRACKS_PER_ARTIST_PICK):
+                    have.add(key)
+                    picks.append(key)
+    finally:
+        played.done()
+    return picks, circle
+
+
+def build(lane_id, report=print):
+    """Radio: one round for the lane, a pillar song first, the rest spread. Non-stop carries on from pillars."""
+    lane_ = lane(lane_id)
+    if lane_ is None:
+        report(t("Problem: that Radio lane has gone. Re-analyse under Radio's arrow to make the lanes again."))
+        return
+    appending = engine.NONSTOP_APPEND
+    if not appending:
+        report(t("Radio: {name}.", name=lane_["name"]))
+        join_new_artists(report)
+        lane_ = lane(lane_id) or lane_
+    session_id = engine.session_start("radio", {"Artist": "", "Name": lane_["name"]})
+    avoid = set()
+    if appending and engine.OUTPUT_OVERRIDE:
+        with engine._nonstop_lock:
+            for entry in engine.NONSTOP_ZONES.values():
+                if entry.get("radio_lane") == lane_id:
+                    avoid |= set(entry.get("keys") or ())
+    picks, circle = find(lane_, report, avoid=avoid)
+    report("  " + t("Pillars this round: {names}.", names=", ".join(circle)))
+    if not picks:
+        report(t("Radio: nothing found for {name} this time. The sources may not be answering; try again in a "
+                 "minute.", name=lane_["name"]))
+        engine.session_finish(session_id, 0, sources="none", report=report)
+        return
+    first, rest = picks[0], picks[1:]
+    random.shuffle(rest)
+    keys = engine.spread_artists([first] + rest, keep=first)
+    import library
+    artists = {engine.artist_key((library.track_row(k) or {}).get("Artist") or "") for k in keys}
+    report("  " + t("{tracks}, about {minutes} minutes, from {artists} artists.",
+                    tracks=tn("{count} track", "{count} tracks", len(keys)), minutes=round(_minutes(keys)),
+                    artists=len(artists)))
+    engine.send_to_jriver(keys, typed=True, report=report, append=appending)
+    zone = engine.LAST_OUTPUT_ID
+    if zone is not None:
+        with engine._nonstop_lock:
+            entry = engine.NONSTOP_ZONES.get(zone)
+            if entry is not None:
+                entry.update(radio_lane=lane_id, origin="radio", kind="radio")
+    engine.session_finish(session_id, len(keys), report=report)
+    engine.SAVE_NAME = t("{name} Radio", name=lane_["name"])

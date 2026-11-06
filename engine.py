@@ -1044,7 +1044,7 @@ import itertools as _itertools
 import threading as _threading
 
 NONSTOP_KINDS = {"similar": "artists", "youtube_queue": "artists", "similar_tracks": "tracks",
-                 "top_tracks": "top", "headliner": "top", "vibe": "vibe"}
+                 "top_tracks": "top", "headliner": "top", "vibe": "vibe", "radio": "radio"}
 NONSTOP_CONTEXT = {}     # the build in progress (set by session_start)
 # RUN_AFTER: group -> (on, path), from Settings > Playlist > Run After Building. Set only by load_settings():
 # a default here would undo the startup load.
