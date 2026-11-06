@@ -1,7 +1,7 @@
 """
 The More Options row's three switches on the Play tab (Ben, 2 Nov 2026): Moderator, Deep Cuts and
 Non-stop, Off or On, lit when On. Opening the row drops a note saying they override every playlist's
-own settings while it's open; closing says the pages decide again. With the row open, dragging a
+own settings while it's open; closing by hand clears the notices and keeps the build. With the row open, dragging a
 playlist shows a third pill, Use Its Settings, which sets the switches from that playlist's page.
 """
 
@@ -74,13 +74,14 @@ def test_opening_the_row_says_one_line_and_the_first_time_a_dialog_too(app, ui, 
     p._show_more(False)
     ui.pump(0.3)
     assert "closed" not in log(p), "nothing said on closing: the line already said when the override ends"
+    assert log(p).count(line) == 0, "closing by hand takes the line away (Ben, 6 Nov 2026)"
     p._show_more(True)
     ui.pump(0.3)
-    assert log(p).count(line) == 2 and len(shown) == 1, "the line again, the dialog never again"
+    assert log(p).count(line) == 1 and len(shown) == 1, "the line again, once, the dialog never again"
     p._show_more(False)
     p._show_more(True, save=False)   # as start-up restores a row left open
     ui.pump(0.3)
-    assert log(p).count(line) == 3 and len(shown) == 1, "the line at start-up too, never the dialog"
+    assert log(p).count(line) == 1 and len(shown) == 1, "the line at start-up too, never the dialog"
     p._show_more(False, save=False)
     assert not ui.errors, ui.errors[0]
 
@@ -131,4 +132,33 @@ def test_the_third_pill_shows_only_with_the_row_open_and_sets_the_switches_from_
     assert "Note: More Options set from Similar Artists: Moderator Balanced, Deep Cuts Off, Non-stop Keep It Tight." in log(p)
     assert [b._name for b in p.play_buttons][0] == "Similar Artists", "the row is as it was"
     p._show_more(False)
+    assert not ui.errors, ui.errors[0]
+
+
+def test_closing_the_row_takes_the_notices_away_and_keeps_the_build(app, ui):
+    """Ben, 6 Nov 2026: four opens and closes left four copies of the More Options line. Closing the row by
+    hand now clears every notice (the More Options line, the orange notes) and leaves a build's own lines."""
+    p = ui.play
+    p._end_greeting(keep=False)
+    p._show_more(True)
+    ui.pump(0.3)
+    p._append_log("Similar Artists (Seed: Joe Satriani - Ice 9)")
+    p._append_log("  Note: two tracks were left out, as they were played today.")
+    p._notice("Note: the next build is 24bit7's tracks only.")
+    ui.pump(0.2)
+    assert "More Options Open" in log(p) and "24bit7's tracks only" in log(p)
+    p._show_more(False)
+    ui.pump(0.3)
+    text = log(p)
+    assert "More Options Open" not in text and "24bit7's tracks only" not in text, "the notices go"
+    assert "Similar Artists (Seed: Joe Satriani - Ice 9)" in text, "the build stays"
+    assert "two tracks were left out" in text, "a note that's part of a build stays too"
+    assert not any("More Options Open" in x or "tracks only" in x for x in p._live), "gone from the kept lines too"
+    assert any("Joe Satriani" in x for x in p._live)
+    for _ in range(3):
+        p._show_more(True)
+        ui.pump(0.2)
+        p._show_more(False)
+        ui.pump(0.2)
+    assert "More Options Open" not in log(p), "no pile of lines however often it's opened and closed"
     assert not ui.errors, ui.errors[0]

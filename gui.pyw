@@ -716,7 +716,7 @@ class PlayTab(tk.Frame):
         elif nest_into is not None:
             parent = nest_into._button
             if buttons.nest(child["id"], parent["id"]):
-                self._append_log(t("Note: {child} is under {parent} now. The arrow on {parent} lists it.",
+                self._notice(t("Note: {child} is under {parent} now. The arrow on {parent} lists it.",
                                    child=child["name"], parent=parent["name"]))
         else:
             row = self.button_row
@@ -727,7 +727,7 @@ class PlayTab(tk.Frame):
                                and event.x_root < b.winfo_rootx() + b.winfo_width() // 2), None)
                 buttons.unnest(child["id"])
                 buttons.move_to(child["id"], before)
-                self._append_log(t("Note: {name} is back on the Play tab.", name=child["name"]))
+                self._notice(t("Note: {name} is back on the Play tab.", name=child["name"]))
         self.refresh_buttons()
 
     def _show_drag_image_for(self, name):
@@ -775,7 +775,7 @@ class PlayTab(tk.Frame):
         self._close_children()
         if buttons.unnest(child["id"]):
             self.refresh_buttons()
-            self._append_log(t("Note: {name} is back on the Play tab.", name=child["name"]))
+            self._notice(t("Note: {name} is back on the Play tab.", name=child["name"]))
 
     # --- dragging a playlist: along the row, or onto the cog (its settings) or the cross (off the row) ---
 
@@ -938,7 +938,7 @@ class PlayTab(tk.Frame):
         elif nest_into is not None:   # held over another playlist: under it, into its menu
             parent = nest_into._button
             if buttons.nest(button["id"], parent["id"]):
-                self._append_log(t("Note: {child} is under {parent} now. The arrow on {parent} lists it.",
+                self._notice(t("Note: {child} is under {parent} now. The arrow on {parent} lists it.",
                                    child=button["name"], parent=parent["name"]))
         else:   # dropped on the row: where its slot has slid to
             i = self.play_buttons.index(fb)
@@ -1034,7 +1034,7 @@ class PlayTab(tk.Frame):
         if wants_page:   # New: its page opens with the name box ready to type in
             self.open_playlist_settings(button["id"], rename=True)
         else:
-            self._append_log(t("Note: {name} is on the Play tab.", name=button["name"]))
+            self._notice(t("Note: {name} is on the Play tab.", name=button["name"]))
 
     def _button_menu(self, event, button):
         """Right-click on a playlist: Rename, Duplicate, Settings, Move Left, Move Right, Remove; and Restore."""
@@ -1088,7 +1088,7 @@ class PlayTab(tk.Frame):
         self.refresh_buttons()
         self._live.clear()   # a fresh console for the note (Ben, 1 Nov)
         self._clear_log()
-        self._append_log(t("Note: {name} deleted.", name=button["name"]))
+        self._notice(t("Note: {name} deleted.", name=button["name"]))
 
     def on_button(self, button):
         """Runs a playlist: from the Search tab's typed seed, or from the Now Playing zone's track."""
@@ -1126,6 +1126,8 @@ class PlayTab(tk.Frame):
             self.extras_row.pack_forget()
             self.more_line.pack_forget()
             self.more_box.configure(height=1)   # Tk keeps an emptied frame's size otherwise
+            if save:   # closed by hand: the notices go, the build's lines stay (Ben, 6 Nov 2026)
+                self._clear_notices()
         if save:
             playmix.set_open(open_)
         self._update_more_label()
@@ -1135,7 +1137,7 @@ class PlayTab(tk.Frame):
     def _say_overrides(self, by_hand):
         """One console line each time the row opens; the first time it's opened by hand, a dialog too (Ben, 2 Nov 2026)."""
         self._sync_override_switches()
-        self._append_log(t(overrides.OPEN_LINE))
+        self._notice(t(overrides.OPEN_LINE))
         if by_hand and not overrides.told():
             overrides.set_told()
             messagebox.showinfo(t("More Options"), t(overrides.OPEN_LINE) + "\n\n"
@@ -1164,7 +1166,7 @@ class PlayTab(tk.Frame):
         """The Use Its Settings pill: the three switches take what this playlist's own page has."""
         values = overrides.set_switches(overrides.from_playlist(button))
         self._sync_override_switches()
-        self._append_log(t("Note: More Options set from {name}: {switches}.", name=button["name"],
+        self._notice(t("Note: More Options set from {name}: {switches}.", name=button["name"],
                            switches=overrides.summary()))
         return values
 
@@ -1174,7 +1176,7 @@ class PlayTab(tk.Frame):
         line = "Note: " + playmix.summary(self.mix_rows.rows)
         if line != getattr(self, "_mix_note_shown", None):
             self._mix_note_shown = line
-            self._append_log(line)
+            self._notice(line)
 
     def _update_more_label(self):
         """The More options button's arrow: up while the row is open, down while it's closed."""
@@ -1532,7 +1534,7 @@ class PlayTab(tk.Frame):
         self._clear_log()
         if keep:
             for line in held:
-                self._insert_line(line)
+                self._insert_line(line, notice=line in getattr(self, "_notices", []))
 
     @staticmethod
     def _line_kind(line):
@@ -1551,27 +1553,48 @@ class PlayTab(tk.Frame):
             return "ai"
         return None
 
-    def _append_log(self, line):
+    def _notice(self, line):
+        """A line that tells you about something you did (a note, the More Options line), not part of a build:
+        closing More Options takes these away and leaves the build's own lines (Ben, 6 Nov 2026)."""
+        return self._append_log(line, notice=True)
+
+    def _clear_notices(self):
+        """Takes the notices off the console and out of the kept lines; a build's lines stay as they are."""
+        notices, self._notices = getattr(self, "_notices", []), []
+        for line in notices:
+            for kept in (self._live, self._held):
+                if line in kept:
+                    del kept[len(kept) - 1 - kept[::-1].index(line)]   # the latest copy: that's the notice
+        self.log.config(state="normal")
+        ranges = self.log.tag_ranges("notice")
+        for start, end in reversed(list(zip(ranges[0::2], ranges[1::2]))):
+            self.log.delete(start, end)
+        self.log.config(state="disabled")
+        self._mix_note_shown = None   # the same note can show again after the next change
+
+    def _append_log(self, line, notice=False):
         if getattr(self, "_stamp_next", False) and line.strip():
             line = time.strftime("%H:%M") + "  " + line.lstrip("\n")
             self._stamp_next = False
         self._live.append(line)
+        if notice:
+            self._notices = getattr(self, "_notices", []) + [line]
         if getattr(self, "review_panel", None) is not None:
             self.review_panel.console_activity()   # a dot on Console while Review is showing
         if self._greeting_active:
             self._held.append(line)   # not into the middle of the greeting: shown once it clears
             return line
-        self._insert_line(line)
+        self._insert_line(line, notice=notice)
         return line
 
-    def _insert_line(self, line):
+    def _insert_line(self, line, notice=False):
         """Puts a line on screen, coloured by its kind, if the tab it belongs to is the one showing."""
         if not self._live_visible():
             return   # another tab is showing: the line is kept for when this build's tab is chosen
         at_bottom = self.log.yview()[1] >= 0.999   # scrolled up to read? new lines don't pull you down
         self.log.config(state="normal")
         kind = self._line_kind(line)
-        tags = (kind,) if kind else ()
+        tags = ((kind,) if kind else ()) + (("notice",) if notice else ())
         link = re.search(re.escape(engine.RELEASES_PAGE) + r"\S+", line)   # the new-version line's download link
         if link:
             self.log.tag_configure("release_link", underline=True)
