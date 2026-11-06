@@ -101,3 +101,11 @@ def test_a_build_leaves_out_skipped_tracks(app):
     app.engine.create_similar_playlist(report=r, seed_info=seed)
     assert not set(first[:3]) & set(j.zone("Speakers").playlist), r.text()
     assert r.has("Filters: Skipped Tracks (skipped by voice twice or more"), r.text()
+
+
+def test_the_filter_text_doesnt_promise_a_plain_alexa_skip_counts():
+    """A plain "Alexa, skip" goes to the speaker, not the skill (manual, What you can say), so it's never counted:
+    the filter's text must speak of skips asked of the skill (6 Nov 2026)."""
+    import filters
+    assert '"Alexa, skip"' not in filters.SKIPPED_TEXT
+    assert "skill" in filters.SKIPPED_TEXT

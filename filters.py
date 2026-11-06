@@ -38,7 +38,7 @@ SKIPPED_NAME = N_("Skipped Tracks")
 SKIPS_TRACK = 2    # voice skips that leave a track out
 SKIPS_ARTIST = 3   # tracks left out that way that leave their artist out
 SKIPPED_TEXT = N_("Leaves out any track skipped by voice twice or more, and every track by an artist with three "
-                  "such tracks. Saying \"Alexa, skip\" counts the skip in a field of 24bit7's own in JRiver, "
+                  "such tracks. Each skip you ask the skill for counts in a field of 24bit7's own in JRiver, "
                   "24bit7 Voice Skips, which you can see and clear in JRiver.")
 SHIPPED_FLAG = "filters_skipped_shipped"
 
