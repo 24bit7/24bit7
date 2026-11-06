@@ -4556,6 +4556,26 @@ MIX_NOTED = False        # the "left out on YouTube" note has been logged this b
 CANCEL_CHECK = None      # set by voice.py: returns True once a newer command has taken over
 CANCEL_REQUESTED = threading.Event()   # set by the console's Cancel while a build runs
 SENT_ANY = False         # this build has sent tracks to JRiver or YouTube (for the Cancelled line)
+SAVE_NAME = None         # Save Playlist's name for this build, where the build knows better (embellish.py)
+
+
+def save_name():
+    """Save Playlist's suggested name: the build's own, or "<seed artist> Mix", or the seed's name."""
+    if SAVE_NAME:
+        return SAVE_NAME
+    row = None
+    try:
+        if CURRENT_SESSION is not None:
+            row = db().execute("SELECT seed_artist, seed_track FROM sessions WHERE id=?",
+                               (CURRENT_SESSION,)).fetchone()
+    except Exception:
+        row = None
+    artist = (split_values(row[0]) or [row[0]])[0] if row and row[0] else ""
+    if artist:
+        return t("{artist} Mix", artist=artist)
+    if row and row[1]:
+        return row[1]
+    return t("24bit7 Mix")
 
 
 class BuildCancelled(BaseException):

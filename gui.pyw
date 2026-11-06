@@ -41,6 +41,7 @@ from review_gui import ReviewPanel
 import badge
 import console_query
 import playmix
+import embellish
 import overrides
 import mode
 import profiles
@@ -105,7 +106,17 @@ PLAY_NOTES = {
                  "together. Lasts one playlist; click Top-Up again to cancel."),
     "Show Credits": N_("Lists the producer, engineer, musicians and other credits for what's playing, from Discogs."),
     "Help": N_("Hover notes for the Play tab: on, hovering over anything here explains it; off, no pop-ups."),
+    "Playlist": N_("One of your JRiver playlists or smartlists. Click into the box for the list, the five you played "
+                   "here most recently at the top; type to narrow it."),
+    "Play": N_("Plays the playlist as it is. The arrow chooses Play Shuffled or Play Ordered."),
+    "Play & Embellish": N_("Plays the playlist with new tracks woven in: the top tracks you own by artists that the "
+                           "playlist's own artists agree on. The arrow chooses how many."),
+    "Save Playlist": N_("Saves what's in Playing Now in the zone the last playlist went to as a JRiver playlist, so "
+                        "a chain of Top-Ups or an embellished playlist can be kept."),
 }
+PLAYLISTS_SHOWN = 15   # rows of the All Playlists part of the list before "type to narrow"
+MONTHS = (N_("Jan"), N_("Feb"), N_("Mar"), N_("Apr"), N_("May"), N_("Jun"), N_("Jul"), N_("Aug"), N_("Sep"),
+          N_("Oct"), N_("Nov"), N_("Dec"))
 BUTTON_GAP = 8   # between the Play tab's buttons, and between its rows of them
 
 
@@ -250,6 +261,8 @@ class PlayTab(tk.Frame):
             widget.config(cursor="hand2")
         self.seed_nb._tabs[0].bind("<Button-1>", refresh_now, add="+")   # the Now Playing tab
 
+        self._build_playlists_tab()
+
         self.search_tab = tk.Frame(self.seed_nb, padx=26, pady=8)
         self.seed_nb.add(self.search_tab, text=t("Search"))
         fields = tk.Frame(self.search_tab)   # one row, so each title sits right beside its box
@@ -267,8 +280,307 @@ class PlayTab(tk.Frame):
         for entry in (self.search_artist, self.search_track):
             entry.bind("<Return>", lambda e: self.on_similar())
         self.seed_nb.bind("<<NotebookTabChanged>>", lambda e: (self._sync_seed_buttons(), self._place_output()))
-        for widget in (fields, self.search_tab):   # the panel settles its height after the switch
-            widget.bind("<Configure>", lambda e: self._seed_is_search() and self.after_idle(self._place_output), add="+")
+        for widget in (fields, self.search_tab, self.playlists_tab):   # the panel settles its height after the switch
+            widget.bind("<Configure>", lambda e: self._seed_has_row() and self.after_idle(self._place_output), add="+")
+
+    # --- JRiver Playlists (Ben, 6 Nov 2026): play or embellish one of your own playlists ----------------
+
+    def _build_playlists_tab(self):
+        """The third seed tab: Playlist, Play \u25be and Play & Embellish \u25be on one row, Output at the right."""
+        tab = self.playlists_tab = tk.Frame(self.seed_nb, padx=26, pady=8)
+        self.seed_nb.add(tab, text=t("JRiver Playlists"))
+        row = tk.Frame(tab)
+        row.grid(row=0, column=0, sticky="w")
+        label = tk.Label(row, text=t("Playlist"), font=("Segoe UI", 10))
+        label.pack(side="left")
+        self.playlist_entry = RoundedEntry(row, width=30, font=("Segoe UI", 9))
+        self.playlist_entry.pack(side="left", padx=(4, 24))
+        self._playlist_chosen = None
+        self._playlists_pop = None
+        self._playlists_found = None
+        entry = self.playlist_entry.entry
+        entry.bind("<FocusIn>", lambda e: self._open_playlists(), add="+")
+        entry.bind("<Button-1>", lambda e: self._open_playlists(), add="+")
+        entry.bind("<KeyRelease>", self._playlists_typed, add="+")
+        entry.bind("<Return>", lambda e: self._pick_first_playlist(), add="+")
+        entry.bind("<Escape>", lambda e: self._close_playlists(), add="+")
+        entry.bind("<FocusOut>", lambda e: self.after(200, self._close_playlists_if_away), add="+")
+        self.play_list_button = FlatButton(row, text=t("Play"), width=18, height=2,
+                                           command=lambda: self.on_play_playlist(False), arrow=True,
+                                           arrow_command=lambda: self._choice_menu("order"))
+        self.play_list_button.pack(side="left", padx=(0, BUTTON_GAP))
+        self.embellish_button = FlatButton(row, text=t("Play & Embellish"), width=18, height=2,
+                                           command=lambda: self.on_play_playlist(True), arrow=True,
+                                           arrow_command=lambda: self._choice_menu("amount"))
+        self.embellish_button.pack(side="left")
+        on, wrap = self.help_on, self.note_wrap
+        for widget, name in ((label, "Playlist"), (self.playlist_entry, "Playlist"), (self.play_list_button, "Play"),
+                             (self.embellish_button, "Play & Embellish")):
+            Tooltip(widget, t(PLAY_NOTES[name]), when=on, wrap=wrap)
+        self.extra_list_buttons = [self.play_list_button, self.embellish_button]
+
+    def _seed_is_playlists(self):
+        tab = getattr(self, "playlists_tab", None)
+        return tab is not None and self.seed_nb.select() == str(tab)
+
+    def _seed_has_row(self):
+        """Search and JRiver Playlists: a row of boxes, with Output level with it."""
+        return self._seed_is_search() or self._seed_is_playlists()
+
+    def _playlist_list(self):
+        """Every JRiver playlist and smartlist, A to Z, read once each time the list opens."""
+        import saved_playlists
+        try:
+            found = saved_playlists.scan()
+        except Exception as e:
+            engine.debug(f"JRiver Playlists: couldn't read the playlists ({e})")
+            return None
+        return sorted(found, key=lambda p: (p["Name"].lower(), p.get("Folder") or ""))
+
+    def _open_playlists(self):
+        if self._playlists_pop is not None:
+            return
+        self._playlists_found = self._playlist_list()
+        self._fill_playlists()
+
+    def _playlists_typed(self, event):
+        if event.keysym in ("Return", "Escape", "Tab"):
+            return
+        self._playlist_chosen = None
+        if self._playlists_found is None:
+            self._playlists_found = self._playlist_list()
+        self._fill_playlists()
+
+    def _when(self, stamp):
+        """'20:41' today, 'yesterday', or '4 Nov'."""
+        try:
+            when = datetime.strptime(stamp, "%Y-%m-%d %H:%M")
+        except (TypeError, ValueError):
+            return ""
+        days = (datetime.now().date() - when.date()).days
+        if days == 0:
+            return when.strftime("%H:%M")
+        if days == 1:
+            return t("yesterday")
+        return f"{when.day} {t(MONTHS[when.month - 1])}"
+
+    def _fill_playlists(self):
+        """The list under the box: the recent five, then every playlist A to Z, both narrowed by what's typed."""
+        self._close_playlists()
+        entry = self.playlist_entry
+        bg, fg, muted, line = PALETTE["field_bg"], PALETTE["text"], PALETTE["help_fg"], PALETTE["line"]
+        pop = self._playlists_pop = tk.Toplevel(self)
+        pop.withdraw()
+        pop.overrideredirect(True)
+        pop.configure(bg=line, padx=1, pady=1)
+        inner = tk.Frame(pop, bg=bg)
+        inner.pack(fill="both", expand=True)
+        pop._rows = []
+        typed = entry.get().strip().lower()
+        found = self._playlists_found
+        import saved_playlists
+
+        def heading(text):
+            tk.Label(inner, text=text.upper(), font=("Segoe UI", 8), fg=muted, bg=bg).pack(anchor="w", padx=10,
+                                                                                         pady=(6, 1))
+
+        def add_row(playlist, tag):
+            r = tabs.PickRow(inner, playlist["Name"], fg=fg, bg=bg, fit=True, tag=tag)
+            r.configure(cursor="hand2")
+            r.pack(fill="x", padx=3, pady=1)
+            r.bind("<Enter>", lambda e, w=r: w.set_chosen(True))
+            r.bind("<Leave>", lambda e, w=r: w.set_chosen(False))
+            r.bind("<ButtonPress-1>", lambda e, p=playlist: self._pick_playlist(p))
+            pop._rows.append((playlist, r))
+
+        if found is None:
+            tk.Label(inner, text=t("JRiver isn't answering, so the playlists can't be listed."), fg=muted, bg=bg,
+                     font=("Segoe UI", 9)).pack(anchor="w", padx=10, pady=6)
+        else:
+            by_id = {p["ID"]: p for p in found}
+            recent = [(by_id[x["id"]], x) for x in embellish.recent() if x["id"] in by_id
+                      and typed in by_id[x["id"]]["Name"].lower()]
+            if recent:
+                heading(t("Recent"))
+                for p, x in recent:
+                    how = t("embellished") if x.get("how") == "embellished" else t("played")
+                    add_row(p, f"{how}, {self._when(x.get('when'))}".strip(", "))
+                tk.Frame(inner, bg=line, height=1).pack(fill="x", pady=4)
+            matches = [p for p in found if typed in p["Name"].lower()]
+            heading(t("All Playlists"))
+            for p in matches[:PLAYLISTS_SHOWN]:
+                where = "" if p.get("Folder") in (None, "", saved_playlists.ROOT) else p["Folder"]
+                kind = t("Smartlist") if p.get("Type") == "Smartlist" else ""
+                add_row(p, ", ".join(x for x in (where, kind) if x))
+            if not matches:
+                tk.Label(inner, text=t("No playlist has that in its name."), fg=muted, bg=bg,
+                         font=("Segoe UI", 9)).pack(anchor="w", padx=10, pady=(0, 6))
+            elif len(matches) > PLAYLISTS_SHOWN:
+                tk.Label(inner, text=t("and {count} more: type to narrow the list", count=len(matches) - PLAYLISTS_SHOWN),
+                         fg=muted, bg=bg, font=("Segoe UI", 9)).pack(anchor="w", padx=10, pady=(0, 6))
+        pop.update_idletasks()
+        w = max(pop.winfo_reqwidth(), entry.winfo_width(), 300)
+        pop.geometry(f"{w}x{pop.winfo_reqheight()}+{entry.winfo_rootx()}+{entry.winfo_rooty() + entry.winfo_height() + 2}")
+        pop.deiconify()
+        pop.lift()
+
+    def _close_playlists(self):
+        pop, self._playlists_pop = self._playlists_pop, None
+        if pop is not None:
+            try:
+                pop.destroy()
+            except tk.TclError:
+                pass
+
+    def _close_playlists_if_away(self):
+        """The box lost the keyboard: the list goes, unless the box has it back."""
+        try:
+            if self.focus_get() is self.playlist_entry.entry:
+                return
+        except (KeyError, tk.TclError):
+            pass
+        self._close_playlists()
+        self._playlists_found = None
+
+    def _pick_playlist(self, playlist):
+        self._playlist_chosen = playlist
+        self.playlist_entry.delete(0, "end")
+        self.playlist_entry.insert(0, playlist["Name"])
+        self._close_playlists()
+        self._playlists_found = None
+        self.focus_set()   # out of the box, so the list doesn't open again at once
+
+    def _pick_first_playlist(self):
+        pop = self._playlists_pop
+        if pop is not None and pop._rows:
+            self._pick_playlist(pop._rows[0][0])
+
+    def _chosen_playlist(self):
+        """The playlist in the box: the one picked, or the one whose name was typed in full. None after saying why."""
+        typed = self.playlist_entry.get().strip()
+        chosen = self._playlist_chosen
+        if chosen and chosen["Name"] == typed:
+            return chosen
+        if not typed:
+            messagebox.showinfo(t("JRiver Playlists"), t("Pick a playlist first."), parent=self)
+            return None
+        found = self._playlist_list() or []
+        same = [p for p in found if p["Name"].lower() == typed.lower()]
+        if len(same) == 1:
+            return same[0]
+        messagebox.showinfo(t("JRiver Playlists"),
+                            t("More than one playlist is called {name}. Pick the one you mean from the list.", name=typed)
+                            if same else t("There's no JRiver playlist called {name}. Pick one from the list.", name=typed),
+                            parent=self)
+        return None
+
+    def _choice_menu(self, which):
+        """The arrows: Play Shuffled or Play Ordered; Add Half, Double It or Build It Out. Remembered."""
+        self._close_children()
+        button = self.play_list_button if which == "order" else self.embellish_button
+        options = embellish.ORDERS if which == "order" else embellish.AMOUNTS
+        names = embellish.ORDER_NAMES if which == "order" else embellish.AMOUNT_NAMES
+        current = embellish.choices()[which]
+        bg, fg, muted, line = PALETTE["field_bg"], PALETTE["text"], PALETTE["help_fg"], PALETTE["line"]
+        pop = self._children_popup = tk.Toplevel(self)
+        pop.withdraw()
+        pop.overrideredirect(True)
+        pop.configure(bg=line, padx=1, pady=1)
+        inner = tk.Frame(pop, bg=bg)
+        inner.pack(fill="both", expand=True)
+        pop._rows = []
+        for code in options:
+            mark = "\u2713" if code == current else ""
+            r = tabs.PickRow(inner, t(names[code]), fg=fg, bg=bg, fit=True,
+                             left=lambda parent, m=mark: tk.Label(parent, text=m, width=2, fg=PALETTE["button_fg"],
+                                                                  bg=bg, font=("Segoe UI", 10)))
+            r.configure(cursor="hand2")
+            r.pack(fill="x", padx=3, pady=1)
+            r.bind("<Enter>", lambda e, w=r: w.set_chosen(True))
+            r.bind("<Leave>", lambda e, w=r: w.set_chosen(False))
+            r.bind("<ButtonRelease-1>", lambda e, c=code: self._choose(which, c))
+            pop._rows.append((code, r, mark))
+            if which == "amount":
+                tk.Label(inner, text=t(embellish.AMOUNT_NOTES[code]), fg=muted, bg=bg, font=("Segoe UI", 8),
+                         justify="left", wraplength=320).pack(anchor="w", padx=(30, 10), pady=(0, 4))
+        pop.update_idletasks()
+        w = max(pop.winfo_reqwidth(), button.winfo_width())
+        pop.geometry(f"{w}x{pop.winfo_reqheight()}+{button.winfo_rootx()}+{button.winfo_rooty() + button.winfo_height() + 2}")
+        pop.deiconify()
+        pop.lift()
+        pop.focus_force()
+        pop.bind("<Escape>", lambda e: self._close_children())
+        pop.bind("<FocusOut>", lambda e: self.after(100, self._close_children_if_unfocused))
+
+    def _choose(self, which, code):
+        embellish.set_choice(which, code)
+        self._close_children()
+
+    def on_play_playlist(self, embellish_it):
+        """Play or Play & Embellish: a build like any other (Play or Review Mode, Output, Top-Up)."""
+        if self.running:
+            return
+        playlist = self._chosen_playlist()
+        if playlist is None:
+            return
+        chosen = embellish.choices()
+        top_up = bool(getattr(self, "top_up_armed", False))
+        if embellish_it:
+            target = lambda: embellish.embellish(playlist, chosen["order"], chosen["amount"], self.report)
+        else:
+            target = lambda: embellish.play(playlist, chosen["order"], self.report)
+        self._run_job(target, needs_playing=False, mix=False, review=True, top_up=top_up)
+
+    # --- Save Playlist: after a build, the output zone's Playing Now kept as a JRiver playlist ------------
+
+    def _show_save(self, zone):
+        self._save_zone = zone
+        shown = zone is not None
+        if shown != bool(getattr(self, "_save_shown", False)):
+            self._save_shown = shown
+            if not shown:
+                self.save_button.place_forget()
+            self._flow_buttons()
+
+    def on_save_playlist(self):
+        zone = getattr(self, "_save_zone", None)
+        if zone is None or self.running:
+            return
+        label = engine.zone_label(zone)
+        try:
+            keys = [str(r.get("Key")) for r in engine.playing_now_rows(zone) if r.get("Key")]
+        except Exception:
+            keys = []
+        if not keys:
+            messagebox.showinfo(t("Save Playlist"), t("Playing Now in {zone} is empty, so there's nothing to save.",
+                                                      zone=label), parent=self)
+            return
+        from tabs import ask_name
+        name = ask_name(self, t("Save Playlist"),
+                        t("Save what's in Playing Now in {zone} ({tracks}) as a JRiver playlist called:", zone=label,
+                          tracks=tn("{count} track", "{count} tracks", len(keys))),
+                        initial=getattr(self, "_save_default", "") or "")
+        name = (name or "").strip()
+        if not name:
+            return
+        import saved_playlists
+        try:
+            taken = any(p["Name"].lower() == name.lower() and p.get("Type") == "Playlist"
+                        and p.get("Folder") == saved_playlists.ROOT for p in saved_playlists.scan())
+        except Exception:
+            taken = False
+        if taken and not messagebox.askyesno(t("Save Playlist"),
+                                             t('There\'s already a JRiver playlist called "{name}". Replace it?', name=name),
+                                             parent=self):
+            return
+        try:
+            engine.review_save(keys, name)
+        except Exception as e:
+            self._append_log(str(e) if str(e).startswith(("Problem", t("Problem")))
+                             else t("Problem: the playlist wasn't saved ({e}).", e=e))
+            return
+        self._append_log(t('Saved {tracks} as the JRiver playlist "{name}".',
+                           tracks=tn("{count} track", "{count} tracks", len(keys)), name=name))
 
     def _fill_zone_list(self):
         self.zone_cb.config(values=engine.zone_names())
@@ -320,13 +632,14 @@ class PlayTab(tk.Frame):
         box = getattr(self, "output_box", None)
         if box is None:
             return
-        if self._seed_is_search():
-            # level with the Artist and Track boxes, which sit centred in the panel: read where they are
+        if self._seed_has_row():
+            # level with the row of boxes, which sits centred in the panel: read where it is
             # (place measures from inside the panel's padding, the same 26 as Zone has on the left)
-            fields = self.search_tab.grid_slaves(row=0, column=0)[0]
-            self.search_tab.update_idletasks()
-            middle = fields.winfo_y() + fields.winfo_height() // 2 - int(self.search_tab.cget("pady"))
-            box.place(in_=self.search_tab, relx=1.0, rely=0, x=0, y=middle, anchor="e")
+            tab = self.search_tab if self._seed_is_search() else self.playlists_tab
+            fields = tab.grid_slaves(row=0, column=0)[0]
+            tab.update_idletasks()
+            middle = fields.winfo_y() + fields.winfo_height() // 2 - int(tab.cget("pady"))
+            box.place(in_=tab, relx=1.0, rely=0, x=0, y=middle, anchor="e")
         else:
             box.place(in_=self.seed_nb._pages[0], relx=1.0, rely=0.5, x=0, y=0, anchor="e")
             box.update_idletasks()   # so its width is known
@@ -334,12 +647,25 @@ class PlayTab(tk.Frame):
         box.lift()
 
     def _sync_seed_buttons(self):
-        """Show Credits needs an album, which a typed seed doesn't have, so it greys out on Search."""
+        """
+        Show Credits needs an album, which a typed seed doesn't have, so it greys out on Search. On JRiver
+        Playlists the row's playlists grey out too: they start from a track or an artist (Ben, 6 Nov 2026).
+        """
         self._sync_seed_bars()   # a typed seed ignores Seed, so the bars go back to orange on Search
-        button = getattr(self, "credits_button", None)
-        if button is None or self.running:
+        if self.running:
             return
-        button.config(state="disabled" if self._seed_is_search() else "normal")
+        lists = self._seed_is_playlists()
+        for b in getattr(self, "play_buttons", []):
+            if not getattr(b, "_needs_advanced", False):
+                b.config(state="disabled" if lists else "normal")
+        if getattr(self, "play_buttons", None):
+            self._sync_ai_button()
+        if not lists:
+            self._close_playlists()
+        button = getattr(self, "credits_button", None)
+        if button is None:
+            return
+        button.config(state="disabled" if self._seed_has_row() else "normal")
 
     def _typed_seed(self, need_track, why=None):
         """The Search tab's seed, or None (after a prompt) if the fields aren't filled in."""
@@ -364,7 +690,7 @@ class PlayTab(tk.Frame):
         frame = self.button_row = tk.Frame(self)
         frame.pack(fill="x")
         frame.pack_propagate(False)
-        self.play_buttons, self.extra_buttons = [], []
+        self.play_buttons, self.extra_buttons = [], list(getattr(self, "extra_list_buttons", []))
         # More options: the quieter button. Opens the row below; stays usable during a build.
         self.more_button = FlatButton(frame, text=t("More Options"), command=self._toggle_more,
                                       width=18, height=2, quiet=True)
@@ -373,6 +699,11 @@ class PlayTab(tk.Frame):
         self.add_button._name = "+"
         for w in (self.add_button, self.add_button._label):
             w.bind("<Button-3>", lambda e: self._button_menu(e, None))
+        # Save Playlist: shows after a build that went to a JRiver zone, at the row's top right
+        self.save_button = FlatButton(frame, text=t("Save Playlist"), command=self.on_save_playlist, width=14, height=2,
+                                      quiet=True)
+        Tooltip(self.save_button, t(PLAY_NOTES["Save Playlist"]), when=self.help_on, wrap=self.note_wrap)
+        self._save_shown, self._save_zone = False, None
         self._draw_buttons()
         frame.bind("<Configure>", lambda e: self._flow_buttons())
 
@@ -556,7 +887,12 @@ class PlayTab(tk.Frame):
                 b._ai_tip = Tooltip(b, "", when=lambda: not engine.ai_enabled())
             else:
                 Tooltip(b, self._button_note(button), when=on, wrap=wrap)
+            Tooltip(b, t("Playlists start from a track or an artist, so they rest while JRiver Playlists is showing. "
+                         "Use Play or Play & Embellish there."), when=self._seed_is_playlists, wrap=wrap)
             self.play_buttons.append(b)
+        if getattr(self, "playlists_tab", None) is not None and self._seed_is_playlists() and not self.running:
+            for b in self.play_buttons:
+                b.config(state="disabled")
         self._sync_ai_button()
         self._flow_buttons()
 
@@ -564,6 +900,10 @@ class PlayTab(tk.Frame):
         """Places the row's buttons left to right, wrapping onto another row when the window is narrow."""
         row = self.button_row
         avail = max(row.winfo_width(), 1) - 2 * 16
+        save = getattr(self, "save_button", None)
+        if save is not None and getattr(self, "_save_shown", False):
+            avail -= save._size[0] + BUTTON_GAP   # the row's top right is Save Playlist's
+            save.place(x=max(row.winfo_width(), 1) - 16 - save._size[0], y=4)
         x = y = 0
         height = 0
         for b in self.play_buttons + [self.more_button, self.add_button]:
@@ -1338,7 +1678,8 @@ class PlayTab(tk.Frame):
 
     def _seed_teal(self):
         """Whether Seed is on Playing Now and in force (the Now Playing tab, not Search)."""
-        return getattr(self, "seed_var", None) is not None and self.seed_var.get() == "Playing Now"             and not self._seed_is_search()
+        return getattr(self, "seed_var", None) is not None and self.seed_var.get() == "Playing Now" \
+            and not self._seed_has_row()
 
     def _on_behaviour_changed(self, *_):
         code = {shown: c for c, shown in PLAY_BEHAVIOUR}.get(self.behaviour_var.get(), "instant")
@@ -1367,8 +1708,8 @@ class PlayTab(tk.Frame):
         for button in self.play_buttons:
             if getattr(button, "_kind", None) != "vibe":
                 continue
-            if not self.running:
-                button.config(state="normal" if on else "disabled")
+            if not self.running:   # resting on JRiver Playlists too, as every playlist does there
+                button.config(state="normal" if on and not self._seed_is_playlists() else "disabled")
             button._ai_tip.text = (t("AI Playlist needs {what} under Settings > Keys.", what=engine.ai_missing_text())
                                    if not engine.ai_configured() else
                                    t("Paused: Use AI is Off under Settings > Keys."))
@@ -2297,7 +2638,9 @@ class PlayTab(tk.Frame):
             self.badge.working(*self._badge_job)
 
         rows = (playmix.rows() or None) if mix else None   # added playlists: app builds only
-        review = review and bool(mix) and self._review_mode()   # Review: app builds, never voice
+        review = review and origin is None and self._review_mode()   # Review: app builds, never voice
+        if origin is None:
+            self._show_save(None)   # back after the build, if it went to a JRiver zone
         self._job_review = review
         top_up = bool(top_up and origin is None and getattr(self, "top_up_armed", False))
         if top_up:
@@ -2314,6 +2657,7 @@ class PlayTab(tk.Frame):
             engine.MIX_ROWS, engine.MIX_KEEP, engine.MIX_FAST_KEY, engine.MIX_NOTED = rows, set(), None, False
             engine.REVIEW_MODE = review
             engine.TOP_UP = top_up
+            engine.SAVE_NAME = None
             overrides = {}
             engine.BUILD_STARTED, engine.LAST_OUTPUT = time.time(), None
             engine.LAST_OUTPUT_ID, engine.LAST_BUILD = None, None
@@ -2378,6 +2722,13 @@ class PlayTab(tk.Frame):
             b.config(state="normal")
         self._sync_ai_button()
         self._sync_seed_buttons()
+        if (getattr(self, "_job_origin", None) is None and not getattr(self, "_job_review", False)
+                and engine.SENT_ANY and engine.LAST_OUTPUT_ID and engine.LAST_OUTPUT not in ("YouTube", "Tidal")):
+            try:
+                self._save_default = engine.save_name()
+            except Exception:
+                self._save_default = ""
+            self._show_save(engine.LAST_OUTPUT_ID)
         if getattr(self, "_job_review", False) and getattr(self, "_job_cancelled", False):
             self._job_review = False   # cancelled: the Review list is dropped
         if getattr(self, "_job_review", False):   # a Review build: its tracks go to the Review list

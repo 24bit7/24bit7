@@ -22,7 +22,7 @@ REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 import fakes  # noqa: E402
 
-APP_MODULES = ["i18n", "engine", "library", "deepcuts", "voice", "saved_playlists", "nonstop", "playmix", "overrides", "mode", "tour", "filters", "buttons", "devices", "buildlog", "blend",
+APP_MODULES = ["i18n", "engine", "library", "deepcuts", "voice", "saved_playlists", "nonstop", "playmix", "overrides", "mode", "tour", "filters", "buttons", "devices", "buildlog", "blend", "embellish",
                "console_query", "ai_usage", "support_gui", "window_chrome", "hotkeys", "tray", "tabs", "mix_gui", "review_gui", "profiles", "ai_dialog", "discover_gui", "settings_gui", "gui", "source_test"]
 
 BASE_ENV = {
