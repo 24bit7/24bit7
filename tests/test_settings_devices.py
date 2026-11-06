@@ -1,6 +1,6 @@
 """
-The Devices box under Settings > Playlist Settings (Ben, 2 Nov 2026; renamed from Device Playlists and Last
-heard dropped, 3 Nov 2026), in place of the Devices tab: a tab per Alexa device; Plays to, Remove and Enable
+The Devices box (Ben, 2 Nov 2026; renamed from Device Playlists and Last heard dropped, 3 Nov 2026), on a
+Devices tab of its own again since 5 Nov 2026, with the same page as Playlist Settings: a tab per Alexa device; Plays to, Remove and Enable
 Switch To; four phrase rows, each the playlist that phrase runs, greyed until the device has its own (tagged
 Standard while it's the standard); Restore Default Device Playlists. A row opens its page with "Copy Settings
 From:" on the first row. The Zones section stays under Other and Voice Commands keeps the switch timing.
@@ -14,7 +14,7 @@ from test_settings_buttons import walk, labels, settings_pane, tab_titles, page_
 
 
 def box_page(ui, device_id=KITCHEN):
-    page_named(ui, "Playlist Settings")
+    page_named(ui, "Devices")
     s = ui.settings
     s._buttons_refresh()
     s._device_pick(device_id)
@@ -29,7 +29,8 @@ def row_texts(s):
 def test_the_box_lists_the_devices_as_tabs_with_the_standards_greyed(app, ui):
     s = box_page(ui)
     titles = tab_titles(settings_pane(ui))
-    assert "Playlist Settings" in titles and "Devices" not in titles and "Zones" not in titles
+    assert "Playlist Settings" in titles and "Devices" in titles and "Zones" not in titles
+    assert titles.index("Devices") == titles.index("Playlist Settings") + 1, "Devices straight after Playlist Settings"
     tabs_ = [w.cget("text") for w in walk(s._device_tabs) if isinstance(w, tk.Label)]
     assert set(tabs_) == {"Kitchen Echo", "Lounge Dot"}
     assert row_texts(s) == [("Music like: Similar Artists", "Standard"), ("Songs by: Artist's Top Tracks", "Standard"),
@@ -38,7 +39,10 @@ def test_the_box_lists_the_devices_as_tabs_with_the_standards_greyed(app, ui):
     assert "Plays to" in texts and "Remove" in texts and "Enable Switch To" in texts
     assert not any(x.startswith("Last heard") for x in texts), "Last heard went (Ben, 3 Nov 2026)"
     outer = labels(s._buttons_outer)
-    assert "Your Playlist Buttons" in outer and "Devices" in outer and "Device Playlists" not in outer, "renamed Devices"
+    assert "Your Playlist Buttons" in outer and "Devices" not in outer, "the Devices box left Playlist Settings"
+    own = labels(s._devices_outer)
+    assert "Devices" in own and "Device Playlists" not in own and "Your Playlist Buttons" not in own
+    assert "Restore Default Device Playlists" in own and "Restore Default Playlists" not in own
     assert not ui.errors, ui.errors[0]
 
 
@@ -92,11 +96,40 @@ def test_copy_settings_from_links_hides_the_page_and_unticking_makes_the_devices
     ui.pump(0.4)
     assert buttons.of_device(KITCHEN) == [] and devices.playlist_for(KITCHEN, "songs_by")["id"] == linked["id"]
     assert s._from_device == (KITCHEN, "songs_by") and s._device_strip_tick.instate(["selected"])
-    pick = next(r for r in s._button_rows if r[0] == buttons.standard("tracks")["id"])
-    s._pick_button(pick[0])
-    ui.pump(0.4)
-    assert s._from_device is None and s._device_strip is None, "a list row leaves the device's page"
+    page_named(ui, "Playlist Settings")
+    assert s._from_device is None and s._device_strip is None, "Playlist Settings leaves the device's page"
     assert not any(row.chosen for _p, row, _b, _o in s._device_rows), "no device row outlined"
+    assert not ui.errors, ui.errors[0]
+
+
+def test_devices_is_a_tab_of_its_own_and_each_tab_keeps_its_page(app, ui):
+    """Ben, 5 Nov 2026: Settings > Playlist Settings split in two. Each tab is the old one minus the other box,
+    the same page on the right of both. The page is built on whichever tab is showing; each remembers its own."""
+    import buttons
+    s = ui.settings
+    page_named(ui, "Playlist Settings")
+    chosen = buttons.standard("tracks")["id"]
+    s._pick_button(chosen)
+    ui.pump(0.3)
+    assert s._button_right is s._list_right and s._name_box.winfo_ismapped()
+    assert not s._device_right.winfo_children(), "nothing built on the hidden tab"
+    page_named(ui, "Devices")
+    assert s._button_right is s._device_right and not s._list_right.winfo_children()
+    assert s._from_device == (KITCHEN, "music_like"), "the chosen device's first phrase opens"
+    assert s._device_strip is not None and s._device_strip.winfo_ismapped(), "Copy Settings From on its first row"
+    s._device_rows[2][1].event_generate("<Button-1>")   # Tracks like this
+    ui.pump(0.4)
+    assert s._from_device == (KITCHEN, "tracks_like")
+    page_named(ui, "Playlist Settings")
+    assert s._button_right is s._list_right and s._from_device is None and s._device_strip is None
+    assert s._button_id == chosen, "back on Playlist Settings, the playlist chosen there"
+    assert [r for r in s._button_rows if r[0] == chosen][0][1].chosen
+    page_named(ui, "Devices")
+    assert s._from_device == (KITCHEN, "tracks_like"), "back on Devices, the row opened there"
+    s.show_playlist(buttons.standard("top")["id"])   # the Play tab's cog, from the Devices tab
+    ui.pump(0.4)
+    assert s._button_right is s._list_right and s._from_device is None
+    assert s._button_id == buttons.standard("top")["id"] and s._name_box.winfo_ismapped()
     assert not ui.errors, ui.errors[0]
 
 
@@ -125,7 +158,7 @@ def test_zone_switch_rename_and_remove_live_in_the_box(app, ui, monkeypatch):
     assert KITCHEN not in [d[0] for d in app.voice.devices()] and KITCHEN not in devices.load()
     import buttons
     assert buttons.of_device(KITCHEN) == [], "its own playlists went with it"
-    assert s._device_id == LOUNGE
+    assert s._device_id == LOUNGE and s._from_device == (LOUNGE, "music_like"), "the next device's page opens"
     assert not ui.errors, ui.errors[0]
 
 

@@ -1073,7 +1073,7 @@ def upgrade():
                     record["buttons"][phrase] = b["id"]
         if made:
             engine.print(t("Note: {name} had settings of its own. They're now its own playlists under Settings > "
-                           "Playlist Settings > Device Playlists ({names}), which its voice commands run.",
+                           "Devices ({names}), which its voice commands run.",
                            name=shown_name, names=", ".join(x["name"] for x in made)))
     save(arrange_shipped(items))   # last, so the devices above were compared with the settings the user had
     devices.save(device_data)

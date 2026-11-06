@@ -58,7 +58,7 @@ SHOTS = [
     ("settings_buttons_ai_playlist", ["Settings", "Playlist Settings"], ["settings_gui.py", "buttons.py"],
      "button:AI Playlist:Playlist"),
     ("edit_filters", ["Settings", "Playlist Settings"], ["settings_gui.py", "filters.py"], "edit_filters"),
-    ("settings_devices", ["Settings", "Playlist Settings"], ["settings_gui.py", "devices.py"], "device:demo-kitchen"),
+    ("settings_devices", ["Settings", "Devices"], ["settings_gui.py", "devices.py"], "device:demo-kitchen"),
     ("settings_discover_sites", ["Settings", "Discover"], ["settings_gui.py"], None),
     ("settings_keys", ["Settings", "Keys"], ["settings_gui.py"], None),
     ("settings_voice_commands", ["Settings", "Voice Commands"], ["settings_gui.py", "voice.py"], None),

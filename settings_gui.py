@@ -1546,18 +1546,77 @@ class SettingsTab(tk.Frame):
         restore.bind("<Button-1>", lambda e: self._button_restore())
         Tooltip(restore, t("Puts back anything 24bit7 ships that's been deleted: a standard playlist, Artist + Guests, "
                            "Consensus or a Top 10, under the playlist it came under."))
-        self._build_device_box(left)
-        self._button_right = tk.Frame(outer, pady=12)
-        self._button_right.pack(side="left", fill="both", expand=True, padx=(0, 12))
-        outer.bind("<Map>", lambda e: self._buttons_refresh())
+        self._list_right = tk.Frame(outer, pady=12)
+        self._list_right.pack(side="left", fill="both", expand=True, padx=(0, 12))
+        self._button_right = self._list_right   # the page is built on whichever of the two tabs is showing
+        self._list_button_id = None
+        outer.bind("<Map>", lambda e: self._show_side("list"))
+        # Devices, a tab of its own again (Ben, 5 Nov 2026): the Devices box on the left, the same page on the right
+        devices_tab = tk.Frame(nb)
+        nb.add(devices_tab, text=t("Devices"))
+        self._devices_outer = devices_tab
+        column = tk.Frame(devices_tab)
+        column.pack(side="left", fill="y")
+        self._build_device_box(self._scroll_page(column, fit_width=True))
+        self._device_right = tk.Frame(devices_tab, pady=12)
+        self._device_right.pack(side="left", fill="both", expand=True, padx=(0, 12))
+        devices_tab.bind("<Map>", lambda e: self._show_side("devices"))
         self._buttons_refresh()
+
+    def _use_side(self, which):
+        """
+        Moves the page to the Playlist Settings tab ("list") or the Devices tab ("devices"), emptying the other.
+        Each tab remembers its own: back on Playlist Settings, the playlist chosen there before. True if it moved.
+        """
+        frame = self._device_right if which == "devices" else self._list_right
+        if self._button_right is frame:
+            return False
+        for child in self._button_right.winfo_children():
+            child.destroy()
+        self._button_right = frame
+        self._button_page = None
+        if which == "devices":
+            self._list_button_id = self._button_id
+        else:
+            self._device_opened = getattr(self, "_from_device", None)   # Devices reopens it next time
+            self._from_device = None
+            self._button_id = self._list_button_id or self._button_id
+        return True
+
+    def _show_side(self, which):
+        """A tab came into view: the page follows it. Devices opens the row last opened there, else the chosen
+        device's first phrase."""
+        if not self._use_side(which) and self._button_page is not None:
+            self._buttons_refresh()
+            return
+        if which == "list":
+            self._buttons_refresh()
+            return
+        opened = getattr(self, "_from_device", None) or getattr(self, "_device_opened", None)
+        if opened and opened[0] in [r[0] for r in voice.devices()]:
+            self._device_slot_page(*opened)
+        else:
+            self._device_open_first()
+
+    def _device_open_first(self):
+        """The Devices tab with nothing open: the chosen device's first phrase, or an empty page if no device has
+        spoken yet."""
+        self._from_device = None
+        self._devices_refresh()
+        if self._device_id is not None:
+            self._device_slot_page(self._device_id, devices.PHRASES[0][0])
+            return
+        for child in self._button_right.winfo_children():
+            child.destroy()
+        self._button_page = None
 
     def show_playlist(self, button_id, rename=False):
         """
         Opens Settings on this playlist's page (the Play tab's cog, right-click Settings, a new playlist).
         rename: the name box opens at once, cursor in it, for a playlist that's just been made.
         """
-        self._button_id = button_id
+        self._use_side("list")
+        self._button_id = self._list_button_id = button_id
         if getattr(self, "_from_device", None):   # from the Play tab: the list's page, not a device's
             self._from_device = None
             self._button_page = None   # so the refresh rebuilds it without the strip
@@ -2372,6 +2431,10 @@ class SettingsTab(tk.Frame):
         devices.forget(self._device_id)
         if self._button_id in gone:
             self._button_id = None
+        if self._button_right is self._device_right:
+            self._device_id = None
+            self._device_open_first()
+            return
         self._buttons_refresh()
         self._button_fill_page()
 
@@ -2400,6 +2463,7 @@ class SettingsTab(tk.Frame):
         """
         if device_id is None:
             return
+        self._use_side("devices")
         self._from_device = (device_id, phrase)
         playlist = next((b for ph, _l, b, _o in devices.rows(device_id) if ph == phrase), None)
         self._button_id = playlist["id"] if playlist else None
@@ -2547,8 +2611,8 @@ class SettingsTab(tk.Frame):
                   or buttons.get(self._button_id))
         if target is None:
             return
-        if target["id"] != self._button_id:
-            self._pick_button(target["id"])
+        if target["id"] != self._button_id or self._button_right is not self._list_right:
+            self.show_playlist(target["id"])   # the tour runs on Playlist Settings, even from a device's page
         self.update_idletasks()
         self._tour = tour.Tour(self._button_inner, on_close=lambda: setattr(self, "_tour", None))
 
@@ -5700,7 +5764,7 @@ class SettingsTab(tk.Frame):
                          "playlists and shuffles always play at once, and \"more like this\" always waits."),
                   on=new_title)
 
-        # --- Switching: the devices themselves are under Settings > Devices ---
+        # --- Switching: the devices themselves are under Settings > Devices (a tab again, 5 Nov 2026) ---
         box = section(tab, t("Switching"),
                       t("Each Alexa device, the zone it plays to and whether \"switch\" can move the music there "
                         "are set under Settings > Devices."))

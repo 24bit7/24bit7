@@ -644,7 +644,7 @@
   "Note: {feature} skipped: Use AI is Off (Settings > Keys).": "Hinweis: {feature} übersprungen: KI verwenden ist aus (Einstellungen > Schlüssel).",
   "Note: {names} back on the Play tab: a playlist is either a button or a device's now (Settings > Playlist Settings).": "Hinweis: {names} wieder auf dem Abspielen-Tab: Eine Playlist ist jetzt entweder ein Button oder die eines Geräts (Einstellungen > Playlist-Einstellungen).",
   "Note: {name} deleted.": "Hinweis: {name} gelöscht.",
-  "Note: {name} had settings of its own. They're now its own playlists under Settings > Playlist Settings > Device Playlists ({names}), which its voice commands run.": "Hinweis: {name} hatte eigene Einstellungen. Sie sind jetzt eigene Playlists unter Einstellungen > Playlist-Einstellungen > Geräte-Playlists ({names}), die seine Sprachbefehle starten.",
+  "Note: {name} had settings of its own. They're now its own playlists under Settings > Devices ({names}), which its voice commands run.": "Hinweis: {name} hatte eigene Einstellungen. Sie sind jetzt eigene Playlists unter Einstellungen > Geräte ({names}), die seine Sprachbefehle starten.",
   "Note: {name} is already all in the playlist, so nothing was added from it.": "Hinweis: {name} ist schon ganz in der Playlist, daher wurde nichts daraus hinzugefügt.",
   "Note: {name} is back on the Play tab.": "Hinweis: {name} ist wieder im Abspielen-Tab.",
   "Note: {name} is empty, or no longer in JRiver, so nothing was added from it.": "Hinweis: {name} ist leer oder nicht mehr in JRiver, daher wurde nichts daraus hinzugefügt.",

@@ -79,8 +79,8 @@ def inner_page(ui, title):
 def test_playlists_tab_replaces_sources_playlist_and_filters(app, ui):
     s = buttons_page(ui)
     titles = tab_titles(settings_pane(ui))
-    assert "Playlist Settings" in titles and not {"Sources", "Playlist", "Filters", "Buttons", "Playlists", "Devices", "Zones"} & set(titles), titles
-    assert "Devices" not in titles, "folded into the Device Playlists box (2 Nov 2026)"
+    assert "Playlist Settings" in titles and not {"Sources", "Playlist", "Filters", "Buttons", "Playlists", "Zones"} & set(titles), titles
+    assert "Devices" in titles, "folded into Playlist Settings on 2 Nov 2026, its own tab again on 5 Nov 2026"
     assert s._button_names() == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Artist + Guests", "Consensus", "AI Playlist"]
     assert s._button_id == s._buttons[0]["id"] and s._button_page.button["name"] == "Similar Artists"
     assert not [w for w in walk(s._button_right) if hasattr(w, "_tabs")], "one page, no inner tabs"
