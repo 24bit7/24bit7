@@ -344,3 +344,6 @@ Ben found the device strip too busy. Each phrase's page now opens with one line,
 
 **3 Nov 2026: Review Mode as one tick under Skip tracks.**
 "Review Mode uses the same settings", ticked to start, replaces both the Separate Settings tick and the Current Track / Review Mode columns on Artist's Top Tracks, so every kind that reviews asks the same question in the same place. The .env keys (REVIEW_SAME_*) are unchanged, so nobody's figures move.
+
+**5 Nov 2026: Teal means a knock-on effect.**
+Teal is 24bit7's signature colour, and Ben gave it one meaning: something has changed and it will affect what happens next. Seed following Playing Now is one case; Top-Up waiting for its playlist is another. When someone's accent colour is close to teal, the stand-in colour (`tabs.seed_colour`, leaf green) takes its place everywhere, so the meaning survives any theme. New controls that change what the next build or the next press does use it; ordinary on and off states use the accent colour.
