@@ -2222,6 +2222,15 @@ class SettingsTab(tk.Frame):
             tk.Label(row, text=t("No filters yet."), fg=PALETTE["help_fg"]).pack(side="left", padx=(0, 10))
         out = {}
         for f in items:
+            if f.get("every"):   # every playlist's already: ticked and greyed, not one of this playlist's
+                text = f["name"] + "   " + (t("(every playlist)") if f.get("on") else t("(off)"))
+                shown = tk.BooleanVar(value=bool(f.get("on")))
+                tick = ttk.Checkbutton(row, text=text, variable=shown)
+                tick.state(["disabled"])
+                tick.shown = shown   # held while the tick shows
+                tick.pack(side="left", padx=(0, 12))
+                Tooltip(tick, t("Set to Every playlist in Edit Filters."))
+                continue
             var = tk.BooleanVar(value=f["id"] in ticked)
             out[f["id"]] = var
             text = f["name"] + ("" if f.get("on") else "   " + t("(off)"))
@@ -2784,11 +2793,29 @@ class SettingsTab(tk.Frame):
             self._filter_save()
         ttk.Checkbutton(row, text=t("On"), variable=on, command=on_toggled).pack(side="left")
         help_mark(row, t("Off keeps the filter for later without it applying anywhere.")).pack(side="left", padx=(8, 0))
+        every = tk.BooleanVar(value=bool(item.get("every")))
+        keep.append(every)
+
+        def every_toggled():
+            item["every"] = every.get()
+            self._filter_save()
+            self._filter_fill_editor()
+        ttk.Checkbutton(row, text=t("Every playlist"), variable=every, command=every_toggled).pack(side="left",
+                                                                                                  padx=(24, 0))
+        help_mark(row, t("Ticked, the filter applies to every playlist 24bit7 builds, whether it's ticked on the "
+                         "playlist's page or not.")).pack(side="left", padx=(8, 0))
         parts = filters.used_by(item["id"])
         tk.Label(box, text=(t("Used by: {names}", names=", ".join(parts)) if parts else
                             t("Not ticked on any button yet. Tick it under Filters on a button's page.")),
                  fg=PALETTE["help_fg"], font=HELP_FONT, wraplength=scaled(box, 560), justify="left").grid(
             row=1, column=0, sticky="w", pady=(8, 0))
+
+        if item.get("builtin") == "skipped":   # its rule is its own: say what it does, nothing to set
+            box = section(right, t("What It Leaves Out"))
+            tk.Label(box, text=t(filters.SKIPPED_TEXT), wraplength=scaled(box, 560), justify="left").grid(
+                row=0, column=0, sticky="w")
+            right.keep = keep
+            return
 
         box = section(right, t("Only pick from"),
                       t("Every playlist this filter applies to only uses tracks on this JRiver playlist or "
@@ -2943,6 +2970,8 @@ class SettingsTab(tk.Frame):
     def _filter_duplicate(self):
         if self._filter_i is None:
             return
+        if self._filters[self._filter_i].get("builtin"):
+            return   # its rule is built in: a copy would be the same filter twice
         copy = filters.tidy(dict(self._filters[self._filter_i]))
         copy.update(id=filters.blank()["id"], name=t("{name} copy", name=copy["name"]))
         copy["rules"] = [dict(r) for r in copy["rules"]]
@@ -2955,6 +2984,10 @@ class SettingsTab(tk.Frame):
         if self._filter_i is None:
             return
         item = self._filters[self._filter_i]
+        if item.get("builtin"):
+            messagebox.showinfo(t("Delete filter"), t("{name} comes with 24bit7, so it stays. Untick On to switch it "
+                                                      "off.", name=item["name"]), parent=self._filter_win)
+            return
         if not messagebox.askyesno(t("Delete filter"), t("Delete the filter {name}?", name=item["name"]),
                                    parent=self._filter_win):
             return

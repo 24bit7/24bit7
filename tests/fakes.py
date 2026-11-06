@@ -162,6 +162,7 @@ class FakeJRiver:
         self.calls = []          # (path, params)
         self.up = True
         self.refused = set()   # calls answered 401 Access denied, as Helmut's JRiver did AddFiles
+        self.fields_made = []  # Library/CreateField calls: (name, type)
         self.playlists = []
         keys = [r["Key"] for r in self.tracks]
         beatles = [r["Key"] for r in self.tracks if r["Artist"] == "The Beatles"]
@@ -319,6 +320,15 @@ class FakeJRiver:
             return Resp(text=_mpl([self.by_key[k] for k in pl["keys"]], ["Key"]))
         if path == "Files/Search":
             return self._search(params)
+        if path == "Library/CreateField":   # creates or updates a library field
+            self.fields_made.append((params.get("Name"), params.get("Type")))
+            return Resp(text=_response({"Field": params.get("Name", "")}))
+        if path == "File/SetInfo":
+            row = self.by_key.get(str(params.get("File")))
+            if row is None:
+                return Resp(text=_response({}, "Failure"))
+            row[str(params.get("Field"))] = str(params.get("Value", ""))
+            return Resp(text=_response({}))
         return Resp(404, "unknown MCWS call")
 
     def _search(self, params):

@@ -33,7 +33,9 @@ REFRESH_MINUTES = 30     # how often the library is re-read in the background
 AUDIO = "[Media Type]=[Audio]"
 FIELDS = ("Key,Name,Artist,Album,Album Artist (auto),Disc #,Track #,Duration,BPM,Last Played,"
           # for Settings > Filters rules
-          "Rating,Date (year),Number Plays,Date Imported,Genre,File Type,Bit Depth,Sample Rate,Filename")
+          "Rating,Date (year),Number Plays,Date Imported,Genre,File Type,Bit Depth,Sample Rate,Filename,"
+          # 24bit7's own field, written by the Alexa skip (JRiver leaves out a field it doesn't have yet)
+          "24bit7 Voice Skips")
 
 _lock = threading.Lock()
 _albums = {}             # (album, album artist) -> [track rows]

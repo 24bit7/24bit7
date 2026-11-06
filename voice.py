@@ -418,6 +418,7 @@ def _zone_command(intent, device, body):
         if not ok:
             return "problem", "JRiver didn't skip. Is it running on the media PC?", {}
         print(t("[Voice] {name}: skipped {get} on {zone}", name=name, get=info.get('Name'), zone=zone))
+        engine.record_voice_skip(info.get("FileKey"))   # for the Skipped Tracks filter
         return "started", "Skipped.", {}
 
     title, artist, album = _speakable(info)

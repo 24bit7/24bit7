@@ -13,6 +13,11 @@ them all. The seed track is never filtered out. A track
 with no value for a rule's field passes it (an unrated track counts as rating 0,
 an unplayed one as played 0 times and never played).
 
+Every playlist (Ben, 5 Nov 2026): a filter with it ticked applies to every playlist
+24bit7 builds, ticked on its page or not. Skipped Tracks ships, off: it leaves out
+tracks skipped by voice twice or more, and every track by an artist with three such
+tracks (the Alexa skip counts them in 24bit7's own JRiver field).
+
 Kept in the database's meta table as JSON. The build in progress gets its filter
 ids through engine.FILTER_IDS (buttons.run sets them).
 """
@@ -28,9 +33,26 @@ import engine
 META_KEY = "filters"
 
 
+SKIPPED_ID = "skipped"
+SKIPPED_NAME = N_("Skipped Tracks")
+SKIPS_TRACK = 2    # voice skips that leave a track out
+SKIPS_ARTIST = 3   # tracks left out that way that leave their artist out
+SKIPPED_TEXT = N_("Leaves out any track skipped by voice twice or more, and every track by an artist with three "
+                  "such tracks. Saying \"Alexa, skip\" counts the skip in a field of 24bit7's own in JRiver, "
+                  "24bit7 Voice Skips, which you can see and clear in JRiver.")
+SHIPPED_FLAG = "filters_skipped_shipped"
+
+
 def blank(name="New filter"):
-    return {"id": uuid.uuid4().hex[:8], "name": name, "on": True,
+    return {"id": uuid.uuid4().hex[:8], "name": name, "on": True, "every": False, "builtin": "",
             "pick_from": "", "pick_name": "", "match": "all", "rules": []}
+
+
+def skipped_filter():
+    """The shipped Skipped Tracks filter: off, for every playlist once it's on."""
+    out = blank(t(SKIPPED_NAME))
+    out.update(id=SKIPPED_ID, on=False, every=True, builtin="skipped")
+    return out
 
 
 def tidy(item):
@@ -51,11 +73,20 @@ def stored_raw():
 
 
 def load():
-    """Every filter, in the order shown."""
+    """Every filter, in the order shown. Skipped Tracks is added once, the first time the list is read."""
     try:
-        row = engine.db().execute("SELECT value FROM meta WHERE key=?", (META_KEY,)).fetchone()
+        con = engine.db()
+        row = con.execute("SELECT value FROM meta WHERE key=?", (META_KEY,)).fetchone()
         items = json.loads(row[0]) if row and row[0] else []
-        return [tidy(x) for x in items if isinstance(x, dict)]
+        items = [tidy(x) for x in items if isinstance(x, dict)]
+        shipped = con.execute("SELECT value FROM meta WHERE key=?", (SHIPPED_FLAG,)).fetchone()
+        if not shipped:
+            if not any(x.get("builtin") == "skipped" for x in items):
+                items.append(skipped_filter())
+                save(items)
+            con.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (SHIPPED_FLAG, "1"))
+            con.commit()
+        return items
     except Exception:
         return []
 
@@ -73,6 +104,8 @@ def used_by(filter_id):
     config's own (2 Nov 2026): a playlist of several configs names the config, "Artist + Guests (config 2)".
     """
     import buttons
+    if next((x for x in load() if x["id"] == filter_id and x.get("every")), None):
+        return [t("Every playlist")]
     out = []
     for b in buttons.load():
         cfgs = buttons.configs(b)
@@ -85,7 +118,26 @@ def used_by(filter_id):
 def by_ids(ids):
     """The filters a button build runs under: the ones named, in the order shown, that are on."""
     wanted = {str(i) for i in ids}
-    return [x for x in load() if x["id"] in wanted and x.get("on")]
+    return [x for x in load() if (x["id"] in wanted or x.get("every")) and x.get("on")]
+
+
+def skipped_sets():
+    """(keys, artist keys) the Skipped Tracks filter leaves out, from the library held in memory."""
+    import library
+    library.ensure_loaded()
+    with library._lock:
+        rows = list(library._tracks)
+    keys, per_artist = set(), {}
+    for row in rows:
+        try:
+            skips = int(float(str(row.get(engine.SKIP_FIELD) or "0").strip() or 0))
+        except ValueError:
+            continue
+        if skips >= SKIPS_TRACK:
+            keys.add(str(row.get("Key")))
+            artist = engine.artist_key(row.get("Artist") or "")
+            per_artist[artist] = per_artist.get(artist, 0) + 1
+    return keys, {a for a, n in per_artist.items() if n >= SKIPS_ARTIST and a}
 
 
 # --- rules ------------------------------------------------------------------------
@@ -225,6 +277,8 @@ def describe_rule(rule):
 
 def describe(item):
     """A short line for the Active filters list and the log."""
+    if item.get("builtin") == "skipped":
+        return t("{name} (skipped by voice twice or more, and artists with three such tracks)", name=item["name"])
     bits = []
     if item.get("pick_from"):
         bits.append(t("only from {name}", name=item.get("pick_name") or t("a playlist")))
@@ -246,7 +300,10 @@ class Active:
         self.items = by_ids(ids or [])
         self.pools = []
         self.rule_sets = [(x.get("match", "all"), x["rules"]) for x in self.items if x.get("rules")]
-        if self.rule_sets:
+        self.skipped = None
+        if any(x.get("builtin") == "skipped" for x in self.items):
+            self.skipped = skipped_sets()
+        if self.rule_sets or self.skipped:
             import library
             library.ensure_loaded()
             self.library = library
@@ -264,7 +321,19 @@ class Active:
             report("  " + t("Filters: {filters}", filters="; ".join(describe(x) for x in self.items)))
 
     def __bool__(self):
-        return bool(self.pools or self.rule_sets)
+        return bool(self.pools or self.rule_sets or self.skipped is not None)
+
+    def _not_skipped(self, key):
+        if self.skipped is None:
+            return True
+        keys, artists = self.skipped
+        if str(key) in keys:
+            return False
+        if artists:
+            row = self.library.track_row(key)
+            if row is not None and engine.artist_key(row.get("Artist") or "") in artists:
+                return False
+        return True
 
     def _rules_pass(self, key):
         row = self.library.track_row(key) if self.rule_sets else None
@@ -283,7 +352,7 @@ class Active:
 
     def passes(self, key):
         """allows() without counting a track left out: for trying your other copies of a song."""
-        return all(str(key) in pool for pool in self.pools) and self._rules_pass(key)
+        return all(str(key) in pool for pool in self.pools) and self._not_skipped(key) and self._rules_pass(key)
 
     def allows(self, key):
         if self.passes(key):

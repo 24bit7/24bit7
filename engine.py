@@ -7331,6 +7331,44 @@ def steer_description(directions, own_words, strength):
 IF_SHORT_NAMES = {"ask": N_("Ask Again"), "drift": "Drift", "leave": N_("Leave Short")}
 
 
+SKIP_FIELD = "24bit7 Voice Skips"   # how often a track has been skipped by voice (Ben, 5 Nov 2026)
+_skip_field_ready = False
+
+
+def record_voice_skip(key):
+    """
+    The Alexa skip: one more on the track's count in 24bit7's own JRiver field, made the first time it's
+    needed. Written with Dirty=0, so JRiver doesn't rewrite the file's tags for it. The library held in
+    memory takes the new count at once, so the Skipped Tracks filter sees it before the next re-read.
+    Returns the new count, or None when JRiver couldn't be told.
+    """
+    global _skip_field_ready
+    if not key:
+        return None
+    import library   # here rather than at the top: it imports engine
+    try:
+        if not _skip_field_ready:
+            requests.get(f"{JRIVER_BASE}/Library/CreateField", params={"Name": SKIP_FIELD, "Type": "integer"},
+                         auth=AUTH, timeout=10)
+            _skip_field_ready = True
+        row = library.track_row(key) or {}
+        try:
+            count = int(float(str(row.get(SKIP_FIELD) or "0").strip() or 0)) + 1
+        except ValueError:
+            count = 1
+        r = requests.get(f"{JRIVER_BASE}/File/SetInfo", params={"File": str(key), "FileType": "Key",
+                         "Field": SKIP_FIELD, "Value": str(count), "Dirty": "0"}, auth=AUTH, timeout=10)
+        if r.status_code != 200:
+            return None
+        if row:
+            with library._lock:
+                row[SKIP_FIELD] = str(count)
+        return count
+    except Exception as e:
+        debug(f"Voice skip not counted for {key}: {e}")
+        return None
+
+
 def library_bpm(key):
     """A library track's BPM as a number, or None when it isn't tagged."""
     import library   # here rather than at the top: it imports engine

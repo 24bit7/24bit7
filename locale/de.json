@@ -1496,5 +1496,14 @@
   "Note: Match Tempo isn't in effect, as the seed track has no BPM tag.": "Hinweis: Match Tempo ist nicht aktiv, weil der Seed-Titel keinen BPM-Tag hat.",
   "Match Tempo, Strict: within {band}% of the seed's {bpm} BPM, half and double time included.": "Match Tempo, Streng: innerhalb von {band} % der {bpm} BPM des Seeds, halbes und doppeltes Tempo eingeschlossen.",
   "Match Tempo, Prefer: tempos closest to the seed's {bpm} BPM first.": "Match Tempo, Bevorzugen: Tempi nahe an den {bpm} BPM des Seeds zuerst.",
-  "Match Tempo left out {off} off tempo and {untagged} with no BPM tag.": "Match Tempo hat {off} mit anderem Tempo und {untagged} ohne BPM-Tag weggelassen."
+  "Match Tempo left out {off} off tempo and {untagged} with no BPM tag.": "Match Tempo hat {off} mit anderem Tempo und {untagged} ohne BPM-Tag weggelassen.",
+  "Skipped Tracks": "Übersprungene Titel",
+  "Leaves out any track skipped by voice twice or more, and every track by an artist with three such tracks. Saying \"Alexa, skip\" counts the skip in a field of 24bit7's own in JRiver, 24bit7 Voice Skips, which you can see and clear in JRiver.": "Lässt jeden Titel weg, der zweimal oder öfter per Sprache übersprungen wurde, und jeden Titel eines Künstlers mit drei solchen Titeln. \"Alexa, skip\" zählt das Überspringen in einem eigenen Feld von 24bit7 in JRiver, 24bit7 Voice Skips, das du in JRiver sehen und leeren kannst.",
+  "Every playlist": "Jede Playlist",
+  "{name} (skipped by voice twice or more, and artists with three such tracks)": "{name} (zweimal oder öfter per Sprache übersprungen, und Künstler mit drei solchen Titeln)",
+  "Ticked, the filter applies to every playlist 24bit7 builds, whether it's ticked on the playlist's page or not.": "Angehakt gilt der Filter für jede Playlist, die 24bit7 erstellt, ob er auf der Seite der Playlist angehakt ist oder nicht.",
+  "What It Leaves Out": "Was er weglässt",
+  "{name} comes with 24bit7, so it stays. Untick On to switch it off.": "{name} gehört zu 24bit7 und bleibt deshalb. Nimm den Haken bei An weg, um ihn auszuschalten.",
+  "(every playlist)": "(jede Playlist)",
+  "Set to Every playlist in Edit Filters.": "In Filter bearbeiten auf Jede Playlist gestellt."
 }
