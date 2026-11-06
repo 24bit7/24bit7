@@ -22,7 +22,7 @@ The **[user manual](docs/MANUAL.md)** explains every part of the app, page by pa
 
 ## What it does
 
-A row of playlists on the **Play** tab, three to start with, two of them with a menu of more behind a small arrow, and as many of your own as you like, plus **More Options**. The seed is whichever of the two small tabs is showing when you press one: **Now Playing** (whatever JRiver is playing right now) or **Search** (any artist and track you type, owned or not).
+A row of playlists on the **Play** tab, three to start with, two of them with a menu of more behind a small arrow, and as many of your own as you like, plus **More Options**. The seed is whichever of the three small tabs is showing when you press one: **Now Playing** (whatever JRiver is playing right now), **JRiver Playlists** (one of your own playlists, to play as it is or embellished with new tracks) or **Search** (any artist and track you type, owned or not).
 
 | Action | What you get |
 |---|---|
@@ -33,15 +33,16 @@ A row of playlists on the **Play** tab, three to start with, two of them with a 
 | **Artist's Top Tracks** | Fifteen of the artist's most popular tracks that you actually own, in random order (its menu calls the button Top 15, Random). From the Search tab it needs only the artist. |
 | **Top 10, Best First** and **Top 10, Best Last** | In Artist's Top Tracks' menu: the ten most popular, best first, or the same ten with the least popular first. |
 | **AI Playlist** | Type a mood or scene, pick More tracks like the song that's playing, or pick one of three AI suggestions, and the AI picks a playlist to match from your library. |
+| **Radio** | No seed: a lane of what you listen to, made from your plays and the sources' genres, each lane with pillar artists. Each round is Consensus over a few pillars, and it plays on all evening. The face plays the last lane you played; the arrow lists them all, to split, join back or add as buttons. |
 | **+** and right-click | **+** opens the Add a Playlist window: **From Existing** (every playlist, the devices' own included: Add or Create Copy puts a copy on the row), **From Template** (the four kinds as shipped, Artist + Guests, Consensus or a Top 10, on the row at once) or **New** (a blank slate: its page opens under Settings > Playlist Settings with the name box ready, and + Add a Config says what it builds). Right-click a playlist to rename, duplicate, move or delete it; hold one to drag it along the row, the others moving aside as you go, onto the Settings or Delete pill that appears over the console (or Use Its Settings, while More Options is open), or over another playlist for a moment to nest it there: the other's button grows an arrow and a menu, runs the row you make its default, and every page has a Title in Menu for how its row reads in a menu. Each playlist is a whole recipe: one or more configs (a way of finding tracks, with its sources, counts and Moderator), Drift, Deep Cuts, Non-stop, filters and shortcut. |
-| **More Options** | Opens a row underneath with **Seed** (Current Track or Playing Now), **Mode** (Play or Review), then **Moderator**, **Deep Cuts** and **Non-stop**, which override every playlist's own settings while the row is open (closed, each playlist's page decides), **Show Credits** (producer, engineer and other credits for the current album, from Discogs; not offered from the Search tab, which has no album to look up), **+ Add JRiver Playlist** (see below) and a **?** that switches the hover notes on. It remembers whether it's open. |
+| **More Options** | Opens a row underneath with **Seed** (Current Track or Playing Now), **Mode** (Play or Review), then **Moderator**, **Deep Cuts** and **Non-stop**, which override every playlist's own settings while the row is open (closed, each playlist's page decides), **Show Credits** (producer, engineer and other credits for the current album, from Discogs; not offered from the Search tab, which has no album to look up), **Top-Up** (the next playlist goes into what's left of Playing Now instead of replacing it), **+ Add JRiver Playlist** (see below) and a **?** that switches the hover notes on. It remembers whether it's open. |
 
 **Output**, to the right of the Zone line, decides where the finished playlist goes: **Same zone** (the default: the zone you seeded from), any JRiver zone by name, or **YouTube**, which opens it in your browser as an instant playlist. The **Zone** dropdown on the Now Playing tab picks which zone you seed from.
 
 Two supporting tabs:
 
 - **Discover** lists every track a run looked for, whether it was found (hit) or not (miss), filterable by session and searchable across all fields. Select a row and every site you have ticked has its own button along the bottom: one click, one browser tab. Stores (Bandcamp, Qobuz, Bleep, Beatport and more) and YouTube search for the artist and track; reference sites (Wikipedia, Discogs, AllMusic, MusicBrainz) search for the artist, so you can browse the discography. If your favourite site is missing, add up to three of your own under Settings > Discover. Misses are one click from purchase. **Label** finds who released the selected track and opens the label on Bandcamp (see below). Tick any rows (or Select all) and **Create YouTube playlist** opens them in your browser as one playlist, so you can hear the misses before you buy; **Create Tidal Playlist** puts them in your Tidal playlist called 24bit7 instead. **Clear all** empties the history, and **Clear selected** removes just the ticked rows; both ask first.
-- **Settings** holds all keys and preferences, in boxed sections; rest the pointer on a setting's title for its explanation. **Playlist Settings** lists your playlist buttons and, under them, each Alexa device's playlists, with one page per playlist: in Simple, one config with its sources, Playlist Selection and filters; in Advanced, every section, open when it's on, with a Take a Tour that walks through them. Changes save immediately and the running app picks them up without a restart.
+- **Settings** holds all keys and preferences, in boxed sections; rest the pointer on a setting's title for its explanation. **Playlist Settings** lists your playlist buttons, and **Devices** each Alexa device's playlists, with one page per playlist: in Simple, one config with its sources, Playlist Selection and filters; in Advanced, every section, open when it's on, with a Take a Tour that walks through them. Changes save immediately and the running app picks them up without a restart.
 
 ---
 
@@ -138,6 +139,8 @@ Filters are named and shared, and where one applies is decided by ticking it on 
 - **Only pick from:** a JRiver playlist or smartlist, so only its tracks can be used. Set up any filtering you like in JRiver's smartlist editor and 24bit7 respects it.
 - **Rules**, matching all or any: Rating (any of 0 to 5, where 0 is unrated), Year, Last played, Play count, Date imported, Genre, Artist, Album, Duration, File type, Bit depth, Sample rate and File location. "Sample rate at most 48 kHz" saves JRiver converting on the fly for a Sonos.
 
+Tick **Every playlist** on a filter and it applies to every playlist. **Skipped Tracks** comes ready-made and off: it leaves out a track you've skipped by voice twice, and an artist with three such tracks, and lists what it's leaving out, each with Let Back In.
+
 A track with no value for a field (no year, say) passes that rule, and the log counts them. The seed track is never filtered out. Each build's log names the filters that applied and how many tracks they left out. Albums, songs, shuffles and JRiver playlists asked for by voice play as asked.
 
 ### Keyboard shortcuts
@@ -216,7 +219,7 @@ Each playlist's page can run a file of your choice once its playlist is in JRive
 
 24bit7 can take commands from an Alexa skill you host yourself. This is not a one-click setup: you need your own Amazon developer account and Alexa-hosted skill, a Tailscale Funnel (or similar) to let Amazon reach 24bit7 on your PC, and 24bit7 left running, which Start with Windows and the tray take care of. The skill's code and interaction model are in the `alexa` folder of this repository. The user manual's **[Voice Commands](docs/MANUAL.md#voice-commands)** chapter explains what it does, and **[Setting up the Alexa skill](docs/MANUAL.md#setting-up-the-alexa-skill)** takes you through every step. Both are linked from Settings > Voice Commands and Settings > About too.
 
-Settings > Voice Commands holds the key the skill sends. Each Alexa device has a tab in the Devices box under Settings > Playlist Settings: its name, the zone it plays to, and the playlist each phrase runs (any of your playlists as it is, or the device's own copy). Two rooms can run two sets of settings side by side, for A/B testing or for different people.
+Settings > Voice Commands holds the key the skill sends. Each Alexa device has a tab under Settings > Devices: its name, the zone it plays to, and the playlist each phrase runs (any of your playlists as it is, or the device's own copy). Two rooms can run two sets of settings side by side, for A/B testing or for different people.
 
 Once it is set up, each device plays to its zone:
 
@@ -305,7 +308,17 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.30.1
+## What's new in 1.31.0
+
+- **Radio**, a button that needs no seed. 24bit7 sorts the artists you play into lanes by the sources' genres (Classic Rock, Downtempo and so on), each with pillar artists: the genre's best that you own, plus your own most played. Each round is Consensus over a few pillars, about an hour, and it carries on from the pillars all evening. Lanes split and join back, and any lane can be a button of its own. It rests, greyed, until you've played enough.
+- **JRiver Playlists**, a third seed tab: pick one of your JRiver playlists and **Play** it, shuffled or in order, or **Play & Embellish** it, with new tracks woven in from artists the playlist's own artists agree on: **Add Half**, **Double It** or **Build It Out**.
+- **Save Playlist** after any build to a JRiver zone saves that zone's Playing Now as a JRiver playlist.
+- **Top-Up**, on the More Options row: click it, then a playlist, and the new tracks go into what's left of Playing Now instead of replacing it. Lasts one playlist.
+- **Match Tempo** for Artist Matching and Track Matching: Off, Prefer or Strict, from your BPM tags, half and double time counting.
+- **Voice skips count.** "Ask needle drop to skip" is counted in JRiver, and the **Skipped Tracks** filter (off to start) leaves out what you skip twice. Any filter can now apply to **Every playlist**.
+- **Settings > Devices** is a tab of its own again, so Playlist Settings is quieter. Non-stop now "adds more", leaving "top up" to Top-Up, and the German uses JRiver's own names for Playing Now and Media Network.
+
+### Earlier: 1.30.1
 
 - **Playlist Settings in smaller text**, the size of its notes, with **A-** and **A+** at the top right for the text size of every Settings screen. The left column and the page each scroll as one piece, header included.
 - **Consensus** and **Moderator** sit under the configs with the other whole-playlist sections. The Preview is half the size, beside Name, Take a Tour sits under Simple / Advanced, and the corners are square again.

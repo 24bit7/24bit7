@@ -44,6 +44,8 @@ SHOTS = [
     ("play", ["Play", "Now Playing"], ["gui.pyw", "mix_gui.py", "tabs.py"], "more_closed"),
     ("play_more_options", ["Play", "Now Playing"], ["gui.pyw", "mix_gui.py", "tabs.py"], "more_open"),
     ("play_search", ["Play", "Search"], ["gui.pyw", "tabs.py"], "more_closed"),
+    ("play_jriver_playlists", ["Play", "JRiver Playlists"], ["gui.pyw", "embellish.py", "tabs.py"], "playlists_list"),
+    ("play_radio", ["Play", "Now Playing"], ["gui.pyw", "radio.py", "tabs.py"], "radio_list"),
     ("play_review", ["Play", "Now Playing"], ["gui.pyw", "review_gui.py"], "review"),
     ("ai_playlist_create", ["Play", "Now Playing"], ["ai_dialog.py"], "ai_create"),
     ("ai_playlist_steer", ["Play", "Now Playing"], ["ai_dialog.py"], "ai_steer"),
@@ -107,6 +109,30 @@ DEMO_PLAYLISTS = [
     {"ID": "204", "Name": "Random Album", "Folder": "Smartlists", "Type": "Smartlist"},
     {"ID": "205", "Name": "Kitchen Disco", "Folder": "Mixes", "Type": "Playlist"},
 ]
+# Radio (1.31.0): lanes as an analysis of a sixties-and-folk library would make them, Classic Rock split open
+DEMO_RADIO = {"when": "2026-11-06 20:18", "resting": None, "known": [], "lanes": [
+    {"id": "1", "name": "Classic Rock / Rock", "genres": ["classic rock", "rock"], "artists": 60, "plays": 4200,
+     "pillars": ["The Beatles", "The Kinks", "The Rolling Stones"], "children": [
+         {"id": "1a", "name": "Classic Rock / Psychedelic", "genres": ["classic rock", "psychedelic"], "artists": 34,
+          "plays": 2600, "pillars": ["The Beatles", "The Byrds"]},
+         {"id": "1b", "name": "Blues Rock / Blues", "genres": ["blues rock", "blues"], "artists": 26, "plays": 1600,
+          "pillars": ["Jimi Hendrix", "Cream"]}]},
+    {"id": "2", "name": "Folk / Singer-Songwriter", "genres": ["folk", "singer-songwriter"], "artists": 41,
+     "plays": 2100, "pillars": ["Simon & Garfunkel", "Nick Drake"], "children": [
+         {"id": "2a", "name": "Folk / Folk Rock", "genres": ["folk", "folk rock"], "artists": 22, "plays": 1200,
+          "pillars": ["Simon & Garfunkel"]},
+         {"id": "2b", "name": "Singer-Songwriter / Acoustic", "genres": ["singer-songwriter", "acoustic"],
+          "artists": 19, "plays": 900, "pillars": ["Nick Drake"]}]},
+    {"id": "3", "name": "Electronic / Ambient", "genres": ["electronic", "ambient"], "artists": 28, "plays": 1500,
+     "pillars": ["Brian Eno", "Boards of Canada"]},
+    {"id": "4", "name": "Jazz / Vocal Jazz", "genres": ["jazz", "vocal jazz"], "artists": 17, "plays": 800,
+     "pillars": ["Nina Simone", "Chet Baker"]},
+    {"id": "5", "name": "Soul / Motown", "genres": ["soul", "motown"], "artists": 15, "plays": 600,
+     "pillars": ["Marvin Gaye", "The Supremes"]},
+]}
+# JRiver Playlists: what 24bit7 played or embellished lately, for the list's Recent part
+DEMO_RECENT = [{"id": "202", "name": "Road Trip", "how": "embellished", "when": "2026-11-06 19:40"},
+               {"id": "201", "name": "Sunday Morning", "how": "played", "when": "2026-11-05 10:12"}]
 # Discover: one Similar Artists session from Here Comes The Sun. (artist, track, sources, found)
 DEMO_DISCOVERIES = [
     ("The Kinks", "Waterloo Sunset", "Last.fm, Deezer", True),
@@ -405,6 +431,14 @@ def start_demo(gui, temp):
     record = devices.for_device("demo-kitchen")
     record["buttons"]["tracks_like"] = kitchen["id"]
     devices.update("demo-kitchen", buttons=record["buttons"])
+    try:   # Radio's lanes, its face on Classic Rock with the split open, and the recent JRiver playlists (1.31.0)
+        import embellish
+        import radio
+        radio._set_meta(radio.ANALYSIS_KEY, DEMO_RADIO)
+        radio.set_row(default="1", open=["1"], buttons=[])
+        embellish._set_meta(embellish.RECENT_KEY, DEMO_RECENT)
+    except ImportError:
+        pass
     try:   # the console's Log (1.11.0 and later)
         import buildlog
         buildlog._table(con)
@@ -736,7 +770,7 @@ def main():
                 else:   # the Kitchen Echo build that started its Non-stop chain, opened from the Log
                     import buildlog
                     play._load_build(next(r for r in buildlog.recent("demo-kitchen") if r["chain_pos"] == 1))
-            dialog = None
+            dialog = popup = None
             if action and action.startswith("button:"):   # a playlist's page (the third part, an old inner tab, is ignored)
                 _, which, _tab = action.split(":")
                 import buttons
@@ -755,13 +789,37 @@ def main():
                 settle(root, 0.5)
             elif action == "edit_filters":
                 dialog = play.settings._open_filters()
+            elif action == "playlists_list":   # Road Trip chosen, the list open under the box (1.31.0)
+                play._show_more(False, save=False)
+                play._close_playlists_if_away = lambda: None   # the shot takes the keyboard from the box
+                road_trip = next(x for x in DEMO_PLAYLISTS if x["Name"] == "Road Trip")
+                play._pick_playlist(dict(road_trip))
+                settle(root, 0.3)
+                play._open_playlists()
+                popup = play._playlists_pop
+            elif action == "radio_list":   # Radio's arrow open: the lanes, Classic Rock split
+                play._show_more(False, save=False)
+                play._close_children_if_unfocused = lambda: None
+                play._draw_radio_lanes()
+                play._flow_buttons()
+                play._open_radio()
+                popup = play._children_popup
             if action == "review":
                 show_review(play)
             elif action in ("ai_create", "ai_steer"):
                 play._show_more(False, save=False)
                 dialog = open_ai_window(gui, root, play, "steer" if action == "ai_steer" else "create")
             settle(root, 1.0 if name in ("settings_jriver_playlists", "play_review") or dialog else 0.5)
+            if popup is not None:   # a drop-down list, kept above the window while it's grabbed
+                popup.attributes("-topmost", True)
+                settle(root, 0.3)
             image = grab_window(dialog) if dialog else capture(root, page)
+            if popup is not None:
+                try:
+                    popup.destroy()
+                except Exception:
+                    pass
+                play._playlists_pop = play._children_popup = None
             (written if save_if_changed(image, name) else same).append(name)
             print(f"  {name}: {'saved' if name in written else 'unchanged'}")
             if dialog is not None:
