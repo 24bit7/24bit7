@@ -38,7 +38,7 @@ GWL_STYLE, WS_CAPTION, SWP_FRAME = -16, 0x00C00000, 0x0027
 DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND = 33, 2
 IF_SHORT = [("ask", N_("Ask Again")), ("drift", "Drift"), ("leave", N_("Leave Short"))]
 IF_SHORT_TIP = N_("When fewer tracks match your library than you asked for: Ask Again asks the AI for more "
-                  "(up to two more rounds), Drift tops up from your music sources, Leave Short stops there.")
+                  "(up to two more rounds), Drift adds more from your music sources, Leave Short stops there.")
 COUNT_MIN, COUNT_MAX = 5, 100
 
 

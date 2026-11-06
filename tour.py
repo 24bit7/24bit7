@@ -49,7 +49,7 @@ SECTION_NOTES = {
     "If All Else Fails": N_("What happens when a build finds nothing: shuffle the seed's genre, run a file or play a JRiver "
                             "playlist. Have it on so a quiet seed never leaves the room silent."),
     "Run After Building": N_("Runs a file of yours once the playlist is in JRiver, such as a script that dims the lights. "
-                             "Only when the build worked, and never for a Non-stop top-up."),
+                             "Only when the build worked, and never when Non-stop adds more."),
 }
 
 # The order the tour visits them: the config's own sections first, then the whole-playlist ones

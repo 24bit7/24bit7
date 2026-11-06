@@ -812,7 +812,7 @@ DRIFT_MODERATOR_OPTIONS = [("same", N_("Same as build")), ("off", N_("Off")), ("
                            ("balanced", N_("Balanced")), ("strict", N_("Strict"))]
 DRIFT_ARTIST_SOURCE_NAMES = [s for s in SOURCE_NAMES if s[0] != "ai"]   # Drift from the sources never uses the AI
 DRIFT_SOURCES_HELP = (N_("Same as the Sources uses the sources ticked in this config. Custom "
-                      "Sources lets the top-up rounds use different ones, for example steadier sources first "
+                      "Sources lets Drift's rounds use different ones, for example steadier sources first "
                       "and more adventurous ones to fill the gaps."))
 DRIFT_SAME_WARNING = (N_("Same sources keep Drift's picks closest to the seed. Custom Sources give Drift a "
                       "different route if the playlist finds nothing and provide a back-up route to build "
@@ -834,10 +834,10 @@ NONSTOP_RESEED_OPTIONS = [("last", N_("Last track")), ("second", N_("2nd track")
 SAVED_RESEED_OPTIONS = NONSTOP_RESEED_OPTIONS + [("whole", "Whole playlist")]   # JRiver Playlists rows only
 NONSTOP_MODE_OPTIONS = [("off", N_("Off")), ("tight", N_("Keep It Tight")), ("journey", N_("Wander"))]
 NONSTOP_MODE_HELP = (N_("When the last track of a playlist 24bit7 built starts, more are added so the music keeps going.\n"
-                     "Keep It Tight: each top-up reseeds from a track of the original playlist, a different one "
+                     "Keep It Tight: each time it adds more, it reseeds from a track of the original playlist, a different one "
                      "each time, so the evening stays close to where it started. When every track has been used "
                      "as a seed, it carries on as Wander, and the console says so.\n"
-                     "Wander: each top-up reseeds from where the music has got to (Reseed "
+                     "Wander: each time it adds more, it reseeds from where the music has got to (Reseed "
                      "from), so the evening travels."))
 NONSTOP_WITH_OPTIONS = [("vibe", N_("More from the AI")), ("artists", N_("Similar artists")), ("tracks", N_("Similar tracks"))]
 # Saved Playlists dropdowns
@@ -860,7 +860,7 @@ def table_colours():
 
 
 # The ? beside each Number of tracks
-LIMIT_HELP = N_("Ticked, the playlist stops at this many tracks, picked at random from everything found. Unticked, every track found goes in: Number of artists times Tracks per artist selection, plus the seed artist's, so the playlist can run long, and Drift doesn't run as there's no target to fall short of. Non-stop top-ups always keep to this number.\nTo switch the random pick off altogether, set Tracks per artist selection to the same as Number of artist's top tracks (say 5 of 5) and untick this.")
+LIMIT_HELP = N_("Ticked, the playlist stops at this many tracks, picked at random from everything found. Unticked, every track found goes in: Number of artists times Tracks per artist selection, plus the seed artist's, so the playlist can run long, and Drift doesn't run as there's no target to fall short of. When Non-stop adds more, it keeps to this number.\nTo switch the random pick off altogether, set Tracks per artist selection to the same as Number of artist's top tracks (say 5 of 5) and untick this.")
 TARGET_HELP = N_('This is the target number of tracks. The playlist may come out shorter, depending on how many matches are in your library. If your playlists are often too short, tick Drift to fill them out.')
 TOP_TARGET_HELP = N_("This is the target number of tracks. The playlist may come out shorter, depending on how many of the artist's top tracks are in your library.")
 
@@ -2626,7 +2626,7 @@ class SettingsTab(tk.Frame):
         tab.grid_columnconfigure(1, weight=1)
 
         box = section(left, t("Your filters"),
-                      t("Filters narrow the playlists 24bit7 builds, Drift and Non-stop top-ups included. Tick a "
+                      t("Filters narrow the playlists 24bit7 builds, Drift and what Non-stop adds included. Tick a "
                       "filter under Filters on a button's page (Settings > Buttons) and every playlist that button "
                       "builds must pass it. Where several apply, a track must pass them all. Albums, songs, "
                       "shuffles and JRiver playlists asked for by voice play as asked."))
@@ -2985,8 +2985,8 @@ class SettingsTab(tk.Frame):
                          "starts, more are added, Similar artists or Similar tracks, seeded from the song "
                          "chosen under Reseed from. It carries on until something else is played on that "
                          "zone."),
-            "Reseed from": N_("Where each Non-stop top-up seeds from. Last track and 2nd track follow on from the "
-                            "music, so the evening travels. Whole playlist is Keep It Tight: each top-up seeds "
+            "Reseed from": N_("Where Non-stop seeds from each time it adds more. Last track and 2nd track follow on from the "
+                            "music, so the evening travels. Whole playlist is Keep It Tight: each time, it seeds "
                             "from one of the playlist's own tracks, a different one each time, and carries on "
                             "from the last track once they've all been used."),
         }
@@ -4126,7 +4126,7 @@ class SettingsTab(tk.Frame):
             mode_cb = TCombobox(row, textvariable=p.vars[f"DEEP_CUTS_{g}"],
                                    values=[shown for _, shown in DEVICE_DEEP_CUTS], state="readonly", width=12)
             mode_cb.pack(side="left", padx=(6, 24))
-            title = tk.Label(row, text=t("Top Up with Deep Cuts by"))
+            title = tk.Label(row, text=t("Add Deep Cuts by"))
             title.pack(side="left")
             Tooltip(title, t("How many deep cuts, as a share of the playlist, added on top of it: 10% of "
                            "30 tracks adds 3; 100% adds as many again, an even mix."))
@@ -4228,11 +4228,11 @@ class SettingsTab(tk.Frame):
                        "music, with no credit used."))
             else:
                 option(t("Then play using") if group == "top" else t("Play using"), f"NONSTOP_{g}_USING",
-                       NONSTOP_USING_OPTIONS, cfg["using"], t("What each top-up is built with."))
+                       NONSTOP_USING_OPTIONS, cfg["using"], t("What Non-stop builds with each time it adds more."))
             reseed_cb = option(t("Reseed from"), f"NONSTOP_{g}_RESEED", NONSTOP_RESEED_OPTIONS, cfg["reseed"],
-                               t("For Wander. Last track: each top-up follows on from where "
+                               t("For Wander. Last track: each time Non-stop adds more, it follows on from where "
                                "the music has got to, so it wanders as the evening goes on.\nSecond track: each "
-                               "top-up seeds from the first pick after the original seed, so it stays closer to "
+                               "time Non-stop adds more, it seeds from the first pick after the original seed, so it stays closer to "
                                "how it started. Keep It Tight doesn't use this."))
             p.nonstop_parts[g] = (body, rest_cb)
             if not hasattr(p, "nonstop_reseed"):
@@ -4357,8 +4357,8 @@ class SettingsTab(tk.Frame):
             ttk.Button(row, text=t("Browse..."), command=browse).pack(side="left")
             help_mark(row, t("Runs the file once the playlist is in JRiver, added playlists included, and only "
                            "if the build worked. It runs in the background and isn't told anything about the "
-                           "playlist. A .bat, .exe, PowerShell or Python script all work. Non-stop top-ups "
-                           "don't run it.")).pack(side="left", padx=(8, 0))
+                           "playlist. A .bat, .exe, PowerShell or Python script all work. It doesn't run "
+                           "when Non-stop adds more.")).pack(side="left", padx=(8, 0))
             place(row)
 
         # --- Similar Artists ---
