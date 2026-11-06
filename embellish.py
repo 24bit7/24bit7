@@ -11,7 +11,7 @@ tracks you own by each artist the circle agrees on, woven in with yours.
 
 The circle is taken ten of the playlist's artists at a time, picked at random (a big
 playlist is sampled, as Playing Now is). Add Half and Double It stop as soon as they
-have enough; Build It Out says what each stage added, and Stop keeps what's found so
+have enough; Build It Out says what each stage added, and Cancel keeps what's found so
 far: the lot goes in when it finishes or is stopped, so Ordered stays in your order.
 
 The playlist's first track plays first. Ordered keeps your order with the new tracks
@@ -28,7 +28,7 @@ AMOUNTS = ("half", "double", "out")
 AMOUNT_NAMES = {"half": N_("Add Half"), "double": N_("Double It"), "out": N_("Build It Out")}
 AMOUNT_NOTES = {"half": N_("One new track for every two on the playlist."),
                 "double": N_("As many new tracks as the playlist has."),
-                "out": N_("Every agreeing artist's top tracks you own, ten artists at a time. Stop keeps what's in.")}
+                "out": N_("Every agreeing artist's top tracks you own, ten artists at a time. Cancel keeps what's in.")}
 ORDERS = ("shuffled", "ordered")
 ORDER_NAMES = {"shuffled": N_("Play Shuffled"), "ordered": N_("Play Ordered")}
 STAGE = 10          # playlist artists added to the circle per stage
@@ -150,7 +150,7 @@ def find(keys, name, amount, report):
     want = want_for(amount, len(keys))
     if amount == "out" and len(on_list) > BIG:
         report("  " + t("Build It Out: {name} has {tracks} by {artists} artists. That can mean several hundred tracks "
-                        "and a few minutes; Stop keeps whatever is in.", name=name,
+                        "and a few minutes; Cancel keeps whatever is in.", name=name,
                         tracks=tn("{count} track", "{count} tracks", len(keys)), artists=len(on_list)))
     have = {str(k) for k in keys}
     played = engine.PlayedFilter("artists", report=report, filters=True)
@@ -204,7 +204,7 @@ def find(keys, name, amount, report):
     except engine.BuildCancelled:
         if amount != "out" or not new:
             raise
-        engine.CANCEL_REQUESTED.clear()   # Build It Out: Stop keeps what's found, and it plays
+        engine.CANCEL_REQUESTED.clear()   # Build It Out: Cancel keeps what's found, and it plays
         report("  " + t("Stopped at stage {stage}: keeping the {tracks} found so far.", stage=stage,
                         tracks=tn("{count} track", "{count} tracks", len(new))))
     finally:

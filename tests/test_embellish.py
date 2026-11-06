@@ -124,3 +124,11 @@ def test_save_playlist_suggests_a_name(app):
     seed = app.engine.typed_seed_info("The Beatles", "Here Comes The Sun")
     app.engine.create_similar_playlist(report=app.Lines(), seed_info=seed)
     assert app.engine.save_name() == "The Beatles Mix"
+
+
+def test_build_it_out_names_the_button_you_press():
+    """The console's button is Cancel, so Build It Out's notes say Cancel, not Stop (6 Nov 2026)."""
+    import embellish
+    import inspect
+    assert "Stop keeps" not in inspect.getsource(embellish)
+    assert "Cancel keeps" in embellish.AMOUNT_NOTES["out"]
