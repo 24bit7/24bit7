@@ -103,6 +103,15 @@ def lane(lane_id):
     return next((x for x in lanes(include_children=True) if x["id"] == lane_id), None)
 
 
+def lane_named(name):
+    """
+    The lane a Radio playlist set to a lane plays, by its name (Classic Rock / Rock), so it survives a
+    Re-analyse, which numbers the lanes afresh. None when no lane is called that now.
+    """
+    wanted = (name or "").strip().lower()
+    return next((x for x in lanes(include_children=True) if x["name"].lower() == wanted), None) if wanted else None
+
+
 def row():
     """{"default": lane id, "open": [lane ids split open], "buttons": [lane ids on the row]}."""
     saved = _meta(ROW_KEY, {})
@@ -528,11 +537,27 @@ def join_new_artists(report, limit=10):
 
 # --- a build ----------------------------------------------------------------------------------------
 
-def _owned_top(artist, have, played, limit):
-    """An artist's top tracks you own (the sources' order), then your most played of theirs, up to limit."""
+def _owned_top(artist, have, played, limit, pool=None):
+    """
+    An artist's top tracks you own, then your most played of theirs, up to limit. pool: pick limit at
+    random from the owned ones among the artist's top pool (Radio's page: "pick 3 of each artist's top 5"),
+    as Artist Matching does; None takes them in the sources' order (a pillar's own songs: its best known).
+    """
     import library
     out = []
-    top, _label = engine.blended_top_tracks(artist, limit=max(limit, engine.TRACKS_PER_ARTIST_POOL))
+    top, _label = engine.blended_top_tracks(artist, limit=max(limit, pool or 0, engine.TRACKS_PER_ARTIST_POOL))
+    if pool:
+        owned = []
+        for title, _sources in top[:pool]:
+            key = library.find_track_key(artist, title)
+            key = played.pick(key) if key and str(key) not in have else None
+            if key and str(key) not in have and str(key) not in owned:
+                owned.append(str(key))
+        random.shuffle(owned)
+        out = owned[:limit]
+        if len(out) >= limit:
+            return out
+        top = top[pool:]
     for title, _sources in top:
         key = library.find_track_key(artist, title)
         key = played.pick(key) if key and str(key) not in have else None
@@ -563,8 +588,11 @@ def _minutes(keys):
     return total / 60.0
 
 
-def find(lane_, report, minutes=TARGET_MINUTES, avoid=()):
-    """The tracks for one round: (keys, the pillars used). avoid: keys already sent (Non-stop's rounds)."""
+def find(lane_, report, minutes=TARGET_MINUTES, avoid=(), own=None):
+    """
+    The tracks for one round: (keys, the pillars used). avoid: keys already sent (Non-stop's rounds).
+    own: a list that gets the pillars' own songs (the Moderator's yardstick).
+    """
     pillars = list(lane_["pillars"])
     random.shuffle(pillars)
     if not pillars:
@@ -572,6 +600,7 @@ def find(lane_, report, minutes=TARGET_MINUTES, avoid=()):
     have = {str(k) for k in avoid}
     played = engine.PlayedFilter("artists", report=report, filters=True)
     circle, lists, picks, seen_artists = [], {}, [], set()
+    own = [] if own is None else own
     try:
         while pillars and len(circle) < CIRCLE_MAX and (not picks or _minutes(picks) < minutes):
             engine.check_cancelled()
@@ -586,21 +615,68 @@ def find(lane_, report, minutes=TARGET_MINUTES, avoid=()):
             circle += joining
             agreed, _same = engine.inner_circle(circle, lambda m: lists[engine.artist_key(m)],
                                                 min(AGREE, len(circle)), key=engine.artist_key)
-            for p in joining:   # a couple of each pillar's own
+            for p in joining:   # a couple of each pillar's own, its best known
                 for key in _owned_top(p, have, played, 2):
                     have.add(key)
                     picks.append(key)
-            for artist, _why in agreed[len(circle):]:
+                    own.append(key)
+            for artist, _why in agreed[len(circle):]:   # Radio's page: pick n of each artist's top m
                 a = engine.artist_key(artist)
                 if a in seen_artists:
                     continue
                 seen_artists.add(a)
-                for key in _owned_top(artist, have, played, engine.TRACKS_PER_ARTIST_PICK):
+                for key in _owned_top(artist, have, played, engine.TRACKS_PER_ARTIST_PICK,
+                                      pool=max(engine.TRACKS_PER_ARTIST_POOL, engine.TRACKS_PER_ARTIST_PICK)):
                     have.add(key)
                     picks.append(key)
     finally:
         played.done()
     return picks, circle
+
+
+def _tracks(keys):
+    """[(key, artist, title)] for the Moderator."""
+    import library
+    out = []
+    for k in keys:
+        row = library.track_row(k) or {}
+        out.append((str(k), row.get("Artist") or "", row.get("Name") or ""))
+    return out
+
+
+def moderator_seed(lane_, circle):
+    """What the Moderator judges a round against: the lane and the pillars in it this round."""
+    return f"vibe: {lane_['name']} radio, in the sound of {', '.join(circle)}"
+
+
+def moderate(picks, own, seed, report):
+    """
+    Radio's Moderator (6 Nov 2026), its level from Radio's page or the More Options switch: the agreeing
+    artists' tracks are checked against the lane, with the pillars' own songs as what fits. The pillars'
+    songs stay. Nothing removed when it's off, or when the AI can't run (said once).
+    """
+    level = engine.AI_MODERATOR_BY.get("artists", "off")
+    guests = [k for k in picks if k not in set(own)]
+    if level in ("", "off") or not guests:
+        return picks
+    removed = engine.moderate(_tracks(guests), seed, report, level=level, reference=_tracks(own))
+    return [k for k in picks if k not in removed] if removed else picks
+
+
+def deep_cuts(keys, seed, report):
+    """Radio's Deep Cuts: lesser-played artists from the genre most of this round shares, as the page sets."""
+    try:
+        import deepcuts
+        genre = deepcuts.common_genre(keys, share=0.3)
+    except Exception:
+        genre = None
+    cfg = engine.DEEP_CUTS.get("artists") or {}
+    if cfg.get("mode", "off") == "off":
+        return keys
+    if not genre:
+        report("  " + t("Deep Cuts: none this round, as no one genre is shared by enough of its tracks."))
+        return keys
+    return engine.add_deep_cuts(keys, None, report, group="artists", genres=[genre], moderator_seed=seed)
 
 
 def build(lane_id, report=print):
@@ -621,16 +697,20 @@ def build(lane_id, report=print):
             for entry in engine.NONSTOP_ZONES.values():
                 if entry.get("radio_lane") == lane_id:
                     avoid |= set(entry.get("keys") or ())
-    picks, circle = find(lane_, report, avoid=avoid)
+    own = []
+    picks, circle = find(lane_, report, avoid=avoid, own=own)
     report("  " + t("Pillars this round: {names}.", names=", ".join(circle)))
     if not picks:
         report(t("Radio: nothing found for {name} this time. The sources may not be answering; try again in a "
                  "minute.", name=lane_["name"]))
         engine.session_finish(session_id, 0, sources="none", report=report)
         return
+    seed = moderator_seed(lane_, circle)
+    picks = moderate(picks, own, seed, report)
     first, rest = picks[0], picks[1:]
     random.shuffle(rest)
     keys = engine.spread_artists([first] + rest, keep=first)
+    keys = deep_cuts(keys, seed, report)
     import library
     artists = {engine.artist_key((library.track_row(k) or {}).get("Artist") or "") for k in keys}
     report("  " + t("{tracks}, about {minutes} minutes, from {artists} artists.",

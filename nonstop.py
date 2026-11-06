@@ -219,9 +219,12 @@ def _job(zone, zone_name, info):
             kind = entry.get("kind")
             origin = entry.get("origin") or kind
             if origin == "radio":   # never from Radio's own picks: from the lane's pillars, so it stays in the lane
-                import radio
                 report("  " + t("{zone} is on its last track, so Radio plays on.", zone=zone_name))
-                radio.build(entry.get("radio_lane"), report=report)
+                button = buttons.get(entry["button"]) if entry.get("button") else None
+                if not buttons.is_radio(button):   # the playlist that started it has gone: Radio as shipped
+                    button = next((b for b in buttons.load() if buttons.is_radio(b)), None) or \
+                        buttons.ready_made_button("radio", {"artists": buttons.standard("artists")})
+                buttons.run_radio(button, report=report, lane_id=entry.get("radio_lane"))
                 return
             cfg = config_for(zone_name, entry)
             if origin == "saved":

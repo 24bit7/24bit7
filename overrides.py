@@ -136,6 +136,11 @@ def from_playlist(button):
     kind = button.get("kind")
     if kind is None:
         return {"moderator": "off", "deep_cuts": "off", "nonstop": "off"}
+    if kind == buttons.RADIO:   # Radio's Moderator and Deep Cuts are Artist Matching's keys; it always plays on
+        get = _getter(_merged(button))
+        level = engine.moderator_settings(get).get("artists", "off")
+        deep = (get("DEEP_CUTS_ARTISTS", "off") or "off").strip().lower()
+        return _clean({"moderator": level, "deep_cuts": deep, "nonstop": "journey"})
     get = _getter(_merged(button))
     level = engine.moderator_settings(get).get(kind, "off") if kind in engine.MODERATOR_GROUPS or kind == "vibe" else "off"
     deep = (get(f"DEEP_CUTS_{GROUPS[kind]}", "off") or "off").strip().lower() if kind in engine.DEEP_CUT_GROUPS else "off"

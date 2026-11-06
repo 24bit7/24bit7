@@ -27,7 +27,8 @@ def test_each_config_is_a_bordered_box_with_sources_across_and_its_own_filters(a
                                        and int(box.cget("highlightthickness")) >= 1):
             box = box.master
         assert box is not None, "the Filters strip sits inside the config's bordered box"
-    ticks = [w for w in walk(s._button_filter_rows[1]) if isinstance(w, ttk.Checkbutton)]
+    ticks = [w for w in walk(s._button_filter_rows[1]) if isinstance(w, ttk.Checkbutton)
+             and not w.instate(["disabled"])]   # an every-playlist filter (Skipped Tracks) shows greyed, not this config's
     assert [t_.cget("text") for t_ in ticks] == ["Stereo"]
     ticks[0].invoke()
     ui.pump(0.3)

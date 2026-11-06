@@ -5852,7 +5852,7 @@ def deep_cut_genres(seed_info, keys=()):
     return ([genre], where) if genre else ([], "")
 
 
-def add_deep_cuts(keys, seed_info, report=print):
+def add_deep_cuts(keys, seed_info, report=print, group=None, genres=None, moderator_seed=None):
     """
     Deep Cuts (Settings > Playlist, per Play option): tops a finished playlist up with
     tracks from the corners of the seed's genre that rarely get played, by the set share
@@ -5860,8 +5860,10 @@ def add_deep_cuts(keys, seed_info, report=print):
     in at random, the first track always leading. Similar Artists picks the least played
     artists, then their top tracks; Similar Tracks and AI Playlist the least played tracks.
     The Moderator, if on, checks them too. Says in the console what it added, or why none.
+    Radio (6 Nov 2026) passes group "artists" (its settings are Artist Matching's), the genres to
+    pick from (its round's own) and the Moderator's seed line (the lane).
     """
-    kind = NONSTOP_CONTEXT.get("kind")
+    kind = group or NONSTOP_CONTEXT.get("kind")
     cfg = DEEP_CUTS.get(kind) if kind in DEEP_CUT_GROUPS else None
     if not cfg or cfg["mode"] == "off" or not keys:
         return keys
@@ -5870,12 +5872,14 @@ def add_deep_cuts(keys, seed_info, report=print):
         import deepcuts
         import library
         library.ensure_loaded()
-        genres, _ = deep_cut_genres(seed_info, keys)
+        if genres is None:
+            genres, _ = deep_cut_genres(seed_info, keys)
         seeds = seed_artists(seed_info) if seed_info and seed_info.get("Artist") else []
         in_build = [k for k in keys if library.track_row(k)]
         artists = seeds + [deepcuts.first_artist(library.track_row(k)) for k in in_build]
         played = PlayedFilter(kind, report=lambda *_: None, filters=True)
-        moderating = moderator_level() != "off"
+        moderating = ((AI_MODERATOR_BY.get(kind, "off") if ai_configured() else "off") if group
+                      else moderator_level()) != "off"
         want = count * 2 if moderating else count   # spares, so the Moderator's removals are replaced
         if kind == "artists":
             picks, note = deepcuts.pick_by_artist(genres, want, artists, in_build, played.fresh,
@@ -5889,8 +5893,8 @@ def add_deep_cuts(keys, seed_info, report=print):
         report("  " + t("Deep Cuts: none this time, as {note}.", note=note))
         return keys
     if moderating and len(picks) > 1:
-        seed = (f"vibe: {NONSTOP_CONTEXT.get('vibe')}" if kind == "vibe" else seed_label(seed_info or {}))
-        removed = moderate(picks, seed, report)
+        seed = moderator_seed or (f"vibe: {NONSTOP_CONTEXT.get('vibe')}" if kind == "vibe" else seed_label(seed_info or {}))
+        removed = moderate(picks, seed, report, level=AI_MODERATOR_BY.get(kind) if group else None)
         picks = [p for p in picks if p[0] not in removed]
     picks = picks[:count]
     cut_keys = []

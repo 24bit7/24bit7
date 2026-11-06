@@ -32,6 +32,7 @@ import ai_usage
 import i18n
 import tabs
 import mode
+import radio
 import tour
 from tabs import TabbedPane, PALETTE, FlatButton, TCombobox, NamePrompt, PromptWindow, PickRow
 from datetime import datetime
@@ -1031,6 +1032,8 @@ TEMPLATE_NOTES = {   # what each template is, for the Add a Playlist window
                        "sometimes short."),
     "top10_first": N_("The artist's ten most popular tracks that you own, best first."),
     "top10_last": N_("The artist's ten most popular tracks that you own, least popular first."),
+    "radio": N_("No seed: a lane of what you play most, a round at a time from its best-known artists and the "
+                "artists they agree on, and it never stops."),
 }
 
 
@@ -1895,7 +1898,9 @@ class SettingsTab(tk.Frame):
                 self._buttons_changed()
         self._subtitle_box.bind("<FocusOut>", save_subtitle)
         self._subtitle_box.bind("<Return>", save_subtitle)
-        about = t("No config yet: add one below.") if kind is None else t(buttons.KIND_LABELS[kind])
+        about = t("No config yet: add one below.") if kind is None else t(buttons.label_of(kind))
+        if kind == buttons.RADIO:
+            about = t(TEMPLATE_NOTES["radio"])
         if button.get("device"):
             phrase = next((label for ph, label in devices.PHRASES
                            if devices.for_device(button["device"])["buttons"].get(ph) == button["id"]), None)
@@ -1947,6 +1952,11 @@ class SettingsTab(tk.Frame):
             self._refresh_key_marks()
             return
         simple = mode.is_simple()   # Simple: the first config alone, with Sources, Playlist Selection and Filters (2 Nov 2026)
+        if buttons.is_radio(button):   # its own page: no configs (Ben, 6 Nov 2026)
+            self._radio_page(inner, button, simple)
+            tabs.use_fonts(right)
+            self._refresh_key_marks()
+            return
         cfgs = buttons.configs(button)
         mix = buttons.tidy_mix(button.get("mix"), len(cfgs))
         if simple:
@@ -2006,6 +2016,87 @@ class SettingsTab(tk.Frame):
         pages[0][0].resync = lambda: [r() for r in resyncs]
         tabs.use_fonts(right)   # the page's tick boxes, dropdowns and number boxes
         self._refresh_key_marks()
+
+    def _radio_page(self, inner, button, simple):
+        """
+        Radio's page (Ben, 6 Nov 2026): one box with its Lane, Sources, Playlist Selection and Filters; under it,
+        in Advanced, Moderator, Deep Cuts and Shortcut. Its settings are Artist Matching's (buttons.RADIO_KEYS).
+        There's no Drift, Mix, Consensus or If All Else Fails, and it always plays on, so no Non-stop either.
+        """
+        self._matching_configs = 0
+        edge = PALETTE["button_fg"]
+        block = tk.Frame(inner, highlightthickness=1, highlightbackground=edge, highlightcolor=edge)
+        block.grid(row=inner.grid_size()[1], column=0, sticky="ew", pady=(0, 10))
+        block.grid_columnconfigure(0, weight=1)
+        tint = tabs.mix_colour(inner, edge, inner.cget("bg"), 0.12)
+        head = tk.Frame(block, bg=tint, padx=8, pady=4)
+        head.grid(row=0, column=0, sticky="ew")
+        tk.Label(head, text=t("Radio"), font=HEADING_FONT, fg=PALETTE["section_fg"], bg=tint).pack(side="left")
+        body = tk.Frame(block, padx=8, pady=6)
+        body.grid(row=1, column=0, sticky="ew")
+        body.grid_columnconfigure(0, weight=1)
+        self._radio_lane_section(body, button)
+        env = dict(read_env())
+        env.update(button.get("settings") or {})
+        p = ProfilePage("button", None, env, {}, lambda *_: None)
+        p.button, p.columns = button, False
+        p.config_index, p.config_kind = 0, buttons.RADIO
+        p.save = lambda *_, p=p: self._save_button_page(p)
+        self._button_page, self._button_pages = p, [p]
+        whole = tk.Frame(inner)
+        whole.grid(row=inner.grid_size()[1], column=0, sticky="ew")
+        whole.grid_columnconfigure(0, weight=1)
+        places = {}
+        for title in WHOLE_SECTIONS:
+            places[title] = tk.Frame(whole)
+            places[title].grid(row=len(places), column=0, sticky="ew")
+            places[title].grid_columnconfigure(0, weight=1)
+        if hotkeys.AVAILABLE and not simple:
+            self._shortcut_section(places["Shortcut"], button)
+        self._fill_sources(body, p, "artists", where_=places, radio=True)
+        sources_resync = p.resync
+        self._fill_playlist(body, p, buttons.RADIO, parts={"Playlist Selection"} | (set() if simple else {"Deep Cuts"}),
+                            where_=places)
+        playlist_resync = p.resync
+        self._config_filters(body, button, 0)
+        p.resync = lambda: (sources_resync(), playlist_resync())
+        self._sync_moderator_box(p)
+        tk.Label(inner, text=t("Radio always plays on: each round comes from other well-known artists of the lane. "
+                               "Drift, Mix, Consensus and If All Else Fails don't apply to it."),
+                 fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w", justify="left",
+                 wraplength=scaled(inner, 700)).grid(row=inner.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+
+    def _radio_lane_section(self, body, button):
+        """Lane: Last Played (the lane last played from any Radio's arrow) or one lane, kept by its name."""
+        box = section(body, t("Lane"), t("Last Played plays the lane you last picked from a Radio button's arrow "
+                                         "(the biggest, the first time). Pick a lane to make this Radio play that "
+                                         "one always: Add as a Button on a lane's right-click does the same."))
+        last = t("Last Played")
+        names = [lane_["name"] for lane_ in radio.lanes(include_children=True)]
+        current = button.get("lane") or ""
+        if current and current not in names:
+            names.append(current)   # gone since the lanes were made again: still shown, and the build says so
+        var = tk.StringVar(value=current or last)
+        row = tk.Frame(box)
+        row.grid(row=0, column=0, sticky="w")
+        cb = TCombobox(row, textvariable=var, values=[last] + names, state="readonly",
+                       width=max(14, max((len(n) for n in [last] + names), default=10) + 2))
+        cb.pack(side="left")
+        if radio.analysis() is None:
+            tk.Label(row, text=t("The lanes are made the first time Radio plays."), fg=PALETTE["help_fg"],
+                     font=HELP_FONT).pack(side="left", padx=(10, 0))
+        elif current and current not in [lane_["name"] for lane_ in radio.lanes(include_children=True)]:
+            tk.Label(row, text=t("This lane has gone since the lanes were made again: pick another."),
+                     fg=PALETTE["help_fg"], font=HELP_FONT).pack(side="left", padx=(10, 0))
+
+        def chosen(_e=None, bid=button["id"]):
+            cb.selection_clear()
+            buttons.set_lane(bid, "" if var.get() == last else var.get())
+            self._buttons = buttons.buttons_only()
+            self._draw_preview()
+            self._buttons_changed()
+        cb.bind("<<ComboboxSelected>>", chosen)
+        self._radio_lane_box = cb
 
     def _config_block(self, inner, button, n, cfg):
         """A config's block: "Config n · Kind" (click to fold it away), Remove on the second and later. Returns its body."""
@@ -2244,7 +2335,7 @@ class SettingsTab(tk.Frame):
 
     def _config_filters(self, body, button, n):
         """Filters at the end of a config's box: a tick per filter for this config, then Edit Filters (2 Nov 2026)."""
-        cfg = buttons.configs(button)[n]
+        cfg = {"filters": button.get("filters") or []} if buttons.is_radio(button) else buttons.configs(button)[n]
         box = section(body, t("Filters"), tour.note_for("Filters"),
                       fold=(lambda: False) if mode.is_simple() else None)   # closed in Simple; a click opens it
         row = tk.Frame(box)
@@ -2259,7 +2350,7 @@ class SettingsTab(tk.Frame):
         button = buttons.get(self._button_id) if self._button_id else None
         if button is None:
             return
-        cfgs = buttons.configs(button)
+        cfgs = [{"filters": button.get("filters") or []}] if buttons.is_radio(button) else buttons.configs(button)
         for n, row in list(getattr(self, "_button_filter_rows", {}).items()):
             if row.winfo_exists() and n < len(cfgs):
                 self._button_filter_vars[n] = self._filter_ticks(row, cfgs[n]["filters"],
@@ -2283,6 +2374,15 @@ class SettingsTab(tk.Frame):
                        "top": "TOP_TRACK_SOURCES"}.get(kind)
         if sources_key in values and not values[sources_key]:
             return   # every source unticked: mid-change, keep the last good set
+        if kind == buttons.RADIO:   # Radio: its own settings, Artist Matching's keys (6 Nov 2026)
+            if not values.get("SIMILAR_SOURCES", "x"):
+                return
+            settings = dict(p.button.get("settings") or {})
+            settings.update({k: v for k, v in values.items() if k in buttons.RADIO_KEYS})
+            buttons.set_settings(p.button["id"], settings)
+            p.button["settings"] = settings
+            self._buttons_changed()
+            return
         # laid over what the config has: a setting with no control on the page stays as it was
         cfg = buttons.configs(p.button)[index]
         settings = dict(cfg.get("settings") or {})
@@ -2510,7 +2610,7 @@ class SettingsTab(tk.Frame):
         var = tk.BooleanVar(value=not own)
         tick = ttk.Checkbutton(line, text=t("Copy Settings From:"), variable=var)
         tick.pack(side="left")
-        choices = buttons.buttons_only()
+        choices = buttons.for_voice()   # Radio has no seed, so no phrase can run it
         names = [b["name"] for b in choices]
         if own:
             source = buttons.get(button.get("copied_from") or "")
@@ -2524,7 +2624,7 @@ class SettingsTab(tk.Frame):
         self._device_strip_tick, self._device_strip_from = tick, cb
 
         def chosen_id():
-            return next((b["id"] for b in buttons.buttons_only() if b["name"] == pick.get()), None)
+            return next((b["id"] for b in buttons.for_voice() if b["name"] == pick.get()), None)
 
         def picked(_e=None):
             cb.selection_clear()
@@ -3740,7 +3840,7 @@ class SettingsTab(tk.Frame):
         Tooltip(cb, t(NO_KEY_TEXT), when=lambda: not self._ai_set_up())
         p.moderator_boxes.append(cb)
 
-    def _fill_sources(self, tab, p, kind, where_=None):
+    def _fill_sources(self, tab, p, kind, where_=None, radio=False):
         """A config's Sources section, and its Consensus and Moderator in where_ (the whole-playlist frames under the configs)."""
         p.loading = True
         p.moderator_boxes = []
@@ -3776,7 +3876,8 @@ class SettingsTab(tk.Frame):
                            "playlist with fewer wildcards, but less chance of discovering something new. "
                            "Tip: try single sources on their own before blending.")).pack(side="left", padx=(8, 0))
             if not simple:   # under the configs, with the other whole-playlist sections (Ben, 3 Nov 2026)
-                self._inner_circle_section(p, where_["Consensus"] if where_ else pages["artists"], "artists")
+                if not radio:   # Radio's rounds are a consensus already
+                    self._inner_circle_section(p, where_["Consensus"] if where_ else pages["artists"], "artists")
                 self._moderator_section(p, where_["Moderator"] if where_ else pages["artists"], "artists")
 
         # --- Similar Tracks: its own sources and agreement ---
@@ -4568,6 +4669,26 @@ class SettingsTab(tk.Frame):
             nonstop("artists")
             hidden("artists")
             fallback("artists")
+            run_after("artists")
+
+        # --- Radio: each round's pick, Skip played, Deep Cuts; the rest built out of sight so the values stay whole
+        if kind == buttons.RADIO:
+            pages["artists"] = tab
+            begin("artists", t("Playlist Selection"), tour.note_for("Playlist Selection"))
+            each = [t("Pick"), ("TRACKS_PER_ARTIST_PICK", "3", 1, 20), t("of each artist's top"),
+                    ("TRACKS_PER_ARTIST_POOL", "5", 1, 20), t("tracks")]
+            p.seed_boxes["current"] = seed_line(t("Each Round"), PALETTE["text"], each, pady=(0, 0),
+                                                note=t("Each round takes a few of the lane's best-known artists and the "
+                                                       "artists their lists agree on. For each of those, this many of "
+                                                       "their top tracks that you own, picked at random from that many "
+                                                       "of their best known. The well-known artists themselves give "
+                                                       "two of their best-known songs."))
+            p.pick_sb = p.seed_boxes["current"]["TRACKS_PER_ARTIST_PICK"]
+            p.vars["TRACKS_PER_ARTIST_POOL"].trace_add("write", lambda *a: sync_pick_limit(p))
+            recent("artists")
+            deep_cuts("artists")
+            nonstop("artists")
+            hidden("artists")
             run_after("artists")
 
         # --- Similar Tracks ---

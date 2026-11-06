@@ -800,9 +800,12 @@ def main():
             elif action == "radio_list":   # Radio's arrow open: the lanes, Classic Rock split
                 play._show_more(False, save=False)
                 play._close_children_if_unfocused = lambda: None
-                play._draw_radio_lanes()
-                play._flow_buttons()
-                play._open_radio()
+                import buttons
+                if not play._radio_buttons():   # Radio is a playlist now (1.31.0): one on the row
+                    buttons.add_from_choice(("template", "radio"))
+                    play.refresh_buttons()
+                    settle(root, 0.3)
+                play._open_radio(play._radio_buttons()[0]._button)
                 popup = play._children_popup
             if action == "review":
                 show_review(play)

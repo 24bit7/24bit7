@@ -2,7 +2,7 @@
 The arrangement 24bit7 ships (Ben, 2 Nov 2026): three buttons, two with menus. Similar Artists (titled
 Artist Matching) over the standard Similar Tracks as Track Matching, Consensus and Artist + Guests;
 Artist's Top Tracks set to fifteen in random order (only those two settings; the rest stays the user's),
-titled Top 15, Random, over Top 10, Best First and Top 10, Best Last; AI Playlist alone. The fake world
+titled Top 15, Random, over Top 10, Best First and Top 10, Best Last; AI Playlist alone; then Radio (6 Nov 2026). The fake world
 elsewhere starts flat (conftest), so these tests put the real arrange_shipped back and run the upgrade.
 """
 
@@ -22,9 +22,10 @@ def fresh(app, monkeypatch, **env):
 def test_the_upgrade_lays_on_the_shipped_arrangement(app, monkeypatch):
     buttons, items = fresh(app, monkeypatch, TOP_TRACKS_COUNT="20", TOP_TRACKS_ORDER="popular", TOP_TRACK_SOURCES="deezer",
                            SIMILAR_TRACK_COUNT="8")
-    assert [b["name"] for b in buttons.shown()] == ["Similar Artists", "Artist's Top Tracks", "AI Playlist"]
+    assert [b["name"] for b in buttons.shown()] == ["Similar Artists", "Artist's Top Tracks", "AI Playlist", "Radio"]
     assert [b["name"] for b in items] == ["Similar Artists", "Track Matching", "Consensus", "Artist + Guests",
-                                          "Artist's Top Tracks", "Top 10, Best First", "Top 10, Best Last", "AI Playlist"]
+                                          "Artist's Top Tracks", "Top 10, Best First", "Top 10, Best Last", "AI Playlist",
+                                          "Radio"]
     by = {b["name"]: b for b in items}
     artists, top = by["Similar Artists"], by["Artist's Top Tracks"]
     assert [c["name"] for c in buttons.children(artists["id"])] == ["Track Matching", "Consensus", "Artist + Guests"]
@@ -41,7 +42,7 @@ def test_the_upgrade_lays_on_the_shipped_arrangement(app, monkeypatch):
     assert first["settings"]["TOP_TRACK_SOURCES"] == "deezer" and first["made"] == "top10_first" and last["made"] == "top10_last"
     assert by["Artist + Guests"]["settings"]["TOP_TRACKS_COUNT"] == "12" and by["Artist + Guests"]["made"] == "headliner"
     assert buttons.missing_shipped() == []
-    assert [r["key"] for r in buttons.READY_MADE] == ["headliner", "inner_circle", "top10_first", "top10_last"], "offered as templates too"
+    assert [r["key"] for r in buttons.READY_MADE] == ["headliner", "inner_circle", "top10_first", "top10_last", "radio"],         "offered as templates too"
 
 
 def test_restore_puts_back_what_is_missing_under_its_parent_and_touches_nothing_else(app, monkeypatch):
@@ -61,9 +62,10 @@ def test_restore_puts_back_what_is_missing_under_its_parent_and_touches_nothing_
     assert buttons.restore_standard() == [] and buttons.missing_shipped() == []
     # a parent that's gone: its children came out onto the row and stay there; Restore puts it back after the rest
     buttons.remove(top["id"])
-    assert [b["name"] for b in buttons.shown()] == ["Similar Artists", "Top 10, Best First", "Top 10, Best Last", "AI Playlist"]
+    assert [b["name"] for b in buttons.shown()] == ["Similar Artists", "Top 10, Best First", "Top 10, Best Last", "AI Playlist",
+                                                    "Radio"]
     back = buttons.restore_standard()
     assert [b["name"] for b in back] == ["Artist's Top Tracks"]
     assert [b["name"] for b in buttons.shown()] == ["Similar Artists", "Top 10, Best First", "Top 10, Best Last", "AI Playlist",
-                                                    "Artist's Top Tracks"], "nothing already there is moved"
+                                                    "Radio", "Artist's Top Tracks"], "nothing already there is moved"
     assert buttons.children(buttons.standard("top")["id"]) == []

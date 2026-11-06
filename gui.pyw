@@ -537,67 +537,39 @@ class PlayTab(tk.Frame):
 
     # --- Save Playlist: after a build, the output zone's Playing Now kept as a JRiver playlist ------------
 
-    # --- Radio: the button, its lanes, Split, lane buttons --------------------------------------------
+    # --- Radio: a playlist of its own kind (Ben, 6 Nov 2026), its arrow listing the lanes -------------
 
-    def _radio_row(self):
-        """Radio and its lane buttons, in row order (drawn on first use, after the playlists)."""
-        if not getattr(self, "_radio_drawn", False):
-            self._radio_drawn = True
-            self._draw_radio_lanes()
-        return [self.radio_button] + self.radio_lane_buttons
+    def _radio_buttons(self):
+        """The Radio playlists' buttons on the row."""
+        return [b for b in getattr(self, "play_buttons", []) if getattr(b, "_kind", None) == buttons.RADIO]
 
-    def _draw_radio_lanes(self):
-        """The lanes added as buttons, after Radio."""
-        for b in self.radio_lane_buttons:
-            if b in self.extra_buttons:
-                self.extra_buttons.remove(b)
-            b.destroy()
-        self.radio_lane_buttons = []
-        for lane_id in radio.row()["buttons"]:
-            lane_ = radio.lane(lane_id)
-            if lane_ is None:
-                continue
-            b = FlatButton(self.button_row, text=lane_["name"], width=18, height=2,
-                           command=lambda i=lane_id: self.on_radio(i))
-            b._name, b._lane = lane_["name"], lane_id
-            for w in (b, b._label):
-                w.bind("<Button-3>", lambda e, i=lane_id: self._radio_lane_menu(e, i, on_row=True))
-            Tooltip(b, t("Radio: {lane}. Right-click to remove the button.", lane=lane_["name"]), when=self.help_on,
-                    wrap=self.note_wrap)
-            if self.running:
-                b.config(state="disabled")
-            self.radio_lane_buttons.append(b)
-            self.extra_buttons.append(b)
-        self._sync_radio()
+    def _radio_resting_text(self):
+        why = radio.resting()
+        if not why:
+            return ""
+        return t("Radio is resting: it needs {need} artists you've played {plays} or more times, and there are "
+                 "{have} so far. It wakes once there are enough.", need=why["need"], plays=radio.MIN_PLAYS,
+                 have=why["have"])
 
     def _sync_radio(self):
-        """Radio greys out while it rests (too little played yet), with a note saying how far off it is."""
-        why = radio.resting()
-        if why:
-            self._radio_note.text = t("Radio is resting: it needs {need} artists you've played {plays} or more times, "
-                                      "and there are {have} so far. It wakes once there are enough.",
-                                      need=why["need"], plays=radio.MIN_PLAYS, have=why["have"])
-        else:
-            self._radio_note.text = ""
-        if not self.running:
-            self.radio_button.config(state="disabled" if why else "normal")
+        """Radio greys out while it rests (too little played yet), with a note saying how far off it is. It
+        plays on every seed tab, JRiver Playlists included: it needs no seed."""
+        text = self._radio_resting_text()
+        for b in self._radio_buttons():
+            if getattr(b, "_radio_note", None) is not None:
+                b._radio_note.text = text
+            if not self.running and not getattr(b, "_needs_advanced", False):
+                b.config(state="disabled" if text else "normal")
 
-    def on_radio(self, lane_id=None):
-        """Radio's face (the last lane played), a lane in its list, or a lane's own button."""
+    def on_radio(self, button, lane_id=None):
+        """A Radio playlist's face (its lane, or the last lane played), or a lane picked from its arrow."""
         if self.running:
             return
         top_up = bool(getattr(self, "top_up_armed", False))
 
         def target():
-            if radio.analysis() is None:   # the first press ever: the lanes first
-                if radio.analyse(self.report).get("resting"):
-                    return
-            chosen = radio.lane(lane_id) if lane_id else radio.default_lane()
-            if chosen is None:
-                self.report(t("Problem: that Radio lane has gone. Re-analyse under Radio's arrow to make the lanes again."))
-                return
-            radio.set_row(default=chosen["id"])
-            radio.build(chosen["id"], report=self.report)
+            current = buttons.get(button["id"]) or button   # the page may have changed it since the row was drawn
+            buttons.run_radio(current, report=self.report, lane_id=lane_id)
         self._run_job(target, needs_playing=False, mix=False, review=True, top_up=top_up)
 
     def on_radio_analyse(self):
@@ -606,9 +578,13 @@ class PlayTab(tk.Frame):
         self._close_children()
         self._run_job(lambda: radio.analyse(self.report), needs_playing=False, mix=False)
 
-    def _open_radio(self):
-        """The arrow: every lane with its share of your plays, the face's marked; Re-analyse at the foot."""
+    def _open_radio(self, button):
+        """The arrow: every lane with its share of your plays, the one the face plays marked; Re-analyse at the foot."""
         self._close_children()
+        fb = next((b for b in self.play_buttons if b._button["id"] == button["id"]), None)
+        if fb is None:
+            return
+        button = buttons.get(button["id"]) or button
         bg, fg, muted, line = PALETTE["field_bg"], PALETTE["text"], PALETTE["help_fg"], PALETTE["line"]
         pop = self._children_popup = tk.Toplevel(self)
         pop.withdraw()
@@ -617,14 +593,15 @@ class PlayTab(tk.Frame):
         inner = tk.Frame(pop, bg=bg)
         inner.pack(fill="both", expand=True)
         pop._rows = []
+        pop._button = button
         result = radio.analysis()
-        face = radio.default_lane()
+        face, _problem = buttons.radio_lane_for(button)
         opened = set(radio.row()["open"])
         if result is None:
             tk.Label(inner, text=t("No lanes yet: press Radio to make them from what you play."), fg=muted, bg=bg,
                      font=("Segoe UI", 9)).pack(anchor="w", padx=10, pady=6)
         elif result.get("resting"):
-            tk.Label(inner, text=self._radio_note.text, fg=muted, bg=bg, font=("Segoe UI", 9), wraplength=320,
+            tk.Label(inner, text=self._radio_resting_text(), fg=muted, bg=bg, font=("Segoe UI", 9), wraplength=320,
                      justify="left").pack(anchor="w", padx=10, pady=6)
         for lane_, depth in radio.visible_rows():
             splits = bool(lane_.get("children"))
@@ -638,8 +615,8 @@ class PlayTab(tk.Frame):
             r.pack(fill="x", padx=3, pady=1)
             r.bind("<Enter>", lambda e, w=r: w.set_chosen(True))
             r.bind("<Leave>", lambda e, w=r: w.set_chosen(False))
-            r.bind("<ButtonRelease-1>", lambda e, i=lane_["id"]: (self._close_children(), self.on_radio(i)))
-            r.bind("<Button-3>", lambda e, i=lane_["id"]: self._radio_lane_menu(e, i))
+            r.bind("<ButtonRelease-1>", lambda e, i=lane_["id"]: (self._close_children(), self.on_radio(button, i)))
+            r.bind("<Button-3>", lambda e, i=lane_["id"]: self._radio_lane_menu(e, button, i))
             pop._rows.append((lane_["id"], r))
         tk.Frame(inner, bg=line, height=1).pack(fill="x", pady=4)
         when = self._when((result or {}).get("when")) if result else ""
@@ -651,10 +628,9 @@ class PlayTab(tk.Frame):
         again.bind("<Leave>", lambda e: again.set_chosen(False))
         again.bind("<ButtonRelease-1>", lambda e: self.on_radio_analyse())
         pop._again = again
-        button = self.radio_button
         pop.update_idletasks()
-        w = max(pop.winfo_reqwidth(), button.winfo_width(), 300)
-        pop.geometry(f"{w}x{pop.winfo_reqheight()}+{button.winfo_rootx()}+{button.winfo_rooty() + button.winfo_height() + 2}")
+        w = max(pop.winfo_reqwidth(), fb.winfo_width(), 300)
+        pop.geometry(f"{w}x{pop.winfo_reqheight()}+{fb.winfo_rootx()}+{fb.winfo_rooty() + fb.winfo_height() + 2}")
         pop.deiconify()
         pop.lift()
         pop.focus_force()
@@ -669,18 +645,18 @@ class PlayTab(tk.Frame):
         if open_:
             opened.append(lane_id)
         radio.set_row(open=opened)
-        if getattr(self, "_children_popup", None) is not None:
-            self._open_radio()
+        pop = getattr(self, "_children_popup", None)
+        if pop is not None and getattr(pop, "_button", None):
+            self._open_radio(pop._button)
 
-    def _radio_lane_menu(self, event, lane_id, on_row=False):
-        """Right-click a lane: Split or Join Back, Add as a Button or Remove Button."""
+    def _radio_lane_menu(self, event, button, lane_id):
+        """Right-click a lane: Split or Join Back, and Add as a Button (a Radio playlist of that lane)."""
         import review_gui
         p = review_gui.palette()
         menu = tk.Menu(self, tearoff=0, bg=p["bg"], fg=p["text"], activebackground=p["row_on"],
                        activeforeground=p["accent"])
         lane_ = radio.lane(lane_id)
-        pinned = radio.row()["buttons"]
-        if lane_ is not None and not on_row:
+        if lane_ is not None:
             opened = lane_id in radio.row()["open"]
             if lane_.get("children"):
                 menu.add_command(label=t("Join Back") if opened else t("Split"),
@@ -688,21 +664,26 @@ class PlayTab(tk.Frame):
             else:
                 menu.add_command(label=t("Split"), state="disabled")
             menu.add_separator()
-        if lane_id in pinned:
-            menu.add_command(label=t("Remove Button"), command=lambda: self._radio_pin(lane_id, False))
-        else:
-            menu.add_command(label=t("Add as a Button"), command=lambda: self._radio_pin(lane_id, True))
+        menu.add_command(label=t("Add as a Button"), command=lambda: self._radio_add_button(button, lane_id))
         try:
             menu.tk_popup(event.x_root, event.y_root)
         finally:
             menu.grab_release()
 
-    def _radio_pin(self, lane_id, on):
-        pinned = [i for i in radio.row()["buttons"] if i != lane_id] + ([lane_id] if on else [])
-        radio.set_row(buttons=pinned)
+    def _radio_add_button(self, button, lane_id):
+        """A lane as a button of its own: a Radio playlist playing that lane, with this one's settings, after it."""
+        lane_ = radio.lane(lane_id)
         self._close_children()
-        self._draw_radio_lanes()
-        self._flow_buttons()
+        if lane_ is None:
+            return
+        made = buttons.duplicate(button["id"])
+        if made is None:
+            return
+        buttons.rename(made["id"], buttons.unique_name(lane_["name"]))
+        buttons.set_lane(made["id"], lane_["name"])
+        self.refresh_buttons()
+        self._notice(t("Note: {name} is on the Play tab. Its page is under Settings > Playlist Settings.",
+                       name=buttons.get(made["id"])["name"]))
 
     def _show_save(self, zone):
         self._save_zone = zone
@@ -827,10 +808,11 @@ class PlayTab(tk.Frame):
             return
         lists = self._seed_is_playlists()
         for b in getattr(self, "play_buttons", []):
-            if not getattr(b, "_needs_advanced", False):
+            if not getattr(b, "_needs_advanced", False) and getattr(b, "_kind", None) != buttons.RADIO:
                 b.config(state="disabled" if lists else "normal")
         if getattr(self, "play_buttons", None):
             self._sync_ai_button()
+            self._sync_radio()
         if not lists:
             self._close_playlists()
         button = getattr(self, "credits_button", None)
@@ -870,15 +852,6 @@ class PlayTab(tk.Frame):
         self.add_button._name = "+"
         for w in (self.add_button, self.add_button._label):
             w.bind("<Button-3>", lambda e: self._button_menu(e, None))
-        # Radio (Ben, 5 Nov 2026): a button of its own after the playlists, its lanes under the arrow
-        self.radio_button = FlatButton(frame, text=t("Radio"), width=18, height=2, command=lambda: self.on_radio(),
-                                       arrow=True, arrow_command=self._open_radio)
-        self.radio_button._name = "Radio"
-        self._radio_note = Tooltip(self.radio_button, "", when=lambda: bool(radio.resting()), wrap=self.note_wrap)
-        Tooltip(self.radio_button, t(PLAY_NOTES["Radio"]), when=lambda: self.help_on() and not radio.resting(),
-                wrap=self.note_wrap)
-        self.radio_lane_buttons = []
-        self.extra_buttons.append(self.radio_button)
         # Save Playlist: shows after a build that went to a JRiver zone, at the row's top right
         self.save_button = FlatButton(frame, text=t("Save Playlist"), command=self.on_save_playlist, width=14, height=2,
                                       quiet=True)
@@ -1025,6 +998,8 @@ class PlayTab(tk.Frame):
     def _plain_note(self, button):
         if button.get("kind") is None:
             return t("No config yet. Click to open its page and add one.")
+        if buttons.is_radio(button):
+            return t(PLAY_NOTES["Radio"]) + "\n" + buttons.describe(button)
         kind_name = buttons.KIND_NAMES[button["kind"]]
         note = t(PLAY_NOTES.get(button["name"] if button.get("standard") or button["name"] in PLAY_NOTES
                                 else kind_name, PLAY_NOTES[kind_name]))
@@ -1045,11 +1020,14 @@ class PlayTab(tk.Frame):
             face = buttons.runs(button)   # a parent's face carries its default's name
             ai = face["kind"] == "vibe"
             empty = face["kind"] is None   # a blank slate: grey text, and its note always shows
+            is_radio = buttons.is_radio(button)   # its arrow lists the lanes (a Radio playlist takes no children)
             b = FlatButton(self.button_row, text=face["name"], width=18, height=2,
                            command=lambda bt=button: self._press_playlist(bt),
                            accent=PALETTE["ai_purple"] if ai else None,   # magenta: AI credits
                            text_fg=PALETTE["ai_purple"] if ai else PALETTE["help_fg"] if empty else None,
-                           arrow=bool(kids), arrow_command=lambda bt=button: self._open_children(bt))
+                           arrow=bool(kids) or is_radio,
+                           arrow_command=(lambda bt=button: self._open_radio(bt)) if is_radio
+                           else (lambda bt=button: self._open_children(bt)))
             b._name, b._kind, b._button = button["name"], face["kind"], button
             if mode.is_simple() and mode.needs_advanced(face):   # two configs, or Consensus: not itself in Simple
                 b.config(state="disabled")
@@ -1060,20 +1038,27 @@ class PlayTab(tk.Frame):
                 w.bind("<ButtonPress-1>", lambda e, fb=b: self._drag_start(e, fb), add="+")
                 w.bind("<B1-Motion>", lambda e, fb=b: self._drag_move(e, fb), add="+")
                 w.bind("<ButtonRelease-1>", lambda e, fb=b: self._drag_end(e, fb), add="+")
-            if empty:
+            if not is_radio:   # first, so the button's own note is its _tooltip
+                Tooltip(b, t("Playlists start from a track or an artist, so they rest while JRiver Playlists is showing. "
+                             "Use Play or Play & Embellish there."), when=self._seed_is_playlists, wrap=wrap)
+            if is_radio:   # resting: why, whatever ? says; awake: its note while ? is on
+                b._radio_note = Tooltip(b, "", when=lambda: bool(radio.resting()), wrap=wrap)
+                Tooltip(b, self._button_note(button), when=lambda: on() and not radio.resting(), wrap=wrap)
+            elif empty:
                 Tooltip(b, self._button_note(button), wrap=wrap)
             elif ai:   # its "why it's greyed out" note shows whatever ? says
                 Tooltip(b, self._button_note(button), when=lambda: on() and engine.ai_enabled(), wrap=wrap)
                 b._ai_tip = Tooltip(b, "", when=lambda: not engine.ai_enabled())
             else:
                 Tooltip(b, self._button_note(button), when=on, wrap=wrap)
-            Tooltip(b, t("Playlists start from a track or an artist, so they rest while JRiver Playlists is showing. "
-                         "Use Play or Play & Embellish there."), when=self._seed_is_playlists, wrap=wrap)
             self.play_buttons.append(b)
         if getattr(self, "playlists_tab", None) is not None and self._seed_is_playlists() and not self.running:
             for b in self.play_buttons:
-                b.config(state="disabled")
+                if b._kind != buttons.RADIO:   # Radio needs no seed
+                    b.config(state="disabled")
         self._sync_ai_button()
+        if not self.running:
+            self._sync_radio()
         self._flow_buttons()
 
     def _flow_buttons(self):
@@ -1086,7 +1071,7 @@ class PlayTab(tk.Frame):
             save.place(x=max(row.winfo_width(), 1) - 16 - save._size[0], y=4)
         x = y = 0
         height = 0
-        for b in self.play_buttons + self._radio_row() + [self.more_button, self.add_button]:
+        for b in self.play_buttons + [self.more_button, self.add_button]:
             w, h = b._size
             if x and x + w > avail:
                 x, y = 0, y + h + BUTTON_GAP
@@ -1358,8 +1343,9 @@ class PlayTab(tk.Frame):
         under = None
         if x_root is not None and not buttons.is_parent(playlist):
             for other in self.play_buttons:
-                if other is fb or other._button["id"] == (playlist.get("parent") or ""):
-                    continue
+                if (other is fb or other._button["id"] == (playlist.get("parent") or "")
+                        or buttons.is_radio(other._button)):
+                    continue   # Radio's arrow lists lanes, so nothing nests under it
                 if (other.winfo_rootx() <= x_root <= other.winfo_rootx() + other.winfo_width()
                         and other.winfo_rooty() <= y_root <= other.winfo_rooty() + other.winfo_height()):
                     under = other
@@ -1632,6 +1618,8 @@ class PlayTab(tk.Frame):
             self._append_log(t(buttons.NO_CONFIG_YET, name=button["name"]))
             self.open_playlist_settings(button["id"])
             return
+        if buttons.is_radio(button):   # no seed: its lane
+            return self.on_radio(button)
         top_up = bool(getattr(self, "top_up_armed", False))   # let go of when the build starts
         if button["kind"] == "vibe":
             return self.on_vibe(button, top_up=top_up)
@@ -2902,9 +2890,7 @@ class PlayTab(tk.Frame):
             b.config(state="normal")
         self._sync_ai_button()
         self._sync_seed_buttons()
-        if getattr(self, "radio_button", None) is not None:
-            self._draw_radio_lanes()   # a Re-analyse may have changed the lanes, or woken Radio
-            self._flow_buttons()
+        self._sync_radio()   # a Re-analyse may have woken Radio
         if (getattr(self, "_job_origin", None) is None and not getattr(self, "_job_review", False)
                 and engine.SENT_ANY and engine.LAST_OUTPUT_ID and engine.LAST_OUTPUT not in ("YouTube", "Tidal")):
             try:

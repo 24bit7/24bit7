@@ -58,7 +58,34 @@ READY_MADE = [
      "settings": {"TOP_TRACKS_COUNT": "10", "TOP_TRACKS_ORDER": "popular"}, "configs": [], "mix": None},
     {"key": "top10_last", "name": N_("Top 10, Best Last"), "kind": "top",
      "settings": {"TOP_TRACKS_COUNT": "10", "TOP_TRACKS_ORDER": "reverse"}, "configs": [], "mix": None},
+    # Radio (Ben, 6 Nov 2026): a playlist of its own kind, so it drags, deletes, comes from a template and back
+    # with Restore like the others. Its settings start from the standard Similar Artists playlist's.
+    {"key": "radio", "name": N_("Radio"), "kind": "radio", "settings": {}, "configs": [], "mix": None},
 ]
+
+# Radio: no configs, no Mix, no children, and no voice phrase (each needs a seed). It builds rounds by Consensus
+# over a lane's pillars (radio.py), reading these Artist Matching settings, laid over .env as any playlist's are.
+RADIO = "radio"
+RADIO_LABEL = N_("Radio")
+RADIO_KEYS = ["SIMILAR_SOURCES", "SIMILAR_MIN_AGREEMENT", "LISTENBRAINZ_ALGORITHM", "TRACKS_PER_ARTIST_POOL",
+              "TRACKS_PER_ARTIST_PICK", "SKIP_PLAYED_ARTISTS", "SKIP_PLAYED_ARTISTS_DAYS", "AI_MODERATOR_ARTISTS",
+              "DEEP_CUTS_ARTISTS", "DEEP_CUTS_ARTISTS_SHARE"]
+RADIO_GROUP = "artists"   # whose keys those are, for Simple's layer and the More Options switches
+RADIO_ADOPTED_KEY = "radio_playlist"   # meta: Radio has been made a playlist once (the 1.31.0 upgrade, or a fresh install)
+
+
+def is_radio(button):
+    return bool(button) and button.get("kind") == RADIO
+
+
+def keys_of(kind):
+    """The settings a playlist of this kind keeps: its kind's keys, or Radio's."""
+    return RADIO_KEYS if kind == RADIO else KIND_KEYS.get(kind, [])
+
+
+def label_of(kind):
+    """What a kind is called on a page and in the console: Artist Matching, Radio..."""
+    return RADIO_LABEL if kind == RADIO else KIND_LABELS.get(kind, "")
 
 # How the playlists are arranged as 24bit7 ships them (Ben, 2 Nov 2026): three buttons, two with menus.
 # Similar Artists, titled Artist Matching in its menu, over the standard Similar Tracks (named Track
@@ -122,12 +149,15 @@ def blank(name, kind):
             "subtitle": "",                # Title in Menu: how its row reads in a menu (a parent's own row, or a child's)
             "made": "",                    # the ready-made recipe it was made as (READY_MADE key), if any
             "device": "",                  # the Alexa device whose phrase it is: off the Play tab, in the Devices box
-            "copied_from": ""}             # a device's own: the playlist it was copied from, for Copy Settings From
+            "copied_from": "",             # a device's own: the playlist it was copied from, for Copy Settings From
+            "lane": ""}                    # Radio: the lane it plays; blank, the last lane played
 
 
 def tidy(item):
     if "kind" in item and item.get("kind") is None:
         kind = None   # a blank slate, saved as it was made
+    elif item.get("kind") == RADIO:
+        kind = RADIO
     else:
         kind = item.get("kind") if item.get("kind") in KIND_NAMES else "artists"
     out = blank(str(item.get("name") or t("Button")), kind)
@@ -150,8 +180,11 @@ def tidy(item):
         out["configs"] = [{"kind": k, "settings": dict(settings_from(env.get, k), **extra), "filters": list(first_filters)}
                           for k, extra in recipe["configs"]]
         out["mix"] = dict(recipe["mix"])
-    out["settings"] = {k: v for k, v in settings.items() if k in KIND_KEYS.get(kind, [])}
+    out["settings"] = {k: v for k, v in settings.items() if k in keys_of(kind)}
     out["filters"] = [str(f) for f in (out.get("filters") or [])]
+    out["lane"] = str(out.get("lane") or "") if kind == RADIO else ""
+    if kind == RADIO:   # no further configs, no Mix
+        out["configs"] = []
     out["shown"] = bool(out.get("shown", True))
     out["parent"] = str(out.get("parent") or "")
     out["default"] = str(out.get("default") or "")
@@ -189,7 +222,7 @@ def configs(button):
     filters first, then any added under it. A blank slate has none. Filters are each config's own
     (2 Nov 2026): the hosts in Artist + Guests can come from the whole library while the guests are stereo only.
     """
-    if button.get("kind") is None:
+    if button.get("kind") is None or button.get("kind") == RADIO:   # Radio has settings, not configs
         return []
     first = {"kind": button["kind"], "settings": button.get("settings") or {}, "filters": list(button.get("filters") or [])}
     return [first] + [dict(c, filters=list(c.get("filters") or [])) for c in (button.get("configs") or [])]
@@ -228,6 +261,8 @@ def add_config(button_id, kind):
     """Another config under a playlist, starting from the standard playlist of its kind. Returns the playlist."""
     items = load()
     b = next(x for x in items if x["id"] == button_id)
+    if is_radio(b) or kind not in KIND_NAMES:   # Radio has no configs
+        return b
     base = standard(kind)
     settings = dict(base["settings"]) if base else template_settings(kind)
     if b.get("kind") is None:   # a blank slate: its first config is its own
@@ -292,7 +327,7 @@ def set_config_kind(button_id, index, kind):
     """
     items = load()
     b = next(x for x in items if x["id"] == button_id)
-    if kind not in KIND_NAMES or (index == 0 and b.get("standard")):
+    if kind not in KIND_NAMES or (index == 0 and b.get("standard")) or is_radio(b):
         return b
     base = standard(kind)
     settings = dict(base["settings"]) if base and base["id"] != button_id else template_settings(kind)
@@ -398,13 +433,62 @@ def _adopt_130(items):
     return items
 
 
+def _get_meta(key):
+    try:
+        row = engine.db().execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+    except Exception:
+        return None
+    return row[0] if row else None
+
+
+def _set_meta(key, value):
+    con = engine.db()
+    con.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (key, value))
+    con.commit()
+
+
+def _adopt_131(items):
+    """
+    6 Nov 2026: Radio is a playlist. Once, on a list from before: Radio joins the end of the row, with the
+    settings and filters of the standard Similar Artists playlist (what it read until now), and each lane
+    added as a button becomes a Radio playlist playing that lane, named after it. Said once in the console.
+    A fresh install has Radio from the shipped arrangement instead (upgrade).
+    """
+    if _get_meta(RADIO_ADOPTED_KEY):
+        return items
+    _set_meta(RADIO_ADOPTED_KEY, "1")
+    if any(is_radio(b) for b in items):
+        return items
+    base = next((b for b in items if b.get("standard") == "artists"), None)
+    made = [ready_made_button("radio", {"artists": base})]
+    try:
+        import radio
+        pinned = list(radio.row().get("buttons") or [])
+        for lane_id in pinned:
+            lane_ = radio.lane(lane_id)
+            if lane_ is None:
+                continue
+            b = blank(unique_name_in(lane_["name"], items + made), RADIO)
+            b["settings"], b["filters"], b["lane"] = dict(made[0]["settings"]), list(made[0]["filters"]), lane_["name"]
+            made.append(b)
+        if pinned:
+            radio.set_row(buttons=[])
+    except Exception as e:
+        engine.debug(f"Radio: lane buttons not carried over ({e})")
+    items = items + made
+    save(items)
+    engine.print(t("Note: Radio is a playlist now, at the end of the row: drag it, delete it, or set it up under "
+                   "Settings > Playlist Settings like the others."))
+    return items
+
+
 def load():
     """Every button, in the order shown. The first call ever makes them from today's settings."""
     items = _stored()
     if items is None:
         upgrade()
         items = _stored() or []
-    return settle(_adopt_env_shortcuts(_adopt_130(_rename_shipped(items))))
+    return settle(_adopt_131(_adopt_env_shortcuts(_adopt_130(_rename_shipped(items)))))
 
 
 # --- nesting: a playlist under another, one level deep ---------------------------------------------
@@ -455,8 +539,8 @@ def nest(child_id, parent_id):
     items = load()
     by_id = {b["id"]: b for b in items}
     child, parent = by_id.get(child_id), by_id.get(parent_id)
-    if child is None or parent is None or child is parent or parent.get("parent"):
-        return False
+    if child is None or parent is None or child is parent or parent.get("parent") or is_radio(parent):
+        return False   # Radio's arrow lists its lanes, so it takes no children
     if any(b.get("parent") == child_id for b in items):
         return False
     items.remove(child)   # after the parent's last child, whatever its place in the list was
@@ -581,6 +665,11 @@ def buttons_only():
     return [b for b in load() if not b.get("device")]
 
 
+def for_voice():
+    """The playlists a device's phrase can copy: every button but Radio, which has no seed to take a phrase's."""
+    return [b for b in buttons_only() if not is_radio(b)]
+
+
 def of_device(device_id):
     """A device's own playlists (the Device Playlists box), in order."""
     return [b for b in load() if b.get("device") == str(device_id)]
@@ -602,13 +691,14 @@ def add(name, kind, from_id=None):
     elif kind is None:
         new = blank(name.strip() or t("New Playlist"), None)
     else:
-        new = blank(name.strip() or t(KIND_LABELS[kind]), kind)
+        new = blank(name.strip() or t(label_of(kind)), kind)
         if from_id == TEMPLATE:
             new["settings"] = template_settings(kind)
         else:
             source = next((b for b in items if b["id"] == from_id and b["kind"] == kind), None) or standard(kind)
             if source:
                 new["settings"], new["filters"] = dict(source["settings"]), list(source["filters"])
+                new["lane"] = source.get("lane") or ""
                 new["configs"] = [{"kind": c["kind"], "settings": dict(c["settings"]), "filters": list(c.get("filters") or [])}
                                   for c in source.get("configs") or []]
                 new["mix"] = tidy_mix(source.get("mix"), len(new["configs"]) + 1)
@@ -618,12 +708,29 @@ def add(name, kind, from_id=None):
 
 def template_settings(kind):
     """A kind's settings as 24bit7 ships them: every key at its default."""
+    if kind == RADIO:
+        return {}   # every Radio setting at the engine's default
     return settings_from(lambda key, default=None: default, kind)
+
+
+def radio_settings(base=None):
+    """
+    A new Radio playlist's settings: the standard Similar Artists playlist's Radio keys (what Radio read
+    before it was a playlist, so day one sounds the same), with Moderator and Deep Cuts off to start.
+    """
+    base = standard("artists") if base is None else base
+    settings = {k: v for k, v in ((base or {}).get("settings") or {}).items() if k in RADIO_KEYS}
+    settings.update({"AI_MODERATOR_ARTISTS": "off", "DEEP_CUTS_ARTISTS": "off"})
+    return settings
 
 
 def unique_name(base):
     """base, or "base 2", "base 3"... the first not already a playlist's name."""
-    names = {b["name"] for b in load()}
+    return unique_name_in(base, load())
+
+
+def unique_name_in(base, items):
+    names = {b["name"] for b in items}
     if base not in names:
         return base
     n = 2
@@ -723,7 +830,16 @@ def set_settings(button_id, settings):
     items = load()
     for b in items:
         if b["id"] == button_id:
-            b["settings"] = {str(k): str(v) for k, v in settings.items() if k in KIND_KEYS[b["kind"]]}
+            b["settings"] = {str(k): str(v) for k, v in settings.items() if k in keys_of(b["kind"])}
+    save(items)
+
+
+def set_lane(button_id, lane_id):
+    """The lane a Radio playlist plays, by name so a Re-analyse keeps it (an id works too), or "" for the last lane played."""
+    items = load()
+    for b in items:
+        if b["id"] == button_id and is_radio(b):
+            b["lane"] = str(lane_id or "")
     save(items)
 
 
@@ -774,6 +890,8 @@ def nonstop_own(button):
     button = continue_as(button)   # a mix carries on as the config its Mix says
     if button.get("kind") is None:   # a blank slate: nothing to carry on as
         return {"on": False, "using": "artists", "reseed": "last", "mode": "journey"}
+    if button.get("kind") == RADIO:   # Radio always plays on, a fresh round from the pillars (nonstop.py)
+        return {"on": True, "using": "artists", "reseed": "last", "mode": "journey"}
     merged = dict(_env_values(), **(button.get("settings") or {}))
     return engine.nonstop_settings(lambda name, default="": merged.get(name, default))[button["kind"]]
 
@@ -889,6 +1007,13 @@ def ready_made_button(key, bases):
     shipped defaults.
     """
     recipe = next(r for r in READY_MADE if r["key"] == key)
+    if recipe["kind"] == RADIO:   # Radio: the standard Similar Artists playlist's settings and filters
+        b = blank(t(recipe["name"]), RADIO)
+        b["made"] = key
+        base = bases.get("artists")
+        b["settings"] = radio_settings(base or {})
+        b["filters"] = list(base["filters"]) if base else []
+        return b
 
     def start(kind):
         base = bases.get(kind)
@@ -937,6 +1062,9 @@ def arrange_shipped(items):
             child["filters"] = list(top["filters"])
             items.insert(at, child)
             at += 1
+    if not any(is_radio(b) for b in items):   # Radio, after AI Playlist (Ben, 6 Nov 2026)
+        at = next((k + 1 for k, b in enumerate(items) if b.get("standard") == "vibe"), len(items))
+        items.insert(at, ready_made_button("radio", by_std))
     if "tracks" in by_std:
         by_std["tracks"]["name"] = t(SHIPPED_TRACKS_NAME)
     for kind, title in SHIPPED_TITLES.items():
@@ -1077,6 +1205,7 @@ def upgrade():
                            name=shown_name, names=", ".join(x["name"] for x in made)))
     save(arrange_shipped(items))   # last, so the devices above were compared with the settings the user had
     devices.save(device_data)
+    _set_meta(RADIO_ADOPTED_KEY, "1")   # a fresh install has Radio as shipped: no 1.31.0 step to come
 
 
 # --- running one ------------------------------------------------------------------------------
@@ -1093,6 +1222,8 @@ def run(button, report=print, seed_info=None, build=None, extra_filters=(), **op
     each in turn and weaves them as its Mix says (_run_mix); a top-up or a `build` of its own
     runs as the first config alone.
     """
+    if is_radio(button):
+        return run_radio(button, report=report, lane_id=options.get("lane"))
     cfgs = configs(button)
     if not cfgs:   # a blank slate: nothing to build until its page adds a config
         report(t(NO_CONFIG_YET, name=button["name"]))
@@ -1109,6 +1240,63 @@ def run(button, report=print, seed_info=None, build=None, extra_filters=(), **op
         return _run_one(button, button["kind"], button.get("settings") or {}, button.get("filters") or [], report,
                         seed_info, build, extra_filters, options)
     return _run_mix(button, cfgs, report, seed_info, extra_filters, options)
+
+
+def radio_lane_for(button, lane_id=None):
+    """
+    The lane a Radio playlist plays: a lane picked from its arrow this once (by id), else the playlist's
+    own lane (by name), else the last lane played (the biggest, the first time). (lane, problem line or None).
+    """
+    import radio
+    if lane_id:
+        found = radio.lane(lane_id)
+        return found, None if found else t("Problem: that Radio lane has gone. Re-analyse under Radio's arrow to "
+                                            "make the lanes again.")
+    if button.get("lane"):
+        found = radio.lane_named(button["lane"])
+        if found is None:
+            return None, t("Problem: {name} plays the lane {lane}, which isn't there since the lanes were made again. "
+                           "Pick another under Lane on its page (Settings > Playlist Settings).",
+                           name=button["name"], lane=button["lane"])
+        return found, None
+    return radio.default_lane(), None
+
+
+def run_radio(button, report=print, lane_id=None):
+    """
+    Radio as a playlist (6 Nov 2026): its settings laid over .env, with Simple's layer and the More Options
+    switches as for Artist Matching (whose keys they are), under its filters, then a round of its lane. The
+    first press ever makes the lanes. A lane played from the arrow, or by a playlist that follows the last
+    lane, becomes the last lane played. Non-stop's next round comes back here with the lane it was playing.
+    """
+    import mode
+    import overrides
+    import radio
+    if overrides.active() and not engine.NONSTOP_APPEND:
+        report(t("More Options: {switches}, over this playlist's own settings.", switches=overrides.summary()))
+    previous = dict(engine.PROFILE)
+    before = engine.BUILD_BUTTON
+    settings = dict(button.get("settings") or {})
+    settings.update(mode.layer(RADIO_GROUP))
+    settings.update(overrides.layer(button, RADIO_GROUP, settings))
+    engine.use_profile(dict(settings, **previous))
+    engine.FILTER_IDS = [str(i) for i in button.get("filters") or []]
+    engine.BUILD_BUTTON = button["id"]
+    try:
+        if radio.analysis() is None:   # the first press ever: the lanes first
+            if radio.analyse(report).get("resting"):
+                return None
+        lane_, problem = radio_lane_for(button, lane_id)
+        if lane_ is None:
+            report(problem or t("Radio: no lanes yet. Re-analyse under Radio's arrow."))
+            return None
+        if not engine.NONSTOP_APPEND and (lane_id or not button.get("lane")):
+            radio.set_row(default=lane_["id"])
+        return radio.build(lane_["id"], report=report)
+    finally:
+        engine.FILTER_IDS = None
+        engine.BUILD_BUTTON = before
+        engine.use_profile(previous or None)
 
 
 def _run_one(button, kind, settings, filters, report, seed_info, build, extra_filters, options):
@@ -1211,6 +1399,16 @@ def _run_mix(button, cfgs, report, seed_info, extra_filters, options):
 
 def describe(button):
     """A short line for a hover note: the kind (or kinds, joined with +), then what's on."""
+    if is_radio(button):
+        s = button.get("settings") or {}
+        bits = [t(RADIO_LABEL) + (": " + button["lane"] if button.get("lane") else "")]
+        if s.get("AI_MODERATOR_ARTISTS", "off") not in ("off", "", "0"):
+            bits.append(t("Moderator"))
+        if s.get("DEEP_CUTS_ARTISTS", "off") not in ("off", ""):
+            bits.append("Deep Cuts")
+        if button.get("filters"):
+            bits.append(t("Filters"))
+        return ", ".join(bits)
     cfgs = configs(button)
     if not cfgs:
         return t("No config yet")

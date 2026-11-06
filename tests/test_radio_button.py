@@ -1,8 +1,9 @@
 """
-Radio's button (Ben, 6 Nov 2026, from the mock-up): after the playlists on the row, lit on every seed tab. The
-first press makes the lanes and plays the biggest; after that it plays the last lane played. The arrow lists
-the lanes with their share of the plays, Re-analyse at the foot. Right-click a lane to Split or Join Back, and
-Add as a Button. It rests, greyed with a note, until enough has been played.
+Radio on the row (Ben, 6 Nov 2026): a playlist of its own kind, so it sits where it's dragged, deletes and comes
+back like the others. It stays lit on every seed tab, since it needs no seed. The first press makes the lanes and
+plays the biggest; after that a Radio set to Last Played plays the last lane played. Its arrow lists the lanes
+with their share of the plays, Re-analyse at the foot. Right-click a lane to Split or Join Back, or Add as a
+Button: a Radio playlist of that lane, after this one. It rests, greyed with a note, until enough has been played.
 """
 
 import pytest
@@ -21,14 +22,25 @@ def lowered(app, monkeypatch):
     return radio
 
 
-def test_radio_sits_after_the_playlists_and_stays_lit_on_jriver_playlists(app, ui):
+def with_radio(ui):
+    """The fake world starts without Radio (conftest): add it from its template, as a user would."""
+    import buttons
+    made, _page = buttons.add_from_choice(("template", "radio"))
+    ui.play.refresh_buttons()
+    ui.pump(0.2)
+    fb = next(b for b in ui.play.play_buttons if b._button["id"] == made["id"])
+    return made, fb
+
+
+def test_radio_is_a_row_button_and_stays_lit_on_jriver_playlists(app, ui):
     p = ui.play
-    order = p.play_buttons + p._radio_row() + [p.more_button]
-    xs = [b.winfo_x() + 10000 * b.winfo_y() for b in order]
-    assert xs == sorted(xs), "the playlists, then Radio, then More Options"
+    made, fb = with_radio(ui)
+    assert fb is p.play_buttons[-1], "a new playlist goes at the end of the row"
+    assert fb._kind == "radio" and fb._arrow, "its arrow lists the lanes"
     p.seed_nb.select(p.playlists_tab)
     ui.pump(0.3)
-    assert p.radio_button._state == "normal", "no seed, so nothing to rest for"
+    assert fb._state == "normal", "no seed, so nothing to rest for"
+    assert all(b._state == "disabled" for b in p.play_buttons if b is not fb), "the others need a seed"
     assert not ui.errors, ui.errors[0]
 
 
@@ -37,7 +49,8 @@ def test_first_press_analyses_then_plays_the_last_lane_after(app, ui, lowered):
     play_counts(app, EVERYONE)
     p = ui.play
     p._end_greeting(keep=False)
-    p.radio_button._command()
+    made, fb = with_radio(ui)
+    fb._command()
     ui.wait_idle()
     text = console(ui)
     assert "Radio: analysing what you play." in text and "Pillars this round:" in text, text
@@ -45,10 +58,10 @@ def test_first_press_analyses_then_plays_the_last_lane_after(app, ui, lowered):
     assert radio.row()["default"] == first["id"], "the biggest, the first time"
     assert app.jriver.zone("Speakers").playlist
     second = radio.lanes(include_children=True)[1]   # another lane, or a Split half of the first
-    p.on_radio(second["id"])
+    p.on_radio(made, second["id"])
     ui.wait_idle()
-    assert radio.row()["default"] == second["id"], "the face follows the last lane played"
-    p._open_radio()
+    assert radio.row()["default"] == second["id"], "Last Played follows the lane picked from the arrow"
+    p._open_radio(made)
     ui.pump(0.2)
     pop = p._children_popup
     if second["id"] not in [i for i, _ in pop._rows]:   # a half shows once its lane is split open
@@ -63,14 +76,16 @@ def test_first_press_analyses_then_plays_the_last_lane_after(app, ui, lowered):
 
 
 def test_split_join_back_and_add_as_a_button(app, ui, lowered):
+    import buttons
     radio = lowered
     play_counts(app, EVERYONE)
     radio.analyse(app.Lines())
     p = ui.play
+    made, fb = with_radio(ui)
     splittable = next((x for x in radio.lanes() if x.get("children")), None)
     if splittable is None:
         pytest.skip("the fake world made no lane with halves")
-    p._open_radio()
+    p._open_radio(made)
     ui.pump(0.1)
     p._radio_fold(splittable["id"], True)
     ui.pump(0.2)
@@ -81,17 +96,29 @@ def test_split_join_back_and_add_as_a_button(app, ui, lowered):
     assert splittable["children"][0]["id"] not in [i for i, _ in p._children_popup._rows]
     p._close_children()
     half = splittable["children"][0]
-    p._radio_pin(half["id"], True)
+    p._radio_add_button(made, half["id"])
     ui.pump(0.2)
-    assert [b._lane for b in p.radio_lane_buttons] == [half["id"]]
-    b = p.radio_lane_buttons[0]
-    assert b.cget("text") == half["name"] and b.winfo_x() > p.radio_button.winfo_x() or b.winfo_y() > p.radio_button.winfo_y()
-    b._command()
+    lane_button = p.play_buttons[p.play_buttons.index(next(b for b in p.play_buttons
+                                                           if b._button["id"] == made["id"])) + 1]
+    assert lane_button._kind == "radio" and lane_button.cget("text") == half["name"], "right after this one"
+    assert buttons.get(lane_button._button["id"])["lane"] == half["name"]
+    lane_button._command()
     ui.wait_idle()
     assert f"Radio: {half['name']}." in console(ui)
-    p._radio_pin(half["id"], False)
-    ui.pump(0.2)
-    assert not p.radio_lane_buttons
+    assert not ui.errors, ui.errors[0]
+
+
+def test_nothing_nests_under_radio(app, ui):
+    import buttons
+    p = ui.play
+    made, fb = with_radio(ui)
+    other = p.play_buttons[0]
+    ui.pump(0.1)
+    x, y = fb.winfo_rootx() + 10, fb.winfo_rooty() + 10
+    p._watch_nest(other._button, other, x, y)
+    ui.pump(0.1)
+    assert getattr(p, "_nest_watch", None) is None, "Radio is never a nest target"
+    assert buttons.children(made["id"]) == []
     assert not ui.errors, ui.errors[0]
 
 
@@ -99,9 +126,11 @@ def test_radio_rests_greyed_with_a_note(app, ui, lowered):
     radio = lowered
     play_counts(app, {"The Beatles": 3})
     p = ui.play
-    p.on_radio()
+    made, fb = with_radio(ui)
+    p.on_radio(made)
     ui.wait_idle()
     assert "Radio is resting" in console(ui)
-    assert p.radio_button._state == "disabled"
-    assert "there are 1 so far" in p._radio_note.text or "there are 1" in p._radio_note.text, p._radio_note.text
+    fb = next(b for b in p.play_buttons if b._button["id"] == made["id"])
+    assert fb._state == "disabled"
+    assert "there are 1" in fb._radio_note.text, fb._radio_note.text
     assert not ui.errors, ui.errors[0]

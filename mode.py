@@ -84,12 +84,15 @@ def uses_advanced(button, counting_shipped=True):
     if button.get("shortcut"):
         out.append("Shortcut")
     env = buttons._env_values()
+    if buttons.is_radio(button):   # Radio: its Moderator and Deep Cuts, Artist Matching's keys
+        cfgs = [{"kind": buttons.RADIO_GROUP, "settings": button.get("settings") or {}}]
     for cfg in cfgs:
         merged = dict(env, **cfg["settings"])
         g = cfg["kind"].upper()
         for section, tmpl, _off in _OFF:
             key = tmpl.format(G=g)
-            if key in buttons.KIND_KEYS[cfg["kind"]] and section not in out and _is_on(key, merged.get(key)):
+            keys = buttons.RADIO_KEYS if buttons.is_radio(button) else buttons.KIND_KEYS[cfg["kind"]]
+            if key in keys and section not in out and _is_on(key, merged.get(key)):
                 if counting_shipped or section not in _SHIPS_ON:
                     out.append(section)
     return out

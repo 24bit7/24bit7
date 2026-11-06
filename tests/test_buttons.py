@@ -181,7 +181,7 @@ def test_the_ready_made_templates_make_headliner_and_inner_circle_from_the_stand
     app.set_env(SIMILAR_ARTIST_LIMIT="7", TOP_TRACKS_COUNT="12")
     buttons, _, _ = mods()
     buttons.load()
-    assert [r["key"] for r in buttons.READY_MADE] == ["headliner", "inner_circle", "top10_first", "top10_last"]
+    assert [r["key"] for r in buttons.READY_MADE] == ["headliner", "inner_circle", "top10_first", "top10_last", "radio"]
     head = buttons.add(buttons.unique_name("Artist + Guests"), "artists", "template:headliner")
     assert head["name"] == "Artist + Guests 2" and head["kind"] == "top", "the recipe's kind wins over the one passed"
     assert [c["kind"] for c in buttons.configs(head)] == ["top", "artists"] and head["settings"]["TOP_TRACKS_COUNT"] == "12"
@@ -202,10 +202,10 @@ def test_restore_default_buttons_puts_back_only_what_is_missing(app):
     kept = [b for b in items if b["standard"] != "artists"]
     buttons.save(kept)
     back = buttons.restore_standard()
-    assert [b["standard"] or b["made"] for b in back] == ["artists", "top10_first", "top10_last"]
+    assert [b["standard"] or b["made"] for b in back] == ["artists", "top10_first", "top10_last", "radio"]
     names = [b["name"] for b in buttons.load()]
     assert names == ["Similar Tracks", "Artist's Top Tracks", "Top 10, Best First", "Top 10, Best Last", "Artist + Guests",
-                     "Consensus", "AI Playlist", "Similar Artists"]
+                     "Consensus", "AI Playlist", "Similar Artists", "Radio"]
     assert buttons.restore_standard() == []
 
 
