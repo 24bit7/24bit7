@@ -54,6 +54,7 @@ CIRCLE_MAX = 6
 AGREE = 2
 PILLAR_SONGS = 5
 ANALYSIS_KEY = "radio_analysis"
+ROW_KEY = "radio_row"   # the face's lane (the last played), the lanes split open, the lanes added as buttons
 TAGS_KEY = "radio_tags"
 NOT_GENRE = re.compile(
     r"^(seen live|favou?rites?|love|loved|awesome|beautiful|male vocalists?|female vocalists?|\d{2,4}s?|"
@@ -100,6 +101,54 @@ def lanes(include_children=False):
 
 def lane(lane_id):
     return next((x for x in lanes(include_children=True) if x["id"] == lane_id), None)
+
+
+def row():
+    """{"default": lane id, "open": [lane ids split open], "buttons": [lane ids on the row]}."""
+    saved = _meta(ROW_KEY, {})
+    return {"default": saved.get("default"), "open": list(saved.get("open") or []),
+            "buttons": list(saved.get("buttons") or [])}
+
+
+def set_row(**changes):
+    saved = row()
+    saved.update(changes)
+    _set_meta(ROW_KEY, saved)
+
+
+def default_lane():
+    """The lane Radio's face plays: the last played, or the biggest the first time (or once that lane's gone)."""
+    wanted = row()["default"]
+    if wanted and lane(wanted):
+        return lane(wanted)
+    found = lanes()
+    return found[0] if found else None
+
+
+def resting():
+    """Why Radio rests ({"have", "need"}), or None."""
+    result = analysis()
+    return (result or {}).get("resting")
+
+
+def share(lane_):
+    """The lane's share of the plays across every lane, as a whole percentage."""
+    total = sum(x["plays"] for x in lanes()) or 1
+    return round(100 * lane_["plays"] / total)
+
+
+def visible_rows():
+    """The lane list as shown: (lane, depth), a split lane's halves under it while it's open."""
+    opened = set(row()["open"])
+    out = []
+
+    def walk(items, depth):
+        for x in items:
+            out.append((x, depth))
+            if x["id"] in opened and x.get("children"):
+                walk(x["children"], depth + 1)
+    walk((analysis() or {}).get("lanes") or [], 0)
+    return out
 
 
 # --- the library ------------------------------------------------------------------------------------

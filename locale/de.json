@@ -1583,5 +1583,15 @@
   "{name}: {artists} artists; pillars {pillars}.": "{name}: {artists} Künstler; Säulen {pillars}.",
   "Radio: {artist} joins {lane} as a pillar.": "Radio: {artist} kommt als Säule zu {lane}.",
   "{done} of {count}...": "{done} von {count}...",
-  "Short of {minutes} minutes: {artist} joins ({count} of {most} pillars).": "Noch keine {minutes} Minuten: {artist} kommt dazu ({count} von {most} Säulen)."
+  "Short of {minutes} minutes: {artist} joins ({count} of {most} pillars).": "Noch keine {minutes} Minuten: {artist} kommt dazu ({count} von {most} Säulen).",
+  "Plays a lane of what you listen to, with no seed: your lanes come from your plays and the sources' genres. Click Radio for the last lane you played; the arrow lists them all. Right-click a lane to split it or add it as a button.": "Spielt eine Spur aus dem, was du hörst, ohne Seed: Deine Spuren kommen aus deinen Wiedergaben und den Genres der Quellen. Klick auf Radio für die zuletzt gespielte Spur; der Pfeil listet alle auf. Rechtsklick auf eine Spur teilt sie oder macht sie zu einer Schaltfläche.",
+  "Radio: {lane}. Right-click to remove the button.": "Radio: {lane}. Rechtsklick entfernt die Schaltfläche.",
+  "Re-analyse": "Neu auswerten",
+  "Analyse Now": "Jetzt auswerten",
+  "last: {when}": "zuletzt: {when}",
+  "Remove Button": "Schaltfläche entfernen",
+  "Add as a Button": "Als Schaltfläche hinzufügen",
+  "Split": "Teilen",
+  "No lanes yet: press Radio to make them from what you play.": "Noch keine Spuren: Klick auf Radio, um sie aus dem zu machen, was du hörst.",
+  "Join Back": "Wieder zusammenführen"
 }
