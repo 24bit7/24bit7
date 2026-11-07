@@ -142,7 +142,7 @@ def test_a_lane_thats_gone_says_so(app, radio):
     buttons.set_lane(b["id"], "Polka / Oompah")
     r = app.Lines()
     buttons.run(buttons.get(b["id"]), report=r)
-    assert r.has("Radio plays the lane Polka / Oompah, which isn't there since the lanes were made again"), r.text()
+    assert r.has("Radio plays the station Polka / Oompah, which isn't there since the stations were made again"), r.text()
     assert not app.jriver.zone("Speakers").playlist
 
 

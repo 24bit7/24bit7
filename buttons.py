@@ -482,13 +482,38 @@ def _adopt_131(items):
     return items
 
 
+RADIO_SHARED_KEY = "radio_shared"   # meta: Radio playlists have been given one set of settings
+
+
+def _share_radio_once(items):
+    """
+    7 Nov 2026: Radio's settings and filters are one set for every Radio playlist. Once: if they differ,
+    every Radio takes the first one's (the leftmost on the row), said in the console.
+    """
+    if _get_meta(RADIO_SHARED_KEY):
+        return items
+    _set_meta(RADIO_SHARED_KEY, "1")
+    radios = [b for b in items if is_radio(b)]
+    if len(radios) < 2:
+        return items
+    first = radios[0]
+    if all((b.get("settings") or {}) == (first.get("settings") or {}) and
+           list(b.get("filters") or []) == list(first.get("filters") or []) for b in radios[1:]):
+        return items
+    _share_radio(items, first)
+    save(items)
+    engine.print(t("Note: Radio's settings are shared by every Radio button now. They all have {name}'s.",
+                   name=first["name"]))
+    return items
+
+
 def load():
     """Every button, in the order shown. The first call ever makes them from today's settings."""
     items = _stored()
     if items is None:
         upgrade()
         items = _stored() or []
-    return settle(_adopt_131(_adopt_env_shortcuts(_adopt_130(_rename_shipped(items)))))
+    return settle(_share_radio_once(_adopt_131(_adopt_env_shortcuts(_adopt_130(_rename_shipped(items))))))
 
 
 # --- nesting: a playlist under another, one level deep ---------------------------------------------
@@ -702,6 +727,10 @@ def add(name, kind, from_id=None):
                 new["configs"] = [{"kind": c["kind"], "settings": dict(c["settings"]), "filters": list(c.get("filters") or [])}
                                   for c in source.get("configs") or []]
                 new["mix"] = tidy_mix(source.get("mix"), len(new["configs"]) + 1)
+    if is_radio(new):   # a new Radio, from the template too, joins the shared settings of the Radio there is
+        there = next((b for b in items if is_radio(b)), None)
+        if there is not None:
+            new["settings"], new["filters"] = dict(there.get("settings") or {}), list(there.get("filters") or [])
     save(items + [new])
     return new
 
@@ -828,10 +857,18 @@ def duplicate(button_id):
 def set_settings(button_id, settings):
     """Settings > Buttons saved a button's page: only its kind's keys are kept."""
     items = load()
+    target = next((b for b in items if b["id"] == button_id), None)
     for b in items:
-        if b["id"] == button_id:
+        if b["id"] == button_id or (is_radio(target) and is_radio(b)):   # Radio's settings are shared (7 Nov 2026)
             b["settings"] = {str(k): str(v) for k, v in settings.items() if k in keys_of(b["kind"])}
     save(items)
+
+
+def _share_radio(items, source):
+    """Every Radio playlist takes source's settings and filters: they're one set for all of Radio (Ben, 7 Nov 2026)."""
+    for b in items:
+        if is_radio(b) and b is not source:
+            b["settings"], b["filters"] = dict(source.get("settings") or {}), list(source.get("filters") or [])
 
 
 def set_lane(button_id, lane_id):
@@ -846,7 +883,10 @@ def set_lane(button_id, lane_id):
 def set_filters(button_id, ids, index=0):
     """The filters ticked on one of a playlist's configs (index 0 is its own), in the order shown."""
     items = load()
+    target = next((b for b in items if b["id"] == button_id), None)
     for b in items:
+        if index == 0 and b["id"] != button_id and is_radio(target) and is_radio(b):   # shared, as its settings are
+            b["filters"] = [str(i) for i in ids]
         if b["id"] == button_id:
             if index == 0:
                 b["filters"] = [str(i) for i in ids]
@@ -1250,14 +1290,14 @@ def radio_lane_for(button, lane_id=None):
     import radio
     if lane_id:
         found = radio.lane(lane_id)
-        return found, None if found else t("Problem: that Radio lane has gone. Re-analyse under Radio's arrow to "
-                                            "make the lanes again.")
+        return found, None if found else t("Problem: that Radio station has gone. Re-analyse under Radio's arrow "
+                                            "or on its page to make the stations again.")
     if button.get("lane"):
         found = radio.lane_named(button["lane"])
         if found is None:
-            return None, t("Problem: {name} plays the lane {lane}, which isn't there since the lanes were made again. "
-                           "Pick another under Lane on its page (Settings > Playlist Settings).",
-                           name=button["name"], lane=button["lane"])
+            return None, t("Problem: {name} plays the station {station}, which isn't there since the stations were made "
+                           "again. Pick another under Station on its page (Settings > Playlist Settings).",
+                           name=button["name"], station=button["lane"])
         return found, None
     return radio.default_lane(), None
 
@@ -1288,7 +1328,7 @@ def run_radio(button, report=print, lane_id=None):
                 return None
         lane_, problem = radio_lane_for(button, lane_id)
         if lane_ is None:
-            report(problem or t("Radio: no lanes yet. Re-analyse under Radio's arrow."))
+            report(problem or t("Radio: no stations yet. Re-analyse under Radio's arrow or on its page."))
             return None
         if not engine.NONSTOP_APPEND and (lane_id or not button.get("lane")):
             radio.set_row(default=lane_["id"])

@@ -97,3 +97,31 @@ def test_the_arrows_remember_their_choice(app, ui):
     ui.pump(0.1)
     assert embellish.choices()["amount"] == "out"
     assert not ui.errors, ui.errors[0]
+
+
+def lined_up_pair(p):
+    """The row's last two playlists on its first line that end clear of Output (as _line_up_lists picks)."""
+    first = [b for b in p.play_buttons if b.winfo_y() == p.play_buttons[0].winfo_y()]
+    limit = p.output_box.winfo_rootx() - 24
+    pairs = [(first[i], first[i + 1]) for i in range(len(first) - 2, -1, -1)]
+    return next(pair for pair in pairs if pair[1].winfo_rootx() + pair[1].winfo_width() <= limit)
+
+
+def test_play_and_embellish_line_up_with_the_last_two_playlists(app, ui):
+    """Ben, 7 Nov 2026: the two buttons sit over the row's last two playlists clear of Output, as wide, the box
+    meeting them."""
+    p = lists_tab(ui)
+    root = p.winfo_toplevel()
+    for width in (1180, 1600):
+        root.geometry(f"{width}x{root.winfo_height()}")
+        ui.pump(0.6)
+        under_play, under_emb = lined_up_pair(p)
+        for top, under in ((p.play_list_button, under_play), (p.embellish_button, under_emb)):
+            assert abs(top.winfo_rootx() - under.winfo_rootx()) <= 1, (width, top.cget("text"), top.winfo_rootx(),
+                                                                       under.winfo_rootx())
+            assert abs(top.winfo_width() - under.winfo_width()) <= 1, (width, top.cget("text"))
+        box_right = p.playlist_entry.winfo_rootx() + p.playlist_entry.winfo_width()
+        assert abs(box_right + 24 - p.play_list_button.winfo_rootx()) <= 1, "the box stretches to meet Play"
+        assert p.embellish_button.winfo_rootx() + p.embellish_button.winfo_width() <= p.output_box.winfo_rootx(), \
+            "Output stays clear"
+    assert not ui.errors, ui.errors[0]

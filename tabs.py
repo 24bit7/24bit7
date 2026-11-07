@@ -862,6 +862,13 @@ class FlatButton(tk.Frame):
 
     configure = config
 
+    def set_pixel_width(self, width):
+        """Draws the button this many pixels wide, as another button it lines up with (the JRiver Playlists tab)."""
+        width = max(int(width), self._arrow_w + self._px(40))
+        if width != self._size[0]:
+            self._size = (width, self._size[1])
+            self._draw()
+
     def cget(self, key):
         if key == "state":
             return self._state
@@ -1327,11 +1334,12 @@ class RoundedEntry(tk.Frame):
         h = max(px(24), line + px(10))
         inset = px(10)   # text starts this far in from the left edge
         w = f.measure("0") * width + 2 * inset
+        self._box_w, self._h, self._inset, self._line, self._px1 = w, h, inset, line, px(1)
         fill = PALETTE.get("field_bg") or "#ffffff"
         fg = PALETTE.get("field_fg") or PALETTE.get("text") or "#000000"
         edge = PALETTE.get("field_edge") or PALETTE["button_outline"]
         self._edges = (edge, PALETTE["button_fg"])
-        self._shape = lambda colour: rounded_shape(self, w, h, px(CORNER), fill, colour, px(1))   # as the buttons
+        self._shape = lambda colour: rounded_shape(self, self._box_w, h, px(CORNER), fill, colour, px(1))   # as the buttons
         self._back = tk.Label(self, image=self._shape(edge), bd=0, highlightthickness=0, bg=back)
         self._back.pack()
         options = {"textvariable": textvariable} if textvariable is not None else {}
@@ -1386,6 +1394,24 @@ class RoundedEntry(tk.Frame):
 
     def focus_set(self):
         self.entry.focus_set()
+
+    def set_pixel_width(self, width):
+        """Draws the box this many pixels wide (the JRiver Playlists tab stretches it to the buttons beside it)."""
+        width = max(int(width), 4 * self._inset)
+        if width == self._box_w:
+            return
+        self._box_w = width
+        try:
+            focused = self.focus_get() is self.entry
+        except (tk.TclError, KeyError):
+            focused = False
+        self._back.config(image=self._shape(self._edges[1 if focused else 0]))
+        place = dict(x=self._inset, y=(self._h - self._line) // 2 - self._px1, width=width - 2 * self._inset,
+                     height=self._line + 2 * self._px1)
+        self.entry.place(**place)
+        if self._hint is not None:
+            self._hint_at = place
+            self._sync_hint()
 
 
 # --- a small prompt for a name, in the app's own style ---------------------------------

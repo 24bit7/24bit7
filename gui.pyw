@@ -112,9 +112,9 @@ PLAY_NOTES = {
     "Play": N_("Plays the playlist as it is. The arrow chooses Play Shuffled or Play Ordered."),
     "Play & Embellish": N_("Plays the playlist with new tracks woven in: the top tracks you own by artists that the "
                            "playlist's own artists agree on. The arrow chooses how many."),
-    "Radio": N_("Plays a lane of what you listen to, with no seed: your lanes come from your plays and the "
-                "sources' genres. Click Radio for the last lane you played; the arrow lists them all. Right-click a "
-                "lane to split it or add it as a button."),
+    "Radio": N_("Plays a station of what you listen to, with no seed: your stations come from your plays and "
+                "the sources' genres. Click Radio for the last station you played; the arrow lists them all. "
+                "Right-click a station to split it or add it as a button."),
     "Save Playlist": N_("Saves what's in Playing Now in the zone the last playlist went to as a JRiver playlist, so "
                         "a chain of Top-Ups or an embellished playlist can be kept."),
 }
@@ -122,6 +122,7 @@ PLAYLISTS_SHOWN = 15   # rows of the All Playlists part of the list before "type
 MONTHS = (N_("Jan"), N_("Feb"), N_("Mar"), N_("Apr"), N_("May"), N_("Jun"), N_("Jul"), N_("Aug"), N_("Sep"),
           N_("Oct"), N_("Nov"), N_("Dec"))
 BUTTON_GAP = 8   # between the Play tab's buttons, and between its rows of them
+LIST_BOX_GAP = 24   # JRiver Playlists: between the Playlist box and Play
 
 
 class DropPill(tk.Canvas):
@@ -165,6 +166,8 @@ class PlayTab(tk.Frame):
         self.root = root
         self.settings = None   # the Settings tab, once built
         root.bind("<<ButtonsChanged>>", lambda e: self.refresh_buttons(), add="+")   # from Settings > Buttons
+        root.bind("<<RadioAnalyse>>", lambda e: self.on_radio_analyse(True), add="+")    # Radio's page: Re-analyse
+        root.bind("<<RadioRecount>>", lambda e: self.on_radio_analyse(False), add="+")   # Radio's page: a new count
         self.log_queue = queue.Queue()
         engine.OUTPUT_HOOK = self.log_queue.put   # engine's print() and [debug] lines land here
         self.running = False
@@ -283,7 +286,8 @@ class PlayTab(tk.Frame):
                  font=("Segoe UI", 8), fg=PALETTE["text_muted"]).grid(row=1, column=0, columnspan=4, sticky="w", pady=(6, 0))
         for entry in (self.search_artist, self.search_track):
             entry.bind("<Return>", lambda e: self.on_similar())
-        self.seed_nb.bind("<<NotebookTabChanged>>", lambda e: (self._sync_seed_buttons(), self._place_output()))
+        self.seed_nb.bind("<<NotebookTabChanged>>", lambda e: (self._sync_seed_buttons(), self._place_output(),
+                                                              self.after_idle(self._line_up_lists)))
         for widget in (fields, self.search_tab, self.playlists_tab):   # the panel settles its height after the switch
             widget.bind("<Configure>", lambda e: self._seed_has_row() and self.after_idle(self._place_output), add="+")
 
@@ -298,7 +302,7 @@ class PlayTab(tk.Frame):
         label = tk.Label(row, text=t("Playlist"), font=("Segoe UI", 10))
         label.pack(side="left")
         self.playlist_entry = RoundedEntry(row, width=30, font=("Segoe UI", 9))
-        self.playlist_entry.pack(side="left", padx=(4, 24))
+        self.playlist_entry.pack(side="left", padx=(4, LIST_BOX_GAP))
         self._playlist_chosen = None
         self._playlists_pop = None
         self._playlists_found = None
@@ -322,6 +326,38 @@ class PlayTab(tk.Frame):
                              (self.embellish_button, "Play & Embellish")):
             Tooltip(widget, t(PLAY_NOTES[name]), when=on, wrap=wrap)
         self.extra_list_buttons = [self.play_list_button, self.embellish_button]
+        self._list_widths = (self.playlist_entry._box_w, self.play_list_button._size[0], self.embellish_button._size[0])
+        tab.bind("<Map>", lambda e: e.widget is tab and self.after_idle(self._line_up_lists), add="+")
+
+    def _line_up_lists(self):
+        """
+        Play and Play & Embellish over the row's last two playlist buttons, each as wide as the one under it,
+        and the Playlist box stretching to meet them (Ben, 7 Nov 2026). The last two on the row's first line,
+        should it wrap, that end clear of Output at the tab's right (else the two before them); with no such
+        pair, or no room for the box, they keep their own widths.
+        """
+        tab = getattr(self, "playlists_tab", None)
+        if tab is None or not self._seed_is_playlists() or not tab.winfo_ismapped():
+            return
+        entry, play, embellish = self.playlist_entry, self.play_list_button, self.embellish_button
+        box_w, play_w, emb_w = self._list_widths
+        row = [b for b in getattr(self, "play_buttons", []) if b.winfo_ismapped()]
+        first = [b for b in row if b.winfo_y() == row[0].winfo_y()] if row else []
+        self.update_idletasks()
+        out = getattr(self, "output_box", None)
+        limit = (out.winfo_rootx() if out is not None and out.winfo_ismapped()
+                 else tab.winfo_rootx() + tab.winfo_width()) - LIST_BOX_GAP   # Output stays clear at the right
+        pairs = [(first[i], first[i + 1]) for i in range(len(first) - 2, -1, -1)]   # the last two first
+        for under_play, under_emb in pairs:
+            if under_emb.winfo_rootx() + under_emb.winfo_width() > limit:
+                continue   # Output's there: the pair before
+            room = under_play.winfo_rootx() - entry.winfo_rootx() - LIST_BOX_GAP
+            if room >= box_w // 2:
+                box_w, play_w, emb_w = room, under_play._size[0], under_emb._size[0]
+            break
+        entry.set_pixel_width(box_w)
+        play.set_pixel_width(play_w)
+        embellish.set_pixel_width(emb_w)
 
     def _seed_is_playlists(self):
         tab = getattr(self, "playlists_tab", None)
@@ -572,11 +608,16 @@ class PlayTab(tk.Frame):
             buttons.run_radio(current, report=self.report, lane_id=lane_id)
         self._run_job(target, needs_playing=False, mix=False, review=True, top_up=top_up)
 
-    def on_radio_analyse(self):
+    def on_radio_analyse(self, fresh=True):
+        """Re-analyse (fresh), or the stations cut again at the count set on Radio's page (from the genres kept).
+        Asked while a build runs, it waits for the build to finish."""
         if self.running:
+            self._radio_pending = fresh or bool(getattr(self, "_radio_pending", None))
+            self.report(t("Radio: the stations are made again once this build finishes."))
             return
+        self._radio_pending = None
         self._close_children()
-        self._run_job(lambda: radio.analyse(self.report), needs_playing=False, mix=False)
+        self._run_job(lambda: radio.analyse(self.report, fresh=fresh), needs_playing=False, mix=False)
 
     def _open_radio(self, button):
         """The arrow: every lane with its share of your plays, the one the face plays marked; Re-analyse at the foot."""
@@ -598,7 +639,7 @@ class PlayTab(tk.Frame):
         face, _problem = buttons.radio_lane_for(button)
         opened = set(radio.row()["open"])
         if result is None:
-            tk.Label(inner, text=t("No lanes yet: press Radio to make them from what you play."), fg=muted, bg=bg,
+            tk.Label(inner, text=t("No stations yet: press Radio to make them from what you play."), fg=muted, bg=bg,
                      font=("Segoe UI", 9)).pack(anchor="w", padx=10, pady=6)
         elif result.get("resting"):
             tk.Label(inner, text=self._radio_resting_text(), fg=muted, bg=bg, font=("Segoe UI", 9), wraplength=320,
@@ -1079,6 +1120,7 @@ class PlayTab(tk.Frame):
             x += w + BUTTON_GAP
             height = y + h
         row.config(height=height + 8)
+        self.after_idle(self._line_up_lists)   # JRiver Playlists' two buttons follow the row
 
     def refresh_buttons(self):
         """After the list changed (+, right-click, Settings > Playlists): redraws the row and the dials."""
@@ -2891,6 +2933,13 @@ class PlayTab(tk.Frame):
         self._sync_ai_button()
         self._sync_seed_buttons()
         self._sync_radio()   # a Re-analyse may have woken Radio
+        try:
+            self.root.event_generate("<<RadioChanged>>")   # Radio's page shows the stations as they are now
+        except tk.TclError:
+            pass
+        pending = getattr(self, "_radio_pending", None)
+        if pending is not None:   # Re-analyse or a new count, asked for while the build ran
+            self.after(100, lambda: self.on_radio_analyse(pending))
         if (getattr(self, "_job_origin", None) is None and not getattr(self, "_job_review", False)
                 and engine.SENT_ANY and engine.LAST_OUTPUT_ID and engine.LAST_OUTPUT not in ("YouTube", "Tidal")):
             try:

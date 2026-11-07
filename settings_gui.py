@@ -1032,7 +1032,7 @@ TEMPLATE_NOTES = {   # what each template is, for the Add a Playlist window
                        "sometimes short."),
     "top10_first": N_("The artist's ten most popular tracks that you own, best first."),
     "top10_last": N_("The artist's ten most popular tracks that you own, least popular first."),
-    "radio": N_("No seed: a lane of what you play most, a round at a time from its best-known artists and the "
+    "radio": N_("No seed: a station of what you play most, a round at a time from its best-known artists and the "
                 "artists they agree on, and it never stops."),
 }
 
@@ -1297,6 +1297,17 @@ class SettingsTab(tk.Frame):
 
         self._loading = False
         self._refresh_key_marks()
+        self._radio_refresh = None   # Radio's page, while open: shows the stations as they are now
+        self.winfo_toplevel().bind("<<RadioChanged>>", lambda e: self._radio_changed(), add="+")
+
+    def _radio_changed(self):
+        """A Re-analyse or a new count finished on the Play tab: Radio's page, if it's open, shows the new stations."""
+        refresh = getattr(self, "_radio_refresh", None)
+        if refresh is not None:
+            try:
+                refresh()
+            except tk.TclError:
+                self._radio_refresh = None   # the page has gone
 
     # --- persistence -------------------------------------------------------
 
@@ -2017,13 +2028,8 @@ class SettingsTab(tk.Frame):
         tabs.use_fonts(right)   # the page's tick boxes, dropdowns and number boxes
         self._refresh_key_marks()
 
-    def _radio_page(self, inner, button, simple):
-        """
-        Radio's page (Ben, 6 Nov 2026): one box with its Lane, Sources, Playlist Selection and Filters; under it,
-        in Advanced, Moderator, Deep Cuts and Shortcut. Its settings are Artist Matching's (buttons.RADIO_KEYS).
-        There's no Drift, Mix, Consensus or If All Else Fails, and it always plays on, so no Non-stop either.
-        """
-        self._matching_configs = 0
+    def _radio_block(self, inner, title, note=None):
+        """A green-edged box with a tinted head, as a config's: Radio's page has two. Returns its body."""
         edge = PALETTE["button_fg"]
         block = tk.Frame(inner, highlightthickness=1, highlightbackground=edge, highlightcolor=edge)
         block.grid(row=inner.grid_size()[1], column=0, sticky="ew", pady=(0, 10))
@@ -2031,11 +2037,31 @@ class SettingsTab(tk.Frame):
         tint = tabs.mix_colour(inner, edge, inner.cget("bg"), 0.12)
         head = tk.Frame(block, bg=tint, padx=8, pady=4)
         head.grid(row=0, column=0, sticky="ew")
-        tk.Label(head, text=t("Radio"), font=HEADING_FONT, fg=PALETTE["section_fg"], bg=tint).pack(side="left")
+        tk.Label(head, text=title, font=HEADING_FONT, fg=PALETTE["section_fg"], bg=tint).pack(side="left")
+        if note:
+            tk.Label(head, text=note, font=HELP_FONT, fg=PALETTE["help_fg"], bg=tint).pack(side="right")
         body = tk.Frame(block, padx=8, pady=6)
         body.grid(row=1, column=0, sticky="ew")
         body.grid_columnconfigure(0, weight=1)
-        self._radio_lane_section(body, button)
+        return body
+
+    def _radio_page(self, inner, button, simple):
+        """
+        Radio's page (Ben, 6 Nov 2026; shared settings and stations, 7 Nov 2026). This Button: the station it
+        plays and its Shortcut, the only things that differ between Radio buttons. All Radio Buttons: Stations
+        (the count, Re-analyse, a row per station to rename or split), Sources, Playlist Selection, Filters,
+        and in Advanced the Moderator and Deep Cuts, one set for every Radio button (buttons.set_settings).
+        Its settings are Artist Matching's (buttons.RADIO_KEYS). There's no Drift, Mix, Consensus or If All
+        Else Fails, and it always plays on, so no Non-stop either.
+        """
+        self._matching_configs = 0
+        mine = self._radio_block(inner, t("This Button"))
+        self._radio_station_section(mine, button)
+        if hotkeys.AVAILABLE and not simple:
+            self._shortcut_section(mine, button)
+        shared = self._radio_block(inner, t("All Radio Buttons"),
+                                   t("Shared by every Radio button: a change here changes them all."))
+        self._radio_stations_section(shared)
         env = dict(read_env())
         env.update(button.get("settings") or {})
         p = ProfilePage("button", None, env, {}, lambda *_: None)
@@ -2043,51 +2069,55 @@ class SettingsTab(tk.Frame):
         p.config_index, p.config_kind = 0, buttons.RADIO
         p.save = lambda *_, p=p: self._save_button_page(p)
         self._button_page, self._button_pages = p, [p]
-        whole = tk.Frame(inner)
-        whole.grid(row=inner.grid_size()[1], column=0, sticky="ew")
+        whole = tk.Frame(shared)   # Moderator and Deep Cuts, placed under Filters once those are built
         whole.grid_columnconfigure(0, weight=1)
         places = {}
         for title in WHOLE_SECTIONS:
             places[title] = tk.Frame(whole)
             places[title].grid(row=len(places), column=0, sticky="ew")
             places[title].grid_columnconfigure(0, weight=1)
-        if hotkeys.AVAILABLE and not simple:
-            self._shortcut_section(places["Shortcut"], button)
-        self._fill_sources(body, p, "artists", where_=places, radio=True)
+        self._fill_sources(shared, p, "artists", where_=places, radio=True)
         sources_resync = p.resync
-        self._fill_playlist(body, p, buttons.RADIO, parts={"Playlist Selection"} | (set() if simple else {"Deep Cuts"}),
+        self._fill_playlist(shared, p, buttons.RADIO, parts={"Playlist Selection"} | (set() if simple else {"Deep Cuts"}),
                             where_=places)
         playlist_resync = p.resync
-        self._config_filters(body, button, 0)
+        self._config_filters(shared, button, 0)
+        whole.grid(row=shared.grid_size()[1], column=0, sticky="ew")
         p.resync = lambda: (sources_resync(), playlist_resync())
         self._sync_moderator_box(p)
-        tk.Label(inner, text=t("Radio always plays on: each round comes from other well-known artists of the lane. "
-                               "Drift, Mix, Consensus and If All Else Fails don't apply to it."),
+        tk.Label(inner, text=t("Radio always plays on: each round comes from other well-known artists of the "
+                               "station. Drift, Mix, Consensus and If All Else Fails don't apply to it."),
                  fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w", justify="left",
                  wraplength=scaled(inner, 700)).grid(row=inner.grid_size()[1], column=0, sticky="w", pady=(6, 0))
 
-    def _radio_lane_section(self, body, button):
-        """Lane: Last Played (the lane last played from any Radio's arrow) or one lane, kept by its name."""
-        box = section(body, t("Lane"), t("Last Played plays the lane you last picked from a Radio button's arrow "
-                                         "(the biggest, the first time). Pick a lane to make this Radio play that "
-                                         "one always: Add as a Button on a lane's right-click does the same."))
+    def _radio_station_section(self, body, button):
+        """Station: Last Played (the station last played from any Radio's arrow) or one station, kept by its name."""
+        box = section(body, t("Station"), t("Last Played plays the station you last picked from a Radio button's "
+                                            "arrow (the biggest, the first time). Pick a station to make this "
+                                            "button play that one always: Add as a Button on a station's "
+                                            "right-click does the same."))
         last = t("Last Played")
-        names = [lane_["name"] for lane_ in radio.lanes(include_children=True)]
-        current = button.get("lane") or ""
-        if current and current not in names:
-            names.append(current)   # gone since the lanes were made again: still shown, and the build says so
-        var = tk.StringVar(value=current or last)
         row = tk.Frame(box)
         row.grid(row=0, column=0, sticky="w")
-        cb = TCombobox(row, textvariable=var, values=[last] + names, state="readonly",
-                       width=max(14, max((len(n) for n in [last] + names), default=10) + 2))
+        var = tk.StringVar()
+        cb = TCombobox(row, textvariable=var, state="readonly")
         cb.pack(side="left")
-        if radio.analysis() is None:
-            tk.Label(row, text=t("The lanes are made the first time Radio plays."), fg=PALETTE["help_fg"],
-                     font=HELP_FONT).pack(side="left", padx=(10, 0))
-        elif current and current not in [lane_["name"] for lane_ in radio.lanes(include_children=True)]:
-            tk.Label(row, text=t("This lane has gone since the lanes were made again: pick another."),
-                     fg=PALETTE["help_fg"], font=HELP_FONT).pack(side="left", padx=(10, 0))
+        note = tk.Label(row, fg=PALETTE["help_fg"], font=HELP_FONT)
+        note.pack(side="left", padx=(10, 0))
+
+        def fill():
+            current = (buttons.get(button["id"]) or button).get("lane") or ""
+            names = [lane_["name"] for lane_ in radio.lanes(include_children=True)]
+            gone = bool(current) and current not in names
+            shown = names + ([current] if gone else [])   # gone since the stations were made again: still shown
+            cb.config(values=[last] + shown, width=max(14, max((len(n) for n in [last] + shown), default=10) + 2))
+            var.set(current or last)
+            if radio.analysis() is None:
+                note.config(text=t("The stations are made the first time Radio plays."))
+            elif gone:
+                note.config(text=t("This station has gone since the stations were made again: pick another."))
+            else:
+                note.config(text="")
 
         def chosen(_e=None, bid=button["id"]):
             cb.selection_clear()
@@ -2096,7 +2126,150 @@ class SettingsTab(tk.Frame):
             self._draw_preview()
             self._buttons_changed()
         cb.bind("<<ComboboxSelected>>", chosen)
+        fill()
         self._radio_lane_box = cb
+        self._radio_lane_fill = fill
+
+    def _radio_stations_section(self, body):
+        """
+        Stations (Ben, 7 Nov 2026): Show [n] stations (a new count cuts the stations again from the genres kept,
+        on the Play tab, so the console shows it), Re-analyse with when it last ran, then a row per station: its
+        name to rename (the genre name in grey beside a renamed one), its share of your plays, its artists and
+        first pillars. The arrow beside a station that has halves is Split, as on the Play tab's arrow.
+        """
+        box = section(body, t("Stations"), t("Radio's stations: groups of the artists you play most, by the genres "
+                                             "the sources give them. Fewer stations joins the closest ones together; "
+                                             "more splits the biggest. Re-analyse makes them again from what you "
+                                             "play now. Click a station's name to rename it."))
+        top = tk.Frame(box)
+        top.grid(row=0, column=0, sticky="w")
+        tk.Label(top, text=t("Show")).pack(side="left")
+        count_var = tk.StringVar()
+        count_sb = tk.Spinbox(top, from_=2, to=radio.STATIONS_MAX, textvariable=count_var, width=3)
+        count_sb.pack(side="left", padx=(6, 6))
+        tk.Label(top, text=t("stations")).pack(side="left")
+        again = tk.Button(top, command=lambda: self._radio_event("<<RadioAnalyse>>"))
+        again.pack(side="left", padx=(18, 0))
+        when_label = tk.Label(top, fg=PALETTE["help_fg"], font=HELP_FONT)
+        when_label.pack(side="left", padx=(10, 0))
+        table = tk.Frame(box)
+        table.grid(row=1, column=0, sticky="ew", pady=(8, 0))
+        status = tk.Label(box, fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w", justify="left")
+        status.grid(row=2, column=0, sticky="w")
+        state = {"count": None}
+
+        def count_changed(_e=None):
+            try:
+                n = int(count_var.get())
+            except ValueError:
+                return
+            n = max(2, min(radio.STATIONS_MAX, n))
+            if n == state["count"]:
+                return
+            state["count"] = n
+            radio.set_row(count=n)
+            self._radio_event("<<RadioRecount>>")
+        count_sb.config(command=count_changed)
+        count_sb.bind("<Return>", count_changed)
+        count_sb.bind("<FocusOut>", count_changed)
+
+        def renamed(lane_id, entry):
+            text = entry.get().strip()
+            found = radio.lane(lane_id)
+            if found is None or text == found["name"]:
+                return
+            problem = radio.rename(lane_id, text)
+            status.config(text=problem or "")
+            refresh()
+            self._buttons = buttons.buttons_only()
+            self._buttons_changed()
+
+        def fold(lane_id):
+            opened = radio.row()["open"]
+            open_ = lane_id not in opened
+            opened = [i for i in opened if i != lane_id and not (not open_ and i.startswith(lane_id))]
+            radio.set_row(open=opened + ([lane_id] if open_ else []))
+            draw()
+
+        def draw():
+            for w in table.winfo_children():
+                w.destroy()
+            self._radio_station_rows = []
+            result = radio.analysis()
+            if result is None:
+                tk.Label(table, text=t("No stations yet: they're made the first time Radio plays, or with Analyse Now."),
+                         fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=0, column=0, columnspan=5, sticky="w")
+                return
+            if result.get("resting"):
+                why = result["resting"]
+                tk.Label(table, text=t("Radio is resting: it needs {need} artists you've played {plays} or more times, "
+                                       "and there are {have} so far. It wakes once there are enough.",
+                                       need=why["need"], plays=radio.MIN_PLAYS, have=why["have"]),
+                         fg=PALETTE["help_fg"], font=HELP_FONT, wraplength=scaled(table, 600),
+                         justify="left").grid(row=0, column=0, columnspan=5, sticky="w")
+                return
+            opened = set(radio.row()["open"])
+            width = max([len(x["name"]) for x in radio.lanes(include_children=True)] + [18]) + 2
+            for r, (lane_, depth) in enumerate(radio.visible_rows()):
+                splits = bool(lane_.get("children"))
+                arrow = tk.Label(table, text=("▾" if lane_["id"] in opened else "▸") if splits else "",
+                                 fg=PALETTE["section_fg"], cursor="hand2" if splits else "", width=2)
+                arrow.grid(row=r, column=0, sticky="w")
+                if splits:
+                    arrow.bind("<Button-1>", lambda e, i=lane_["id"]: fold(i))
+                    Tooltip(arrow, t("Split: this station's two halves, here and in the Play tab's list. "
+                                     "Click again to join them back."))
+                cell = tk.Frame(table)
+                cell.grid(row=r, column=1, sticky="w", padx=(18 * depth, 0), pady=1)
+                entry = ttk.Entry(cell, width=width)
+                entry.insert(0, lane_["name"])
+                entry.pack(side="left")
+                entry.bind("<Return>", lambda e, i=lane_["id"], w=entry: renamed(i, w))
+                entry.bind("<FocusOut>", lambda e, i=lane_["id"], w=entry: renamed(i, w))
+                if lane_.get("auto") and lane_["auto"] != lane_["name"]:
+                    tk.Label(cell, text=lane_["auto"], fg=PALETTE["help_fg"], font=HELP_FONT).pack(side="left", padx=(6, 0))
+                tk.Label(table, text=f"{radio.share(lane_)}%").grid(row=r, column=2, sticky="e", padx=(12, 0))
+                tk.Label(table, text=tn("{count} artist", "{count} artists", lane_["artists"]),
+                         fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=r, column=3, sticky="w", padx=(12, 0))
+                pillars = lane_.get("pillars") or []
+                tk.Label(table, text=", ".join(pillars[:4]) + ("..." if len(pillars) > 4 else ""),
+                         fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w").grid(row=r, column=4, sticky="w", padx=(12, 0))
+                self._radio_station_rows.append((lane_["id"], entry))
+            tabs.use_fonts(table)
+
+        def refresh():
+            if not box.winfo_exists():
+                self._radio_refresh = None
+                return
+            result = radio.analysis()
+            shown = len(radio.lanes())
+            state["count"] = radio.row()["count"] or shown or None
+            count_var.set(str(state["count"] or ""))
+            again.config(text=t("Re-analyse") if result else t("Analyse Now"))
+            if result and result.get("when"):
+                when_label.config(text=t("Last analysed {when}, from {count} artists you've played {plays} or more "
+                                         "times.", when=radio.when_text(result["when"]), count=len(result.get("known") or []),
+                                         plays=radio.MIN_PLAYS))
+            else:
+                when_label.config(text="")
+            draw()
+            fill = getattr(self, "_radio_lane_fill", None)
+            if fill is not None:
+                try:
+                    fill()
+                except tk.TclError:
+                    pass
+        refresh()
+        self._radio_refresh = refresh
+        self._radio_count_box = count_sb
+        self._radio_again = again
+
+    def _radio_event(self, name):
+        """Asks the Play tab to make the stations again (it runs the job, so the console shows it)."""
+        try:
+            self.winfo_toplevel().event_generate(name)
+        except tk.TclError:
+            pass
 
     def _config_block(self, inner, button, n, cfg):
         """A config's block: "Config n · Kind" (click to fold it away), Remove on the second and later. Returns its body."""
@@ -4678,7 +4851,7 @@ class SettingsTab(tk.Frame):
             each = [t("Pick"), ("TRACKS_PER_ARTIST_PICK", "3", 1, 20), t("of each artist's top"),
                     ("TRACKS_PER_ARTIST_POOL", "5", 1, 20), t("tracks")]
             p.seed_boxes["current"] = seed_line(t("Each Round"), PALETTE["text"], each, pady=(0, 0),
-                                                note=t("Each round takes a few of the lane's best-known artists and the "
+                                                note=t("Each round takes a few of the station's best-known artists and the "
                                                        "artists their lists agree on. For each of those, this many of "
                                                        "their top tracks that you own, picked at random from that many "
                                                        "of their best known. The well-known artists themselves give "

@@ -53,9 +53,13 @@ CIRCLE_START = 3
 CIRCLE_MAX = 6
 AGREE = 2
 PILLAR_SONGS = 5
+STATIONS_MAX = 40      # the most stations the Stations section's box asks for
 ANALYSIS_KEY = "radio_analysis"
-ROW_KEY = "radio_row"   # the face's lane (the last played), the lanes split open, the lanes added as buttons
+ROW_KEY = "radio_row"   # the face's lane (the last played), the lanes split open, the station count asked for
 TAGS_KEY = "radio_tags"
+CANON_KEY = "radio_canon"   # Last.fm's top artists per genre: kept so a new station count re-cuts in seconds
+NAMES_KEY = "radio_names"   # the stations you renamed: {its genre path: your name}
+_canon_cache = None         # the CANON_KEY cache while an analysis runs
 NOT_GENRE = re.compile(
     r"^(seen live|favou?rites?|love|loved|awesome|beautiful|male vocalists?|female vocalists?|\d{2,4}s?|"
     r"british|uk|american|usa|english|german|french|canadian|australian|irish|scottish|swedish|norwegian|"
@@ -109,14 +113,100 @@ def lane_named(name):
     Re-analyse, which numbers the lanes afresh. None when no lane is called that now.
     """
     wanted = (name or "").strip().lower()
-    return next((x for x in lanes(include_children=True) if x["name"].lower() == wanted), None) if wanted else None
+    if not wanted:
+        return None
+    every = lanes(include_children=True)
+    return next((x for x in every if x["name"].lower() == wanted), None) \
+        or next((x for x in every if (x.get("auto") or "").lower() == wanted), None)
 
 
 def row():
-    """{"default": lane id, "open": [lane ids split open], "buttons": [lane ids on the row]}."""
+    """
+    {"default": lane id, "open": [lane ids split open], "buttons": [lane ids on the row, before 1.31.0],
+    "count": the number of stations asked for on Radio's page, or None for as many as the analysis finds}.
+    """
     saved = _meta(ROW_KEY, {})
+    count = saved.get("count")
     return {"default": saved.get("default"), "open": list(saved.get("open") or []),
-            "buttons": list(saved.get("buttons") or [])}
+            "buttons": list(saved.get("buttons") or []), "count": int(count) if count else None}
+
+
+MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")   # shown through t()
+
+
+def when_text(stamp):
+    """The analysis's time as Radio's page shows it: '20:18' today, else '6 Nov, 20:18'."""
+    try:
+        when = datetime.strptime(stamp, "%Y-%m-%d %H:%M")
+    except (TypeError, ValueError):
+        return ""
+    if when.date() == datetime.now().date():
+        return when.strftime("%H:%M")
+    return f"{when.day} {t(MONTHS[when.month - 1])}, {when.strftime('%H:%M')}"
+
+
+def names():
+    """The stations you renamed: {genre path: your name}."""
+    return dict(_meta(NAMES_KEY, {}))
+
+
+def rename(lane_id, name):
+    """
+    Renames a station (Ben, 7 Nov 2026). Blank goes back to its genre name. Kept by the station's genre path,
+    so the name comes back with the station after a Re-analyse or a new count; a Radio playlist set to the
+    station follows the new name. Returns a problem line, or None.
+    """
+    result = analysis()
+    found = lane(lane_id)
+    if not result or found is None:
+        return t("That station has gone since the stations were made again.")
+    new = (name or "").strip() or found.get("auto") or found["name"]
+    if any(x["name"].lower() == new.lower() and x["id"] != lane_id for x in lanes(include_children=True)):
+        return t("Another station is called {name}.", name=new)
+    old = found["name"]
+    saved = names()
+    if new == (found.get("auto") or found["name"]):
+        saved.pop(found.get("key") or found["name"], None)
+    else:
+        saved[found.get("key") or found["name"]] = new
+
+    def walk(items):
+        for x in items:
+            if x["id"] == lane_id:
+                x["name"] = new
+            walk(x.get("children") or [])
+    walk(result.get("lanes") or [])
+    _set_meta(ANALYSIS_KEY, result)
+    _set_meta(NAMES_KEY, saved)
+    import buttons
+    items = buttons.load()
+    moved = False
+    for b in items:
+        if buttons.is_radio(b) and (b.get("lane") or "").lower() == old.lower():
+            b["lane"], moved = new, True
+    if moved:
+        buttons.save(items)
+    return None
+
+
+def _apply_names(out, report):
+    """Each station's genre name kept as "auto" and its genre path as "key"; your names laid over them."""
+    saved = names()
+    seen = set()
+
+    def walk(items, path):
+        for x in items:
+            x["auto"] = x["name"]
+            x["key"] = (path + " > " if path else "") + x["auto"]
+            seen.add(x["key"])
+            if x["key"] in saved:
+                x["name"] = saved[x["key"]]
+            walk(x.get("children") or [], x["key"])
+    walk(out, "")
+    for key, name in saved.items():
+        if key not in seen:
+            report("  " + t("Your name {name} is kept for {station}, which isn't a station this time.", name=name,
+                            station=key.split(" > ")[-1]))
 
 
 def set_row(**changes):
@@ -254,6 +344,16 @@ def tag_top_artists(tag, limit=100):
         return []
 
 
+def _top_for(tag):
+    """tag_top_artists, from the analysis's cache when it has the genre (a new station count asks nothing)."""
+    if _canon_cache is not None and _canon_cache.get(tag):
+        return list(_canon_cache[tag])
+    found = tag_top_artists(tag)
+    if _canon_cache is not None and found:
+        _canon_cache[tag] = found
+    return found
+
+
 def genres_for(a, view_row, cache):
     """The genre rule: sources first, then your own tag, else nothing. Returns ({genre: weight}, case)."""
     src = [(g, w) for g, w in (cache.get(a) or []) if w >= TAG_MIN and not NOT_GENRE.match(g)]
@@ -368,7 +468,7 @@ def _canon(genres, view, owned_ok, report):
     """The sources' canon for a lane: Last.fm's top artists for its top genres that you own. Artist keys, best first."""
     tags = [g for g, _ in genres.most_common(2)]
     ranked = []
-    lists = [tag_top_artists(g) for g in tags]
+    lists = [_top_for(g) for g in tags]
     lists = [x for x in lists if x]
     if len(lists) == 2:   # both genres: artists high in both first, by their summed rank
         a_rank = {engine.artist_key(n): i for i, n in enumerate(lists[0])}
@@ -438,8 +538,43 @@ def _make_lane(lane_id, node, kids, leaves, artists, vecs, view, report, depth, 
     return lane_
 
 
-def analyse(report=print):
-    """Reads plays, asks the sources for genres, makes the lanes and their pillars, and keeps the lot."""
+def _stations_cut(n, merges, leaves, asked):
+    """
+    The tree cut into groups: k groups, where k is one per twenty artists (at most LANES_MAX) or, with a
+    count asked for on Radio's page, the fewest that give that many groups of LANE_MIN artists or more (as
+    near as the tree allows). Returns (roots, groups big enough to be stations).
+    """
+    def at(k):
+        roots = _cut(n, merges, k)
+        return roots, [r for r in roots if len(leaves[r]) >= LANE_MIN]
+    if not asked:
+        return at(max(2, min(LANES_MAX, n // 20)))
+    best = None
+    for k in range(1, n + 1):   # k groups hold at most k stations; more asked than the tree allows: the most it gives
+        roots, big = at(k)
+        if best is None or len(big) > len(best[1]):
+            best = (roots, big)
+        if len(big) >= asked:
+            return roots, big
+    return best
+
+
+def analyse(report=print, fresh=True):
+    """
+    Reads plays, asks the sources for genres, makes the lanes and their pillars, and keeps the lot.
+    fresh: Re-analyse asks Last.fm for each genre's top artists again; a new station count (fresh False)
+    uses the ones kept from last time, so it takes seconds.
+    """
+    global _canon_cache
+    _canon_cache = {} if fresh else dict(_meta(CANON_KEY, {}))
+    try:
+        return _analyse(report)
+    finally:
+        _set_meta(CANON_KEY, _canon_cache)
+        _canon_cache = None
+
+
+def _analyse(report):
     started = time.time()
     view = library_view()
     played = sorted((a for a, v in view.items() if v["plays"] >= MIN_PLAYS), key=lambda a: -view[a]["plays"])
@@ -468,9 +603,8 @@ def analyse(report=print):
         return result
     merges = cluster(vecs)
     kids, leaves = _tree(len(artists), merges)
-    k = max(2, min(LANES_MAX, len(artists) // 20))
-    roots = _cut(len(artists), merges, k)
-    big = [r for r in roots if len(leaves[r]) >= LANE_MIN]
+    asked = row()["count"]
+    roots, big = _stations_cut(len(artists), merges, leaves, asked)
     small = [r for r in roots if len(leaves[r]) < LANE_MIN]
     if not big:
         big, small = [max(roots, key=lambda r: len(leaves[r]))], [r for r in roots if r != max(roots, key=lambda r: len(leaves[r]))]
@@ -488,16 +622,20 @@ def analyse(report=print):
         # the folded-in artists count in the lane, though Split keeps to the tree's halves
         out.append(_make_lane(str(n), r, kids, leaves, artists, vecs, view, report, depth=0, prefer=prefer,
                               extra=extra[r]))
-    names = Counter(x["name"] for x in out)
+    taken = Counter(x["name"] for x in out)
     for x in out:   # two lanes can't share a name: the second takes its third genre instead
-        if names[x["name"]] > 1 and len(x["genres"]) > 2:
+        if taken[x["name"]] > 1 and len(x["genres"]) > 2:
             x["name"] = " / ".join(g.title() for g in (x["genres"][0], x["genres"][2]))
+    _apply_names(out, report)
     result = {"when": datetime.now().strftime("%Y-%m-%d %H:%M"), "lanes": out, "resting": None,
               "known": [a for a in played]}
     _set_meta(ANALYSIS_KEY, result)
-    report(tn("Radio: {count} lane, from {artists} artists, {seconds} s.",
-              "Radio: {count} lanes, from {artists} artists, {seconds} s.", len(out), artists=len(artists),
+    report(tn("Radio: {count} station, from {artists} artists, {seconds} s.",
+              "Radio: {count} stations, from {artists} artists, {seconds} s.", len(out), artists=len(artists),
               seconds=max(0, round(time.time() - started))))
+    if asked and len(out) < asked:
+        report("  " + t("You asked for {asked} stations; {made} is as many as stand alone, since the rest would "
+                        "have fewer than {least} artists.", asked=asked, made=len(out), least=LANE_MIN))
     for x in out:
         report("  " + t("{name}: {artists} artists; pillars {pillars}.", name=x["name"], artists=x["artists"],
                         pillars=", ".join(x["pillars"][:6]) + ("..." if len(x["pillars"]) > 6 else "")))
@@ -532,7 +670,7 @@ def join_new_artists(report, limit=10):
     result["known"] = sorted(known)
     _set_meta(ANALYSIS_KEY, result)
     for name, lane_name in joined:
-        report("  " + t("Radio: {artist} joins {lane} as a pillar.", artist=name, lane=lane_name))
+        report("  " + t("Radio: {artist} joins {station} as a pillar.", artist=name, station=lane_name))
 
 
 # --- a build ----------------------------------------------------------------------------------------
@@ -646,7 +784,7 @@ def _tracks(keys):
 
 def moderator_seed(lane_, circle):
     """What the Moderator judges a round against: the lane and the pillars in it this round."""
-    return f"vibe: {lane_['name']} radio, in the sound of {', '.join(circle)}"
+    return f"vibe: {lane_.get('auto') or lane_['name']} radio, in the sound of {', '.join(circle)}"   # its genres, not your name for it
 
 
 def moderate(picks, own, seed, report):
@@ -683,7 +821,8 @@ def build(lane_id, report=print):
     """Radio: one round for the lane, a pillar song first, the rest spread. Non-stop carries on from pillars."""
     lane_ = lane(lane_id)
     if lane_ is None:
-        report(t("Problem: that Radio lane has gone. Re-analyse under Radio's arrow to make the lanes again."))
+        report(t("Problem: that Radio station has gone. Re-analyse under Radio's arrow or on its page to make the "
+                 "stations again."))
         return
     appending = engine.NONSTOP_APPEND
     if not appending:
