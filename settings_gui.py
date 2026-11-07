@@ -2487,7 +2487,7 @@ class SettingsTab(tk.Frame):
         out = {}
         for f in items:
             if f.get("every"):   # every playlist's already: ticked and greyed, not one of this playlist's
-                text = f["name"] + "   " + (t("(every playlist)") if f.get("on") else t("(off)"))
+                text = filters.tick_name(f) + "   " + (t("(every playlist)") if f.get("on") else t("(off)"))
                 shown = tk.BooleanVar(value=bool(f.get("on")))
                 tick = ttk.Checkbutton(row, text=text, variable=shown)
                 tick.state(["disabled"])
@@ -2497,7 +2497,7 @@ class SettingsTab(tk.Frame):
                 continue
             var = tk.BooleanVar(value=f["id"] in ticked)
             out[f["id"]] = var
-            text = f["name"] + ("" if f.get("on") else "   " + t("(off)"))
+            text = filters.tick_name(f) + ("" if f.get("on") else "   " + t("(off)"))
             ttk.Checkbutton(row, text=text, variable=var, command=command).pack(side="left", padx=(0, 12))
         tk.Button(row, text=t("Edit Filters..."), command=self._open_filters).pack(side="left")
         return out
@@ -3091,10 +3091,13 @@ class SettingsTab(tk.Frame):
             right.keep = keep
             return
 
+        self._filter_what_it_does(right, item, keep)
+
         box = section(right, t("Only pick from"),
                       t("Every playlist this filter applies to only uses tracks on this JRiver playlist or "
                       "smartlist. Set up any filtering you like in JRiver's smartlist editor, and 24bit7 "
-                      "respects it. The list comes from Settings > JRiver Playlists."))
+                      "respects it. With At least, a track on it counts towards the share instead. The list "
+                      "comes from Settings > JRiver Playlists."))
         options = self._filter_playlists()
         labels = dict(options)
         pick = tk.StringVar(value=labels.get(item.get("pick_from", ""), "None"))
@@ -3115,7 +3118,9 @@ class SettingsTab(tk.Frame):
                       t("Tracks must match all (or any) of the rules. A track with no value for a field passes that "
                       "rule, and the log counts them; an unrated track counts as rating 0, and an unplayed one "
                       "as played 0 times and never played. Rating 0 means unrated. Sample rate at most 48 kHz "
-                      "saves JRiver converting on the fly for a Sonos."))
+                      "saves JRiver converting on the fly for a Sonos. With At least, a track with no value for "
+                      "a field doesn't count towards the share. Other field reads any JRiver field by its name, "
+                      "your own fields included."))
         top = tk.Frame(box)
         top.grid(row=0, column=0, sticky="w", pady=(0, 8))
         tk.Label(top, text=t("Tracks must match")).pack(side="left")
@@ -3140,10 +3145,18 @@ class SettingsTab(tk.Frame):
             field = tk.StringVar(value=label)
             op = tk.StringVar(value=dict(ops).get(rule.get("op"), ops[0][1]))
             keep.extend([field, op])
+            r *= 2   # each rule's row, then a line under it for an Other field
             field_cb = TCombobox(rows, textvariable=field, values=field_labels, state="readonly", width=13)
             field_cb.grid(row=r, column=0, sticky="w", pady=3)
-            op_cb = TCombobox(rows, textvariable=op, values=[l for _, l in ops], state="readonly", width=17)
-            op_cb.grid(row=r, column=1, sticky="w", padx=6)
+            if kind == "other":   # the field's name, then the condition
+                middle = tk.Frame(rows)
+                middle.grid(row=r, column=1, sticky="w", padx=6)
+                self._other_field_name(middle, rule, keep)
+                op_cb = TCombobox(middle, textvariable=op, values=[l for _, l in ops], state="readonly", width=12)
+                op_cb.pack(side="left", padx=(6, 0))
+            else:
+                op_cb = TCombobox(rows, textvariable=op, values=[l for _, l in ops], state="readonly", width=17)
+                op_cb.grid(row=r, column=1, sticky="w", padx=6)
             cell = tk.Frame(rows)
             cell.grid(row=r, column=2, sticky="w")
 
@@ -3184,7 +3197,9 @@ class SettingsTab(tk.Frame):
                         rule[key] = var.get().strip()
                         self._filter_save()
                     var.trace_add("write", typed)
-                if rule["field"] == "file_type":   # a dropdown of the types in your library
+                if kind == "other":   # the field's values in your library, or type one
+                    self._other_field_value(cell, rows, r, rule, keep)
+                elif rule["field"] == "file_type":   # a dropdown of the types in your library
                     var = tk.StringVar(value=rule.get("value", ""))
                     keep.append(var)
                     types = filters.file_types()
@@ -3221,6 +3236,129 @@ class SettingsTab(tk.Frame):
         tk.Button(box, text=t("Add rule"), width=max(10, len(t("Add rule")) + 2), command=add_rule).grid(
             row=2, column=0, sticky="w", pady=(8, 0))
         right.keep = keep   # hold the variables while the page shows
+
+    def _filter_what_it_does(self, right, item, keep):
+        """
+        What It Does (Ben, 7 Nov 2026): leave out what doesn't match, as filters always have, or make at least
+        a share of each playlist match, the rest as usual.
+        """
+        box = section(right, t("What It Does"),
+                      t("Leave out: every playlist the filter applies to only uses tracks that match. At least: the "
+                        "playlist is as usual, and at least that share of it matches. Where it can't find enough "
+                        "tracks that match, it fills up with the usual ones and the console says how far short it fell."))
+        how = tk.StringVar(value="least" if filters.is_share(item) else "leave")
+        share = tk.StringVar(value=str(filters.share_of(item)))
+        keep.extend([how, share])
+        spin = None
+
+        def changed():
+            item["mode"] = how.get()
+            spin.config(state="normal" if how.get() == "least" else "disabled")
+            self._filter_save()
+        ttk.Radiobutton(box, text=t("Leave out tracks that don't match"), variable=how, value="leave",
+                        command=changed).grid(row=0, column=0, sticky="w")
+        row = tk.Frame(box)
+        row.grid(row=1, column=0, sticky="w", pady=(4, 0))
+        ttk.Radiobutton(row, text=t("At least"), variable=how, value="least", command=changed).pack(side="left")
+        spin = ttk.Spinbox(row, from_=1, to=100, width=3, textvariable=share, justify="center")
+        spin.pack(side="left", padx=6)
+        tk.Label(row, text=t("% of each playlist matches")).pack(side="left")
+        spin.config(state="normal" if how.get() == "least" else "disabled")
+        self._filter_share_box = spin
+
+        def typed(*_):
+            try:
+                n = int(share.get())
+            except ValueError:
+                return
+            if 1 <= n <= 100:
+                item["share"] = n
+                self._filter_save()
+        share.trace_add("write", typed)
+
+    def _other_field_name(self, parent, rule, keep):
+        """An Other field rule's field name; a field the library copy hasn't read is read once it's typed."""
+        name = tk.StringVar(value=rule.get("name", ""))
+        keep.append(name)
+        entry = ttk.Entry(parent, textvariable=name, width=14)
+        entry.pack(side="left")
+
+        def done(_e=None):
+            typed = name.get().strip()
+            known = filters.jriver_fields().get(typed.lower())
+            if known and known != typed:   # as JRiver spells it, so the library copy reads it
+                typed = known
+                name.set(known)
+            if typed == rule.get("name", ""):
+                return
+            rule["name"], rule["value"] = typed, ""
+            self._filter_save()
+            self._read_other_fields()
+        entry.bind("<Return>", done)
+        entry.bind("<FocusOut>", done)
+
+    def _read_other_fields(self):
+        """Reads the library again, in the background, when a rule names a field its copy doesn't hold."""
+        import library
+        wanted = filters.other_fields()
+        if library.has_fields(wanted):
+            self._filter_fill_editor()
+            return
+        state = {"done": False}
+
+        def read():
+            try:
+                filters.jriver_fields(fresh=True)   # a field made in JRiver a moment ago is known too
+                library.load()
+            finally:
+                state["done"] = True
+        import threading
+        threading.Thread(target=read, daemon=True).start()
+
+        def wait():
+            if not getattr(self, "_filter_win", None) or not self._filter_win.winfo_exists():
+                return
+            if state["done"]:
+                self._filter_fill_editor()
+            else:
+                self._filter_win.after(150, wait)
+        wait()
+
+    def _other_field_value(self, cell, rows, r, rule, keep):
+        """The value box for an Other field: the field's values in your library, or one typed; a line under it."""
+        name = str(rule.get("name") or "").strip()
+        var = tk.StringVar(value=rule.get("value", ""))
+        keep.append(var)
+        values, tracks, artists = filters.field_values(name) if name else ([], 0, 0)
+        box = ttk.Combobox(cell, textvariable=var, values=values, width=18)   # your own values: never translated
+        box.pack(side="left")
+
+        def picked(*_):
+            rule["value"] = var.get().strip()
+            self._filter_save()
+        var.trace_add("write", picked)
+        if not name:
+            return
+        import library
+        tried = self.__dict__.setdefault("_fields_tried", set())
+        if not library.has_fields([name]) and name not in tried:
+            # a rule saved before the library copy was read: read it again, once, and the line follows
+            tried.add(name)
+            tk.Label(rows, text=t("Reading {name} from JRiver...", name=name), fg=PALETTE["help_fg"],
+                     font=HELP_FONT).grid(row=r + 1, column=0, columnspan=4, sticky="w", pady=(0, 4))
+            self._filter_win.after_idle(self._read_other_fields)
+            return
+        if name.lower() not in filters.jriver_fields():
+            text, colour = t("JRiver has no field called {name}, so this rule does nothing.", name=name), PALETTE["brand_orange"]
+        elif not tracks:
+            text, colour = t("{name}: no track in your library has a value yet.", name=name), PALETTE["help_fg"]
+        else:
+            text = t("{name}: {tracks} by {artists} have a value. The list holds the values in your library.", name=name,
+                     tracks=tn("{count} track", "{count} tracks", tracks), artists=tn("{count} artist", "{count} artists", artists))
+            colour = PALETTE["help_fg"]
+        tk.Label(rows, text=text, fg=colour, font=HELP_FONT).grid(row=r + 1, column=0, columnspan=4, sticky="w",
+                                                                    pady=(0, 4))
+        self._other_field_line = text
 
     def _skipped_box(self, right):
         """Skipped Tracks' page: what it leaves out now, each with Let Back In, which clears the count."""

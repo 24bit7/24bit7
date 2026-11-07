@@ -767,6 +767,8 @@ def find(lane_, report, minutes=TARGET_MINUTES, avoid=(), own=None):
                                       pool=max(engine.TRACKS_PER_ARTIST_POOL, engine.TRACKS_PER_ARTIST_PICK)):
                     have.add(key)
                     picks.append(key)
+        # At least filters (7 Nov 2026): the round's share, the pillars' own songs kept
+        picks = engine.apply_shares(picks, played, report, keep=own, artists=circle)
     finally:
         played.done()
     return picks, circle

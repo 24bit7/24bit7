@@ -316,6 +316,7 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 - **Top-Up**, on the More Options row: click it, then a playlist, and the new tracks go into what's left of Playing Now instead of replacing it. Lasts one playlist.
 - **Match Tempo** for Artist Matching and Track Matching: Off, Prefer or Strict, from your BPM tags, half and double time counting.
 - **Voice skips count.** "Ask needle drop to skip" is counted in JRiver, and the **Skipped Tracks** filter (off to start) leaves out what you skip twice. Any filter can now apply to **Every playlist**.
+- **At least**: a filter can ask for a share instead of leaving tracks out, "at least 20% of each playlist matches", and its rules can read **Other field**, any JRiver field by name, your own included. Short of the share, the usual tracks fill up and the console says by how much.
 - **Settings > Devices** is a tab of its own again, so Playlist Settings is quieter. Non-stop now "adds more", leaving "top up" to Top-Up, and the German uses JRiver's own names for Playing Now and Media Network.
 
 ### Earlier: 1.30.1

@@ -38,6 +38,22 @@ FIELDS = ("Key,Name,Artist,Album,Album Artist (auto),Disc #,Track #,Duration,BPM
           "24bit7 Voice Skips")
 
 _lock = threading.Lock()
+_fields_read = set()     # the Other field names (filters) the copy in memory holds
+
+
+def fields():
+    """FIELDS plus any JRiver field an Other field rule names (filters), so the rules can read it."""
+    try:
+        import filters   # here rather than at the top: filters imports engine, which this file imports
+        extra = [f for f in filters.other_fields() if f not in FIELDS.split(",")]
+    except Exception:
+        extra = []
+    return ",".join([FIELDS] + extra), set(extra)
+
+
+def has_fields(names):
+    """True when the copy in memory holds these fields (an Other field rule's): else it needs reading again."""
+    return all(n in _fields_read or n in FIELDS.split(",") for n in names if n)
 _albums = {}             # (album, album artist) -> [track rows]
 _artists = {}            # normalised artist -> artist as tagged
 _tracks = []
@@ -204,8 +220,11 @@ def _get(path, **params):
 
 
 def _read_tracks():
+    global _fields_read
     started = time.time()
-    r = _get("Files/Search", Query=AUDIO, Action="JSON", Fields=FIELDS)
+    names, extra = fields()
+    r = _get("Files/Search", Query=AUDIO, Action="JSON", Fields=names)
+    _fields_read = extra
     answered = time.time()
     try:
         # strict=False: a control character in a tag (a pasted line break, a stray byte from an

@@ -320,6 +320,10 @@ class FakeJRiver:
             return Resp(text=_mpl([self.by_key[k] for k in pl["keys"]], ["Key"]))
         if path == "Files/Search":
             return self._search(params)
+        if path == "Library/Fields":   # every field the library has: the rows' own, and any created
+            names = list(dict.fromkeys([k for r in self.tracks for k in r] + [n for n, _ in self.fields_made]))
+            body = "".join(f"<Field Name=\"{escape(n)}\" DataType=\"String\"/>" for n in names)
+            return Resp(text=f"<Response Status=\"OK\"><Fields>{body}</Fields></Response>")
         if path == "Library/CreateField":   # creates or updates a library field
             self.fields_made.append((params.get("Name"), params.get("Type")))
             return Resp(text=_response({"Field": params.get("Name", "")}))

@@ -6029,6 +6029,155 @@ def spread_artists(keys, keep=None, after=None):
     return out
 
 
+# --- At least (Settings > Filters, Ben 7 Nov 2026) ---------------------------------------
+# A filter set to "At least 20% of each playlist matches" doesn't leave anything out: after the build,
+# apply_shares makes sure that share of the playlist matches, by swapping tracks that don't for tracks
+# by artists you own that do, found deeper in the similar-artist lists already fetched for the
+# playlist's artists. Short of that, the usual tracks stay and the console says how far short it fell.
+
+
+def _shares(played):
+    """The At least filters a build runs under (its PlayedFilter's), or []."""
+    active = getattr(played, "filters", None) if played is not None else None
+    return list(getattr(active, "shares", None) or [])
+
+
+def share_not_here(played, report, why):
+    """One line per At least filter, for a build its share can't apply to (one artist's tracks)."""
+    for item in _shares(played):
+        report("  " + t("{name}: {why}, so its share doesn't apply here.", name=item["name"], why=why))
+
+
+def _cached_lists(kind, artist):
+    """Every cached list of this kind for an artist, from any source and any depth ([[names]])."""
+    a = artist_key(artist)
+    if not a:
+        return []
+    with _cache_lock:
+        rows = db().execute("SELECT payload FROM cache WHERE kind=? AND key >= ? AND key < ?",
+                            (kind, a + "|", a + "}")).fetchall()   # "|" is followed by "}": just this artist's keys
+    out = []
+    for (payload,) in rows:
+        try:
+            names = json.loads(payload) or []
+        except ValueError:
+            continue
+        out.append([n if isinstance(n, str) else (n[0] if isinstance(n, (list, tuple)) and n else str(n))
+                    for n in names])
+    return out
+
+
+def _share_tracks(item, active, keys, artists, played, per_artist, want):
+    """
+    Tracks that count towards this filter's share, for the playlist: [(key, artist)], at most `want`.
+    Its artists are the ones you own whose tracks count, found in the similar-artist lists already cached
+    for the playlist's artists and seeds, most lists first; per artist, its top tracks you own first.
+    """
+    import library   # here rather than at the top: library imports engine
+    with library._lock:
+        rows = list(library._tracks)
+    by_artist = {}
+    for row in rows:
+        if active.counts_for(item, row.get("Key"), row):
+            by_artist.setdefault(artist_key(_row_artist(row)), []).append(row)
+    if not by_artist:
+        return []
+    have = {str(k) for k in keys}
+    per = {}
+    for k in have:
+        a = artist_key(_row_artist(library.track_row(k) or {}))
+        per[a] = per.get(a, 0) + 1
+    rank = {}   # artist key -> (lists it's in, best place in any)
+    for name in dict.fromkeys(artists):
+        for names in _cached_lists("similar", name):
+            for place, other in enumerate(names):
+                a = artist_key(other)
+                if a in by_artist:
+                    lists, best = rank.get(a, (0, place))
+                    rank[a] = (lists + 1, min(best, place))
+    out = []
+    for a in sorted(rank, key=lambda a: (-rank[a][0], rank[a][1])):
+        room = per_artist - per.get(a, 0)
+        if room <= 0:
+            continue
+        top = {}
+        for names in _cached_lists("top_tracks", _row_artist(by_artist[a][0])):
+            for place, title in enumerate(names):
+                top.setdefault(library.norm(title), place)
+        def order(row):
+            place = top.get(library.norm(row.get("Name") or ""))
+            try:
+                plays = float(row.get("Number Plays") or 0)
+            except ValueError:
+                plays = 0
+            return (place is None, place or 0, -plays)
+        for row in sorted(by_artist[a], key=order):
+            if room <= 0 or len(out) >= want:
+                break
+            key = str(row.get("Key"))
+            if key in have:
+                continue
+            use = played.pick(key) if played is not None else key
+            if use and str(use) not in have and active.counts_for(item, use):
+                have.add(str(use))
+                out.append((str(use), _row_artist(library.track_row(use) or row)))
+                room -= 1
+        if len(out) >= want:
+            break
+    return out
+
+
+def apply_shares(keys, played, report, keep=(), per_artist=None, artists=()):
+    """
+    Each At least filter's share of the playlist, as near as it can: tracks that count are swapped in for
+    the last of those that don't (never one in keep, never one another At least filter counts), spread
+    through the playlist rather than left at the end. artists: the build's seeds, whose similar-artist
+    lists are read too. Returns the keys, in order.
+    """
+    shares = _shares(played)
+    if not shares or not keys:
+        return keys
+    if output_streaming():
+        for item in shares:
+            report("  " + t("{name}: the playlist goes to YouTube or Tidal, so its share doesn't apply.", name=item["name"]))
+        return keys
+    import library   # here rather than at the top: library imports engine
+    library.ensure_loaded()
+    active = played.filters
+    keys = [str(k) for k in keys]
+    keep = {str(k) for k in keep if k}
+    import filters as filter_settings
+    for item in shares:
+        total = len(keys)
+        need = -(-total * filter_settings.share_of(item) // 100)   # rounded up
+        have = sum(1 for k in keys if active.counts_for(item, k))
+        if have < need:
+            others = [o for o in shares if o is not item]
+            out = [k for k in reversed(keys) if k not in keep and not active.counts_for(item, k)
+                   and not any(active.counts_for(o, k) for o in others)]
+            names = list(artists) + [_row_artist(library.track_row(k) or {}) for k in keys]
+            found = _share_tracks(item, active, keys, [n for n in names if n], played,
+                                  per_artist or TRACKS_PER_ARTIST_PICK, min(need - have, len(out)))
+            if found:
+                report("  " + t("Looking deeper in the similar artists for {name}: {artists}.", name=item["name"],
+                                artists=", ".join(dict.fromkeys(a for _, a in found))))
+                gone = set(out[:len(found)])
+                keys = [k for k in keys if k not in gone]
+                step = len(keys) / (len(found) + 1)
+                for i, (key, _artist) in reversed(list(enumerate(found))):   # spread through, back to front
+                    keys.insert(max(1 if keep else 0, int(round((i + 1) * step))), key)
+                have += len(found)
+        pct = round(100 * have / total) if total else 0
+        if have >= need:
+            report("  " + t("{name}: {have} of {total} tracks ({pct}%), as asked.", name=item["name"], have=have,
+                            total=total, pct=pct))
+        else:
+            report("  " + t("{name}: {have} of {total} tracks ({pct}%), short of the {share}% asked for: no more of the "
+                            "similar artists you own match it. The usual tracks fill the rest.", name=item["name"],
+                            have=have, total=total, pct=pct, share=filter_settings.share_of(item)))
+    return keys
+
+
 def finish_playlist(keys, drift, fast, seed_info, report, detail=""):
     """
     Sends a first pass, then lets Drift top it up. JRiver output: the first pass
@@ -6036,11 +6185,26 @@ def finish_playlist(keys, drift, fast, seed_info, report, detail=""):
     a fast start, everything is added behind the playing track). With added
     playlists (Play tab), Drift runs first and everything is sent together, so
     they sit around the whole set. YouTube output: Drift runs first, as the link
-    is made once. Returns how many were sent.
+    is made once. With an At least filter, Drift runs first too, so the share is
+    worked out over the whole playlist before it's sent. Returns how many were sent.
     """
     keys = spread_artists(add_deep_cuts(keys, seed_info, report), keep=fast.key)
-    if mix_active():
+    shares = bool(_shares(drift.played))
+    if shares:
         drift.run(keys)
+        keys = apply_shares(keys, drift.played, report, keep=[fast.key], per_artist=drift.per_artist,
+                            artists=[a for a, _ in drift.seed_pairs])
+        keys = spread_artists(keys, keep=fast.key)
+        if not mix_active() and not output_streaming():
+            mix_skipped(report)
+            rest = fast.rest(keys)
+            if rest:
+                report(sending_message(len(keys), detail))
+                send_to_jriver(rest, seed_info=seed_info, report=report, append=fast.started)
+            return len(keys)
+    if mix_active():
+        if not shares:
+            drift.run(keys)
         keys = spread_artists(keys, keep=fast.key)
         final = combine_with_mix(keys, report)
         rest = fast.rest(final)
@@ -6050,7 +6214,8 @@ def finish_playlist(keys, drift, fast, seed_info, report, detail=""):
         return len(final)
     mix_skipped(report)
     if output_streaming():
-        drift.run(keys)
+        if not shares:
+            drift.run(keys)
         keys = spread_artists(keys)
         if keys:
             report(sending_message(len(keys), detail))
@@ -7719,6 +7884,7 @@ def create_only_playlist(text, report=print):
              target=target))
     session_id = session_start("vibe", {"Artist": artist, "Name": text, "Album": ""}, "AI")
     played = PlayedFilter("vibe", report=report, filters=True)
+    share_not_here(played, report, t("a playlist of one artist's tracks matches all or nothing"))
     by_title = {}
     for key in library.artist_tracks(artist)[1]:
         name = ((library.track_row(key) or {}).get("Name") or "").strip()
@@ -7799,6 +7965,7 @@ def play_top_n(report=print, seed_info=None):
     ordered_keys, labels_used = [], []
     fast = FastStart(seed_info, report, enabled=(order == "popular"))
     played = PlayedFilter("top", report=report, filters=True)
+    share_not_here(played, report, t("a playlist of one artist's tracks matches all or nothing"))
     # a now-playing seed stays where it is in Playing Now, so a top track that is the seed isn't queued again
     playing_key = "" if seed_info.get("Typed") else str(seed_info.get("FileKey") or "")
     for artist in seeds:

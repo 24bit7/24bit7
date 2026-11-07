@@ -299,8 +299,11 @@ An AI Playlist config has no sources to pick, and its playlist's Drift section h
 
 A window of named filters that narrow what 24bit7 picks, Drift rounds and what Non-stop adds included. Where a filter applies is decided by ticking it on a config, for every playlist that config builds, wherever it's sent. **Used by** on each filter says which playlists have it ticked, and which config where there are several. Each filter has:
 
+- **What It Does**: **Leave out tracks that don't match**, or **At least [20]% of each playlist matches** (below).
 - **Only pick from**: a JRiver playlist or smartlist, so only its tracks can be used. Anything you can set up in JRiver's smartlist editor, 24bit7 respects.
-- **Rules**, matching all or any: Rating, Year, Last played, Play count, Date imported, Genre, Artist, Album, Duration, File type, Bit depth, Sample rate and File location. For example, "Sample rate at most 48 kHz" saves JRiver converting on the fly for a Sonos.
+- **Rules**, matching all or any: Rating, Year, Last played, Play count, Date imported, Genre, Artist, Album, Duration, File type, Bit depth, Sample rate, File location and **Other field**. For example, "Sample rate at most 48 kHz" saves JRiver converting on the fly for a Sonos. Other field reads any JRiver field by its name, your own included: type the name, and its values in your library are listed to pick from, with how many tracks and artists have one. A name JRiver doesn't know is pointed out.
+
+**At least.** A filter set to At least leaves nothing out. The playlist is built as usual, then 24bit7 makes sure at least that share of it matches: a filter "Kiwi Music, at least 20%, Country is New Zealand" makes six of thirty tracks Kiwi. Tracks that match are swapped in for the last of those that don't, from artists you own found deeper in the similar-artist lists already fetched, and spread through the playlist rather than left at the end. Where there aren't enough, the usual tracks fill the rest and the console says how far short it fell: "Kiwi Music: 3 of 30 tracks (10%), short of the 20% asked for". A track with no value for a rule's field doesn't count towards the share. On a playlist's page the tick reads "Kiwi Music (at least 20%)". Drift rounds and what Non-stop adds aim for the same share; Artist's Top Tracks, all one artist, says the share doesn't apply.
 
 Tick **Every playlist** on a filter and it applies to every playlist 24bit7 builds, whether it's ticked on the playlist's page or not.
 

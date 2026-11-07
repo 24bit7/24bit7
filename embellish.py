@@ -201,6 +201,8 @@ def find(keys, name, amount, report):
             if amount == "out":
                 report("  " + t("Stage {stage}: {artists} artists, {tracks} added.", stage=stage, artists=len(members),
                                 tracks=tn("{count} track", "{count} tracks", len(new) - before)))
+        # At least filters (7 Nov 2026): their share of what's added; your own playlist is yours
+        new = engine.apply_shares(new, played, report, artists=list(on_list.values()))
     except engine.BuildCancelled:
         if amount != "out" or not new:
             raise

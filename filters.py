@@ -18,6 +18,12 @@ Every playlist (Ben, 5 Nov 2026): a filter with it ticked applies to every playl
 tracks skipped by voice twice or more, and every track by an artist with three such
 tracks (the Alexa skip counts them in 24bit7's own JRiver field).
 
+At least (Ben, 7 Nov 2026): a filter can ask for a share instead of leaving tracks out.
+"At least 20% of each playlist matches" keeps the playlist as usual and makes sure that
+share of it matches; engine.apply_shares does the work after a build. A track with no
+value for a rule's field doesn't count towards a share. Other field: a rule on any JRiver
+field by name (Ben's Country), read into the library copy alongside the usual fields.
+
 Kept in the database's meta table as JSON. The build in progress gets its filter
 ids through engine.FILTER_IDS (buttons.run sets them).
 """
@@ -45,7 +51,28 @@ SHIPPED_FLAG = "filters_skipped_shipped"
 
 def blank(name="New filter"):
     return {"id": uuid.uuid4().hex[:8], "name": name, "on": True, "every": False, "builtin": "",
-            "pick_from": "", "pick_name": "", "match": "all", "rules": []}
+            "pick_from": "", "pick_name": "", "match": "all", "rules": [], "mode": "leave", "share": SHARE_DEFAULT}
+
+
+SHARE_DEFAULT = 20   # At least's percentage, until it's changed
+
+
+def is_share(item):
+    """True for a filter set to At least: it asks for a share rather than leaving tracks out."""
+    return item.get("mode") == "least" and item.get("builtin") != "skipped"
+
+
+def tick_name(item):
+    """A filter's name on a playlist's page: "Kiwi Music (at least 20%)" for an At least filter."""
+    return item["name"] + (" " + t("(at least {n}%)", n=share_of(item)) if is_share(item) else "")
+
+
+def share_of(item):
+    """At least's percentage, one to a hundred."""
+    try:
+        return max(1, min(100, int(float(item.get("share") or SHARE_DEFAULT))))
+    except (TypeError, ValueError):
+        return SHARE_DEFAULT
 
 
 def skipped_filter():
@@ -180,6 +207,8 @@ FIELDS = [
     ("bit_depth", N_("Bit depth"), [("at_least", N_("at least")), ("exactly", N_("exactly")), ("at_most", N_("at most"))], "number"),
     ("sample_rate", N_("Sample rate"), [("at_least", N_("at least")), ("exactly", N_("exactly")), ("at_most", N_("at most"))], "khz"),
     ("location", N_("File location"), [("contains", N_("contains")), ("not_contains", N_("doesn't contain"))], "text"),
+    ("other", N_("Other field"), [("is", N_("is")), ("is_not", N_("isn't")), ("contains", N_("contains")),
+                                  ("not_contains", N_("doesn't contain"))], "other"),
 ]
 FIELD_INFO = {code: (label, ops, kind) for code, label, ops, kind in FIELDS}
 TEXT_FIELDS = {"genre": "Genre", "artist": "Artist", "album": "Album", "file_type": "File Type", "location": "Filename"}
@@ -207,7 +236,57 @@ def file_types():
 
 def blank_rule(field="rating"):
     ops = FIELD_INFO[field][1]
-    return {"field": field, "op": ops[0][0], "value": "", "value2": ""}
+    out = {"field": field, "op": ops[0][0], "value": "", "value2": ""}
+    if field == "other":
+        out["name"] = ""   # the JRiver field's name, as JRiver spells it
+    return out
+
+
+def other_fields(items=None):
+    """The JRiver fields named in Other field rules, for the library to read as well."""
+    out = []
+    for item in load() if items is None else items:
+        for rule in item.get("rules") or []:
+            name = str(rule.get("name") or "").strip() if rule.get("field") == "other" else ""
+            if name and name not in out:
+                out.append(name)
+    return out
+
+
+_jriver_fields = {"names": None, "at": 0}
+
+
+def jriver_fields(fresh=False):
+    """{lower-case name: name as JRiver has it} for every library field, asked of JRiver at most every minute."""
+    if fresh or _jriver_fields["names"] is None or time.time() - _jriver_fields["at"] > 60:
+        try:
+            import xml.etree.ElementTree as ET
+            import library
+            r = library._get("Library/Fields")
+            names = [f.get("Name") for f in ET.fromstring(engine.xml_safe(r.text)).iter("Field") if f.get("Name")]
+            _jriver_fields.update(names={n.lower(): n for n in names}, at=time.time())
+        except Exception:
+            return _jriver_fields["names"] or {}
+    return _jriver_fields["names"]
+
+
+def field_values(name):
+    """(values, tracks, artists) for a JRiver field in the library copy: its values, most tracks first."""
+    import library
+    counts, tracks, artists = {}, 0, set()
+    with library._lock:
+        rows = list(library._tracks)
+    for row in rows:
+        value = str(row.get(name) or "").strip()
+        if not value:
+            continue
+        tracks += 1
+        artists.add(engine.artist_key(row.get("Artist") or ""))
+        for part in value.split(";"):
+            part = part.strip()
+            if part:
+                counts[part] = counts.get(part, 0) + 1
+    return sorted(counts, key=lambda v: (-counts[v], v.lower())), tracks, len(artists)
 
 
 def _number(text):
@@ -229,6 +308,17 @@ def rule_result(rule, key, row):
             return True
         rating = _number(row.get("Rating")) or 0   # JRiver leaves the field out for an unrated track
         return int(rating) in wanted
+    if field == "other":
+        name, wanted = str(rule.get("name") or "").strip(), str(value).strip().lower()
+        if not name or not wanted:
+            return True   # not filled in yet: the rule does nothing
+        have = str(row.get(name) or "").strip().lower()
+        if not have:
+            return MISSING
+        if op in ("is", "is_not"):
+            same = wanted in [part.strip() for part in have.split(";")]   # a list field: any of its values
+            return same if op == "is" else not same
+        return (wanted in have) if op == "contains" else (wanted not in have)
     if field in TEXT_FIELDS:
         wanted = str(value).strip().lower()
         if not wanted:
@@ -290,6 +380,8 @@ def describe_rule(rule):
     label, ops, kind = FIELD_INFO.get(rule.get("field"), ("?", [("", "")], ""))
     op = dict(ops).get(rule.get("op"), "")
     value = rule.get("value", "")
+    if kind == "other":
+        return f"{rule.get('name') or '?'} {t(op)} {value}"
     if kind == "stars":
         value = ", ".join(x for x in str(value).split(",") if x) or t("none")
     elif rule.get("op") == "between":
@@ -308,7 +400,27 @@ def describe(item):
     rules = [describe_rule(r) for r in item.get("rules") or []]
     if rules:
         bits.append((" " + t("and") + " " if item.get("match", "all") == "all" else " " + t("or") + " ").join(rules))
+    if is_share(item):   # "Kiwi Music (at least 20%: Country is New Zealand)"
+        least = t("at least {n}%", n=share_of(item))
+        return item["name"] + f" ({least}: {'; '.join(bits)})" if bits else item["name"] + f" ({least})"
     return item["name"] + (f" ({'; '.join(bits)})" if bits else "")
+
+
+def matches(item, key, row=None):
+    """
+    For an At least filter: do this track's fields count towards the share? Its rules, where a track
+    with no value for a rule's field doesn't count. Only pick from is checked by Active.counts_for.
+    """
+    import library
+    row = row if row is not None else library.track_row(key)
+    if row is None:
+        return False
+    rules = item.get("rules") or []
+    if not rules:
+        return True
+    results = [rule_result(rule, key, row) for rule in rules]
+    passed = [r is not MISSING and bool(r) for r in results]
+    return all(passed) if item.get("match", "all") == "all" else any(passed)
 
 
 class Active:
@@ -320,7 +432,10 @@ class Active:
 
     def __init__(self, ids, report=print):
         self.report, self.left_out, self.missing = report, 0, 0
-        self.items = by_ids(ids or [])
+        everything = by_ids(ids or [])
+        self.shares = [x for x in everything if is_share(x)]   # At least: engine.apply_shares does those
+        self.items = [x for x in everything if not is_share(x)]
+        self.share_pools = {}   # an At least filter's id -> the keys on its Only pick from playlist
         self.pools = []
         self.rule_sets = [(x.get("match", "all"), x["rules"]) for x in self.items if x.get("rules")]
         self.skipped = None
@@ -330,6 +445,15 @@ class Active:
             import library
             library.ensure_loaded()
             self.library = library
+        for item in list(self.shares):
+            if not item.get("pick_from"):
+                continue
+            try:
+                import saved_playlists
+                self.share_pools[item["id"]] = {str(k) for k in saved_playlists.playlist_keys(item["pick_from"])}
+            except Exception as e:
+                report("  " + t("Problem: the filter {name} couldn't read {value} from JRiver ({e}), so it was skipped this time.", name=item['name'], value=item.get('pick_name') or 'its playlist', e=e))
+                self.shares.remove(item)
         for item in self.items:
             if not item.get("pick_from"):
                 continue
@@ -341,10 +465,19 @@ class Active:
                 continue
             self.pools.append(keys)
         if self:
-            report("  " + t("Filters: {filters}", filters="; ".join(describe(x) for x in self.items)))
+            report("  " + t("Filters: {filters}", filters="; ".join(describe(x) for x in self.items + self.shares)))
 
     def __bool__(self):
-        return bool(self.pools or self.rule_sets or self.skipped is not None)
+        return bool(self.pools or self.rule_sets or self.skipped is not None or self.shares)
+
+    def counts_for(self, item, key, row=None):
+        """Does this track count towards an At least filter's share? Its playlist, then its rules."""
+        pool = self.share_pools.get(item["id"])
+        if pool is not None and str(key) not in pool:
+            return False
+        if pool is not None and not (item.get("rules") or []):
+            return True
+        return matches(item, key, row)
 
     def _not_skipped(self, key):
         if self.skipped is None:
