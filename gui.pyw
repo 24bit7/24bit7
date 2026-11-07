@@ -212,7 +212,7 @@ class PlayTab(tk.Frame):
         # pressed is the seed - what JRiver is playing, or a typed artist and track.
         outer = tk.Frame(self, pady=8)   # no side margin: the line under the two tabs spans the window
         outer.pack(fill="x")
-        self.seed_nb = TabbedPane(outer, font=("Segoe UI", 9, "bold"), pad=(14, 4), indent=22)
+        self.seed_nb = TabbedPane(outer, font=("Segoe UI", 9, "bold"), pad=(14, 4), indent=22, even=True)
         self.seed_nb.pack(fill="x")
 
         frame = tk.Frame(self.seed_nb, padx=26, pady=8)
@@ -272,6 +272,7 @@ class PlayTab(tk.Frame):
 
         self.search_tab = tk.Frame(self.seed_nb, padx=26, pady=8)
         self.seed_nb.add(self.search_tab, text=t("Search"))
+        self.search_tab.grid_anchor("w")   # the boxes and the line under them centred in the panel, as one
         fields = tk.Frame(self.search_tab)   # one row, so each title sits right beside its box
         fields.grid(row=0, column=0, columnspan=4, sticky="w")
         tk.Label(fields, text=t("Artist"), font=("Segoe UI", 10)).pack(side="left")
@@ -288,8 +289,6 @@ class PlayTab(tk.Frame):
             entry.bind("<Return>", lambda e: self.on_similar())
         self.seed_nb.bind("<<NotebookTabChanged>>", lambda e: (self._sync_seed_buttons(), self._place_output(),
                                                               self.after_idle(self._line_up_lists)))
-        for widget in (fields, self.search_tab, self.playlists_tab):   # the panel settles its height after the switch
-            widget.bind("<Configure>", lambda e: self._seed_has_row() and self.after_idle(self._place_output), add="+")
 
     # --- JRiver Playlists (Ben, 6 Nov 2026): play or embellish one of your own playlists ----------------
 
@@ -297,6 +296,7 @@ class PlayTab(tk.Frame):
         """The third seed tab: Playlist, Play \u25be and Play & Embellish \u25be on one row, Output at the right."""
         tab = self.playlists_tab = tk.Frame(self.seed_nb, padx=26, pady=8)
         self.seed_nb.add(tab, text=t("JRiver Playlists"))
+        tab.grid_anchor("w")   # the row centred in the panel, level with Output
         row = tk.Frame(tab)
         row.grid(row=0, column=0, sticky="w")
         label = tk.Label(row, text=t("Playlist"), font=("Segoe UI", 10))
@@ -821,20 +821,17 @@ class PlayTab(tk.Frame):
         return self.seed_nb.select() == str(self.search_tab)
 
     def _place_output(self):
-        """Output at the right of the seed tab that's showing: level with Zone, or with the Artist and Track boxes."""
+        """
+        Output at the right of the seed tab that's showing, in the panel's middle on every tab (Ben, 7 Nov
+        2026): the tabs are one height and their rows are centred, so it never moves when the tab changes.
+        place measures from inside the panel's padding, the same 26 as Zone has on the left.
+        """
         box = getattr(self, "output_box", None)
         if box is None:
             return
-        if self._seed_has_row():
-            # level with the row of boxes, which sits centred in the panel: read where it is
-            # (place measures from inside the panel's padding, the same 26 as Zone has on the left)
-            tab = self.search_tab if self._seed_is_search() else self.playlists_tab
-            fields = tab.grid_slaves(row=0, column=0)[0]
-            tab.update_idletasks()
-            middle = fields.winfo_y() + fields.winfo_height() // 2 - int(tab.cget("pady"))
-            box.place(in_=tab, relx=1.0, rely=0, x=0, y=middle, anchor="e")
-        else:
-            box.place(in_=self.seed_nb._pages[0], relx=1.0, rely=0.5, x=0, y=0, anchor="e")
+        page = self.seed_nb._current if self.seed_nb._current is not None else self.seed_nb._pages[0]
+        box.place(in_=page, relx=1.0, rely=0.5, x=0, y=0, anchor="e")
+        if page is self.seed_nb._pages[0]:
             box.update_idletasks()   # so its width is known
             self._usage_info.pack_configure(padx=(0, box.winfo_reqwidth() + 36))   # the track text stops short of it
         box.lift()
@@ -2108,6 +2105,7 @@ class PlayTab(tk.Frame):
             self.np_track.show((t("Nothing playing"), None))
             self.np_detail.show((t("Start a track in this zone to seed from it"), None))
             self.last_playing = None
+        self.seed_nb.even_out()   # a long title can wrap onto another line: every tab grows with it
 
     def _type_greeting(self, text, i):
         """Types the greeting one character at a time, then clears it after 10 seconds."""

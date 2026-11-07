@@ -359,7 +359,7 @@ class TabbedPane(tk.Frame):
     on a high-resolution screen as on a normal one.
     """
 
-    def __init__(self, master, font, pad=(18, 8), box=False, indent=8, strip=False, **kw):
+    def __init__(self, master, font, pad=(18, 8), box=False, indent=8, strip=False, even=False, **kw):
         self._strip_mode = strip   # the main window's top strip: tabs on a black (or blue) band
         if strip:
             kw.setdefault("bg", PALETTE.get("strip_bg") or master.cget("bg"))
@@ -388,6 +388,15 @@ class TabbedPane(tk.Frame):
         self._box = self._line if box else 0
         self._holder = tk.Frame(self, bg=PALETTE["line"] if box else self.cget("bg"))
         self._holder.pack(fill="both", expand=True)
+        # even=True: every page as tall as the tallest, so what's under the pane stays put when the tab
+        # changes (Ben, 7 Nov 2026). A strut no wider than nothing holds the height; a page that grows past
+        # it still gets its room, and even_out() resets it.
+        self._strut = None
+        if even:
+            self._strut = tk.Frame(self._holder, width=0, height=0, bg=self._holder.cget("bg"))
+            self._strut.pack(side="left", fill="y")
+            self._evening = None
+            self.bind("<Configure>", lambda e: e.widget is self and self._even_soon(), add="+")
 
     # --- the ttk.Notebook-style interface ---------------------------------
 
@@ -420,8 +429,26 @@ class TabbedPane(tk.Frame):
         page.pack(in_=self._holder, fill="both", expand=True, padx=self._box, pady=(0, self._box))
         page.lift()
         self._paint()
+        self.even_out()
         self.event_generate("<<NotebookTabChanged>>")
         return None
+
+    def even_out(self):
+        """With even=True: the strut as tall as the tallest page asks to be, whichever is showing."""
+        if self._strut is None or not self._pages:
+            return
+        self.update_idletasks()   # so each page's request is up to date, shown or not
+        tallest = max(page.winfo_reqheight() for page in self._pages) + self._box
+        if int(self._strut.cget("height")) != tallest:
+            self._strut.config(height=tallest)
+
+    def _even_soon(self):
+        """A width change can rewrap a page's text: even out once things settle."""
+        if self._evening is None:
+            def run():
+                self._evening = None
+                self.even_out()
+            self._evening = self.after_idle(run)
 
     def remove(self, page):
         """Takes a page and its tab away (Settings drops a device's tab when it goes)."""

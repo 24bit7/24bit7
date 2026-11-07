@@ -26,9 +26,10 @@ def test_output_is_on_the_zone_line_on_both_tabs(app, ui):
     p.seed_nb.select(p.search_tab)
     ui.pump(0.3)
     assert p.output_cb.winfo_ismapped()
-    box_mid = p.search_artist.winfo_rooty() + p.search_artist.winfo_height() // 2
+    # 7 Nov 2026: in the panel's middle, level with the boxes and the line under them taken together
+    box_top = p.search_artist.winfo_rooty()
     out_mid = p.output_cb.winfo_rooty() + p.output_cb.winfo_height() // 2
-    assert abs(box_mid - out_mid) <= 6, (box_mid, out_mid)
+    assert box_top < out_mid < box_top + 3 * p.search_artist.winfo_height(), (box_top, out_mid)
 
 
 def test_ai_usage_sits_on_the_seed_tabs_row(app, ui):
