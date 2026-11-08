@@ -35,8 +35,9 @@ def test_the_column_and_the_page_scroll_as_one_with_square_corners(app, ui):
     for w in (s._name_box, s._preview, s._mode_labels["simple"], s._tour_button):
         assert page in ancestors(w), "the header scrolls with the page"
     column = next(w for w in ancestors(s._button_list) if isinstance(w, tk.Canvas))
-    assert column is not page.master and column is next(w for w in ancestors(s._device_restore) if isinstance(w, tk.Canvas)), \
-        "Your Playlist Buttons and Device Playlists scroll together, apart from the page"
+    devices = next(w for w in ancestors(s._device_restore) if isinstance(w, tk.Canvas))
+    assert column is not page.master and devices is not column, \
+        "Your Playlist Buttons scrolls apart from the page; Device Playlists has its own column on Devices (5 Nov 2026)"
     assert column.winfo_width() >= s._button_list.master.winfo_reqwidth(), "the column asks for the width its content needs"
     assert not [w for w in walk(s) if getattr(w, "corner_tile", False)] and not hasattr(tabs, "corner_tiles")
     assert not ui.errors, ui.errors[0]

@@ -123,8 +123,9 @@ def test_right_click_menu_renames_copies_moves_removes_and_restores(app, ui, mon
     monkeypatch.setattr(gui.messagebox, "askyesno", lambda *a, **k: asked.append(a) or True)
     menus[-1].invoke(6)   # Delete: asks, then the playlist is gone (no off-the-row state, 2 Nov 2026)
     assert len(asked) == 1 and "Delete Similar Artists?" in asked[0][1]
-    assert names(p) == ["Similar Tracks", "Star Turn", "Star Turn 2", "Artist's Top Tracks", "Consensus", "AI Playlist"]
-    assert not any(b.get("standard") == "artists" for b in buttons.load()) and len(buttons.load()) == 8
+    assert names(p) == ["Similar Tracks", "Star Turn", "Star Turn 2", "Artist's Top Tracks", "Consensus", "AI Playlist",
+                        "Radio"], "Radio ships after AI Playlist (6 Nov 2026)"
+    assert not any(b.get("standard") == "artists" for b in buttons.load()) and len(buttons.load()) == 9
     p._button_menu(Click(), None)   # right-click on +
     assert labels(menus[-1]) == ["Restore Default Playlists"] and menus[-1].entrycget(0, "state") == "normal", \
         "deleted: missing, so Restore is live"

@@ -52,11 +52,14 @@ def test_what_it_does_and_an_other_field_rule(app, ui):
     entry.delete(0, "end")
     entry.insert(0, "country")   # as typed: JRiver's spelling is used
     entry.event_generate("<Return>")
-    ui.pump(1.0)
+    line = "Country: 3 tracks by 1 artist have a value. The list holds the values in your library."
+    for _ in range(25):   # the field is read on a thread; the full suite (8 Nov 2026) was slower than a second
+        ui.pump(0.2)
+        if line in labels(win):
+            break
     rule = next(x for x in filters.load() if x["id"] == f["id"])["rules"][0]
     assert rule["name"] == "Country", rule
-    assert "Country: 3 tracks by 1 artist have a value. The list holds the values in your library." in labels(win), \
-        labels(win)
+    assert line in labels(win), [x for x in labels(win) if "Country" in x or "JRiver" in x]
     box = next(w for w in walk(win) if isinstance(w, ttk.Combobox) and "New Zealand" in w.cget("values"))
     box.set("New Zealand")
     ui.pump(0.2)
