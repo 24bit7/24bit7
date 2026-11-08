@@ -785,6 +785,10 @@ def switch_step(preferred):
         "  Problem: JRiver didn't switch it. Is JRiver running?"
 
 
+NO_STATIONS = ("You don't have any stations yet. When the Radio button is ready, choose Analyse Now to make "
+               "your stations.")   # Ben's words, 8 Nov 2026; Analyse Now is the button's name in the app
+
+
 def _radio(device, value, body, busy, top_up):
     """
     Radio by voice (Ben, 8 Nov 2026): "radio folk" plays that station on the device's zone, with Radio's shared
@@ -800,10 +804,8 @@ def _radio(device, value, body, busy, top_up):
     if engine.zone_id(zone) is None:
         return "problem", f"I can't find the {zone} zone in JRiver.", {}
     result = radio.analysis()
-    if result is None or not radio.lanes():
-        if result and result.get("resting"):
-            return "problem", "Radio needs more of your plays before it can make stations. Play some music in JRiver first.", {}
-        return "problem", "Radio has no stations yet. Press Radio in 24bit7 once to make them.", {}
+    if result is None or not radio.lanes():   # resting or never analysed: one line for both (Ben, 8 Nov 2026)
+        return "problem", NO_STATIONS, {}
     offered = radio.recent_lanes()
     if not value:
         return "ask", radio.ask_which(offered), {"ask": "station", "title": ""}

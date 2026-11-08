@@ -83,9 +83,15 @@ def test_the_last_five_are_the_last_played_then_the_biggest(app, stations):
     assert len(radio.row()["recent"]) <= radio.RECENT_MAX
 
 
-def test_no_stations_yet_says_how_to_make_them(app, alexa):
+def test_no_stations_yet_says_how_to_make_them(app, alexa, monkeypatch):
+    """Ben, 8 Nov 2026: one line, never analysed or resting, naming the app's Analyse Now button."""
+    import radio
+    line = "You don't have any stations yet. When the Radio button is ready, choose Analyse Now to make your stations."
     r = alexa.say("RadioIntent", "folk")
-    assert "Radio has no stations yet" in r.ssml and r.ends is True, r
+    assert line in r.ssml.replace("&apos;", "'") and r.ends is True, r
+    monkeypatch.setattr(radio, "analysis", lambda: {"resting": "twelve artists of forty"})
+    r = alexa.say("RadioIntent", "folk")
+    assert line in r.ssml.replace("&apos;", "'") and r.ends is True, "resting says the same"
 
 
 def keys_of(app, n):
