@@ -168,6 +168,7 @@ class PlayTab(tk.Frame):
         root.bind("<<ButtonsChanged>>", lambda e: self.refresh_buttons(), add="+")   # from Settings > Buttons
         root.bind("<<RadioAnalyse>>", lambda e: self.on_radio_analyse(True), add="+")    # Radio's page: Re-analyse
         root.bind("<<RadioRecount>>", lambda e: self.on_radio_analyse(False), add="+")   # Radio's page: a new count
+        root.bind("<<EmbellishAmounts>>", lambda e: self._sync_amounts(), add="+")   # Settings > JRiver Playlists
         self.log_queue = queue.Queue()
         engine.OUTPUT_HOOK = self.log_queue.put   # engine's print() and [debug] lines land here
         self.running = False
@@ -321,6 +322,7 @@ class PlayTab(tk.Frame):
                                            command=lambda: self.on_play_playlist(True), arrow=True,
                                            arrow_command=lambda: self._choice_menu("amount"))
         self.embellish_button.pack(side="left")
+        self._sync_amounts()
         on, wrap = self.help_on, self.note_wrap
         for widget, name in ((label, "Playlist"), (self.playlist_entry, "Playlist"), (self.play_list_button, "Play"),
                              (self.embellish_button, "Play & Embellish")):
@@ -514,11 +516,21 @@ class PlayTab(tk.Frame):
                             parent=self)
         return None
 
+    def _sync_amounts(self):
+        """Play & Embellish's arrow only while Settings leaves more than one amount to choose from."""
+        try:
+            self.embellish_button.set_arrow(len(embellish.amounts()["shown"]) > 1)
+        except (AttributeError, tk.TclError):
+            pass
+
     def _choice_menu(self, which):
-        """The arrows: Play Shuffled or Play Ordered; Add Half, Double It or Build It Out. Remembered."""
+        """
+        The arrows: Play Shuffled or Play Ordered (remembered); the amounts Settings > JRiver Playlists offers,
+        names only, the default ticked, a pick running Play & Embellish with it once (Ben, 7 Nov 2026).
+        """
         self._close_children()
         button = self.play_list_button if which == "order" else self.embellish_button
-        options = embellish.ORDERS if which == "order" else embellish.AMOUNTS
+        options = embellish.ORDERS if which == "order" else embellish.amounts()["shown"]
         names = embellish.ORDER_NAMES if which == "order" else embellish.AMOUNT_NAMES
         current = embellish.choices()[which]
         bg, fg, muted, line = PALETTE["field_bg"], PALETTE["text"], PALETTE["help_fg"], PALETTE["line"]
@@ -540,9 +552,6 @@ class PlayTab(tk.Frame):
             r.bind("<Leave>", lambda e, w=r: w.set_chosen(False))
             r.bind("<ButtonRelease-1>", lambda e, c=code: self._choose(which, c))
             pop._rows.append((code, r, mark))
-            if which == "amount":
-                tk.Label(inner, text=t(embellish.AMOUNT_NOTES[code]), fg=muted, bg=bg, font=("Segoe UI", 8),
-                         justify="left", wraplength=320).pack(anchor="w", padx=(30, 10), pady=(0, 4))
         pop.update_idletasks()
         w = max(pop.winfo_reqwidth(), button.winfo_width())
         pop.geometry(f"{w}x{pop.winfo_reqheight()}+{button.winfo_rootx()}+{button.winfo_rooty() + button.winfo_height() + 2}")
@@ -553,10 +562,13 @@ class PlayTab(tk.Frame):
         pop.bind("<FocusOut>", lambda e: self.after(100, self._close_children_if_unfocused))
 
     def _choose(self, which, code):
-        embellish.set_choice(which, code)
         self._close_children()
+        if which == "order":
+            embellish.set_choice(which, code)
+        else:   # an amount from the arrow: this once, the default stays as Settings has it
+            self.on_play_playlist(True, amount=code)
 
-    def on_play_playlist(self, embellish_it):
+    def on_play_playlist(self, embellish_it, amount=None):
         """Play or Play & Embellish: a build like any other (Play or Review Mode, Output, Top-Up)."""
         if self.running:
             return
@@ -564,6 +576,8 @@ class PlayTab(tk.Frame):
         if playlist is None:
             return
         chosen = embellish.choices()
+        if amount:
+            chosen["amount"] = amount
         top_up = bool(getattr(self, "top_up_armed", False))
         if embellish_it:
             target = lambda: embellish.embellish(playlist, chosen["order"], chosen["amount"], self.report)
@@ -644,14 +658,17 @@ class PlayTab(tk.Frame):
         elif result.get("resting"):
             tk.Label(inner, text=self._radio_resting_text(), fg=muted, bg=bg, font=("Segoe UI", 9), wraplength=320,
                      justify="left").pack(anchor="w", padx=10, pady=6)
-        for lane_, depth in radio.visible_rows():
+        rows = radio.visible_rows()
+        any_split = any(x.get("children") for x, _d in rows)   # every name starts where a split's does
+        for lane_, depth in rows:
             splits = bool(lane_.get("children"))
             tag = f"{radio.share(lane_)}%"
             if face is not None and lane_["id"] == face["id"]:
                 tag = t("default") + " \u00b7 " + tag
             r = tabs.PickRow(inner, lane_["name"], fg=fg, bg=bg, fit=True, tag=tag, indent=18 * depth,
                              fold=("open" if lane_["id"] in opened else "closed") if splits else None,
-                             on_fold=(lambda i=lane_["id"]: self._radio_fold(i)) if splits else None)
+                             on_fold=(lambda i=lane_["id"]: self._radio_fold(i)) if splits else None,
+                             fold_space=any_split)
             r.configure(cursor="hand2")
             r.pack(fill="x", padx=3, pady=1)
             r.bind("<Enter>", lambda e, w=r: w.set_chosen(True))

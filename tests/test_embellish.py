@@ -106,8 +106,8 @@ def test_play_ordered_and_shuffled(app):
 
 def test_recent_and_the_arrows_choices_are_remembered(app):
     import embellish
-    assert embellish.choices() == {"order": "shuffled", "amount": "half"}
-    embellish.set_choice("amount", "double")
+    assert embellish.choices() == {"order": "shuffled", "amount": "p50"}
+    embellish.set_amounts(default="double")
     embellish.set_choice("order", "ordered")
     assert embellish.choices() == {"order": "ordered", "amount": "double"}
     for pid in ("201", "202", "203", "204", "205", "201"):
@@ -131,4 +131,5 @@ def test_build_it_out_names_the_button_you_press():
     import embellish
     import inspect
     assert "Stop keeps" not in inspect.getsource(embellish)
-    assert "Cancel keeps" in embellish.AMOUNT_NOTES["out"]
+    import settings_gui
+    assert "Cancel keeps" in inspect.getsource(settings_gui.SettingsTab._embellish_section)

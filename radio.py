@@ -9,17 +9,23 @@ Analysis (once, then by hand with Re-analyse)
                     most LANES_MAX groups; a group of fewer than LANE_MIN artists folds into its nearest
                     neighbour. A lane is named by its two strongest genres, weighted by plays
   Split             a lane's own two halves one level down the same tree: no new analysis. Offered when
-                    both halves have LANE_MIN artists and PILLARS_TO_SPLIT pillars of their own
-  Pillars           the sources' canon for the lane (Last.fm's top artists for its genres) that you own
-                    (PILLAR_OWNED tracks or more), about twelve, blended with about eight of your own most
-                    played in the lane, each side filling the other's gap. Compilations (every track named
-                    "Artist - Title", or Various Artists) are never pillars
+                    both halves have LANE_MIN artists and PILLARS_TO_SPLIT pillars of their own. A half
+                    that's nearly a copy of its lane (most of its pillars the same) gives way to its own
+                    halves, so a split always shows something new (7 Nov 2026)
+  Pillars           about twelve of your own most played in the lane, blended with about eight of the
+                    sources' canon for it (Last.fm's top artists for its genres) that you own (PILLAR_OWNED
+                    tracks or more), each side filling the other's gap: your own first since 7 Nov 2026, as
+                    broad tags pulled mainstream acts into the canon. Compilations (every track named
+                    "Artist - Title", or Various Artists) are never pillars. Your edits (Edit on a station's
+                    row) are laid over them, kept by the station's genre path
   Resting           too little played yet (fewer than MIN_ARTISTS played artists with genres): Radio rests
                     and says how far off it is
 
 A build
   Consensus over three random pillars: artists on two or more of their similar-artist lists, each giving
-  its top tracks you own, with a couple of each circle pillar's own. Short of TARGET_MINUTES, another
+  its top tracks you own, with a couple of each circle pillar's own (at random from its best known five).
+  An agreeing artist that another station fits over twice as well (NEAR) is left out, so a round stays
+  in the station without the Moderator. Short of TARGET_MINUTES, another
   pillar joins (still two or more lists, against everything pulled so far), up to six. A pillar song goes
   first so music starts at once. Non-stop carries on with a fresh round from other random pillars, never
   from what Radio itself played, so it stays in the lane.
@@ -44,8 +50,11 @@ TAGS_PER_ARTIST = 8
 LANES_MAX = 24
 LANE_MIN = 5
 PILLAR_OWNED = 5
-PILLARS_CANON = 12
-PILLARS_OWN = 8
+PILLARS_CANON = 8
+PILLARS_OWN = 12
+NEAR = 0.5              # an agreeing artist is left out when another station fits it over twice as well
+COPY_SHARE = 0.75       # a half with this share of its lane's pillars is a copy: its own halves stand in
+ANALYSIS_VERSION = 2    # 7 Nov 2026: own pillars first, copies give way; an older analysis is cut again
 PILLARS_TO_SPLIT = 6
 ARTISTS_MAX = 1500      # the most played artists analysed, for a very big library
 TARGET_MINUTES = 60
@@ -59,6 +68,7 @@ ROW_KEY = "radio_row"   # the face's lane (the last played), the lanes split ope
 TAGS_KEY = "radio_tags"
 CANON_KEY = "radio_canon"   # Last.fm's top artists per genre: kept so a new station count re-cuts in seconds
 NAMES_KEY = "radio_names"   # the stations you renamed: {its genre path: your name}
+PILLARS_KEY = "radio_pillars"   # your pillar edits: {a station's genre path: {"add": [names], "remove": [names]}}
 _canon_cache = None         # the CANON_KEY cache while an analysis runs
 NOT_GENRE = re.compile(
     r"^(seen live|favou?rites?|love|loved|awesome|beautiful|male vocalists?|female vocalists?|\d{2,4}s?|"
@@ -107,6 +117,33 @@ def lane(lane_id):
     return next((x for x in lanes(include_children=True) if x["id"] == lane_id), None)
 
 
+def lane_by_key(key):
+    """The lane with this genre path (its "key"), or None."""
+    return next((x for x in lanes(include_children=True) if key and x.get("key") == key), None)
+
+
+def outdated():
+    """An analysis made before this version's rules (ANALYSIS_VERSION): the next Radio press cuts it again."""
+    result = analysis()
+    return bool(result and result.get("lanes") and (result.get("version") or 1) < ANALYSIS_VERSION)
+
+
+def recut(report, lane_id=None):
+    """
+    Cuts an outdated analysis again from the genres kept (seconds, no new questions to the sources), keeping
+    your names and pillar edits, and the last station played. Returns lane_id's station's new id (or None).
+    """
+    old, last = lane(lane_id) if lane_id else None, lane(row()["default"]) if row()["default"] else None
+    report(t("Radio: making the stations again with this version's rules. It takes a few seconds; your names "
+             "and pillars are kept."))
+    analyse(report, fresh=False)
+    if last is not None:
+        found = lane_by_key(last.get("key")) or lane_named(last.get("auto") or last["name"])
+        set_row(default=found["id"] if found else None)
+    found = (lane_by_key(old.get("key")) or lane_named(old.get("auto") or old["name"])) if old else None
+    return found["id"] if found else None
+
+
 def lane_named(name):
     """
     The lane a Radio playlist set to a lane plays, by its name (Classic Rock / Rock), so it survives a
@@ -123,12 +160,14 @@ def lane_named(name):
 def row():
     """
     {"default": lane id, "open": [lane ids split open], "buttons": [lane ids on the row, before 1.31.0],
-    "count": the number of stations asked for on Radio's page, or None for as many as the analysis finds}.
+    "count": the number of stations asked for on Radio's page, or None for as many as the analysis finds,
+    "recent": [genre paths of the last stations played, newest first]}.
     """
     saved = _meta(ROW_KEY, {})
     count = saved.get("count")
     return {"default": saved.get("default"), "open": list(saved.get("open") or []),
-            "buttons": list(saved.get("buttons") or []), "count": int(count) if count else None}
+            "buttons": list(saved.get("buttons") or []), "count": int(count) if count else None,
+            "recent": list(saved.get("recent") or [])}
 
 
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")   # shown through t()
@@ -222,6 +261,80 @@ def default_lane():
         return lane(wanted)
     found = lanes()
     return found[0] if found else None
+
+
+# --- by voice (8 Nov 2026) --------------------------------------------------------------------------
+
+RECENT_MAX = 5   # stations Needle Drop offers when asked for Radio with no station
+ORDINALS = {"first": 0, "one": 0, "second": 1, "two": 1, "third": 2, "three": 2, "fourth": 3, "four": 3,
+            "fifth": 4, "five": 4, "last": -1}
+FILLER = {"the", "station", "radio", "please", "number", "a"}
+
+
+def remember_played(lane_):
+    """A station played, newest first in the list Needle Drop offers; kept by genre path, which a Re-analyse keeps."""
+    key = lane_.get("key") or lane_["name"]
+    recent = [k for k in row()["recent"] if k != key]
+    set_row(recent=([key] + recent)[:RECENT_MAX])
+
+
+def recent_lanes(count=RECENT_MAX):
+    """The stations Needle Drop offers: the last played, newest first, then the biggest to make up the count."""
+    out = []
+    for key in row()["recent"]:
+        found = lane_by_key(key) or lane_named(key)
+        if found and all(x["id"] != found["id"] for x in out):
+            out.append(found)
+    for x in lanes():
+        if all(y["id"] != x["id"] for y in out):
+            out.append(x)
+    return out[:count]
+
+
+def spoken_name(lane_):
+    """A station as Alexa says it: 'Folk / Singer-Songwriter' reads as 'Folk and Singer-Songwriter'."""
+    return lane_["name"].replace(" / ", " and ")
+
+
+def ask_which(offered):
+    """'Which station? One, Classic Rock and Rock. Two, Folk.' Numbered, since a name may hold an 'and'."""
+    words = ("One", "Two", "Three", "Four", "Five")
+    return "Which station? " + " ".join(f"{words[i]}, {spoken_name(x)}." for i, x in enumerate(offered[:len(words)]))
+
+
+def match_station(heard, offered=None):
+    """
+    The station a spoken answer names, or None: 'the second one' or 'two' from the list offered; else the name in
+    full ('classic rock rock'), one part of it ('folk'), or every word heard within it ('vocal'), as renamed or
+    by its genre name. Several alike: the one offered first, then the biggest.
+    """
+    import library
+    offered = recent_lanes() if offered is None else offered
+    words = [w for w in library.norm(heard or "").split() if w not in FILLER]
+    if words and words[0] in ORDINALS and (len(words) == 1 or words[1:] == ["one"]):
+        index = ORDINALS[words[0]]
+        return offered[index] if offered and index < len(offered) else None
+    phrase = " ".join(words)
+    if not phrase:
+        return None
+    every = lanes(include_children=True)
+    order = {x["id"]: i for i, x in enumerate(offered)}
+
+    def names(x):
+        return [n for n in (x["name"], x.get("auto") or "") if n]
+
+    def best(found):
+        return min(found, key=lambda x: (order.get(x["id"], len(order)), -share(x))) if found else None
+    tiers = (
+        lambda x: any(library.norm(n) == phrase for n in names(x)),
+        lambda x: any(library.norm(part) == phrase for n in names(x) for part in n.split("/")),
+        lambda x: any(set(words) <= set(library.norm(n).split()) for n in names(x)),
+    )
+    for rule in tiers:
+        found = best([x for x in every if rule(x)])
+        if found:
+            return found
+    return None
 
 
 def resting():
@@ -486,7 +599,7 @@ def _canon(genres, view, owned_ok, report):
 
 def pillars_for(members_keys, genres, view, report, elsewhere=(), own_keys=None):
     """
-    About twelve canon and eight of your own most played in the lane, each side filling the other's gap.
+    About twelve of your own most played in the lane and eight canon, each side filling the other's gap.
     elsewhere: artists you play that the analysis put in another lane, so the canon doesn't pull them in.
     """
     elsewhere = set(elsewhere)
@@ -496,14 +609,9 @@ def pillars_for(members_keys, genres, view, report, elsewhere=(), own_keys=None)
     own = sorted((a for a in (members_keys if own_keys is None else own_keys) if a in owned_ok),
                  key=lambda a: -view[a]["plays"])   # a stray folded in from a tiny group isn't one of the lane's own
     total = PILLARS_CANON + PILLARS_OWN
-    take_canon = min(len(canon), max(PILLARS_CANON, total - len(own)))
-    picked = canon[:take_canon]
-    for a in own:
-        if len(picked) >= total:
-            break
-        if a not in picked:
-            picked.append(a)
-    for a in canon[take_canon:]:
+    take_own = min(len(own), max(PILLARS_OWN, total - len(canon)))
+    picked = own[:take_own]
+    for a in canon + own[take_own:]:
         if len(picked) >= total:
             break
         if a not in picked:
@@ -534,8 +642,29 @@ def _make_lane(lane_id, node, kids, leaves, artists, vecs, view, report, depth, 
                                      prefer))
         if len(halves) == 2 and all(len(h["pillars"]) >= PILLARS_TO_SPLIT for h in halves) \
                 and halves[0]["name"] != halves[1]["name"]:
-            lane_["children"] = halves
+            lane_["children"] = without_copies(lane_, halves)
     return lane_
+
+
+def is_copy(half, parent):
+    """A half whose pillars are mostly its lane's: playing it would sound like the lane itself."""
+    mine = half.get("pillars") or []
+    theirs = {engine.artist_key(n) for n in parent.get("pillars") or []}
+    return bool(mine) and sum(engine.artist_key(n) in theirs for n in mine) >= COPY_SHARE * len(mine)
+
+
+def without_copies(parent, halves):
+    """
+    A split's halves, with any half that's nearly a copy of the lane replaced by its own halves (Ben, 7 Nov
+    2026): Rock opens to Blues, Grunge, Classic Rock and the rest, not to Blues and another Rock. A copy with
+    no halves of its own stays: it's the lane without its other half.
+    """
+    out = list(halves)
+    while True:
+        i = next((i for i, h in enumerate(out) if h.get("children") and is_copy(h, parent)), None)
+        if i is None:
+            return out
+        out[i:i + 1] = out[i]["children"]
 
 
 def _stations_cut(n, merges, leaves, asked):
@@ -627,8 +756,9 @@ def _analyse(report):
         if taken[x["name"]] > 1 and len(x["genres"]) > 2:
             x["name"] = " / ".join(g.title() for g in (x["genres"][0], x["genres"][2]))
     _apply_names(out, report)
+    _lay_pillars(out, report)
     result = {"when": datetime.now().strftime("%Y-%m-%d %H:%M"), "lanes": out, "resting": None,
-              "known": [a for a in played]}
+              "known": [a for a in played], "version": ANALYSIS_VERSION}
     _set_meta(ANALYSIS_KEY, result)
     report(tn("Radio: {count} station, from {artists} artists, {seconds} s.",
               "Radio: {count} stations, from {artists} artists, {seconds} s.", len(out), artists=len(artists),
@@ -640,6 +770,167 @@ def _analyse(report):
         report("  " + t("{name}: {artists} artists; pillars {pillars}.", name=x["name"], artists=x["artists"],
                         pillars=", ".join(x["pillars"][:6]) + ("..." if len(x["pillars"]) > 6 else "")))
     return result
+
+
+# --- your pillars (Edit on a station's row, Ben, 7 Nov 2026) ----------------------------------------
+
+def pillar_edits():
+    """{a station's genre path: {"add": [artist names], "remove": [artist names]}}."""
+    return dict(_meta(PILLARS_KEY, {}))
+
+
+def _path(x):
+    return x.get("key") or x.get("auto") or x["name"]
+
+
+def _ensure_keys(result):
+    """An analysis from before renames has no genre paths: they're worked out once, as _apply_names does."""
+    def walk(items, path):
+        for x in items:
+            x.setdefault("auto", x["name"])
+            x.setdefault("key", (path + " > " if path else "") + x["auto"])
+            walk(x.get("children") or [], x["key"])
+    walk(result.get("lanes") or [], "")
+
+
+def _lay_pillars(items, report=None):
+    """
+    Each station's pillars: the analysis's own (kept as "auto_pillars"), less what you removed from it or from
+    a station it's a half of, plus what you added to it. A half left with fewer than CIRCLE_START keeps its own.
+    """
+    saved = pillar_edits()
+    seen = set()
+
+    def walk(xs, removed):
+        for x in xs:
+            x.setdefault("auto_pillars", list(x.get("pillars") or []))
+            mine = saved.get(_path(x)) or {}
+            seen.add(_path(x))
+            gone = removed | {engine.artist_key(n) for n in mine.get("remove") or []}
+            kept = [n for n in x["auto_pillars"] if engine.artist_key(n) not in gone]
+            if len(kept) < CIRCLE_START:
+                kept = [n for n in x["auto_pillars"] if engine.artist_key(n) not in removed] or list(x["auto_pillars"])
+            for n in mine.get("add") or []:
+                if engine.artist_key(n) not in {engine.artist_key(k) for k in kept}:
+                    kept.append(n)
+            x["pillars"] = kept
+            walk(x.get("children") or [], gone)
+    walk(items, set())
+    if report is not None:
+        for path in saved:
+            if path not in seen:
+                report("  " + t("Your pillars for {station} are kept, though it isn't a station this time.",
+                                station=path.split(" > ")[-1]))
+
+
+def _save_pillars(result, saved):
+    _set_meta(PILLARS_KEY, saved)
+    _lay_pillars(result.get("lanes") or [])
+    _set_meta(ANALYSIS_KEY, result)
+
+
+def _every(result):
+    out = []
+
+    def walk(items):
+        for x in items:
+            out.append(x)
+            walk(x.get("children") or [])
+    walk(result.get("lanes") or [])
+    return out
+
+
+def _editing(lane_id):
+    """(the analysis, the station in it, your edits, the station's own edits), or None if it's gone."""
+    result = analysis()
+    if not result:
+        return None
+    _ensure_keys(result)
+    found = next((x for x in _every(result) if x["id"] == lane_id), None)
+    if found is None:
+        return None
+    saved = pillar_edits()
+    mine = saved.setdefault(_path(found), {"add": [], "remove": []})
+    mine.setdefault("add", [])
+    mine.setdefault("remove", [])
+    return result, found, saved, mine
+
+
+def _tidy(saved):
+    for path in [p for p, v in saved.items() if not (v.get("add") or v.get("remove"))]:
+        saved.pop(path)
+
+
+def edited(lane_):
+    """Whether you've changed this station's pillars (Restore Pillars is offered)."""
+    mine = pillar_edits().get(_path(lane_)) or {}
+    return bool(mine.get("add") or mine.get("remove"))
+
+
+def added(lane_):
+    """The artists you added to this station, as keys."""
+    return {engine.artist_key(n) for n in (pillar_edits().get(_path(lane_)) or {}).get("add") or []}
+
+
+def add_pillar(lane_id, name):
+    """Adds an artist from your library to a station's pillars. Returns a problem line, or None."""
+    found = _editing(lane_id)
+    if found is None:
+        return t("That station has gone since the stations were made again.")
+    result, station, saved, mine = found
+    a = engine.artist_key(name)
+    if a not in {engine.artist_key(n) for n in station.get("pillars") or []}:
+        mine["remove"] = [n for n in mine["remove"] if engine.artist_key(n) != a]
+        if a not in {engine.artist_key(n) for n in station.get("auto_pillars") or station.get("pillars") or []}:
+            mine["add"].append(name)
+    _tidy(saved)
+    _save_pillars(result, saved)
+    return None
+
+
+def remove_pillar(lane_id, name):
+    """Removes a pillar from a station and its halves; at least CIRCLE_START stay. A problem line, or None."""
+    found = _editing(lane_id)
+    if found is None:
+        return t("That station has gone since the stations were made again.")
+    result, station, saved, mine = found
+    if len(station.get("pillars") or []) <= CIRCLE_START:
+        return t("A station needs at least {count} pillars, since each round starts from {count}.", count=CIRCLE_START)
+    a = engine.artist_key(name)
+    if a in {engine.artist_key(n) for n in mine["add"]}:
+        mine["add"] = [n for n in mine["add"] if engine.artist_key(n) != a]
+    else:
+        mine["remove"].append(name)
+    _tidy(saved)
+    _save_pillars(result, saved)
+    return None
+
+
+def restore_pillars(lane_id):
+    """The analysis's own pillars again for this station, and for its halves as far as this station goes."""
+    found = _editing(lane_id)
+    if found is None:
+        return
+    result, station, saved, _mine = found
+    saved.pop(_path(station), None)
+    _save_pillars(result, saved)
+
+
+def removed_from(lane_):
+    """Artist keys you removed from this station or from a station it's a half of."""
+    saved = pillar_edits()
+    parts = _path(lane_).split(" > ")
+    out = set()
+    for i in range(1, len(parts) + 1):
+        out |= {engine.artist_key(n) for n in (saved.get(" > ".join(parts[:i])) or {}).get("remove") or []}
+    return out
+
+
+def library_artists():
+    """[(name, tracks you own)] for Edit's Add From Your Library: every artist but compilations, A to Z."""
+    view = library_view()
+    rows = [(v["name"], v["owned"]) for v in view.values() if not is_compilation(v)]
+    return sorted(rows, key=lambda r: r[0].lower())
 
 
 def join_new_artists(report, limit=10):
@@ -664,7 +955,10 @@ def join_new_artists(report, limit=10):
             continue
         mine = _unit(genres)
         target = max(result["lanes"], key=lambda x: _cosine(mine, _unit(x.get("centroid") or {})))
+        if a in removed_from(target):   # you took it out: it doesn't come back by itself
+            continue
         if view[a]["name"] not in target["pillars"]:
+            target.setdefault("auto_pillars", list(target["pillars"])).append(view[a]["name"])
             target["pillars"].append(view[a]["name"])
             joined.append((view[a]["name"], target["name"]))
     result["known"] = sorted(known)
@@ -737,8 +1031,9 @@ def find(lane_, report, minutes=TARGET_MINUTES, avoid=(), own=None):
         return [], []
     have = {str(k) for k in avoid}
     played = engine.PlayedFilter("artists", report=report, filters=True)
-    circle, lists, picks, seen_artists = [], {}, [], set()
+    circle, lists, picks, seen_artists, off = [], {}, [], set(), []
     own = [] if own is None else own
+    fits = fitter(lane_)
     try:
         while pillars and len(circle) < CIRCLE_MAX and (not picks or _minutes(picks) < minutes):
             engine.check_cancelled()
@@ -753,25 +1048,90 @@ def find(lane_, report, minutes=TARGET_MINUTES, avoid=(), own=None):
             circle += joining
             agreed, _same = engine.inner_circle(circle, lambda m: lists[engine.artist_key(m)],
                                                 min(AGREE, len(circle)), key=engine.artist_key)
-            for p in joining:   # a couple of each pillar's own, its best known
-                for key in _owned_top(p, have, played, 2):
+            for p in joining:   # a couple of each pillar's own, at random from its best known five
+                for key in _owned_top(p, have, played, 2, pool=PILLAR_SONGS):
                     have.add(key)
                     picks.append(key)
                     own.append(key)
+            fits.learn([artist for artist, _why in agreed[len(circle):]])
             for artist, _why in agreed[len(circle):]:   # Radio's page: pick n of each artist's top m
                 a = engine.artist_key(artist)
                 if a in seen_artists:
                     continue
                 seen_artists.add(a)
+                if not fits(artist):
+                    off.append(artist)
+                    continue
                 for key in _owned_top(artist, have, played, engine.TRACKS_PER_ARTIST_PICK,
                                       pool=max(engine.TRACKS_PER_ARTIST_POOL, engine.TRACKS_PER_ARTIST_PICK)):
                     have.add(key)
                     picks.append(key)
+        if off:
+            report("  " + tn("Left out {count} agreeing artist whose genres don't fit {station}: {names}.",
+                             "Left out {count} agreeing artists whose genres don't fit {station}: {names}.", len(off),
+                             station=lane_["name"], names=", ".join(off[:5]) + ("..." if len(off) > 5 else "")))
         # At least filters (7 Nov 2026): the round's share, the pillars' own songs kept
         picks = engine.apply_shares(picks, played, report, keep=own, artists=circle)
     finally:
         played.done()
     return picks, circle
+
+
+def fitter(lane_):
+    """
+    fits(artist name): whether an agreeing artist belongs in this station (Ben, 7 Nov 2026). Its genres from
+    the sources (Last.fm's tags, kept from the analysis or asked for once by learn()) are set against every
+    top-level station's: it's left out when another station fits it more than twice as well (NEAR) as the one
+    this round is for (for a half, the station it's a half of). No genres, or none any station shares: kept,
+    as nothing says where it belongs. Your own Genre tags aren't used: "Rock/Pop" or "Dance/Electronic" put
+    Grimes in Soundtrack and Burial in House. Without this only the Moderator, which needs AI, kept a round in
+    the station: two pillars that both list a pop act brought it in. On Ben's library this kept all 159
+    artists the analysis put in Electronic / Ambient and left out 366 of the 388 it put elsewhere.
+    fits.learn(names) asks Last.fm, in parallel, about the ones not yet known.
+    """
+    tops = (analysis() or {}).get("lanes") or []
+    centres = {x["id"]: _unit(x.get("centroid") or {}) for x in tops}
+    m = re.match(r"\d+", str(lane_.get("id") or ""))
+    here = m.group(0) if m else None
+    cache = _meta(TAGS_KEY, {})
+    asked = set()
+
+    def fits(name):
+        if here not in centres or len(centres) < 2:
+            return True
+        a = engine.artist_key(name)
+        genres, _case = genres_for(a, {"genres": Counter()}, cache)
+        if not genres:
+            return True
+        mine = _unit(genres)
+        sims = {i: _cosine(mine, c) for i, c in centres.items()}
+        best = max(sims, key=sims.get)
+        return best == here or sims[best] <= 0 or sims[here] >= NEAR * sims[best]
+
+    def learn(names):
+        todo = [(engine.artist_key(n), n) for n in names
+                if engine.artist_key(n) not in cache and engine.artist_key(n) not in asked]
+        if not todo or here not in centres or not engine.LASTFM_KEY:
+            return
+        asked.update(a for a, _n in todo)
+        from concurrent.futures import ThreadPoolExecutor
+
+        def one(pair):
+            try:
+                data = _lastfm({"method": "artist.gettoptags", "artist": pair[1], "autocorrect": 1})
+                return pair[0], [(x["name"].lower().strip(), int(x.get("count", 0)))
+                                 for x in data.get("toptags", {}).get("tag", [])]
+            except Exception:
+                return pair[0], None
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            found = [(a, tags) for a, tags in pool.map(one, todo) if tags is not None]
+        if found:
+            cache.update(found)
+            kept = _meta(TAGS_KEY, {})
+            kept.update(found)
+            _set_meta(TAGS_KEY, kept)
+    fits.learn = learn
+    return fits
 
 
 def _tracks(keys):

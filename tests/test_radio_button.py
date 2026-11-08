@@ -134,3 +134,29 @@ def test_radio_rests_greyed_with_a_note(app, ui, lowered):
     assert fb._state == "disabled"
     assert "there are 1" in fb._radio_note.text, fb._radio_note.text
     assert not ui.errors, ui.errors[0]
+
+
+def test_station_names_line_up_whether_or_not_they_split(app, ui, lowered, monkeypatch):
+    """Ben, 7 Nov 2026: a station with a split arrow and one without start their names at the same place."""
+    radio = lowered
+    play_counts(app, EVERYONE)
+    radio.set_row(count=3)
+    radio.analyse(app.Lines())
+    result = radio.analysis()
+    tops = result["lanes"]
+    assert len(tops) >= 2
+    if not any(x.get("children") for x in tops):   # make sure the list has one of each
+        tops[0]["children"] = [dict(tops[0], id=tops[0]["id"] + "a", children=[]),
+                               dict(tops[0], id=tops[0]["id"] + "b", name="Other Half", children=[])]
+    for x in tops[1:]:
+        x["children"] = []
+    radio._set_meta(radio.ANALYSIS_KEY, result)
+    made, fb = with_radio(ui)
+    ui.play._open_radio(made)
+    ui.pump(0.3)
+    rows = dict(ui.play._children_popup._rows)
+    split_row, plain_row = rows[tops[0]["id"]], rows[tops[1]["id"]]
+    assert split_row.fold is not None and plain_row.fold is None
+    assert split_row.coords(split_row._text_id)[0] == plain_row.coords(plain_row._text_id)[0]
+    ui.play._close_children()
+    assert not ui.errors, ui.errors[0]

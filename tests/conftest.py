@@ -77,6 +77,9 @@ def app(tmp_path, monkeypatch):
             shutil.copy2(os.path.join(REPO, name), folder / name)
     shutil.copytree(os.path.join(REPO, "alexa"), folder / "alexa")
     shutil.copytree(os.path.join(REPO, "locale"), folder / "locale")
+    (folder / "docs").mkdir()
+    for name in ("MANUAL.md", "MANUAL.de.md"):   # Console Query's reference (8 Nov 2026)
+        shutil.copy2(os.path.join(REPO, "docs", name), folder / "docs" / name)
     env = dict(BASE_ENV, VOICE_PORT=str(free_port()))
     write_env(folder / ".env", env)
 

@@ -78,6 +78,8 @@ VOICE_COMMAND_LIST = [
     ("switch / switch to <zone>", N_("Moves what's playing to another zone (Enable Switch To)")),
     ("stop / pause / resume the music", N_("On that device's zone")),
     ("keep it going / non stop / go continuous", N_("Non-stop, once, for whatever is playing")),
+    ("radio <station> / radio", N_("Plays a Radio station; \"radio\" alone lists the last five played to choose from")),
+    ("top up, then a command", N_("The next command joins what's left of Playing Now instead of replacing it")),
     ("list commands / help", N_("Alexa reads the commands once")),
 ]
 CREDITS = [
@@ -166,7 +168,7 @@ UNTESTED_NOTE = N_("Untested so far: please report how it goes on the JRiver for
 
 NO_KEY_TEXT = N_("You need to set up the AI under Settings > Keys to use this function")
 CONSOLE_QUERY_WARNING = (N_("Console Query sends the console, your settings (without keys) and 24bit7's "
-                         "code to your AI provider each time you ask a question. The first question costs a few "
+                         "manual to your AI provider each time you ask a question. The first question costs a few "
                          "pence, more than the Moderator.\n\nTurn it on?"))
 MODERATOR_CHOICES = [N_("Off"), N_("Relaxed"), N_("Balanced"), N_("Strict")]   # English: shown through t()
 MODERATOR_LEVELS_HELP = (
@@ -2217,7 +2219,7 @@ class SettingsTab(tk.Frame):
                 arrow.grid(row=r, column=0, sticky="w")
                 if splits:
                     arrow.bind("<Button-1>", lambda e, i=lane_["id"]: fold(i))
-                    Tooltip(arrow, t("Split: this station's two halves, here and in the Play tab's list. "
+                    Tooltip(arrow, t("Split: the stations within this one, here and in the Play tab's list. "
                                      "Click again to join them back."))
                 cell = tk.Frame(table)
                 cell.grid(row=r, column=1, sticky="w", padx=(18 * depth, 0), pady=1)
@@ -2234,7 +2236,11 @@ class SettingsTab(tk.Frame):
                 pillars = lane_.get("pillars") or []
                 tk.Label(table, text=", ".join(pillars[:4]) + ("..." if len(pillars) > 4 else ""),
                          fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w").grid(row=r, column=4, sticky="w", padx=(12, 0))
+                edit = tk.Button(table, text=t("Edit"), command=lambda i=lane_["id"]: self._edit_pillars(i, draw))
+                edit.grid(row=r, column=5, sticky="e", padx=(12, 0), pady=1)
+                Tooltip(edit, t("Edit this station's pillars: the artists each round starts from."))
                 self._radio_station_rows.append((lane_["id"], entry))
+            table.grid_columnconfigure(4, weight=1)
             tabs.use_fonts(table)
 
         def refresh():
@@ -2263,6 +2269,12 @@ class SettingsTab(tk.Frame):
         self._radio_refresh = refresh
         self._radio_count_box = count_sb
         self._radio_again = again
+
+    def _edit_pillars(self, lane_id, redraw):
+        """Edit on a station's row (Ben, 7 Nov 2026): the Edit Pillars window; the row's pillars follow each change."""
+        import pillars_gui
+        self._pillars_window = pillars_gui.open_for(self, lane_id, changed=redraw)
+        return self._pillars_window
 
     def _radio_event(self, name):
         """Asks the Play tab to make the stations again (it runs the job, so the console shows it)."""
@@ -3083,10 +3095,8 @@ class SettingsTab(tk.Frame):
                  fg=PALETTE["help_fg"], font=HELP_FONT, wraplength=scaled(box, 560), justify="left").grid(
             row=1, column=0, sticky="w", pady=(8, 0))
 
-        if item.get("builtin") == "skipped":   # its rule is its own: say what it does, nothing to set
-            box = section(right, t("What It Leaves Out"))
-            tk.Label(box, text=t(filters.SKIPPED_TEXT), wraplength=scaled(box, 560), justify="left").grid(
-                row=0, column=0, sticky="w")
+        if item.get("builtin") == "skipped":   # its own rule, with its two numbers (Ben, 8 Nov 2026)
+            self._skipped_numbers(right, item, keep)
             self._skipped_box(right)
             right.keep = keep
             return
@@ -3360,17 +3370,65 @@ class SettingsTab(tk.Frame):
                                                                     pady=(0, 4))
         self._other_field_line = text
 
+    def _skipped_numbers(self, right, item, keep):
+        """
+        What It Leaves Out: "Leave out a track skipped by voice [2] times or more." and "Leave out every track by
+        an artist with [3] tracks left out.", one to nine each, saved as typed, Left Out Now redrawn to match.
+        """
+        box = section(right, t("What It Leaves Out"))
+        track_limit, artist_limit = filters.skip_limits(item)
+        self._skip_boxes = {}
+        for row, (field, value, before, after) in enumerate((
+                ("track_skips", track_limit, t("Leave out a track skipped by voice"), t("times or more.")),
+                ("artist_skips", artist_limit, t("Leave out every track by an artist with"), t("tracks left out.")))):
+            line = tk.Frame(box)
+            line.grid(row=row, column=0, sticky="w", pady=2)
+            var = tk.StringVar(value=str(value))
+            keep.append(var)
+            tk.Label(line, text=before).pack(side="left")
+            spin = ttk.Spinbox(line, from_=1, to=filters.SKIPS_MAX, width=2, textvariable=var, justify="center")
+            spin.pack(side="left", padx=6)
+            tk.Label(line, text=after).pack(side="left")
+            self._skip_boxes[field] = spin
+
+            def typed(*_, field=field, var=var):
+                try:
+                    n = int(var.get())
+                except ValueError:
+                    return
+                if 1 <= n <= filters.SKIPS_MAX and n != item.get(field):
+                    item[field] = n
+                    self._filter_save()
+                    self._skipped_redraw(right)
+            var.trace_add("write", typed)
+        tk.Label(box, text=t(filters.SKIPPED_TEXT), fg=PALETTE["help_fg"], font=HELP_FONT,
+                 wraplength=scaled(box, 560), justify="left").grid(row=2, column=0, sticky="w", pady=(6, 0))
+
+    def _skipped_redraw(self, right):
+        """Left Out Now again, at the numbers just typed: the old section goes and a new one takes its place at the end."""
+        old = getattr(self, "_skipped_section", None)
+        while old is not None and old.master is not right:
+            old = old.master
+        if old is not None:
+            old.destroy()
+        self._skipped_box(right)
+
     def _skipped_box(self, right):
         """Skipped Tracks' page: what it leaves out now, each with Let Back In, which clears the count."""
-        tracks, artists = filters.skipped_list()
+        limits = filters.skip_limits()
+        tracks, artists = filters.skipped_list(limits)
         box = section(right, t("Left Out Now"))
+        self._skipped_section = box
         if not tracks:
-            tk.Label(box, text=t("Nothing yet: no track has been skipped by voice twice."), fg=PALETTE["help_fg"],
+            tk.Label(box, text=tn("Nothing yet: no track has been skipped by voice {count} time.",
+                                  "Nothing yet: no track has been skipped by voice {count} times.", limits[0]),
+                     fg=PALETTE["help_fg"],
                      font=HELP_FONT).grid(row=0, column=0, sticky="w")
             return
         r = 0
         for artist, keys in sorted(artists.items(), key=lambda x: x[0].lower()):
-            tk.Label(box, text=t("{artist}, every track (three or more skipped)", artist=artist),
+            tk.Label(box, text=tn("{artist}, every track ({count} track left out)",
+                                  "{artist}, every track ({count} tracks left out)", len(keys), artist=artist),
                      font=LABEL_FONT).grid(row=r, column=0, sticky="w", pady=2)
             tk.Button(box, text=t("Let Back In"), command=lambda k=keys: self._skipped_let_in(k)).grid(
                 row=r, column=1, sticky="w", padx=(12, 0))
@@ -3436,6 +3494,58 @@ class SettingsTab(tk.Frame):
         self._filter_fill_editor()
 
     # --- the JRiver Playlists page ---
+
+    def _embellish_section(self, tab):
+        """
+        Play & Embellish (Ben, 7 Nov 2026): a tick per amount for the arrow's menu and a round button for the
+        default, which the button itself runs. At least one stays ticked; unticking the default moves it to the
+        first still ticked. Kept in the database with the rest of Play & Embellish, not in Profiles: it's how
+        the menu reads, not how a build behaves.
+        """
+        import embellish
+        box = section(tab, t("Play & Embellish"),
+                      t("Which amounts the arrow beside Play & Embellish offers, and which the button itself runs. "
+                        "+10%, +20% and +50% add one new track for every ten, five or two on the playlist; Double "
+                        "adds as many as it has, Triple twice as many; Build It Out adds every agreeing artist's top "
+                        "tracks you own, ten artists at a time, and Cancel keeps what's in. Leave one ticked and "
+                        "the arrow goes."))
+        tk.Label(box, text=t("In the Menu"), fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=0, column=0, sticky="w")
+        tk.Label(box, text=t("Default"), fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=0, column=1, sticky="w",
+                                                                                     padx=(24, 0))
+        now = embellish.amounts()
+        default = tk.StringVar(value=now["default"])
+        ticks, radios = {}, {}
+
+        def sync():
+            state = embellish.amounts()
+            default.set(state["default"])
+            for code, var in ticks.items():
+                var.set(code in state["shown"])
+                radios[code].state(["!disabled"] if code in state["shown"] else ["disabled"])
+            try:
+                self.winfo_toplevel().event_generate("<<EmbellishAmounts>>")
+            except tk.TclError:
+                pass
+
+        def ticked(code):
+            shown = [c for c, v in ticks.items() if v.get()]
+            if not shown:   # at least one stays
+                ticks[code].set(True)
+                return
+            embellish.set_amounts(shown=shown)
+            sync()
+
+        for r, code in enumerate(embellish.AMOUNTS, start=1):
+            var = tk.BooleanVar(value=code in now["shown"])
+            ticks[code] = var
+            ttk.Checkbutton(box, text=t(embellish.AMOUNT_NAMES[code]), variable=var,
+                            command=lambda c=code: ticked(c)).grid(row=r, column=0, sticky="w", pady=1)
+            radio_ = ttk.Radiobutton(box, variable=default, value=code,
+                                     command=lambda c=code: (embellish.set_amounts(default=c), sync()))
+            radio_.grid(row=r, column=1, sticky="w", padx=(30, 0))
+            radios[code] = radio_
+        sync()
+        self._embellish_ticks, self._embellish_default = ticks, default
 
     def _fill_saved(self, tab, p):
         """
@@ -3540,6 +3650,8 @@ class SettingsTab(tk.Frame):
                             "from the last track once they've all been used."),
         }
         CONTROLS = [N_("Shuffle"), N_("Blend"), "Non-stop", N_("Reseed from"), N_("Skip recent")]   # short, so headings fit their dropdowns
+
+        self._embellish_section(tab)
 
         # --- All playlists ---
         box = section(tab, t("All playlists"),
@@ -4234,7 +4346,7 @@ class SettingsTab(tk.Frame):
                 var.set(False)
             elif self._ai_provider() == "ollama":
                 messagebox.showinfo(t("Console Query"), t("Console Query isn't available with Ollama: it sends the "
-                                    "console and 24bit7's code, far more than a local model can hold."), parent=self)
+                                    "console and 24bit7's manual, far more than a local model can hold."), parent=self)
                 var.set(False)
             elif not messagebox.askyesno(t("Console Query"), t(CONSOLE_QUERY_WARNING), parent=self):
                 var.set(False)
@@ -5794,7 +5906,7 @@ class SettingsTab(tk.Frame):
         cq_label.bind("<Button-1>", label_clicked)
         help_mark(row, t("Adds Query to the console's Copy and Clear strip. Ask the AI why a playlist came "
                        "out the way it did, and get suggested setting changes. Each question sends the "
-                       "console, your settings (without keys) and 24bit7's code, so it uses more AI "
+                       "console, your settings (without keys) and 24bit7's manual, so it uses more AI "
                        "credit than the Moderator. Not available with Ollama.")
                   ).pack(side="left", padx=(8, 0))
 

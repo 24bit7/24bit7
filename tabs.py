@@ -809,6 +809,7 @@ class FlatButton(tk.Frame):
         # a split button: an arrow part at the right (a parent playlist's menu), its own click
         self._arrow_w = self._px(24) if arrow else 0
         self._arrow = None
+        self._arrow_off = False   # set_arrow(False): the arrow hidden, the face drawn across its place
         if arrow:
             self._arrow = tk.Label(self, text="\u25be", compound="center", font=self._font, bg=back,
                                    fg=PALETTE["button_fg"], bd=0, highlightthickness=0, padx=0, pady=0, cursor="hand2")
@@ -851,7 +852,7 @@ class FlatButton(tk.Frame):
         fg = (self._text_fg or PALETTE["button_fg"]) if lit else PALETTE["button_off_fg"]
         if self._armed and lit:
             edge, line, fg = self._armed, self._px(2), self._armed
-        if self._arrow is not None:   # one shape, the bar across the whole of it, a black line before the arrow
+        if self._arrow is not None and not self._arrow_off:   # one shape, the bar across it, a black line before the arrow
             image, part = split_shape(self, w, h, self._px(CORNER), fill, edge, line, bar, self._px(BUTTON_BAR),
                                       w - self._arrow_w)
             self._arrow.config(image=part, fg=fg, cursor="hand2" if on else "")
@@ -888,6 +889,23 @@ class FlatButton(tk.Frame):
         return None
 
     configure = config
+
+    def set_arrow(self, on):
+        """
+        Shows or hides a split button's arrow, the button keeping its width (Play & Embellish with one amount
+        left in Settings has nothing to choose from, Ben, 7 Nov 2026).
+        """
+        if self._arrow is None or self._arrow_off == (not on):
+            return
+        self._arrow_off = not on
+        if on:
+            self._arrow.pack(side="left")
+        else:
+            self._arrow.pack_forget()
+        self._draw()
+
+    def has_arrow(self):
+        return self._arrow is not None and not self._arrow_off
 
     def set_pixel_width(self, width):
         """Draws the button this many pixels wide, as another button it lines up with (the JRiver Playlists tab)."""
@@ -1536,12 +1554,14 @@ class PickRow(tk.Canvas):
     """
 
     def __init__(self, master, text, fg=None, bg=None, left=None, chosen=False, indent=0, fold=None, on_fold=None,
-                 tag="", fit=False, edge=None, font=None, tag_font=None):
+                 tag="", fit=False, edge=None, font=None, tag_font=None, fold_space=False):
         """indent: pixels in from the left (a child row). fold: None, "open" or "closed" (a parent's arrow,
         on_fold called when clicked). tag: small text at the right ("default"). fit: ask for just the width
         the text and tag need, with five spaces between them (a drop-down sized to its rows); otherwise the
         row takes the width its list gives it. edge: the outline's colour when chosen (the accent if None).
-        font, tag_font: the text's and the tag's (Segoe UI 10 and 8 unless given; Settings gives its named fonts)."""
+        font, tag_font: the text's and the tag's (Segoe UI 10 and 8 unless given; Settings gives its named fonts).
+        fold_space: a row with no arrow keeps the arrow's room, so its text lines up with rows that have one
+        (Radio's station list, 7 Nov 2026)."""
         bg = bg or master.cget("bg")
         super().__init__(master, bg=bg, bd=0, highlightthickness=0)
         try:
@@ -1566,6 +1586,8 @@ class PickRow(tk.Canvas):
                                              anchor="w", font=self._tag_font, fill=PALETTE["help_fg"])
             if on_fold is not None:
                 self.tag_bind(self._fold_id, "<Button-1>", lambda e: (on_fold(), "break")[1])
+            x += px(16)
+        elif fold_space:
             x += px(16)
         self.left = left(self) if left is not None else None
         if self.left is not None:

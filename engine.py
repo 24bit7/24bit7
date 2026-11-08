@@ -31,7 +31,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.30.1"
+VERSION = "1.31.0"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
@@ -281,8 +281,8 @@ def moderator_settings(get):
 # --- AI providers (Settings > Keys > AI) -----------------------------------------
 # Anthropic is the one fully tested; OpenAI, Google Gemini and Ollama (a local model)
 # are offered untested, for people to try and report back. Each cloud provider has a
-# main model (the AI as a source, AI Playlist, Steer, Assess Tone) and a quick one
-# (the Moderator and the two Queries), checked with ai_usage.PRICES before each release.
+# main model (the AI as a source, AI Playlist, Steer, Assess Tone, Console Query) and a quick one
+# (the Moderator and the usage Query), checked with ai_usage.PRICES before each release.
 AI_PROVIDERS = [("anthropic", "Anthropic"), ("openai", "OpenAI"), ("gemini", "Google Gemini"),
                 ("ollama", "Ollama (Local)")]
 AI_PROVIDER_NAMES = dict(AI_PROVIDERS)
@@ -2314,7 +2314,7 @@ def ai_missing_text():
 
 
 def console_query_ready():
-    """Console Query sends the console and 24bit7's code, far more than a local model can hold."""
+    """Console Query sends the console and 24bit7's manual, far more than a local model can hold."""
     return ai_enabled() and AI_PROVIDER != "ollama"
 
 

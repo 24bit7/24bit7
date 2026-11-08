@@ -7,9 +7,11 @@ It only listens on this PC (127.0.0.1); a tunnel is what connects it to Amazon.
   POST /command   header X-24bit7-Key: <VOICE_KEY>
                   body {"intent": "songs_by" | "music_like" | "genre" | "only" |
                                   "tracks_like" | "album" | "song" | "playlist" | "shuffle" |
-                                  "skip" | "who_is_this" | "more_like" | "more_artists",
+                                  "skip" | "who_is_this" | "more_like" | "more_artists" |
+                                  "radio" | "top_up",
                         "value": "Agnes Obel", "device": "<Alexa device ID>",
-                        "zone": "Sonos"}        # zone is optional and beats the device's zone
+                        "zone": "Sonos",        # zone is optional and beats the device's zone
+                        "top_up": true}         # optional: goes into what's left of Playing Now
                   reply {"speech": "Music like Agnes Obel, coming up on Sonos."}
   GET  /ping      same header; reply {"ok": true, "app": "24bit7", "version": ...}
 
@@ -21,6 +23,8 @@ Skip, who is this and more like this need no value: they work on what the
 device's zone is playing.
 Each Alexa device is remembered in the database with the zone it plays to. A
 build runs as the playlist that device names for the phrase (Settings > Devices).
+Radio (8 Nov 2026) plays a station by name, or asks which of the last five played;
+top up asks what with, and the next command goes into what's left of Playing Now.
 """
 
 import hmac
@@ -57,7 +61,8 @@ def _takes_over(zone):
         return _running[0] == zone and not any(n > 0 for z, n in _open.items() if z != zone)
 
 INTENTS = ("songs_by", "music_like", "genre", "only", "tracks_like", "album", "song", "playlist", "shuffle",
-           "skip", "who_is_this", "more_like", "more_artists", "switch_zones", "keep_going", "stop", "pause", "resume")
+           "skip", "who_is_this", "more_like", "more_artists", "switch_zones", "keep_going", "stop", "pause", "resume",
+           "radio", "top_up")
 COMING = ()   # intents in the skill whose 24bit7 side isn't built yet
 ZONE_INTENTS = ("skip", "who_is_this", "more_like", "more_artists", "stop", "pause", "resume",
                 "keep_going")   # act on what the zone is playing
@@ -156,11 +161,12 @@ def _device_playlist(device, intent):
     return button, own
 
 
-def _job(intent, value, zone, button, device=None):
+def _job(intent, value, zone, button, device=None, top_up=False):
     """
     The build itself, run on the Play tab's worker thread, as the button the zone names for the phrase.
     Takeover: a newer voice command for the same zone stops this build at its next step (or skips it
     if it hasn't started yet), and a paused zone counts as free, so after "Alexa, stop" the next command plays.
+    top_up: "top up" came first, so the build goes into what's left of Playing Now, as the Play tab's Top-Up.
     """
     with _take_lock:
         seq = next(_seq)
@@ -186,8 +192,9 @@ def _job(intent, value, zone, button, device=None):
             engine.OUTPUT_OVERRIDE = zone
             # More like this and more artists like this keep the current track playing and replace what's
             # queued after it, so they use the Play tab's rule (queue after a busy zone), not a takeover
-            engine.VOICE_TAKEOVER = intent not in MORE
-            engine.VOICE_WAIT = engine.VOICE_NEW_PLAYLISTS == "after"   # Settings > Voice Commands > New Playlists
+            engine.VOICE_TAKEOVER = intent not in MORE and not top_up
+            engine.VOICE_WAIT = engine.VOICE_NEW_PLAYLISTS == "after" and not top_up   # Settings > Voice Commands
+            engine.TOP_UP = bool(top_up)
             engine.CANCEL_CHECK = superseded
             _build(intent, value, button, zone, guarded)
         except engine.BuildCancelled:
@@ -198,6 +205,7 @@ def _job(intent, value, zone, button, device=None):
             engine.OUTPUT_OVERRIDE = None
             engine.VOICE_TAKEOVER = False
             engine.VOICE_WAIT = False
+            engine.TOP_UP = False
             engine.CANCEL_CHECK = None
             with _take_lock:
                 _running[0] = None
@@ -228,6 +236,8 @@ def _build(intent, value, button, zone, report):
         buttons.run(button, report=report, seed_info=engine.typed_seed_info(artist, title))
     elif intent in MORE:   # value: the zone's track when the command was heard
         buttons.run(button, report=report, seed_info=value)
+    elif intent == "radio":   # value: the station's id
+        buttons.run_radio(button, report=report, lane_id=value)
     elif intent == "only":   # value: the words as heard, artist and mood together: the AI Playlist button's settings
         buttons.run(button, report=report,
                     build=lambda report, **kw: engine.create_only_playlist(value, report=report))
@@ -258,15 +268,28 @@ def _top_five_start(artist, keys):
     return random.choice(hits) if hits else None
 
 
-def _play_now(intent, value, zone, device=None):
-    """Albums, songs, playlists and shuffles: replace what's playing on the zone at once."""
+def _topped_up(keys, zid, zone, what):
+    """An album, song, playlist or shuffle after "top up": into what's left of Playing Now, as the Play tab's Top-Up."""
+    if not keys:
+        return "problem", f"I couldn't find any tracks in {what}.", {}
+    line, _merged = engine.top_up_merge(keys, zid)
+    print(t("[Voice] Top-Up, {what}, on {zone}: {line}", what=what, zone=zone, line=line))
+    return "started", f"Topped up {zone} with {what}.", {}
+
+
+def _play_now(intent, value, zone, device=None, top_up=False):
+    """Albums, songs, playlists and shuffles: replace what's playing on the zone at once, or after "top up", join it."""
     zid = engine.zone_id(zone)
+    top_up = top_up and not engine.jriver_is_stopped(zid)   # nothing playing: it simply plays
     if intent == "playlist":
         found, matches = saved_playlists.find(value)
         if not matches:
             return "problem", f"I couldn't find a playlist called {value.rsplit(' by ', 1)[0]}.", {}
         if not found:   # two or more share the name: ask which (the answer comes back as 'name by smartlist')
             return "ask", saved_playlists.ask_which(matches), {"ask": "playlist", "title": matches[0].get("Name")}
+        if top_up:
+            return _topped_up(saved_playlists.playlist_keys(str(matches[0].get("ID"))), zid, zone,
+                              f"playlist {matches[0].get('Name')}")
         # Shuffle, Non-stop and Skip recently played from Settings > JRiver Playlists
         ok, what = saved_playlists.play(matches[0], zid, device)
     elif intent in ("album", "song"):
@@ -285,6 +308,8 @@ def _play_now(intent, value, zone, device=None):
             return "ask", speech, {"ask": intent, "title": title}
         title, artist, keys = matches[0]
         keys = keys if intent == "album" else [keys]
+        if top_up:
+            return _topped_up(keys, zid, zone, f"{intent} {title} by {library.spoken(artist)}")
         ok, what = _play_keys(keys, zid), f"{intent} {title} by {library.spoken(artist)}"
         engine.nonstop_forget(zid)   # an album or song ends as normal
     else:
@@ -302,6 +327,8 @@ def _play_now(intent, value, zone, device=None):
         keys = [k for k in keys if played.fresh(k)] or keys   # never leave a shuffle empty
         played.done()
         random.shuffle(keys)
+        if top_up:
+            return _topped_up(keys[:SHUFFLE_CAP], zid, zone, f"songs by {library.spoken(artist)}")
         lead = _top_five_start(artist, keys)
         if lead:   # a shuffle opens on one of their best known songs
             keys = [lead] + [k for k in keys if str(k) != str(lead)]
@@ -758,6 +785,46 @@ def switch_step(preferred):
         "  Problem: JRiver didn't switch it. Is JRiver running?"
 
 
+def _radio(device, value, body, busy, top_up):
+    """
+    Radio by voice (Ben, 8 Nov 2026): "radio folk" plays that station on the device's zone, with Radio's shared
+    settings and Non-stop; "radio" alone asks which of the last five played (numbered), and the answer, a name
+    or "the second one", comes back here as the value.
+    """
+    import buttons
+    import radio
+    name, zone = _hear_device(device or "unknown device")
+    zone = (body.get("zone") or "").strip() or zone
+    if not zone:
+        return "problem", "This device isn't set up yet. Assign it to a zone in 24bit7, under Settings, Voice Commands.", {}
+    if engine.zone_id(zone) is None:
+        return "problem", f"I can't find the {zone} zone in JRiver.", {}
+    result = radio.analysis()
+    if result is None or not radio.lanes():
+        if result and result.get("resting"):
+            return "problem", "Radio needs more of your plays before it can make stations. Play some music in JRiver first.", {}
+        return "problem", "Radio has no stations yet. Press Radio in 24bit7 once to make them.", {}
+    offered = radio.recent_lanes()
+    if not value:
+        return "ask", radio.ask_which(offered), {"ask": "station", "title": ""}
+    found = radio.match_station(value, offered)
+    if found is None:
+        return "ask", f"I couldn't find a station called {value}. " + radio.ask_which(offered), {"ask": "station", "title": ""}
+    if _submit is None:
+        return "problem", "24bit7 isn't ready yet. Try again in a moment.", {}
+    button = buttons.radio_for_voice()
+    heading = (N_("Voice, {name}: Top-Up, radio {station}, to {zone}") if top_up else
+               N_("Voice, {name}: radio {station}, to {zone}"))
+    _submit(_job("radio", found["id"], zone, button, device or "unknown device", top_up=top_up),
+            t(heading, name=name, station=found["name"], zone=zone),
+            {"from": "voice", "device": device or "unknown device",
+             "badge": (t("Radio: {station}", station=found["name"]), zone, False)})
+    if busy and not _takes_over(zone):
+        return "pending", "Please wait, request pending.", {}
+    spoken = radio.spoken_name(found)
+    return "started", (f"Topping up {zone} with {spoken} radio." if top_up else f"{spoken} radio, coming up on {zone}."), {}
+
+
 ARTIST_CLOSE = 0.85   # how close a heard artist must be to a library artist to use the library's spelling
 
 
@@ -792,8 +859,17 @@ def handle_command(body, busy=False):
     intent = (body.get("intent") or "").strip().lower()
     value = (body.get("value") or "").strip()
     device = (body.get("device") or "").strip()
+    top_up = bool(body.get("top_up"))
     if intent not in INTENTS:
         return "problem", "Say songs by, music like, or genre, followed by what you'd like.", {}
+    if intent == "top_up":   # the next command, in the same breath, goes into what's left of Playing Now
+        return "ask", "Top up with what?", {"ask": "top_up", "title": ""}
+    if intent == "radio":
+        try:
+            return _radio(device, value, body, busy, top_up)
+        except Exception as e:
+            print(t("[Voice] radio '{value}' failed: {e}", value=value, e=e))
+            return "problem", "I couldn't reach JRiver. Is it running on the media PC?", {}
     if intent == "song" and value.lower().startswith("by "):   # Alexa heard "songs by" as "song by"
         intent, value = "songs_by", value[3:].strip()
     if intent in ("tracks_like", "music_like") and value.lower() in THIS_WORDS:   # "songs like this"
@@ -825,7 +901,7 @@ def handle_command(body, busy=False):
         return "problem", f"I can't find the {zone} zone in JRiver.", {}
     if intent in INSTANT:
         try:
-            return _play_now(intent, value, zone, device)
+            return _play_now(intent, value, zone, device, top_up=top_up)
         except Exception as e:
             print(t("[Voice] {intent} '{value}' failed: {e}", intent=intent, value=value, e=e))
             return "problem", "I couldn't reach the library in JRiver. Is JRiver running on the media PC?", {}
@@ -857,6 +933,8 @@ def handle_command(body, busy=False):
     shown = f"{value[1]} by {library.spoken(value[0])}" if intent == "tracks_like" else value
     words = {"songs_by": f"Songs by {shown}", "music_like": f"Music like {shown}",
              "genre": f"A {shown} playlist", "only": f"Only {shown}", "tracks_like": f"Tracks like {shown}"}[intent]
+    if top_up:
+        words = "Topping up with " + words[0].lower() + words[1:]
     heading = {"songs_by": N_("Voice, {name}: songs by {shown}{heard}, to {zone}{own}"),
                "music_like": N_("Voice, {name}: music like {shown}{heard}, to {zone}{own}"),
                "genre": N_("Voice, {name}: genre {shown}{heard}, to {zone}{own}"),
@@ -865,13 +943,13 @@ def handle_command(body, busy=False):
     button, own = _device_playlist(device or "unknown device", intent)
     if intent == "tracks_like":   # the console's version; the spoken reply keeps its English
         shown = t("{title} by {artist}", title=value[1], artist=library.spoken(value[0]))
-    _submit(_job(intent, value, zone, button, device or "unknown device"),
-            t(heading, name=name, shown=shown, heard=corrected, zone=zone, own=own),
+    _submit(_job(intent, value, zone, button, device or "unknown device", top_up=top_up),
+            t(heading, name=name, shown=shown, heard=corrected, zone=zone, own=own) + (t(", as a Top-Up") if top_up else ""),
             {"from": "voice", "device": device or "unknown device",
              "badge": (t(BADGE_ASKED[intent], shown=shown), zone, intent in ("genre", "only"))})
     if busy and not _takes_over(zone):
         return "pending", "Please wait, request pending.", {}
-    return "started", f"{words}, coming up on {zone}.", {}
+    return "started", (f"{words}, on {zone}." if top_up else f"{words}, coming up on {zone}."), {}
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -924,7 +1002,7 @@ SAID = {"songs_by": "songs by", "music_like": "music like", "tracks_like": "trac
         "who_is_this": "who is this", "more_like": "more like this",
         "more_artists": "more artists like this", "switch_zones": "switch zones",
         "keep_going": "keep it going", "stop": "stop the music", "pause": "pause the music",
-        "resume": "resume the music"}
+        "resume": "resume the music", "radio": "radio", "top_up": "top up"}
 
 
 def _log_problem(body, speech):

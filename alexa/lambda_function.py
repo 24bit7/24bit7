@@ -15,6 +15,9 @@ needle drop - the Alexa skill for 24bit7.
     "who is this"           says the track, artist and album playing there
     "more like this"        Similar Tracks from what's playing, queued after it
     "more artists like this" Similar Artists from what's playing, queued after it
+    "radio <station>"       plays one of your Radio stations ("radio" alone: it lists the last five played,
+                            and you answer with a name or "the second one")
+    "top up"                asks what with; the next command goes into what's left of Playing Now
 Or in one go: "Alexa, ask needle drop for music like Agnes Obel".
 If several albums or songs share a title, Alexa asks which, and you answer "by <artist>".
 No phrase starts with "play", so Alexa isn't tempted to hand it to a music service.
@@ -57,12 +60,16 @@ COMMANDS = ("To build a playlist: songs by, music like, or tracks like, then an 
             "To play now: album, song, or playlist, then its name, or shuffle songs by, then an artist. "
             "For what's playing: skip, who is this, more like this, more artists like this, keep it going, "
             "or stop, pause or resume the music. "
+            "Radio, then a station, or radio alone to hear your last five. "
+            "Top up, then any command, to add to what's playing instead of replacing it. "
             "And switch, or switch to, then a zone.")
-REPROMPT = {"playlist": "Say by, then the folder.", "zone": "Say to, then the zone."}
+REPROMPT = {"playlist": "Say by, then the folder.", "zone": "Say to, then the zone.",
+            "station": "Say the station's name, or its number.",
+            "top_up": "Say music like, songs by, radio, or playlist, then what you'd like."}
 INTENTS = {"SongsByIntent": "songs_by", "MusicLikeIntent": "music_like", "GenreIntent": "genre", "OnlyIntent": "only",
            "TracksLikeIntent": "tracks_like",
            "AlbumIntent": "album", "SongIntent": "song", "PlaylistIntent": "playlist",
-           "ShuffleIntent": "shuffle"}
+           "ShuffleIntent": "shuffle", "RadioIntent": "radio", "TopUpIntent": "top_up"}
 ZONE_INTENTS = {"SkipIntent": "skip", "WhoIsThisIntent": "who_is_this", "MoreLikeThisIntent": "more_like",
                 "MoreArtistsLikeThisIntent": "more_artists",
                 "SwitchZonesIntent": "switch_zones", "KeepGoingIntent": "keep_going",
@@ -78,9 +85,17 @@ def chimes(count, fallback):
     return '<break time="200ms"/>'.join(f'<audio src="{CHIME}"/>' for _ in range(count))
 
 
-def send(intent, value, device):
+def topping_up(handler_input):
+    """True after "top up" in this conversation: the command that follows goes into what's left of Playing Now."""
+    return bool(handler_input.attributes_manager.session_attributes.get("top_up"))
+
+
+def send(intent, value, device, top_up=False):
     """Sends one command to 24bit7. Returns (status, speech, the whole reply)."""
-    body = json.dumps({"intent": intent, "value": value, "device": device}).encode("utf-8")
+    command = {"intent": intent, "value": value, "device": device}
+    if top_up:
+        command["top_up"] = True
+    body = json.dumps(command).encode("utf-8")
     req = urllib.request.Request(BIT7_URL.rstrip("/") + "/command", data=body, method="POST",
                                  headers={"Content-Type": "application/json", "X-24bit7-Key": BIT7_KEY})
     try:
@@ -103,6 +118,8 @@ def respond(handler_input, status, speech, reply):
     if status == "ask":
         session = handler_input.attributes_manager.session_attributes
         session["ask"], session["title"] = reply.get("ask", "album"), reply.get("title", "")
+        if reply.get("ask") == "top_up":
+            session["top_up"] = True
         return builder.speak(escape(speech)).ask(REPROMPT.get(reply.get("ask"), "Say by, then the artist.")).response
     speech = f'<audio src="{ACK_TONE}"/>' if status == "started" else escape(speech)
     return builder.speak(speech).set_should_end_session(True).response
@@ -127,7 +144,7 @@ class CommandHandler(AbstractRequestHandler):
         intent = INTENTS[ask_utils.get_intent_name(handler_input)]
         value = ask_utils.get_slot_value(handler_input, "query") or ""
         device = handler_input.request_envelope.context.system.device.device_id
-        return respond(handler_input, *send(intent, value, device))
+        return respond(handler_input, *send(intent, value, device, topping_up(handler_input)))
 
 
 class ZoneHandler(AbstractRequestHandler):
@@ -153,7 +170,21 @@ class ByArtistHandler(AbstractRequestHandler):
         if not title:
             return handler_input.response_builder.speak(NOT_CAUGHT).set_should_end_session(False).response
         device = handler_input.request_envelope.context.system.device.device_id
-        return respond(handler_input, *send(kind, f"{title} by {artist}", device))
+        return respond(handler_input, *send(kind, f"{title} by {artist}", device, topping_up(handler_input)))
+
+
+class StationHandler(AbstractRequestHandler):
+    """The answer to "Which station?": a name, or "the second one"."""
+    def can_handle(self, handler_input):
+        return ask_utils.is_intent_name("StationIntent")(handler_input)
+
+    def handle(self, handler_input):
+        session = handler_input.attributes_manager.session_attributes
+        heard = ask_utils.get_slot_value(handler_input, "query") or ""
+        if session.get("ask") != "station" or not heard:
+            return handler_input.response_builder.speak(NOT_CAUGHT).set_should_end_session(False).response
+        device = handler_input.request_envelope.context.system.device.device_id
+        return respond(handler_input, *send("radio", heard, device, topping_up(handler_input)))
 
 
 class SwitchToHandler(AbstractRequestHandler):
@@ -216,7 +247,7 @@ class ErrorHandler(AbstractExceptionHandler):
 
 
 sb = SkillBuilder()
-for handler in (LaunchHandler(), CommandHandler(), ZoneHandler(), ByArtistHandler(), SwitchToHandler(),
+for handler in (LaunchHandler(), CommandHandler(), ZoneHandler(), ByArtistHandler(), StationHandler(), SwitchToHandler(),
                 HelpHandler(), FallbackHandler(), StopHandler(), SessionEndedHandler()):
     sb.add_request_handler(handler)
 sb.add_exception_handler(ErrorHandler())

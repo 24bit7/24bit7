@@ -100,7 +100,7 @@ def test_a_build_leaves_out_skipped_tracks(app):
     r = app.Lines()
     app.engine.create_similar_playlist(report=r, seed_info=seed)
     assert not set(first[:3]) & set(j.zone("Speakers").playlist), r.text()
-    assert r.has("Filters: Skipped Tracks (skipped by voice twice or more"), r.text()
+    assert r.has("Filters: Skipped Tracks (skipped by voice 2 times or more"), r.text()
 
 
 def test_the_filter_text_doesnt_promise_a_plain_alexa_skip_counts():

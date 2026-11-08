@@ -65,7 +65,7 @@ def test_skipped_tracks_lists_whats_left_out_and_lets_it_back_in(app, ui):
     s._filter_fill_editor()
     ui.pump(0.2)
     texts = labels(win)
-    assert "The Beatles, every track (three or more skipped)" in texts, texts
+    assert "The Beatles, every track (3 tracks left out)" in texts, texts
     line = f"{other['Artist']} - {other['Name']}, skipped 3 times"
     assert line in texts
     import tkinter as tk
@@ -79,6 +79,36 @@ def test_skipped_tracks_lists_whats_left_out_and_lets_it_back_in(app, ui):
     artist_button.invoke()
     ui.pump(0.3)
     assert all(j.by_key[k]["24bit7 Voice Skips"] == "" for k in beatles)
-    assert "Nothing yet: no track has been skipped by voice twice." in labels(win)
+    assert "Nothing yet: no track has been skipped by voice 2 times." in labels(win)
+    win.destroy()
+    assert not ui.errors, ui.errors[0]
+
+
+def test_skipped_tracks_numbers_are_set_on_its_page_and_left_out_now_follows(app, ui):
+    """Ben, 8 Nov 2026: the two numbers in boxes, saved as typed, Left Out Now redrawn to match."""
+    import filters
+    import library
+    j = app.jriver
+    other = next(r for r in j.tracks if r["Artist"] != "The Beatles")
+    j.by_key[other["Key"]]["24bit7 Voice Skips"] = "2"
+    library.load()
+    s = ui.settings
+    win = s._open_filters()
+    ui.pump(0.3)
+    s._filter_i = [x["name"] for x in s._filters].index("Skipped Tracks")
+    s._filter_fill_editor()
+    ui.pump(0.2)
+    texts = labels(win)
+    assert "Leave out a track skipped by voice" in texts and "tracks left out." in texts, texts
+    line = f"{other['Artist']} - {other['Name']}, skipped 2 times"
+    assert line in texts
+    track_box = s._skip_boxes["track_skips"]
+    assert track_box.get() == "2" and s._skip_boxes["artist_skips"].get() == "3"
+    track_box.set("3")
+    ui.pump(0.3)
+    assert filters.skip_limits() == (3, 3), "saved as typed"
+    texts = labels(win)
+    assert line not in texts and "Nothing yet: no track has been skipped by voice 3 times." in texts, texts
+    assert texts.count("Left Out Now") == 1, "the old section went"
     win.destroy()
     assert not ui.errors, ui.errors[0]

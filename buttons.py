@@ -1302,6 +1302,15 @@ def radio_lane_for(button, lane_id=None):
     return radio.default_lane(), None
 
 
+def radio_for_voice():
+    """The Radio playlist a voice request plays: the first on the row (their settings are shared), else a fresh one."""
+    found = next((b for b in load() if is_radio(b)), None)
+    if found is not None:
+        return found
+    by_std = {b.get("standard"): b for b in load() if b.get("standard")}
+    return ready_made_button("radio", by_std)
+
+
 def run_radio(button, report=print, lane_id=None):
     """
     Radio as a playlist (6 Nov 2026): its settings laid over .env, with Simple's layer and the More Options
@@ -1326,12 +1335,16 @@ def run_radio(button, report=print, lane_id=None):
         if radio.analysis() is None:   # the first press ever: the lanes first
             if radio.analyse(report).get("resting"):
                 return None
+        elif radio.outdated() and not engine.NONSTOP_APPEND:   # made by an older version's rules
+            lane_id = radio.recut(report, lane_id) if lane_id else (radio.recut(report) and None)
         lane_, problem = radio_lane_for(button, lane_id)
         if lane_ is None:
             report(problem or t("Radio: no stations yet. Re-analyse under Radio's arrow or on its page."))
             return None
         if not engine.NONSTOP_APPEND and (lane_id or not button.get("lane")):
             radio.set_row(default=lane_["id"])
+        if not engine.NONSTOP_APPEND:   # the last five, which Needle Drop offers (8 Nov 2026)
+            radio.remember_played(lane_)
         return radio.build(lane_["id"], report=report)
     finally:
         engine.FILTER_IDS = None

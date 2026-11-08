@@ -107,13 +107,82 @@
           "name": "ResumeMusicIntent",
           "samples": ["resume the music", "resume playing", "resume music", "carry on playing", "unpause"]
         },
+        {
+          "name": "RadioIntent",
+          "slots": [{"name": "query", "type": "STATION"}],
+          "samples": ["radio", "the radio", "some radio", "radio {query}", "{query} radio", "the {query} station",
+                      "station {query}", "radio station {query}", "the radio station {query}"]
+        },
+        {
+          "name": "StationIntent",
+          "slots": [{"name": "query", "type": "STATION"}],
+          "samples": ["{query}", "the {query} one", "the {query}", "number {query}", "{query} please"]
+        },
+        {
+          "name": "TopUpIntent",
+          "samples": ["top up", "top it up", "top up the music", "top up playing now"]
+        },
         {"name": "AMAZON.CancelIntent", "samples": []},
         {"name": "AMAZON.HelpIntent", "samples": []},
         {"name": "AMAZON.StopIntent", "samples": ["close", "finish", "never mind"]},
         {"name": "AMAZON.NavigateHomeIntent", "samples": []},
         {"name": "AMAZON.FallbackIntent", "samples": []}
       ],
-      "types": []
+      "types": [
+        {
+          "name": "STATION",
+          "values": [
+            {"name": {"value": "rock"}},
+            {"name": {"value": "classic rock"}},
+            {"name": {"value": "hard rock"}},
+            {"name": {"value": "folk"}},
+            {"name": {"value": "folk rock"}},
+            {"name": {"value": "singer songwriter"}},
+            {"name": {"value": "jazz"}},
+            {"name": {"value": "vocal jazz"}},
+            {"name": {"value": "soul"}},
+            {"name": {"value": "motown"}},
+            {"name": {"value": "blues"}},
+            {"name": {"value": "blues rock"}},
+            {"name": {"value": "electronic"}},
+            {"name": {"value": "ambient"}},
+            {"name": {"value": "pop"}},
+            {"name": {"value": "indie"}},
+            {"name": {"value": "alternative"}},
+            {"name": {"value": "hip hop"}},
+            {"name": {"value": "rap"}},
+            {"name": {"value": "country"}},
+            {"name": {"value": "metal"}},
+            {"name": {"value": "punk"}},
+            {"name": {"value": "grunge"}},
+            {"name": {"value": "psychedelic"}},
+            {"name": {"value": "reggae"}},
+            {"name": {"value": "classical"}},
+            {"name": {"value": "funk"}},
+            {"name": {"value": "disco"}},
+            {"name": {"value": "house"}},
+            {"name": {"value": "techno"}},
+            {"name": {"value": "dance"}},
+            {"name": {"value": "r and b"}},
+            {"name": {"value": "soundtrack"}},
+            {"name": {"value": "new wave"}},
+            {"name": {"value": "world"}},
+            {"name": {"value": "latin"}},
+            {"name": {"value": "gospel"}},
+            {"name": {"value": "first"}},
+            {"name": {"value": "second"}},
+            {"name": {"value": "third"}},
+            {"name": {"value": "fourth"}},
+            {"name": {"value": "fifth"}},
+            {"name": {"value": "one"}},
+            {"name": {"value": "two"}},
+            {"name": {"value": "three"}},
+            {"name": {"value": "four"}},
+            {"name": {"value": "five"}},
+            {"name": {"value": "last"}}
+          ]
+        }
+      ]
     }
   }
 }

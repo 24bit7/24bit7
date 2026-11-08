@@ -85,17 +85,35 @@ def test_play_and_embellish_then_save_playlist(app, ui):
     assert not ui.errors, ui.errors[0]
 
 
-def test_the_arrows_remember_their_choice(app, ui):
+def test_the_amounts_menu_offers_what_settings_ticks_and_runs_a_pick_once(app, ui, monkeypatch):
+    """Ben, 7 Nov 2026: names only, the default ticked, a pick runs once; one amount left and the arrow goes."""
     import embellish
     p = lists_tab(ui)
+    ran = []
+    monkeypatch.setattr(p, "on_play_playlist", lambda embellish_it, amount=None: ran.append((embellish_it, amount)))
     p._choice_menu("amount")
     ui.pump(0.2)
     pop = p._children_popup
-    assert [code for code, _, _ in pop._rows] == ["half", "double", "out"]
-    assert [mark for _, _, mark in pop._rows] == ["✓", "", ""], "Add Half until changed"
+    assert [code for code, _, _ in pop._rows] == ["p10", "p20", "p50", "double", "triple", "out"]
+    assert [mark for _, _, mark in pop._rows] == ["", "", "✓", "", "", ""], "+50% until changed"
+    labels = [w for w in pop.winfo_children()[0].winfo_children() if isinstance(w, tk.Label)]
+    assert not labels, "no notes under the rows"
     p._choose("amount", "out")
     ui.pump(0.1)
-    assert embellish.choices()["amount"] == "out"
+    assert ran == [(True, "out")] and embellish.choices()["amount"] == "p50", "this once; the default stays"
+    embellish.set_amounts(shown=["p20", "double"], default="double")
+    p._choice_menu("amount")
+    ui.pump(0.2)
+    assert [(c, m) for c, _, m in p._children_popup._rows] == [("p20", ""), ("double", "✓")]
+    p._close_children()
+    embellish.set_amounts(shown=["double"])
+    ui.root.event_generate("<<EmbellishAmounts>>")
+    ui.pump(0.1)
+    assert not p.embellish_button.has_arrow(), "one amount: nothing to choose"
+    embellish.set_amounts(shown=["double", "out"])
+    ui.root.event_generate("<<EmbellishAmounts>>")
+    ui.pump(0.1)
+    assert p.embellish_button.has_arrow()
     assert not ui.errors, ui.errors[0]
 
 

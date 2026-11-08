@@ -5,13 +5,17 @@ Play plays a JRiver playlist or smartlist, shuffled or in its own order. Play & 
 grows it first: Consensus with the playlist's own artists as the circle, then the top
 tracks you own by each artist the circle agrees on, woven in with yours.
 
-  Add Half      one new track for every two on the playlist
-  Double It     as many new tracks as the playlist has
-  Build It Out  every agreeing artist's top tracks you own, until none are left
+  +10%, +20%, +50%   one new track for every ten, five or two on the playlist
+  Double, Triple     as many new tracks as the playlist has, or twice as many
+  Build It Out       every agreeing artist's top tracks you own, until none are left
+
+Which amounts the arrow offers, and which the button itself runs, are set under Settings >
+JRiver Playlists > Play & Embellish (Ben, 7 Nov 2026): all six to start, +50% the default
+(the Add Half of 1.31.0's first days). Picking one from the arrow runs it once.
 
 The circle is taken ten of the playlist's artists at a time, picked at random (a big
-playlist is sampled, as Playing Now is). Add Half and Double It stop as soon as they
-have enough; Build It Out says what each stage added, and Cancel keeps what's found so
+playlist is sampled, as Playing Now is). Every amount but Build It Out stops as soon as it
+has enough; Build It Out says what each stage added, and Cancel keeps what's found so
 far: the lot goes in when it finishes or is stopped, so Ordered stays in your order.
 
 The playlist's first track plays first. Ordered keeps your order with the new tracks
@@ -24,11 +28,13 @@ import random
 import engine
 from i18n import N_, t, tn
 
-AMOUNTS = ("half", "double", "out")
-AMOUNT_NAMES = {"half": N_("Add Half"), "double": N_("Double It"), "out": N_("Build It Out")}
-AMOUNT_NOTES = {"half": N_("One new track for every two on the playlist."),
-                "double": N_("As many new tracks as the playlist has."),
-                "out": N_("Every agreeing artist's top tracks you own, ten artists at a time. Cancel keeps what's in.")}
+AMOUNTS = ("p10", "p20", "p50", "double", "triple", "out")
+AMOUNT_NAMES = {"p10": N_("+10%"), "p20": N_("+20%"), "p50": N_("+50%"), "double": N_("Double"),
+                "triple": N_("Triple"), "out": N_("Build It Out")}
+SHARES = {"p10": 0.1, "p20": 0.2, "p50": 0.5, "double": 1.0, "triple": 2.0}   # new tracks per track on the playlist
+DEFAULT_AMOUNT = "p50"
+OLD_AMOUNTS = {"half": "p50"}   # 1.31.0's first days: Add Half and Double It
+AMOUNTS_KEY = "embellish_amounts"   # {"shown": [codes], "default": code}: Settings > JRiver Playlists
 ORDERS = ("shuffled", "ordered")
 ORDER_NAMES = {"shuffled": N_("Play Shuffled"), "ordered": N_("Play Ordered")}
 STAGE = 10          # playlist artists added to the circle per stage
@@ -72,28 +78,53 @@ def note_recent(playlist, how):
 
 
 def choices():
-    """{"order": "shuffled" or "ordered", "amount": "half", "double" or "out"}: the arrows' last choices."""
+    """{"order": "shuffled" or "ordered" (Play's arrow, remembered), "amount": the default amount (Settings)}."""
     saved = _meta(CHOICE_KEY, {})
     order = saved.get("order") if saved.get("order") in ORDERS else "shuffled"
-    amount = saved.get("amount") if saved.get("amount") in AMOUNTS else "half"
-    return {"order": order, "amount": amount}
+    return {"order": order, "amount": amounts()["default"]}
 
 
 def set_choice(key, value):
-    saved = choices()
+    """Play's arrow: Shuffled or Ordered, remembered. (The amount is Settings' default: set_amounts.)"""
+    saved = dict(_meta(CHOICE_KEY, {}))
     saved[key] = value
     _set_meta(CHOICE_KEY, saved)
+
+
+def amounts():
+    """
+    {"shown": the amounts the arrow offers, in AMOUNTS' order, "default": what the button runs}. At least one
+    is shown and the default is one of them. Before this setting, the arrow's last choice was the default.
+    """
+    saved = _meta(AMOUNTS_KEY, None)
+    if not isinstance(saved, dict):
+        old = _meta(CHOICE_KEY, {}).get("amount")
+        old = OLD_AMOUNTS.get(old, old)
+        return {"shown": list(AMOUNTS), "default": old if old in AMOUNTS else DEFAULT_AMOUNT}
+    shown = [a for a in AMOUNTS if a in (saved.get("shown") or [])] or [DEFAULT_AMOUNT]
+    default = saved.get("default") if saved.get("default") in shown else shown[0]
+    return {"shown": shown, "default": default}
+
+
+def set_amounts(shown=None, default=None):
+    """Settings > JRiver Playlists: which amounts the arrow offers, and the default. Kept sensible either way."""
+    now = amounts()
+    shown = [a for a in AMOUNTS if a in (now["shown"] if shown is None else shown)] or [now["default"]]
+    default = now["default"] if default is None else default
+    if default not in shown:
+        default = shown[0]
+    _set_meta(AMOUNTS_KEY, {"shown": shown, "default": default})
+    return {"shown": shown, "default": default}
 
 
 # --- the build ------------------------------------------------------------------------------------
 
 def want_for(amount, count):
     """How many new tracks an amount asks for, on a playlist of count tracks. None: as many as there are."""
+    amount = OLD_AMOUNTS.get(amount, amount)
     if amount == "out":
         return None
-    if amount == "double":
-        return count
-    return max(1, count // 2)
+    return max(1, int(round(count * SHARES.get(amount, 0.5))))
 
 
 def weave(keys, new, ordered):
@@ -273,6 +304,7 @@ def embellish(playlist, order, amount, report):
         return
     ordered = order == "ordered"
     artists = len(_artists(keys))
+    amount = OLD_AMOUNTS.get(amount, amount)
     report(t("Embellish: {name}, {tracks} by {artists} artists, {amount}.", name=name,
              tracks=tn("{count} track", "{count} tracks", len(keys)), artists=artists, amount=t(AMOUNT_NAMES[amount])))
     session_id = engine.session_start("embellish", {"Artist": "", "Name": name})

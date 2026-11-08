@@ -323,7 +323,7 @@ def test_model_has_every_intent_the_skill_handles(app, alexa):
     model = json.load(open(app.folder / "alexa" / "interaction_model.json", encoding="utf-8"))
     names = {i["name"] for i in model["interactionModel"]["languageModel"]["intents"]}
     handled = set(alexa.skill.INTENTS) | set(alexa.skill.ZONE_INTENTS) | {
-        "ByArtistIntent", "SwitchToIntent", "ListCommandsIntent", "AMAZON.HelpIntent", "AMAZON.FallbackIntent",
+        "ByArtistIntent", "StationIntent", "SwitchToIntent", "ListCommandsIntent", "AMAZON.HelpIntent", "AMAZON.FallbackIntent",
         "AMAZON.StopIntent", "AMAZON.CancelIntent"}
     assert handled <= names, handled - names
     for intent in model["interactionModel"]["languageModel"]["intents"]:

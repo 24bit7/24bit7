@@ -16,7 +16,8 @@ an unplayed one as played 0 times and never played).
 Every playlist (Ben, 5 Nov 2026): a filter with it ticked applies to every playlist
 24bit7 builds, ticked on its page or not. Skipped Tracks ships, off: it leaves out
 tracks skipped by voice twice or more, and every track by an artist with three such
-tracks (the Alexa skip counts them in 24bit7's own JRiver field).
+tracks (the Alexa skip counts them in 24bit7's own JRiver field); both numbers are set
+on its page (8 Nov 2026).
 
 At least (Ben, 7 Nov 2026): a filter can ask for a share instead of leaving tracks out.
 "At least 20% of each playlist matches" keeps the playlist as usual and makes sure that
@@ -41,17 +42,18 @@ META_KEY = "filters"
 
 SKIPPED_ID = "skipped"
 SKIPPED_NAME = N_("Skipped Tracks")
-SKIPS_TRACK = 2    # voice skips that leave a track out
-SKIPS_ARTIST = 3   # tracks left out that way that leave their artist out
-SKIPPED_TEXT = N_("Leaves out any track skipped by voice twice or more, and every track by an artist with three "
-                  "such tracks. Each skip you ask the skill for counts in a field of 24bit7's own in JRiver, "
+SKIPS_TRACK = 2    # voice skips that leave a track out, until changed on its page
+SKIPS_ARTIST = 3   # tracks left out that way that leave their artist out, likewise
+SKIPS_MAX = 9      # the number boxes go from one to nine
+SKIPPED_TEXT = N_("Each skip you ask the skill for counts in a field of 24bit7's own in JRiver, "
                   "24bit7 Voice Skips, which you can see and clear in JRiver.")
 SHIPPED_FLAG = "filters_skipped_shipped"
 
 
 def blank(name="New filter"):
     return {"id": uuid.uuid4().hex[:8], "name": name, "on": True, "every": False, "builtin": "",
-            "pick_from": "", "pick_name": "", "match": "all", "rules": [], "mode": "leave", "share": SHARE_DEFAULT}
+            "pick_from": "", "pick_name": "", "match": "all", "rules": [], "mode": "leave", "share": SHARE_DEFAULT,
+            "track_skips": SKIPS_TRACK, "artist_skips": SKIPS_ARTIST}
 
 
 SHARE_DEFAULT = 20   # At least's percentage, until it's changed
@@ -73,6 +75,23 @@ def share_of(item):
         return max(1, min(100, int(float(item.get("share") or SHARE_DEFAULT))))
     except (TypeError, ValueError):
         return SHARE_DEFAULT
+
+
+def _limit(value, default):
+    try:
+        return max(1, min(SKIPS_MAX, int(float(value))))
+    except (TypeError, ValueError):
+        return default
+
+
+def skip_limits(item=None):
+    """
+    (voice skips that leave a track out, tracks left out that leave their artist out): Skipped Tracks' two number
+    boxes, from the filter given or the one in the list, else the shipped two and three.
+    """
+    if item is None:
+        item = next((x for x in load() if x.get("builtin") == "skipped"), None) or {}
+    return _limit(item.get("track_skips"), SKIPS_TRACK), _limit(item.get("artist_skips"), SKIPS_ARTIST)
 
 
 def skipped_filter():
@@ -148,14 +167,14 @@ def by_ids(ids):
     return [x for x in load() if (x["id"] in wanted or x.get("every")) and x.get("on")]
 
 
-def skipped_list():
+def skipped_list(limits=None):
     """
-    What Skipped Tracks leaves out now, for its page: ([(key, artist, title, skips)] tracks skipped twice or
-    more, A to Z, and {artist as tagged: [keys]} for the artists left out, with their skipped tracks' keys).
+    What Skipped Tracks leaves out now, for its page: ([(key, artist, title, skips)] tracks skipped often enough,
+    A to Z, and {artist as tagged: [keys]} for the artists left out, with their skipped tracks' keys).
     """
     import library
     library.ensure_loaded()
-    keys, artists = skipped_sets()
+    keys, artists = skipped_sets(limits)
     tracks, by_artist = [], {}
     for key in keys:
         row = library.track_row(key) or {}
@@ -171,9 +190,10 @@ def skipped_list():
     return tracks, by_artist
 
 
-def skipped_sets():
-    """(keys, artist keys) the Skipped Tracks filter leaves out, from the library held in memory."""
+def skipped_sets(limits=None):
+    """(keys, artist keys) the Skipped Tracks filter leaves out, from the library held in memory, at its own numbers."""
     import library
+    track_limit, artist_limit = limits or skip_limits()
     library.ensure_loaded()
     with library._lock:
         rows = list(library._tracks)
@@ -183,11 +203,11 @@ def skipped_sets():
             skips = int(float(str(row.get(engine.SKIP_FIELD) or "0").strip() or 0))
         except ValueError:
             continue
-        if skips >= SKIPS_TRACK:
+        if skips >= track_limit:
             keys.add(str(row.get("Key")))
             artist = engine.artist_key(row.get("Artist") or "")
             per_artist[artist] = per_artist.get(artist, 0) + 1
-    return keys, {a for a, n in per_artist.items() if n >= SKIPS_ARTIST and a}
+    return keys, {a for a, n in per_artist.items() if n >= artist_limit and a}
 
 
 # --- rules ------------------------------------------------------------------------
@@ -393,7 +413,10 @@ def describe_rule(rule):
 def describe(item):
     """A short line for the Active filters list and the log."""
     if item.get("builtin") == "skipped":
-        return t("{name} (skipped by voice twice or more, and artists with three such tracks)", name=item["name"])
+        track_limit, artist_limit = skip_limits(item)
+        return tn("{name} (skipped by voice {count} time or more, and artists with {artists} or more such tracks)",
+                  "{name} (skipped by voice {count} times or more, and artists with {artists} or more such tracks)",
+                  track_limit, name=item["name"], artists=artist_limit)
     bits = []
     if item.get("pick_from"):
         bits.append(t("only from {name}", name=item.get("pick_name") or t("a playlist")))
@@ -439,8 +462,9 @@ class Active:
         self.pools = []
         self.rule_sets = [(x.get("match", "all"), x["rules"]) for x in self.items if x.get("rules")]
         self.skipped = None
-        if any(x.get("builtin") == "skipped" for x in self.items):
-            self.skipped = skipped_sets()
+        found = next((x for x in self.items if x.get("builtin") == "skipped"), None)
+        if found is not None:
+            self.skipped = skipped_sets(skip_limits(found))
         if self.rule_sets or self.skipped:
             import library
             library.ensure_loaded()

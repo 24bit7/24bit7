@@ -630,8 +630,12 @@ def grab_window(window):
     return grab_box(window, (x - 1, y - 1, x + window.winfo_width() + 1, y + window.winfo_height() + 1))
 
 
-def grab(root):
+def grab(root, above=None):
+    """The window as it shows; above is an open drop-down list, lifted back over the window, which stays on top
+    for the shots and would otherwise cover it (7 Nov 2026)."""
     root.lift()
+    if above is not None:
+        above.lift(root)
     settle(root, 0.2)
     x, y = root.winfo_rootx(), root.winfo_rooty()
     return grab_box(root, (x, y, x + root.winfo_width(), y + root.winfo_height()))   # the window sits on the main screen
@@ -650,10 +654,10 @@ def scroll_canvas(page):
     return best
 
 
-def capture(root, page):
+def capture(root, page, above=None):
     """The window, with a long page scrolled through and stitched into one tall image."""
     from PIL import Image
-    first = grab(root)
+    first = grab(root, above)
     canvas = scroll_canvas(page)
     if canvas is None:
         return first
@@ -671,7 +675,7 @@ def capture(root, page):
         canvas.yview_moveto(y / total)
         settle(root, 0.25)
         shown = int(canvas.canvasy(0))
-        shot = grab(root)
+        shot = grab(root, above)
         end = min(shown + view, total)
         pieces.append(shot.crop((left, top + (y - shown), right, top + (end - shown))))
         if end <= y:
@@ -816,7 +820,7 @@ def main():
             if popup is not None:   # a drop-down list, kept above the window while it's grabbed
                 popup.attributes("-topmost", True)
                 settle(root, 0.3)
-            image = grab_window(dialog) if dialog else capture(root, page)
+            image = grab_window(dialog) if dialog else capture(root, page, popup)
             if popup is not None:
                 try:
                     popup.destroy()
