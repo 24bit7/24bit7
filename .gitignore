@@ -31,3 +31,5 @@ pack_for_laptop.py
 # per-PC: the clock hook (settings) and its memory of the last message
 .claude/settings.local.json
 .claude/clock_state.json
+# Multiroom's calibration: the click track and the last run's log, made on the fly
+calibration/
