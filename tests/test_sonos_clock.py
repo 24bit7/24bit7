@@ -143,6 +143,7 @@ def test_the_clock_connects_again_after_the_sonos_drops_it(fake):
 def test_find_reads_household_and_group_from_info(fake):
     loc = f"http://127.0.0.1:{fake.info_port}/xml/device_description.xml"
     found = sonos.find(locations=[loc, loc])
-    assert found == [{"ip": "127.0.0.1", "name": "Living Room", "householdId": HOUSEHOLD, "groupId": GROUP}]
+    assert found == [{"ip": "127.0.0.1", "name": "Living Room", "householdId": HOUSEHOLD, "groupId": GROUP,
+                      "model": "Sonos One"}]   # the model keys the speaker profile (stage two)
     assert sonos.find("living", locations=[loc])[0]["name"] == "Living Room"
     assert sonos.find("Kitchen", locations=[loc]) == []

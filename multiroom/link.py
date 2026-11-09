@@ -85,6 +85,12 @@ class Link:
     def running(self):
         return self.conn is not None
 
+    def nudge(self, ms):
+        """Moves Start by ms in the running follower, so the Speakers shift as you listen. Nothing if it isn't running."""
+        with self.lock:
+            if self.conn is not None:
+                self._send(cmd="nudge", ms=ms)
+
     # --- the child ----------------------------------------------------------------------------------
     def _launch(self):
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

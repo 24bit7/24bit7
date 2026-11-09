@@ -40,6 +40,11 @@ class FakeFollower:
 
     def __init__(self, say, die=False):
         self.say, self.die = say, die
+        self.nudges = []
+
+    def nudge(self, ms):
+        self.nudges.append(ms)
+        self.say(f"Start is now {90 + sum(self.nudges):.0f} ms.")
 
     def run(self, stop=None):
         if self.die:
@@ -160,6 +165,17 @@ def test_the_link_starts_the_child_and_shows_its_lines_with_the_prefix():
     assert lk.state == "following" and lk.running()
     lk.stop()
     assert not lk.running() and lk.state == "off"
+
+
+def test_a_nudge_reaches_the_running_follower():
+    lines = []
+    lk = link.Link(say=lines.append, spawn=thread_spawn(make_build()))
+    lk.nudge(5)   # nothing running: nothing happens
+    lk.start(SETTINGS)
+    assert until(lambda: lk.state == "following")
+    lk.nudge(5)
+    assert until(lambda: "Multiroom: Start is now 95 ms." in lines)
+    lk.stop()
 
 
 def test_a_problem_from_the_child_is_a_problem_line():

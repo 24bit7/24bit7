@@ -99,10 +99,13 @@ def find(name=None, locations=None, timeout=3.0):
             i = info(ip, host.port or 1400)
         except (OSError, ValueError):
             continue
-        room = (i.get("device") or {}).get("name") or i.get("name") or ""
+        device = i.get("device") or {}
+        room = device.get("name") or i.get("name") or ""
         if name and name.lower() not in room.lower():
             continue
-        out.append({"ip": ip, "name": room, "householdId": i.get("householdId"), "groupId": i.get("groupId")})
+        shown = device.get("modelDisplayName") or device.get("model") or ""   # "One" on a Sonos One (9 Nov 2026)
+        out.append({"ip": ip, "name": room, "householdId": i.get("householdId"), "groupId": i.get("groupId"),
+                    "model": ("Sonos " + shown).strip()})
     return out
 
 

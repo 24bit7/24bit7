@@ -31,6 +31,7 @@ class Service:
         self.lock = threading.Lock()
         self.stop_event = threading.Event()
         self.thread = None
+        self.follower = None   # the running Follower, for nudge
 
     def send(self, **obj):
         with self.lock:
@@ -53,6 +54,10 @@ class Service:
                     self.start(cmd)
                 elif what == "stop":
                     self.stop()
+                elif what == "nudge":
+                    f = self.follower
+                    if f is not None:
+                        f.nudge(float(cmd.get("ms", 0)))
                 elif what == "quit":
                     break
         finally:
@@ -92,12 +97,14 @@ class Service:
             return
         self.send(state="following")
         self.send(line=description)
+        self.follower = f
         clock.start()
         try:
             f.run(self.stop_event)
         except Exception as e:
             self.send(problem=f"The follower stopped ({e}).")
         finally:
+            self.follower = None
             clock.stop()
             self.send(state="idle")
 

@@ -716,6 +716,15 @@ class Follower:
         elif held >= WAIT_FOR:
             self.finish(f"The {self.leader} stopped playing, so the Speakers have too.")
 
+    def nudge(self, ms):
+        """Moves Start by ms while music plays (Settings > Other > Multiroom, Nudge): the Speakers shift as you listen."""
+        self.start_s += ms / 1000
+        t, p = self.track, self.player
+        if p is not None and t is not None and t.get("late") is not None and t.get("c") is not None:
+            if p.set_origin(t["c"] + self.start_s - t["late"], self._chains):
+                p.place(self.now())
+        self.say(f"Start is now {self.start_s * 1000:.0f} ms.")
+
     def finish(self, why=None, end=None):
         """Stops the Speakers. end: our time the track's sound ends on the Sonos, if it ran (or is running) out."""
         p = self.player

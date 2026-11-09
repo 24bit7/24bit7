@@ -35,6 +35,8 @@ import mode
 import radio
 import tour
 from tabs import TabbedPane, PALETTE, FlatButton, TCombobox, NamePrompt, PromptWindow, PickRow
+from multiroom import clockcheck, fetch as mr_fetch, mcws as mr_mcws, output as mr_output, profiles as mr_profiles
+from multiroom import sonos as mr_sonos
 from datetime import datetime
 from i18n import N_, t, tn
 
@@ -292,6 +294,10 @@ WHOLE_SECTIONS = ("Consensus", "Moderator", "Drift", "Deep Cuts", "Non-stop", "S
                   "Run After Building")
 HELP_FONT = "S24.body"
 HELP_FG = "#666"
+# Settings > Other > Multiroom: the keys its boxes hold besides MULTIROOM_ENABLED (kit settings, out of Profiles)
+MULTIROOM_KEYS = ("MULTIROOM_LEADER", "MULTIROOM_FOLLOWER", "MULTIROOM_SERVER", "MULTIROOM_SPEAKER",
+                  "MULTIROOM_DEVICE", "MULTIROOM_START", "MULTIROOM_RESUME", "MULTIROOM_DAC", "MULTIROOM_FROM")
+VERDICT_FG = {"green": "#2e9e4f", "amber": "#d08a1a", "red": "#e05a5a"}   # Check Clock's verdict
 LABEL_FONT = "S24.bold"
 SECTION_FG = "#1f4e8c"    # section titles, in the logo blue
 SECTION_EDGE = "#aab4c3"  # the thin line round each section
@@ -1353,6 +1359,10 @@ class SettingsTab(tk.Frame):
         updates["SIMILAR_TRACK_TOPUP"] = None   # replaced by Drift in 1.4.0
         for key in ("START_IN_TRAY", "CLOSE_TO_TRAY", "PREFER_OFFICIAL_VIDEOS", "WINDOWS_TITLE_BAR"):
             updates[key] = "1" if self.vars[key].get() else "0"
+        if "MULTIROOM_ENABLED" in self.vars:
+            updates["MULTIROOM_ENABLED"] = "1" if self.vars["MULTIROOM_ENABLED"].get() else "0"
+            for key in MULTIROOM_KEYS:
+                updates[key] = self.vars[key].get().strip()
         return updates
 
     def _on_title_bar_toggled(self):
@@ -5955,6 +5965,8 @@ class SettingsTab(tk.Frame):
         self._zones_filled = False
         tab.bind("<<Shown>>", lambda e: None if self._zones_filled else self._fill_zone_boxes())
 
+        self._build_multiroom(tab)
+
         # --- Windows: start with Windows, start hidden in the tray, and close to the tray ---
         box = section(tab, t("Windows"),
                       t("Voice Commands need 24bit7 running, so for voice after a restart, tick Start with "
@@ -6604,6 +6616,320 @@ class SettingsTab(tk.Frame):
             mode_cb.bind("<<ComboboxSelected>>", self._save)
 
     # --- helpers -----------------------------------------------------------
+
+    # --- Multiroom (experimental, 9 Nov 2026) -------------------------------------------------------------
+
+    def _build_multiroom(self, tab):
+        """
+        Settings > Other > Multiroom: the Speakers' DAC plays what the Sonos zone plays, in step, with JRiver's
+        DSP. Off by default; ticked, Output on the Play tab gains Multiroom. The two zones are picked; the
+        speaker, the DAC and the DLNA server are found (_multiroom_refresh, on a thread). The three numbers come
+        from the profiles until typed over or nudged. Calibrate waits for stage three.
+        """
+        box = self._mr_box = section(
+            tab, t("Multiroom"),
+            t("The Speakers play what the Sonos plays, in step and with your Speakers DSP, so the two rooms sound "
+              "as one. Tick Enable Multiroom and the Play tab's Output list gains Multiroom: a build goes to the "
+              "leader zone and the Speakers follow it. Experimental: tested on one Sonos One and a Chord Hugo over "
+              "ASIO. Two steps in JRiver first: see the note on DLNA server."))
+        env = self.env
+        tk.Label(box, text=t("experimental: tested on one Sonos One and a Chord Hugo over ASIO"),
+                 fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=0, column=0, columnspan=4, sticky="w")
+        self.vars["MULTIROOM_ENABLED"] = tk.BooleanVar(value=env.get("MULTIROOM_ENABLED", "0") in ("1", "true", "yes"))
+        tick = ttk.Checkbutton(box, text=t("Enable Multiroom"), variable=self.vars["MULTIROOM_ENABLED"],
+                               command=self._multiroom_changed, style="Big.TCheckbutton")
+        tick.grid(row=1, column=0, columnspan=4, sticky="w", pady=(4, 6))
+        for key, default in (("MULTIROOM_LEADER", ""), ("MULTIROOM_FOLLOWER", ""), ("MULTIROOM_SERVER", "Multiroom"),
+                             ("MULTIROOM_SPEAKER", ""), ("MULTIROOM_DEVICE", ""), ("MULTIROOM_START", "90"),
+                             ("MULTIROOM_RESUME", "95"), ("MULTIROOM_DAC", "1660"), ("MULTIROOM_FROM", "profiles")):
+            self.vars[key] = tk.StringVar(value=env.get(key, default) or default)
+        parts = self._mr_parts = []
+        self._mr_setting = False        # True while the code sets a number, so the trace doesn't call it typed
+        self._mr_speaker_found = None   # the one Sonos found: ip, name, model, householdId, groupId
+        self._mr_refreshing = False
+        zones = engine.zone_names(include_hidden=True)
+
+        def label(row, text, note):
+            lab = tk.Label(box, text=text, font=LABEL_FONT, anchor="w")
+            lab.grid(row=row, column=0, sticky="w", padx=(24, 0), pady=3)
+            Tooltip(lab, note)
+            parts.append(lab)
+            return lab
+
+        def zone_box(row, key):
+            var = self.vars[key]
+            shown = tk.StringVar(value=var.get() or t("Not set"))
+            cb = TCombobox(box, textvariable=shown, state="readonly", width=18,
+                           values=[t("Not set")] + zones + ([var.get()] if var.get() and var.get() not in zones else []))
+            cb.grid(row=row, column=1, sticky="w", padx=(12, 0))
+
+            def picked(_e=None):
+                cb.selection_clear()
+                var.set("" if shown.get() == t("Not set") else shown.get())
+                self._multiroom_changed()
+            cb.bind("<<ComboboxSelected>>", picked)
+            parts.append(cb)
+            return cb
+
+        label(2, t("Leader"), t("The JRiver zone that plays to the speaker. A build with Output on Multiroom goes here, "
+                                 "and the Speakers follow it."))
+        self._mr_leader_cb = zone_box(2, "MULTIROOM_LEADER")
+        label(3, t("Speaker"), t("The speaker found on the network, and the profile 24bit7 knows it by. Check Clock reads "
+                                  "its clock for ten seconds while something plays and says whether it can be followed."))
+        cell = tk.Frame(box)
+        cell.grid(row=3, column=1, columnspan=3, sticky="w", padx=(12, 0))
+        self._mr_speaker = tk.Label(cell, text=t("Not looked yet."), fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w")
+        self._mr_speaker.pack(side="left")
+        self._mr_check = tk.Button(cell, text=t("Check Clock"), width=12, command=self._multiroom_check_clock)
+        self._mr_check.pack(side="left", padx=(16, 0))
+        parts.extend([self._mr_speaker, self._mr_check])
+        self._mr_clock = tk.Label(box, text="", font=HELP_FONT, anchor="w", justify="left", wraplength=scaled(box, 640))
+        self._mr_clock.grid(row=4, column=1, columnspan=3, sticky="w", padx=(12, 0))
+        label(5, t("Follower"), t("The zone whose DAC follows: the Speakers. 24bit7 stops this zone in JRiver while "
+                                   "Multiroom plays, so the DAC is free."))
+        self._mr_follower_cb = zone_box(5, "MULTIROOM_FOLLOWER")
+        label(6, t("Plays through"), t("The output device: JRiver's device for the follower zone, matched to its ASIO "
+                                        "driver. ASIO is recommended; WASAPI is untested. A box to type the device's "
+                                        "name appears only if nothing matched."))
+        cell = tk.Frame(box)
+        cell.grid(row=6, column=1, columnspan=3, sticky="w", padx=(12, 0))
+        self._mr_device = tk.Label(cell, text=t("Not looked yet."), fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w")
+        self._mr_device.pack(side="left")
+        self._mr_device_entry = ttk.Entry(cell, textvariable=self.vars["MULTIROOM_DEVICE"], width=26)   # shown when nothing matched
+        self.vars["MULTIROOM_DEVICE"].trace_add("write", lambda *a: self._multiroom_text_changed())
+        parts.append(self._mr_device)
+        label(7, t("DLNA server"), t("JRiver's DLNA server the Speakers fetch the tracks from, with your Speakers DSP and "
+                                      "24-bit. Set up once in JRiver: Tools > Options > Media Network > Add or configure "
+                                      "DLNA servers, a server called Multiroom with Format PCM 24-bit; then save the "
+                                      "Speakers zone's DSP as a preset and load it in the server's DSP Studio."))
+        cell = tk.Frame(box)
+        cell.grid(row=7, column=1, columnspan=3, sticky="w", padx=(12, 0))
+        server = ttk.Entry(cell, textvariable=self.vars["MULTIROOM_SERVER"], width=14)
+        server.pack(side="left")
+        self.vars["MULTIROOM_SERVER"].trace_add("write", lambda *a: self._multiroom_text_changed())
+        self._mr_server = tk.Label(cell, text="", fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w")
+        self._mr_server.pack(side="left", padx=(10, 0))
+        parts.extend([server, self._mr_server])
+        tk.Label(box, text=t("Adjustments"), font=LABEL_FONT).grid(row=8, column=0, columnspan=4, sticky="w",
+                                                                  padx=(24, 0), pady=(10, 2))
+        numbers = (("MULTIROOM_START", t("Start"), t("ms"), 0, 500,
+                    t("How far the speaker's sound runs behind its counter at the start of a track, and so everything "
+                      "after. The rooms sound like an echo from the first note? Change this by ten and listen.")),
+                   ("MULTIROOM_RESUME", t("Resume"), t("ms"), 0, 500,
+                    t("The same after a jump within a track. Out of step only after a jump? Change this.")),
+                   ("MULTIROOM_DAC", t("DAC delay"), t("samples"), 0, 20000,
+                    t("The DAC's own delay, in samples, so it shrinks at higher rates: 1,660 is 38 ms at 44.1 kHz and "
+                      "9 ms at 192. Worked out per track from its rate.")))
+        for row, (key, title, unit, lo, hi, note) in enumerate(numbers, start=9):
+            label(row, title, note)
+            cell = tk.Frame(box)
+            cell.grid(row=row, column=1, columnspan=3, sticky="w", padx=(12, 0))
+            spin = tk.Spinbox(cell, from_=lo, to=hi, textvariable=self.vars[key], width=7)
+            spin.pack(side="left")
+            tk.Label(cell, text=unit, fg=PALETTE["help_fg"], font=HELP_FONT).pack(side="left", padx=(6, 0))
+            self.vars[key].trace_add("write", lambda *a: self._multiroom_numbers_changed())
+            parts.append(spin)
+        label(12, t("Nudge"), t("While music plays in both rooms, moves Start by five milliseconds; the Speakers shift as "
+                                 "you listen, and the number is saved as you go."))
+        cell = tk.Frame(box)
+        cell.grid(row=12, column=1, columnspan=3, sticky="w", padx=(12, 0))
+        for text, ms in (("-5 ms", -5), ("+5 ms", 5)):
+            b = tk.Button(cell, text=text, width=7, command=lambda ms=ms: self._multiroom_nudge(ms))
+            b.pack(side="left", padx=(0, 8))
+            parts.append(b)
+        self._mr_from = tk.Label(box, text="", fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w", justify="left",
+                                 wraplength=scaled(box, 760))
+        self._mr_from.grid(row=13, column=0, columnspan=4, sticky="w", padx=(24, 0), pady=(4, 0))
+        cal = tk.Button(box, text=t("Calibrate..."), width=12, state="disabled")
+        cal.grid(row=14, column=0, sticky="w", padx=(24, 0), pady=(10, 0))
+        Tooltip(cal, t("Coming in stage three: one phone recording, about three minutes, measures Start, Resume and "
+                       "the DAC delay for your kit."))
+        self._multiroom_set_from()
+        self._sync_multiroom_parts()
+        tab.bind("<<Shown>>", lambda e: self._multiroom_refresh(), add="+")
+
+    def _multiroom_profiles(self):
+        """(speaker profile, DAC profile) for what was found, Generic and unknown until then."""
+        found = self._mr_speaker_found
+        speaker = mr_profiles.pick_speaker("Sonos" if found else "", (found or {}).get("model", ""))
+        dac = mr_profiles.pick_dac(getattr(self, "_mr_dac_hint", ""), getattr(self, "_mr_dac_name", ""))
+        return speaker, dac
+
+    def _multiroom_set_from(self):
+        speaker, dac = self._multiroom_profiles()
+        self._mr_from.config(text=t(mr_profiles.source_line(self.vars["MULTIROOM_FROM"].get(), speaker, dac)))
+
+    def _sync_multiroom_parts(self):
+        """Everything under the tick is greyed out while Multiroom is off."""
+        on = self.vars["MULTIROOM_ENABLED"].get()
+        for w in self._mr_parts:
+            try:
+                w.config(state=("readonly" if isinstance(w, ttk.Combobox) else "normal") if on else "disabled")
+            except tk.TclError:
+                pass
+        if not on:
+            self._mr_speaker.config(text=t("Multiroom is off."))
+            self._mr_device.config(text=t("Multiroom is off."))
+            self._mr_server.config(text="")
+            self._mr_clock.config(text="")
+
+    def _multiroom_changed(self):
+        """The tick or a zone changed: save, the Play tab's Output list follows, and the follower restarts if it runs."""
+        self._save()
+        engine.refresh_settings_if_changed()
+        self._sync_multiroom_parts()
+        play = getattr(self, "play", None)
+        if play is not None:
+            play.outputs_changed()          # Multiroom unticked while Output is on it: back to Same zone
+            if hasattr(play, "_sync_multiroom"):
+                play._sync_multiroom()      # new zones reach a running follower
+        self._multiroom_refresh()
+
+    def _multiroom_text_changed(self):
+        self._save()
+
+    def _multiroom_numbers_changed(self):
+        """A number typed by hand: the profiles no longer say where the numbers came from."""
+        if self._mr_setting:
+            return
+        if self.vars["MULTIROOM_FROM"].get() != "typed":
+            self.vars["MULTIROOM_FROM"].set("typed")
+        self._save()
+        self._multiroom_set_from()
+
+    def _multiroom_set_numbers(self, start, resume, dac):
+        self._mr_setting = True
+        try:
+            self.vars["MULTIROOM_START"].set(f"{start:g}")
+            self.vars["MULTIROOM_RESUME"].set(f"{resume:g}")
+            self.vars["MULTIROOM_DAC"].set(str(int(dac)))
+        finally:
+            self._mr_setting = False
+
+    def _multiroom_nudge(self, ms):
+        """Start moves by ms, saved, and the running follower shifts the Speakers as you listen."""
+        try:
+            start = float(self.vars["MULTIROOM_START"].get() or 0)
+        except ValueError:
+            start = 90.0
+        self._mr_setting = True
+        try:
+            self.vars["MULTIROOM_START"].set(f"{start + ms:g}")
+        finally:
+            self._mr_setting = False
+        self.vars["MULTIROOM_FROM"].set("typed")
+        self._save()
+        self._multiroom_set_from()
+        play = getattr(self, "play", None)
+        link = getattr(play, "multiroom", None)
+        if link is not None:
+            link.nudge(ms)
+
+    def _multiroom_refresh(self):
+        """Finds the speaker, the DAC and the DLNA server on a thread, then shows them."""
+        if not self.vars["MULTIROOM_ENABLED"].get() or self._mr_refreshing:
+            return
+        self._mr_refreshing = True
+        self._mr_speaker.config(text=t("Looking..."))
+        self._mr_device.config(text=t("Looking..."))
+        self._mr_server.config(text=t("Looking..."))
+        room = self.vars["MULTIROOM_SPEAKER"].get().strip() or None
+        server = self.vars["MULTIROOM_SERVER"].get().strip() or "Multiroom"
+        follower = self.vars["MULTIROOM_FOLLOWER"].get().strip()
+        typed_device = self.vars["MULTIROOM_DEVICE"].get().strip()
+
+        def work():
+            found = {"speakers": [], "server": None, "hint": "", "device": None, "problem": ""}
+            try:
+                found["speakers"] = mr_sonos.find(room)
+            except Exception as e:
+                found["problem"] = str(e)
+            try:
+                found["server"] = mr_fetch.find_server(server)
+            except Exception:
+                pass
+            if follower:
+                try:
+                    hint = typed_device or mr_mcws.JRiver(env=engine.ENV_FILE).device(follower)[0]
+                    found["hint"] = hint
+                    idx = mr_output.find_device(hint)
+                    if idx is not None:
+                        found["device"] = mr_output._sd().query_devices(idx)["name"]
+                except KeyError:
+                    found["hint"] = ""
+                except Exception as e:
+                    found["problem"] = found["problem"] or str(e)
+            try:
+                self.after(0, lambda: self._multiroom_show_found(found))
+            except (tk.TclError, RuntimeError):
+                pass
+        import threading
+        threading.Thread(target=work, daemon=True, name="multiroom-find").start()
+
+    def _multiroom_show_found(self, found):
+        self._mr_refreshing = False
+        if not self.vars["MULTIROOM_ENABLED"].get():
+            return
+        speakers = found["speakers"]
+        self._mr_speaker_found = speakers[0] if len(speakers) == 1 else None
+        if not speakers:
+            self._mr_speaker.config(text=t("No Sonos found on the network.") + (f" ({found['problem']})" if found["problem"] else ""))
+        elif len(speakers) > 1:
+            names = ", ".join(s["name"] for s in speakers)
+            self._mr_speaker.config(text=t("More than one: {names}. Type the room you want after the server name below.", names=names))
+        else:
+            s = speakers[0]
+            profile = mr_profiles.pick_speaker("Sonos", s.get("model", ""))
+            self._mr_speaker.config(text=f"{s['name']} · {s.get('model') or 'Sonos'}  ·  "
+                                    + t("profile: {name}", name=profile["name"])
+                                    + ("" if profile["tested"] else "  " + t("(untested)")))
+        self._mr_dac_hint, self._mr_dac_name = found["hint"], found["device"] or ""
+        if not self.vars["MULTIROOM_FOLLOWER"].get().strip():
+            self._mr_device.config(text=t("Pick the follower zone first."))
+            self._mr_device_entry.pack_forget()
+        elif found["device"]:
+            dac = mr_profiles.pick_dac(found["hint"], found["device"])
+            self._mr_device.config(text=f"{found['device']}  ·  " + t("profile: {name}", name=dac["name"] or t("unknown DAC")))
+            self._mr_device_entry.pack_forget()
+        else:
+            self._mr_device.config(text=t("Nothing matches {hint}. Type the device's name:", hint=repr(found["hint"]))
+                                   if found["hint"] else t("JRiver gave no device for the follower zone. Type the device's name:"))
+            self._mr_device_entry.pack(side="left", padx=(8, 0))
+        if found["server"]:
+            self._mr_server.config(text=t("Found at {base}.", base=found["server"]))
+        else:
+            self._mr_server.config(text=t("Not found: is it on in JRiver's Media Network settings?"))
+        if self.vars["MULTIROOM_FROM"].get() == "profiles":
+            speaker, dac = self._multiroom_profiles()
+            self._multiroom_set_numbers(speaker["start"], speaker["resume"], dac["dac"])
+            self._save()
+        self._multiroom_set_from()
+
+    def _multiroom_check_clock(self):
+        """Reads the speaker's clock for ten seconds on a thread and shows the verdict in its colour."""
+        s = self._mr_speaker_found
+        if s is None:
+            self._mr_clock.config(text=t("Find the speaker first: it shows on the Speaker row once Multiroom is on."),
+                                  fg=VERDICT_FG["amber"])
+            return
+        self._mr_check.config(state="disabled", text=t("Checking..."))
+        self._mr_clock.config(text=t("Reading the clock for ten seconds..."), fg=PALETTE["help_fg"])
+
+        def work():
+            try:
+                verdict = clockcheck.measure(s["ip"], s.get("householdId"), s.get("groupId"))
+            except Exception as e:
+                verdict = clockcheck.Verdict("red", t("Couldn't read the clock ({e}).", e=e), 0, False, None, None)
+            try:
+                self.after(0, lambda: self._multiroom_show_verdict(verdict))
+            except (tk.TclError, RuntimeError):
+                pass
+        import threading
+        threading.Thread(target=work, daemon=True, name="multiroom-clock").start()
+
+    def _multiroom_show_verdict(self, verdict):
+        self._mr_check.config(state="normal", text=t("Check Clock"))
+        self._mr_clock.config(text=t(verdict.text), fg=VERDICT_FG.get(verdict.colour, PALETTE["help_fg"]))
 
     def _build_additional_outputs(self, tab):
         """
