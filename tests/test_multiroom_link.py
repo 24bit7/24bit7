@@ -50,6 +50,9 @@ class FakeFollower:
         self.say("The Speakers finish this track, then stop following.")
         self.left.set()
 
+    def rejoin(self):
+        self.say("rejoined")
+
     def run(self, stop=None):
         import threading
         self.left = threading.Event()
@@ -62,10 +65,10 @@ class FakeFollower:
 
 
 def make_build(die=False, fail=None, calls=None):
-    def build(leader, follower_zone, server, sonos_name, device, start, resume, dac, env, say):
+    def build(leader, follower_zone, server, sonos_name, device, start, resume, dac, env, say, source=None):
         if calls is not None:
             calls.append({"leader": leader, "follower": follower_zone, "server": server, "start": start,
-                          "dac": dac, "env": env})
+                          "dac": dac, "env": env, "source": source})
         if fail:
             raise follower.SetupError(fail)
         return FakeClock(), FakeFollower(say, die), f"Speakers following {leader} (Kitchen, ASIO Chord 1.04)"
@@ -120,7 +123,7 @@ def test_the_child_follows_on_start_and_stops_on_stop():
     assert until(lambda: "The Sound Of Silence: 48 kHz, 24-bit." in a.lines())
     assert a.states() == ["following"] and a.lines()[0].startswith("Speakers following Sonos")
     assert calls == [{"leader": "Sonos", "follower": "Speakers", "server": "Multiroom", "start": 90.0, "dac": 1660,
-                      "env": r"C:\x\.env"}]
+                      "env": r"C:\x\.env", "source": None}]
     a.send(cmd="stop")
     assert until(lambda: a.states() == ["following", "idle"])
     assert "stopped" in a.lines()
@@ -197,6 +200,21 @@ def test_leave_lets_the_follower_finish_and_keeps_the_child_for_later():
     lk.start(SETTINGS)   # Output back on Multiroom: the same child follows again
     assert until(lambda: lk.state == "following")
     assert lines.count("Multiroom: Speakers following Sonos (Kitchen, ASIO Chord 1.04)") == 2
+    lk.stop()
+
+
+def test_a_calibration_follows_with_clicks_and_changes_the_dacs_rate():
+    # stage three: the child follows the leader with the 3.5 kHz click pattern in place of the server's tracks,
+    # and calibrate_rate reopens the DAC at another rate mid-track
+    from multiroom import calibrate
+    lines, calls = [], []
+    lk = link.Link(say=lines.append, spawn=thread_spawn(make_build(calls=calls)))
+    lk.calibrate(SETTINGS, 44100)
+    assert until(lambda: lk.state == "following")
+    assert isinstance(calls[-1]["source"], calibrate.ClickSource) and calls[-1]["source"].rate == 44100
+    lk.calibrate_rate(192000)
+    assert until(lambda: "Multiroom: rejoined" in lines)
+    assert calls[-1]["source"].rate == 192000
     lk.stop()
 
 

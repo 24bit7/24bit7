@@ -88,6 +88,22 @@ class JRiver:
     def stop(self, zone):
         self.call("Playback/Stop", Zone=self.zone_id(zone))
 
+    # --- the calibration run (stage three) ----------------------------------------------------------
+    def play_file(self, zone, path):
+        """Plays a file from disk to a zone; JRiver imports it into the library on the way (delete_file undoes that)."""
+        self.call("Playback/PlayByFilename", Filenames=path, Zone=self.zone_id(zone))
+
+    def play(self, zone):
+        """Play on a stopped zone: the current track from the top."""
+        self.call("Playback/Play", Zone=self.zone_id(zone))
+
+    def position(self, zone, ms):
+        self.call("Playback/Position", Position=int(ms), Zone=self.zone_id(zone))
+
+    def delete_file(self, key):
+        """Takes a track out of the library; its default mode leaves the file on disk (checked 9 Nov 2026)."""
+        self.call("File/Delete", File=int(key))
+
     def playlist(self, zone):
         """A zone's Playing Now, in order, as [(key, name)]."""
         r = requests.get(f"{self.base}/Playback/Playlist", params={"Zone": self.zone_id(zone), "Fields": "Key,Name"},

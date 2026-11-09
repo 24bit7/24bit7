@@ -33,6 +33,7 @@ class Service:
         self.stop_event = threading.Event()
         self.thread = None
         self.follower = None   # the running Follower, for nudge
+        self.click_source = None   # a calibration's clicks, while one runs
 
     def send(self, **obj):
         with self.lock:
@@ -51,8 +52,13 @@ class Service:
                 except ValueError:
                     continue
                 what = cmd.get("cmd")
-                if what == "start":
+                if what in ("start", "calibrate"):
                     self.start(cmd)
+                elif what == "calibrate_rate":   # the DAC reopens at another rate, the Sonos carrying on
+                    f = self.follower
+                    if f is not None and self.click_source is not None:
+                        self.click_source.set_rate(int(cmd.get("rate", 44100)))
+                        f.rejoin()
                 elif what == "stop":
                     self.stop()
                 elif what == "nudge":
@@ -74,7 +80,9 @@ class Service:
 
     def start(self, cmd):
         if self.thread is not None and self.thread.is_alive():
-            return   # already following
+            if cmd.get("cmd") != "calibrate":
+                return   # already following
+            self.stop()  # a calibration takes over from the follower that was running
         self.stop_event = threading.Event()
         self.thread = threading.Thread(target=self._follow, args=(cmd,), daemon=True, name="follower")
         self.thread.start()
@@ -87,11 +95,17 @@ class Service:
 
     def _follow(self, cmd):
         say = lambda line: self.send(line=line)   # noqa: E731
+        source = None
+        if cmd.get("cmd") == "calibrate":   # clicks in place of the server's tracks (stage three)
+            from . import calibrate
+            source = calibrate.ClickSource(int(cmd.get("rate", 44100)), int(cmd.get("hz", calibrate.TONES["speakers"])))
+        self.click_source = source
         try:
             clock, f, description = self.build(
                 cmd.get("leader", "Sonos"), cmd.get("follower", "Speakers"), cmd.get("server", "Multiroom"),
                 cmd.get("sonos") or None, cmd.get("device") or None, float(cmd.get("start", 90.0)),
-                float(cmd.get("resume", 95.0)), int(cmd.get("dac", 1660)), cmd.get("env", ".env"), say=say)
+                float(cmd.get("resume", 95.0)), int(cmd.get("dac", 1660)), cmd.get("env", ".env"), say=say,
+                **({"source": source} if source is not None else {}))
         except follower.SetupError as e:
             self.send(problem=str(e))
             self.send(state="idle")

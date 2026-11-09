@@ -51,9 +51,9 @@ class Link:
     def start(self, settings):
         """Starts the child if it isn't running and tells it to follow with these settings."""
         with self.lock:
-            self.settings, self.wanted = dict(settings), True
+            self.settings, self.wanted = dict(settings, cmd="start"), True
             if self.conn is not None:
-                self._send(cmd="start", **self.settings)
+                self._send(**self.settings)
                 return
             self.state = "starting"
         threading.Thread(target=self._launch, daemon=True, name="multiroom-link").start()
@@ -90,6 +90,21 @@ class Link:
                 self.on_state(state)
             except Exception:
                 pass
+
+    def calibrate(self, settings, rate):
+        """A calibration run: the child follows the leader with clicks at rate in place of the server's tracks."""
+        with self.lock:
+            self.settings, self.wanted = dict(settings, cmd="calibrate", rate=rate), True
+            if self.conn is not None:
+                self._send(**self.settings)
+                return
+            self.state = "starting"
+        threading.Thread(target=self._launch, daemon=True, name="multiroom-link").start()
+
+    def calibrate_rate(self, rate):
+        with self.lock:
+            if self.conn is not None:
+                self._send(cmd="calibrate_rate", rate=rate)
 
     def leave(self):
         """
@@ -138,7 +153,7 @@ class Link:
             if not self.wanted:          # stopped while it was starting
                 self._send(cmd="quit")
                 return
-            self._send(cmd="start", **self.settings)
+            self._send(**dict({"cmd": "start"}, **self.settings))   # a calibration's settings carry their own cmd
         self._read(conn)
 
     def _send(self, **obj):

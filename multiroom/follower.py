@@ -739,6 +739,11 @@ class Follower:
             nxt.close()
         self.say("The Speakers finish this track, then stop following.")
 
+    def rejoin(self):
+        """Stops the Speakers and joins the leader again at once, mid-track (a calibration's change of DAC rate)."""
+        self.finish()
+        self.last = None
+
     def nudge(self, ms):
         """Moves Start by ms while music plays (Settings > Other > Multiroom, Nudge): the Speakers shift as you listen."""
         self.start_s += ms / 1000
@@ -787,11 +792,12 @@ class SetupError(Exception):
 
 
 def build(leader="Sonos", follower="Speakers", server="Multiroom", sonos_name=None, device=None, start=90.0,
-          resume=95.0, dac=1660, env=".env", say=print):
+          resume=95.0, dac=1660, env=".env", say=print, source=None):
     """
     Finds the Sonos, the DLNA server and the DAC, and returns (clock, follower, description): the clock not yet
     started, the description one line saying what follows what. Raises SetupError with the line to show when
-    something isn't there. Used by the command line here and by multiroom.service inside 24bit7.
+    something isn't there. Used by the command line here and by multiroom.service inside 24bit7. source: a
+    stand-in for the DLNA server's tracks (a calibration's clicks), in which case the server isn't looked for.
     """
     jr = mcws.JRiver(env=env)
     found = sonos.find(sonos_name)
@@ -801,9 +807,11 @@ def build(leader="Sonos", follower="Speakers", server="Multiroom", sonos_name=No
         raise SetupError("More than one Sonos answered: say which under Settings > Other > Multiroom ("
                          + " / ".join(d["name"] for d in found) + ").")
     s = found[0]
-    base = fetch.find_server(server)
-    if not base:
-        raise SetupError(f"No DLNA server called {server}: is it on in JRiver's Media Network settings?")
+    if source is None:
+        base = fetch.find_server(server)
+        if not base:
+            raise SetupError(f"No DLNA server called {server}: is it on in JRiver's Media Network settings?")
+        source = Source(base)
     try:
         hint = device or jr.device(follower)[0]
     except KeyError:
@@ -814,7 +822,7 @@ def build(leader="Sonos", follower="Speakers", server="Multiroom", sonos_name=No
     description = (f"Speakers following {leader} ({s['name']}, {output._sd().query_devices(dev)['name']}); "
                    f"Start {start:g} ms, Resume {resume:g} ms, DAC {dac} samples.")
     clock = sonos.SonosClock(s["ip"], s["householdId"], s["groupId"])
-    f = Follower(clock, jr, leader, follower, Source(base), output.Output, dev, start, resume, dac, say=say)
+    f = Follower(clock, jr, leader, follower, source, output.Output, dev, start, resume, dac, say=say)
     return clock, f, description
 
 
