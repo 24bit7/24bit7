@@ -46,16 +46,26 @@ def clock(fake):
 
 # --- the origin from a set of reads --------------------------------------------------------
 
-def test_origin_is_the_median_of_the_quickest_reads():
-    # Twenty quick reads say 100.000; five slow ones say 100.040. The slow ones mustn't move it.
-    reads = [R(100 + k + 0.0005 * (k % 3), 0.004, k * 1000, PLAY) for k in range(20)]
-    reads += [R(100.040 + k, 0.060, k * 1000, PLAY) for k in range(20, 25)]
-    assert sonos.origin_of(reads) == pytest.approx(100.0005, abs=1e-6)
+def read(sampled, pos_ms, there, back):
+    """A read whose counter was sampled at our time sampled: asked there seconds before, answered back seconds after."""
+    a, b = sampled - there, sampled + back
+    return R((a + b) / 2, b - a, pos_ms, PLAY)
+
+
+def test_origin_is_the_second_lowest_upper_bound():
+    # 9 Nov 2026, 14:15: for about fifteen seconds after a track starts the Sonos holds each request 15 to 300 ms
+    # before reading its counter, then answers fast. Midpoints wander by tens of ms; the upper bounds don't.
+    busy = [read(100 + k, k * 1000, there=0.015 + 0.03 * (k % 7), back=0.0005) for k in range(1, 20)]
+    assert sonos.origin_of(busy) == pytest.approx(100.0005, abs=1e-6)
+    midpoints = sorted(r.t - r.pos_ms / 1000 for r in sorted(busy, key=lambda r: r.rtt)[:20])
+    assert midpoints[len(midpoints) // 2] < 99.97, "the old median of midpoints is tens of ms out on these"
+    odd = read(130, 30000, there=0.001, back=-0.010)   # one read that claims an impossible early answer
+    assert sonos.origin_of(busy + [odd]) == pytest.approx(100.0005, abs=1e-6), "one odd read mustn't pull it"
 
 
 def test_origin_leaves_out_reads_that_arent_playing():
     reads = [R(50.0, 0.001, 0, PAUSED), R(60.0, 0.001, None, PLAY), R(100.0, 0.004, 0, PLAY)]
-    assert sonos.origin_of(reads) == pytest.approx(100.0)
+    assert sonos.origin_of(reads) == pytest.approx(100.002)
     assert sonos.origin_of(reads[:2]) is None
 
 
@@ -81,8 +91,8 @@ def test_it_asks_the_way_the_sonos_wants(fake, clock):
 
 
 def test_lopsided_slow_reads_at_a_track_start_dont_move_the_origin(fake, clock):
-    # At a track's start the Sonos answers slowly, and a read whose answer is slow one way only has its midpoint off.
-    # Each of these is 30 ms off; the twenty quickest leave them out.
+    # At a track's start the Sonos answers slowly, and a read that is slow one way has its midpoint off. Each of
+    # these is 30 ms off by its midpoint; its upper bound is only off by its 10 ms way back, and the others' aren't.
     assert wait_for(lambda: clock.latest() is not None)
     t0 = time.perf_counter()
     fake.play(slow=[(0.070, 0.010)] * 5)
@@ -90,6 +100,8 @@ def test_lopsided_slow_reads_at_a_track_start_dont_move_the_origin(fake, clock):
     lopsided = [r for r in clock.recent(since=t0) if r.rtt > 0.07 and r.pos_ms is not None]
     assert lopsided and all(abs(r.t - r.pos_ms / 1000 - fake.origin) > 0.02 for r in lopsided)
     assert abs(clock.origin(since=t0) - fake.origin) < 0.003
+    first = clock.first_origin_after(t0)
+    assert first is not None and abs(first - fake.origin) < 0.012
 
 
 def test_a_paused_sonos_gives_no_origin(fake, clock):

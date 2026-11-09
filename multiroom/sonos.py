@@ -2,10 +2,13 @@
 The Sonos's clock (Multiroom, stage one, 9 Nov 2026).
 
 The Sonos's newer local control API answers on a websocket at port 1443 with its playback position to the
-millisecond. Reading it about a hundred times a second, each read gives one estimate of the counter origin C, our
-clock's time at which positionMillis would have read zero: the read's midpoint minus the position. Most reads come
-back in about 4 ms; the slow ones (15 to 80 ms at a track's start) carry more error, so the origin is the median of
-the twenty quickest recent reads. The UPnP whole-second position was tried first and wobbles by 67 ms between starts.
+millisecond. Reading it many times a second gives the counter origin C, our clock's time at which positionMillis
+would have read zero. Each read bounds C from above: the counter can't have been read after the answer came back,
+so C is no later than (answer time - position). For about fifteen seconds after a track starts the Sonos is busy
+and answers in 15 to 300 ms, holding the request before it reads its counter; the answer itself comes back fast.
+So the upper bounds hold steady (to 0.2 ms, 9 Nov 2026, 14:15) while read midpoints, even the twenty quickest,
+wander by 10 to 65 ms. C is the second lowest upper bound in the window, so one odd read can't pull it. The UPnP
+whole-second position was tried first and wobbles by 67 ms between starts.
 
 The API key is the example one the open-source Sonos libraries use; the Sonos accepts any key in that form.
 """
@@ -106,17 +109,72 @@ def find(name=None, locations=None, timeout=3.0):
 Read = collections.namedtuple("Read", "t rtt pos_ms state")   # t: our clock at the read's midpoint, in seconds
 
 
-def origin_of(reads, n=20):
-    """The counter origin from a set of reads: the median of (t - position) over the n quickest. None if none."""
-    good = sorted((r for r in reads if r.pos_ms is not None and r.state in PLAYING), key=lambda r: r.rtt)[:n]
-    if not good:
+def upper_bound(r):
+    """The latest C can be, from one read: the time its answer came back, less the position it gave."""
+    return r.t + r.rtt / 2 - r.pos_ms / 1000.0
+
+
+def origin_of(reads):
+    """C from a set of reads: the second lowest upper bound of the playing ones (the lowest if only one). None if none."""
+    ub = sorted(upper_bound(r) for r in reads if r.pos_ms is not None and r.state in PLAYING)
+    if not ub:
         return None
-    est = sorted(r.t - r.pos_ms / 1000.0 for r in good)
-    mid = len(est) // 2
-    return est[mid] if len(est) % 2 else (est[mid - 1] + est[mid]) / 2
+    return ub[1] if len(ub) > 1 else ub[0]
 
 
-class SonosClock(threading.Thread):
+class ReadLog:
+    """
+    The recent reads of a Sonos's clock and what the follower asks of them. SonosClock fills it from the real
+    Sonos; the tests fill one from a simulated Sonos.
+    """
+
+    def __init__(self, now=time.perf_counter, keep=10.0):
+        self.now, self.keep = now, keep
+        self.reads = collections.deque()
+        self.lock = threading.Lock()
+
+    def _keep(self, r):
+        with self.lock:
+            self.reads.append(r)
+            while self.reads and self.reads[0].t < r.t - self.keep:
+                self.reads.popleft()
+
+    def recent(self, window=None, since=None):
+        """The kept reads, optionally only those of the last window seconds and those after since."""
+        with self.lock:
+            reads = list(self.reads)
+        if window is not None and reads:
+            reads = [r for r in reads if r.t >= self.now() - window]
+        if since is not None:
+            reads = [r for r in reads if r.t >= since]
+        return reads
+
+    def origin(self, window=2.0, since=None):
+        """C from the playing reads of the last two seconds (and after since). None if none."""
+        return origin_of(self.recent(window, since))
+
+    def first_origin_after(self, t, n=3):
+        """C from the first n playing reads after our time t, to place a stream at a start; None until there are n."""
+        first = [r for r in self.recent(since=t) if r.pos_ms is not None and r.state in PLAYING][:n]
+        return origin_of(first) if len(first) >= n else None
+
+    def latest(self):
+        with self.lock:
+            return self.reads[-1] if self.reads else None
+
+    @property
+    def state(self):
+        r = self.latest()
+        return r.state if r else None
+
+    @property
+    def last_read_age(self):
+        """Seconds since the last read came back, or None before the first."""
+        r = self.latest()
+        return None if r is None else self.now() - r.t
+
+
+class SonosClock(threading.Thread, ReadLog):
     """
     Reads the Sonos's playback status over and over on its own thread and keeps the recent reads.
 
@@ -126,12 +184,11 @@ class SonosClock(threading.Thread):
 
     def __init__(self, ip=None, household=None, group=None, url=None, interval=0.01, keep=10.0,
                  now=time.perf_counter, retry=1.0):
-        super().__init__(daemon=True, name="SonosClock")
+        threading.Thread.__init__(self, daemon=True, name="SonosClock")
+        ReadLog.__init__(self, now, keep)
         self.url = url or f"wss://{ip}:1443/websocket/api"
         self.household, self.group = household, group
-        self.interval, self.keep, self.now, self.retry = interval, keep, now, retry
-        self.reads = collections.deque()
-        self.lock = threading.Lock()
+        self.interval, self.retry = interval, retry
         self.stopping = threading.Event()
         self.connected = threading.Event()
         self.error = None          # the last connection or read failure, as text
@@ -180,12 +237,6 @@ class SonosClock(threading.Thread):
                 self.connected.clear()
             self.stopping.wait(self.retry)
 
-    def _keep(self, r):
-        with self.lock:
-            self.reads.append(r)
-            while self.reads and self.reads[0].t < r.t - self.keep:
-                self.reads.popleft()
-
     def stop(self):
         self.stopping.set()
         ws = self._ws
@@ -194,41 +245,3 @@ class SonosClock(threading.Thread):
                 ws.close()
             except Exception:
                 pass
-
-    # --- what the follower asks ------------------------------------------------------
-    def recent(self, window=None, since=None):
-        """The kept reads, optionally only those of the last window seconds and those after since."""
-        with self.lock:
-            reads = list(self.reads)
-        if window is not None and reads:
-            reads = [r for r in reads if r.t >= self.now() - window]
-        if since is not None:
-            reads = [r for r in reads if r.t >= since]
-        return reads
-
-    def origin(self, window=2.0, n=20, since=None):
-        """C from the twenty quickest playing reads of the last two seconds (and after since). None if none."""
-        return origin_of(self.recent(window, since), n)
-
-    def first_origin_after(self, t):
-        """C from the first playing read after our time t: quick but rough, to place a stream at a fresh start."""
-        for r in self.recent(since=t):
-            if r.pos_ms is not None and r.state in PLAYING:
-                return r.t - r.pos_ms / 1000.0
-        return None
-
-    def latest(self):
-        with self.lock:
-            return self.reads[-1] if self.reads else None
-
-    @property
-    def state(self):
-        r = self.latest()
-        return r.state if r else None
-
-    @property
-    def last_read_age(self):
-        """Seconds since the last read came back, or None before the first."""
-        r = self.latest()
-        return None if r is None else self.now() - r.t
-
