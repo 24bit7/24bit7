@@ -6680,6 +6680,8 @@ class SettingsTab(tk.Frame):
         cell.grid(row=3, column=1, columnspan=3, sticky="w", padx=(12, 0))
         self._mr_speaker = tk.Label(cell, text=t("Not looked yet."), fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w")
         self._mr_speaker.pack(side="left")
+        self._mr_speaker_entry = ttk.Entry(cell, textvariable=self.vars["MULTIROOM_SPEAKER"], width=14)   # more than one Sonos
+        self.vars["MULTIROOM_SPEAKER"].trace_add("write", lambda *a: self._multiroom_text_changed())
         self._mr_check = tk.Button(cell, text=t("Check Clock"), width=12, command=self._multiroom_check_clock)
         self._mr_check.pack(side="left", padx=(16, 0))
         parts.extend([self._mr_speaker, self._mr_check])
@@ -6872,11 +6874,13 @@ class SettingsTab(tk.Frame):
             return
         speakers = found["speakers"]
         self._mr_speaker_found = speakers[0] if len(speakers) == 1 else None
+        self._mr_speaker_entry.pack_forget()
         if not speakers:
             self._mr_speaker.config(text=t("No Sonos found on the network.") + (f" ({found['problem']})" if found["problem"] else ""))
         elif len(speakers) > 1:
             names = ", ".join(s["name"] for s in speakers)
-            self._mr_speaker.config(text=t("More than one: {names}. Type the room you want after the server name below.", names=names))
+            self._mr_speaker.config(text=t("More than one Sonos: {names}. Type the room you want:", names=names))
+            self._mr_speaker_entry.pack(side="left", padx=(8, 0), before=self._mr_check)
         else:
             s = speakers[0]
             profile = mr_profiles.pick_speaker("Sonos", s.get("model", ""))

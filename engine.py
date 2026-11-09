@@ -1546,7 +1546,7 @@ def get_playing_info(zone=None):
         root = _jriver_xml(r)
         info = {"Artist": "Unknown", "Album": "Unknown", "Name": "Unknown",
                 "PlayingNowPosition": "-1", "PlayingNowTracks": "0", "FileKey": "", "ZoneID": "",
-                "State": "", "PositionMS": "", "DurationMS": ""}
+                "State": "", "PositionMS": "", "DurationMS": "", "NextFileKey": "-1"}
         for item in root.findall('Item'):
             if item.get('Name') in info:
                 info[item.get('Name')] = item.text
@@ -4379,6 +4379,33 @@ def typed_seed_key(seed_info, seeds, session_id, report=print):
     report("  " + line)
     session_log(session_id, seeds[0], name, ["seed"], found=False)
     return None
+
+
+def stop_zone(zone):
+    """The Now Playing row's Stop: stops a zone. In multiroom the follower sees the Sonos stop and stops the Speakers."""
+    requests.get(f"{JRIVER_BASE}/Playback/Stop", params={"Zone": zone}, auth=AUTH, timeout=10)
+
+
+def clear_playing_now(zone):
+    """The Now Playing row's Clear Playing Now: empties a stopped zone's list, in one call."""
+    requests.get(f"{JRIVER_BASE}/Playback/ClearPlaylist", params={"Zone": zone}, auth=AUTH, timeout=10)
+
+
+def skip_track(zone):
+    """
+    The Now Playing row's Skip Track: the next track in the zone's list. Counted as a skip in 24bit7's own JRiver
+    field, as a voice skip is, so the Skipped Tracks filter sees it (DECISIONS, 9 Nov 2026). Returns the key skipped.
+    """
+    key = None
+    try:
+        r = requests.get(f"{JRIVER_BASE}/Playback/Info", params={"Zone": zone}, auth=AUTH, timeout=10)
+        key = {i.get("Name"): (i.text or "") for i in _jriver_xml(r).findall("Item")}.get("FileKey")
+    except Exception as e:
+        debug(f"Skip Track couldn't read the track ({e})")
+    requests.get(f"{JRIVER_BASE}/Playback/Next", params={"Zone": zone}, auth=AUTH, timeout=10)
+    if key and key != "-1":
+        record_voice_skip(key)
+    return key
 
 
 def jriver_is_stopped(zone=ACTIVE_ZONE, paused_too=False):

@@ -261,6 +261,10 @@ class FakeJRiver:
         if path == "Playback/Stop":
             self._zone_for(params).state = 0
             return Resp(text=_response({}))
+        if path == "Playback/ClearPlaylist":   # the Now Playing row's Clear Playing Now (9 Nov 2026)
+            z = self._zone_for(params)
+            z.playlist, z.pos, z.state, z.position_ms = [], -1, 0, 0
+            return Resp(text=_response({}))
         if path == "Playback/Pause":
             z = self._zone_for(params)
             if z.playlist:

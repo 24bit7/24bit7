@@ -103,7 +103,8 @@ PLAY_NOTES = {
     "More Options": N_("Opens the row below: Seed, Mode, your JRiver playlists and Show Credits."),
     "Output": N_("Where the finished playlist goes: the zone you seeded from, another JRiver zone, or YouTube or "
                  "Tidal (ticked under Settings > Other > Additional Outputs)."),
-    "Zone": N_("Which JRiver zone Now Playing shows and seeds from."),
+    "Zone": N_("Which JRiver zone Now Playing shows and seeds from. Multiroom shows the leader zone, and is picked by "
+               "itself when the Speakers start following."),
     "Seed": N_("What Similar Artists and Similar Tracks start from: the current track, or every track in Playing Now."),
     "Moderator": N_("While this row is open, the Moderator runs at this level for every playlist: Off, Relaxed, "
                     "Balanced or Strict. Click to step through them. Uses AI credits."),
@@ -117,6 +118,9 @@ PLAY_NOTES = {
                  "The track playing carries on, nothing already there is added twice, and the rest is shuffled "
                  "together. Lasts one playlist; click Top-Up again to cancel."),
     "Show Credits": N_("Lists the producer, engineer, musicians and other credits for what's playing, from Discogs."),
+    "Stop": N_("Stops this zone; in multiroom, both rooms. Once the zone is stopped the button reads Clear Playing "
+               "Now, in red, and one click empties the zone's list."),
+    "Skip Track": N_("The next track in this zone's list. Greyed while the zone is stopped or nothing follows."),
     "Help": N_("Hover notes for the Play tab: on, hovering over anything here explains it; off, no pop-ups."),
     "Playlist": N_("One of your JRiver playlists or smartlists. Click into the box for the list, the five you played "
                    "here most recently at the top; type to narrow it."),
@@ -183,7 +187,8 @@ class PlayTab(tk.Frame):
         self.log_queue = queue.Queue()
         engine.OUTPUT_HOOK = self.log_queue.put
         # Multiroom: the follower's child process, its lines in the console as "Multiroom: ..."
-        self.multiroom = multiroom_link.Link(say=self.log_queue.put)
+        self.multiroom = multiroom_link.Link(say=self.log_queue.put,
+                                             on_state=lambda s: self.after(0, self._multiroom_state, s))
         engine.MULTIROOM_HOOK = self.multiroom_build_sent   # engine's print() and [debug] lines land here
         self.running = False
         self.last_playing = None
@@ -245,6 +250,20 @@ class PlayTab(tk.Frame):
         self.zone_cb.pack(side="left")
         self.zone_cb.bind("<<ComboboxSelected>>", self._on_zone_changed)
 
+        # Stop (amber; Clear Playing Now in red once the zone is stopped) and Skip Track, for whichever zone
+        # the row shows (Ben, 9 Nov 2026; mock-up mockups/now_playing_buttons.html). Packed on the right before
+        # the track text, so they keep their room and the text takes what's left: an InfoLine asks for eighty
+        # characters, and packed after it the buttons were clipped off the row.
+        self._np_controls = tk.Frame(frame)
+        self._np_controls.pack(side="right", padx=(12, 0))   # _place_output adds the room Output takes
+        self.stop_button = FlatButton(self._np_controls, text=t("Stop"), command=self._stop_clicked, width=16,
+                                      height=1, quiet=True)
+        self.stop_button.pack(side="left")
+        self.skip_button = FlatButton(self._np_controls, text=t("Skip Track"), command=self._skip_clicked, width=10,
+                                      height=1, quiet=True)
+        self.skip_button.pack(side="left", padx=(8, 0))
+        self._np_stopped = None   # what the buttons last read: None before the first answer
+
         info = tk.Frame(frame)
         info.pack(side="left", fill="x", expand=True)
         # Grey "Track:", "Artist:" and "Album:" before the names; both lines wrap as needed
@@ -259,6 +278,7 @@ class PlayTab(tk.Frame):
         self.np_detail = InfoLine(info, font=("Segoe UI", 10), fg=PALETTE["text_secondary"], prefix_font=prefix_font, tab=tab)
         self.np_detail.pack(anchor="w", fill="x")
         self.np_track.show(("...", None))
+        self._sync_np_controls(None)
 
         # AI Usage at the far right, while "Show in Now Playing" is ticked in Settings > Keys
         self.usage_box = tk.Frame(self.seed_nb)
@@ -807,13 +827,68 @@ class PlayTab(tk.Frame):
                            tracks=tn("{count} track", "{count} tracks", len(keys)), name=name))
 
     def _fill_zone_list(self):
-        self.zone_cb.config(values=engine.zone_names())
+        engine.refresh_settings_if_changed()
+        self.zone_cb.config(values=engine.zone_names() + ([MULTIROOM_LABEL] if engine.MULTIROOM_ENABLED else []))
+
+    def _zone_name(self):
+        """The JRiver zone the row reads: Multiroom in the list means the leader zone (Ben, 9 Nov 2026)."""
+        name = self.zone_var.get()
+        return engine.MULTIROOM_LEADER if name == MULTIROOM_LABEL else name
 
     def _on_zone_changed(self, *_):
         self._zone_picked = True   # picked by hand, so it stays put until the next launch
-        engine.SEED_ZONE_NAME = self.zone_var.get() or None
+        engine.SEED_ZONE_NAME = self._zone_name() or None
         self.zone_cb.selection_clear()
         self._update_now_playing()
+
+    def _multiroom_state(self, state):
+        """The follower's state changed: when the Speakers start following, Now Playing shows the leader as Multiroom."""
+        if state == "following" and engine.MULTIROOM_ENABLED and self.zone_var.get() != MULTIROOM_LABEL:
+            self.zone_var.set(MULTIROOM_LABEL)
+            self._on_zone_changed()
+
+    # --- Stop, Clear Playing Now and Skip Track -----------------------------------------------------
+
+    def _sync_np_controls(self, info):
+        """The two buttons follow what Now Playing last read: Stop while the zone plays or is paused, Clear Playing
+        Now (red) once it's stopped with tracks left, greyed with none; Skip Track only while a track follows."""
+        stopped = not info or str(info.get("State", "0")) == "0"
+        tracks = int((info or {}).get("PlayingNowTracks") or 0)
+        has_next = str((info or {}).get("NextFileKey", "-1")) not in ("", "-1")
+        self._np_stopped = stopped
+        if stopped:
+            self.stop_button.config(text=t("Clear Playing Now"), armed=PALETTE["red"], command=self._clear_clicked,
+                                    state="normal" if tracks else "disabled")
+        else:
+            self.stop_button.config(text=t("Stop"), armed=PALETTE["amber"], command=self._stop_clicked, state="normal")
+        self.skip_button.config(state="normal" if not stopped and has_next else "disabled")
+
+    def _zone_action(self, call, line):
+        """Runs a JRiver call for the row's zone on a thread, says one line, and reads Now Playing again."""
+        name = self._zone_name()
+        zone = engine.zone_id(name) if name else engine.zone_id()
+        if zone is None:
+            self.report(t("Problem: the zone '{name}' isn't in JRiver.", name=name))
+            return
+        label = engine.zone_label(zone)
+
+        def work():
+            try:
+                call(zone)
+                self.log_queue.put(t(line, zone=label))
+            except Exception as e:
+                self.log_queue.put(t("Problem: JRiver didn't answer ({e}).", e=e))
+            self.after(0, self._update_now_playing)
+        threading.Thread(target=work, daemon=True, name="zone-action").start()
+
+    def _stop_clicked(self):
+        self._zone_action(engine.stop_zone, N_("Stopped {zone}."))
+
+    def _clear_clicked(self):
+        self._zone_action(engine.clear_playing_now, N_("Cleared Playing Now in {zone}."))
+
+    def _skip_clicked(self):
+        self._zone_action(engine.skip_track, N_("Skipped to the next track in {zone}."))
 
     def _follow_active_zone(self):
         """
@@ -864,7 +939,8 @@ class PlayTab(tk.Frame):
         box.place(in_=page, relx=1.0, rely=0.5, x=0, y=0, anchor="e")
         if page is self.seed_nb._pages[0]:
             box.update_idletasks()   # so its width is known
-            self._usage_info.pack_configure(padx=(0, box.winfo_reqwidth() + 36))   # the track text stops short of it
+            # the buttons stop short of Output, and the track text short of the buttons
+            self._np_controls.pack_configure(padx=(12, box.winfo_reqwidth() + 36))
         box.lift()
 
     def _sync_seed_buttons(self):
@@ -1046,7 +1122,7 @@ class PlayTab(tk.Frame):
         for widget, name in ((self.more_button, "More Options"), (self.add_button, "+"), (self.output_cb, "Output"),
                              (self.zone_cb, "Zone"), (self.seed_cb, "Seed"), (self.behaviour_cb, "Mode"),
                              (self.add_playlist_button, "+ Add JRiver Playlist"), (self.help_cb, "Help"),
-                             (self.top_up_button, "Top-Up"),
+                             (self.top_up_button, "Top-Up"), (self.stop_button, "Stop"), (self.skip_button, "Skip Track"),
                              (self.override_cbs["deep_cuts"], "Deep Cuts"), (self.override_cbs["nonstop"], "Non-stop")):
             Tooltip(widget, t(PLAY_NOTES[name]), when=on, wrap=wrap)
         Tooltip(self.override_cbs["moderator"], t(PLAY_NOTES["Moderator"]), when=lambda: on() and engine.ai_enabled(),
@@ -2169,6 +2245,7 @@ class PlayTab(tk.Frame):
             self.np_track.show((t("Nothing playing"), None))
             self.np_detail.show((t("Start a track in this zone to seed from it"), None))
             self.last_playing = None
+        self._sync_np_controls(info)
         self.seed_nb.even_out()   # a long title can wrap onto another line: every tab grows with it
 
     def _type_greeting(self, text, i):

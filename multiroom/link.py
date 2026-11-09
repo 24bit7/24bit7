@@ -36,8 +36,9 @@ def default_spawn(port):
 
 
 class Link:
-    def __init__(self, say=print, spawn=default_spawn):
+    def __init__(self, say=print, spawn=default_spawn, on_state=None):
         self.say, self.spawn = say, spawn
+        self.on_state = on_state   # called with the new state (following, idle, off) as it changes
         self.lock = threading.Lock()
         self.conn = self.proc = None
         self.settings = None
@@ -81,6 +82,14 @@ class Link:
         with self.lock:
             self.conn = self.proc = None
             self.state = "off"
+        self._tell("off")
+
+    def _tell(self, state):
+        if self.on_state is not None:
+            try:
+                self.on_state(state)
+            except Exception:
+                pass
 
     def running(self):
         return self.conn is not None
@@ -141,6 +150,7 @@ class Link:
                     self.say(PREFIX + "Problem: " + msg["problem"])
                 elif "state" in msg:
                     self.state = msg["state"]
+                    self._tell(msg["state"])
         except OSError:
             pass
         with self.lock:
