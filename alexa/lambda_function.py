@@ -62,7 +62,8 @@ COMMANDS = ("To build a playlist: songs by, music like, or tracks like, then an 
             "or stop, pause or resume the music. "
             "Radio, then a station, or radio alone to hear your last five. "
             "Top up, then any command, to add to what's playing instead of replacing it. "
-            "And switch, or switch to, then a zone.")
+            "Switch, or switch to, then a zone. "
+            "And multiroom, so the speakers follow, or single room, to keep the music in this room only.")
 REPROMPT = {"playlist": "Say by, then the folder.", "zone": "Say to, then the zone.",
             "station": "Say the station's name, or its number.",
             "top_up": "Say music like, songs by, radio, or playlist, then what you'd like."}
@@ -73,7 +74,8 @@ INTENTS = {"SongsByIntent": "songs_by", "MusicLikeIntent": "music_like", "GenreI
 ZONE_INTENTS = {"SkipIntent": "skip", "WhoIsThisIntent": "who_is_this", "MoreLikeThisIntent": "more_like",
                 "MoreArtistsLikeThisIntent": "more_artists",
                 "SwitchZonesIntent": "switch_zones", "KeepGoingIntent": "keep_going",
-                "StopMusicIntent": "stop", "PauseMusicIntent": "pause", "ResumeMusicIntent": "resume"}
+                "StopMusicIntent": "stop", "PauseMusicIntent": "pause", "ResumeMusicIntent": "resume",
+                "MultiroomIntent": "multiroom", "SingleRoomIntent": "single_room"}
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)

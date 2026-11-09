@@ -3396,6 +3396,9 @@ def main():
     voice.attach(lambda job, heading, origin=None: play.voice_jobs.put((job, heading, origin)),
                  lambda: play.running or not play.voice_jobs.empty())
     voice.attach_badge(lambda asked, said: play.badge_problems.put((asked, said)))
+    # "multiroom" and "single room" by voice start and stop the follower (stage two, 9 Nov 2026)
+    voice.attach_multiroom(start=lambda: play.multiroom.start(engine.multiroom_settings()),
+                           stop=play.multiroom.stop, running=play.multiroom.running)
     voice.restart()
     # Keyboard shortcuts (Settings > Other): queued on the Play tab like voice commands
     hotkeys.attach(lambda job, heading, origin=None: play.voice_jobs.put((job, heading, origin)),

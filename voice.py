@@ -62,10 +62,11 @@ def _takes_over(zone):
 
 INTENTS = ("songs_by", "music_like", "genre", "only", "tracks_like", "album", "song", "playlist", "shuffle",
            "skip", "who_is_this", "more_like", "more_artists", "switch_zones", "keep_going", "stop", "pause", "resume",
-           "radio", "top_up")
+           "radio", "top_up", "multiroom", "single_room")
 COMING = ()   # intents in the skill whose 24bit7 side isn't built yet
 ZONE_INTENTS = ("skip", "who_is_this", "more_like", "more_artists", "stop", "pause", "resume",
                 "keep_going")   # act on what the zone is playing
+ROOM_INTENTS = ("multiroom", "single_room")   # Multiroom (stage two, 9 Nov 2026): the Speakers follow, or not
 THIS_WORDS = ("this", "this one", "this song", "this track", "it")   # "tracks like this" = more like this,
                                                                      # "music like this" = more artists like this
 MORE = ("more_like", "more_artists")   # seeded from the zone's track, and always queued after it
@@ -480,6 +481,54 @@ def _zone_command(intent, device, body):
     return "started", speech, {}
 
 
+# --- multiroom and single room (stage two, 9 Nov 2026) ----------------------------
+# Ben's three room commands: switch (below), multiroom and single room. The GUI hands over the follower's link
+# with attach_multiroom; without it the commands say Multiroom isn't set up.
+_multiroom = None   # {"start": fn(), "stop": fn(), "running": fn() -> bool}
+
+
+def attach_multiroom(start, stop, running):
+    """The GUI hands over how to start and stop the follower, and whether it's running."""
+    global _multiroom
+    _multiroom = {"start": start, "stop": stop, "running": running}
+
+
+def _room_command(intent, device, body):
+    """
+    multiroom: the Speakers join what the leader zone is playing. single room: collapses to the room of the smart
+    speaker that heard it. Said in the follower's room, the music moves to the Speakers (the Switch To handover)
+    and the leader stops; said in the leader's room, the Speakers just drop out.
+    """
+    engine.refresh_settings_if_changed()
+    name, zone = _hear_device(device or "unknown device")
+    zone = (body.get("zone") or "").strip() or zone
+    if not engine.MULTIROOM_ENABLED or _multiroom is None:
+        return "problem", "Multiroom isn't set up in 24bit7. Turn it on under Settings, Other, Multiroom.", {}
+    leader, follower = engine.MULTIROOM_LEADER, engine.MULTIROOM_FOLLOWER
+    lid = engine.zone_id(leader)
+    if lid is None:
+        return "problem", f"I can't find the {leader} zone in JRiver.", {}
+    if intent == "multiroom":
+        if not _playing(lid):
+            return "problem", f"Nothing's playing on {leader}.", {}
+        _multiroom["start"]()
+        print(t("[Voice] {name}: multiroom, the {follower} follow {leader}", name=name, follower=follower, leader=leader))
+        return "started", "Multiroom.", {}
+    # single room
+    if not zone:
+        return "problem", "This device isn't set up yet. Assign it to a zone in 24bit7, under Settings, Devices.", {}
+    if zone == follower:
+        _multiroom["stop"]()
+        if _playing(lid):
+            if not _move(leader, follower):
+                return "problem", "JRiver didn't move the music. Is it running on the media PC?", {}
+        print(t("[Voice] {name}: single room, the music stays in {zone}", name=name, zone=zone))
+        return "started", f"Just the {zone}.", {}
+    _multiroom["stop"]()
+    print(t("[Voice] {name}: single room, the {follower} drop out", name=name, follower=follower))
+    return "started", f"Just the {zone}.", {}
+
+
 # --- switch, stop, pause, resume ------------------------------------------------
 # Switch moves whatever is playing to another zone: the same Playing Now, from the
 # same track and point, and the zone it left stops. The zones it can move to are
@@ -882,6 +931,12 @@ def handle_command(body, busy=False):
         except Exception as e:
             print(t("[Voice] switch failed: {e}", e=e))
             return "problem", "I couldn't reach JRiver. Is it running on the media PC?", {}
+    if intent in ROOM_INTENTS:
+        try:
+            return _room_command(intent, device, body)
+        except Exception as e:
+            print(t("[Voice] {intent} failed: {e}", intent=intent, e=e))
+            return "problem", "I couldn't reach JRiver. Is it running on the media PC?", {}
     if intent in COMING:
         return "said", "That's coming in the next update of 24bit7.", {}
     if intent in ZONE_INTENTS:
@@ -1004,7 +1059,8 @@ SAID = {"songs_by": "songs by", "music_like": "music like", "tracks_like": "trac
         "who_is_this": "who is this", "more_like": "more like this",
         "more_artists": "more artists like this", "switch_zones": "switch zones",
         "keep_going": "keep it going", "stop": "stop the music", "pause": "pause the music",
-        "resume": "resume the music", "radio": "radio", "top_up": "top up"}
+        "resume": "resume the music", "radio": "radio", "top_up": "top up", "multiroom": "multiroom",
+        "single_room": "single room"}
 
 
 def _log_problem(body, speech):

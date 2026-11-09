@@ -55,6 +55,16 @@
                       "next", "next track", "next song"]
         },
         {
+          "name": "MultiroomIntent",
+          "slots": [],
+          "samples": ["multiroom", "multi room", "multiroom on", "all rooms", "both rooms"]
+        },
+        {
+          "name": "SingleRoomIntent",
+          "slots": [],
+          "samples": ["single room", "single room only", "just this room", "only this room", "this room only"]
+        },
+        {
           "name": "WhoIsThisIntent",
           "slots": [],
           "samples": ["who is this", "who's this", "what is this", "what's this", "what's playing",

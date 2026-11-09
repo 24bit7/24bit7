@@ -1735,5 +1735,8 @@
   "Nothing matches {hint}. Type the device's name:": "Nichts passt zu {hint}. Tipp den Gerätenamen ein:",
   "JRiver gave no device for the follower zone. Type the device's name:": "JRiver hat kein Gerät für die Folgezone genannt. Tipp den Gerätenamen ein:",
   "(untested)": "(ungetestet)",
-  "unknown DAC": "unbekannter DAC"
+  "unknown DAC": "unbekannter DAC",
+  "[Voice] {name}: multiroom, the {follower} follow {leader}": "[Voice] {name}: Multiroom, die {follower} folgen {leader}",
+  "[Voice] {name}: single room, the music stays in {zone}": "[Voice] {name}: Single Room, die Musik bleibt in {zone}",
+  "[Voice] {name}: single room, the {follower} drop out": "[Voice] {name}: Single Room, die {follower} steigen aus"
 }
