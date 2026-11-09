@@ -885,7 +885,7 @@
   "Restore Default Device Playlists": "Standard-Geräte-Playlists wiederherstellen",
   "Restore Default Playlists": "Standard-Playlists wiederherstellen",
   "Results used: {used}": "Verwendete Ergebnisse: {used}",
-  "Resume": "Weiter",
+  "Resume": "Fortsetzen",
   "Review Mode": "Review-Modus",
   "Review settings in use (the standard button's Playlist page, the Review column).": "Review-Einstellungen aktiv (Playlist-Seite des Standard-Buttons, Spalte Review).",
   "Review: nothing ticked, so nothing sent.": "Review: nichts angehakt, daher nichts gesendet.",
@@ -1737,5 +1737,17 @@
   "unknown DAC": "unbekannter DAC",
   "[Voice] {name}: multiroom, the {follower} follow {leader}": "[Voice] {name}: Multiroom, die {follower} folgen {leader}",
   "[Voice] {name}: single room, the music stays in {zone}": "[Voice] {name}: Single Room, die Musik bleibt in {zone}",
-  "[Voice] {name}: single room, the {follower} drop out": "[Voice] {name}: Single Room, die {follower} steigen aus"
+  "[Voice] {name}: single room, the {follower} drop out": "[Voice] {name}: Single Room, die {follower} steigen aus",
+  "The speaker didn't answer, so its clock can't be read. Multiroom won't start.": "Der Lautsprecher hat nicht geantwortet, also lässt sich seine Uhr nicht lesen. Multiroom startet nicht.",
+  "The speaker answers, but nothing was playing, so the clock couldn't be checked. Play something on it and try again.": "Der Lautsprecher antwortet, aber es lief nichts, also konnte die Uhr nicht geprüft werden. Spiel etwas darauf ab und versuch es noch einmal.",
+  "The speaker's counter doesn't keep time with this PC (it runs at {rate} of our clock), so the rooms would drift apart. Multiroom won't start.": "Der Zähler des Lautsprechers hält nicht mit diesem PC Schritt (er läuft mit {rate} unserer Uhr), die Räume würden auseinanderdriften. Multiroom startet nicht.",
+  "Clock: millisecond position, {rtt} ms round trip, steady. Good.": "Uhr: Position in Millisekunden, {rtt} ms Antwortzeit, gleichmäßig. Gut.",
+  "Clock: millisecond position, {rtt} ms round trip, steady. Slow to answer, but usable.": "Uhr: Position in Millisekunden, {rtt} ms Antwortzeit, gleichmäßig. Antwortet langsam, aber brauchbar.",
+  "Clock: whole seconds only, {rtt} ms round trip, steady. Multiroom can run on it, but the rooms may sit a few hundredths of a second apart. Worth trying.": "Uhr: nur ganze Sekunden, {rtt} ms Antwortzeit, gleichmäßig. Multiroom kann damit laufen, aber die Räume liegen vielleicht ein paar Hundertstelsekunden auseinander. Einen Versuch wert.",
+  "From your recording of {date}.": "Aus deiner Aufnahme vom {date}.",
+  "Typed by hand.": "Von Hand eingetragen.",
+  "Generic: not measured yet. The rooms may be a few hundredths of a second apart until you calibrate.": "Generisch: noch nicht gemessen. Die Räume liegen vielleicht ein paar Hundertstelsekunden auseinander, bis du kalibrierst.",
+  "From the {a} and {b} profiles.": "Aus den Profilen {a} und {b}.",
+  "From the {a} profile.": "Aus dem Profil {a}.",
+  "From the profiles.": "Aus den Profilen."
 }

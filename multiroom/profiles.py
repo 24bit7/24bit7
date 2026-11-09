@@ -45,14 +45,36 @@ def pick_dac(device_name="", driver_name=""):
     return copy.deepcopy(UNKNOWN_DAC)
 
 
-def source_line(source, speaker, dac):
-    """The line under the Adjustments: where the numbers came from. source is profiles, typed or recording:<date>."""
+def source_key(source, speaker, dac):
+    """
+    Where the numbers came from, as (key, values) for the app to word in its own language
+    (settings_gui.SOURCE_LINES). source is profiles, typed or recording:<date>.
+    """
     if source.startswith("recording:"):
-        return f"From your recording of {source[len('recording:'):]}."
+        return "recording", {"date": source[len("recording:"):]}
     if source == "typed":
-        return "Typed by hand."
-    names = [n for n in (speaker.get("name"), dac.get("name")) if n]
+        return "typed", {}
     if speaker.get("name") == "Generic":
-        return ("Generic: not measured yet. The rooms may be a few hundredths of a second apart until you "
-                "calibrate.")
-    return f"From the {' and '.join(names)} profiles." if names else "From the profiles."
+        return "generic", {}
+    names = [n for n in (speaker.get("name"), dac.get("name")) if n]
+    if len(names) == 2:
+        return "two_profiles", {"a": names[0], "b": names[1]}
+    if names:
+        return "one_profile", {"a": names[0]}
+    return "profiles", {}
+
+
+ENGLISH_LINES = {
+    "recording": "From your recording of {date}.",
+    "typed": "Typed by hand.",
+    "generic": "Generic: not measured yet. The rooms may be a few hundredths of a second apart until you calibrate.",
+    "two_profiles": "From the {a} and {b} profiles.",
+    "one_profile": "From the {a} profile.",
+    "profiles": "From the profiles.",
+}
+
+
+def source_line(source, speaker, dac):
+    """The line under the Adjustments, in English."""
+    key, values = source_key(source, speaker, dac)
+    return ENGLISH_LINES[key].format(**values)

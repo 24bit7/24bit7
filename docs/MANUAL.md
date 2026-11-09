@@ -11,10 +11,11 @@ This manual explains every part of the app. The [README](https://github.com/24bi
 3. [The Discover tab](#the-discover-tab)
 4. [Settings](#settings)
 5. [How playlists are built](#how-playlists-are-built)
-6. [Voice Commands](#voice-commands)
-7. [Setting up the Alexa skill](#setting-up-the-alexa-skill)
-8. [When something goes wrong](#when-something-goes-wrong)
-9. [Sources and your data](#sources-and-your-data)
+6. [Multiroom](#multiroom)
+7. [Voice Commands](#voice-commands)
+8. [Setting up the Alexa skill](#setting-up-the-alexa-skill)
+9. [When something goes wrong](#when-something-goes-wrong)
+10. [Sources and your data](#sources-and-your-data)
 
 ---
 
@@ -42,7 +43,7 @@ To run from source instead, you need Python 3.10 or newer. Run `pip install -r r
 
 ### Upgrading
 
-Your settings and history live in two files next to the app: `.env` (settings and keys) and `24bit7.db` (cache and Discover history). Copy both into the new version's folder and everything carries over. Settings from older versions are converted automatically. When a release changes the Alexa skill, as 1.31.0 does, paste the new `alexa\interaction_model.json` and `alexa\lambda_function.py` into the Alexa developer console as in [Steps 4 and 5](#step-4-add-the-interaction-model), then Build and Deploy.
+Your settings and history live in two files next to the app: `.env` (settings and keys) and `24bit7.db` (cache and Discover history). Copy both into the new version's folder and everything carries over. Settings from older versions are converted automatically. When a release changes the Alexa skill, as 1.31.0 and 1.32.0 do, paste the new `alexa\interaction_model.json` and `alexa\lambda_function.py` into the Alexa developer console as in [Steps 4 and 5](#step-4-add-the-interaction-model), then Build and Deploy.
 
 You don't have to keep an eye out for new versions: each time 24bit7 opens, it asks GitHub for the latest one, and if it's newer than yours, a line in the console says so, with a link to download it. When you're up to date, or offline, it says nothing.
 
@@ -149,8 +150,15 @@ Both modes ask the AI for about twice the count, since some picks won't be in yo
 - **Any JRiver zone** by name.
 - **YouTube**: the playlist opens in your browser as an instant YouTube playlist. JRiver isn't touched. See [YouTube output](#youtube-output).
 - **Tidal**: the playlist goes into your Tidal playlist called 24bit7, and the console offers **Open in Tidal app** and **Open in Tidal web**. JRiver isn't touched. See [Tidal output](#tidal-output).
+- **Multiroom**: the playlist goes to the zone that plays to your Sonos, and your main system plays the same music in step. See [Multiroom](#multiroom).
 
-YouTube and Tidal only appear here while they're ticked under Settings > Other > Additional Outputs.
+YouTube and Tidal only appear here while they're ticked under Settings > Other > Additional Outputs; Multiroom while it's enabled under Settings > Other > Multiroom.
+
+### Stop and Skip Track
+
+Two buttons sit between the track and Output on the Now Playing row, for whichever zone the row shows. **Stop**, in amber, stops the zone; in Multiroom both rooms stop. Once the zone is stopped the same button reads **Clear Playing Now**, in red, and one click empties the zone's Playing Now, with no confirmation, so it's red for a reason. It reads Stop again as soon as the zone plays. **Skip Track** moves to the next track in the zone's list and is greyed while the zone is stopped or nothing follows. A Skip Track is counted for the [Skipped Tracks](#edit-filters) filter, as a voice skip is. Each click puts one line in the console.
+
+The **Zone** list gains a **Multiroom** entry while Multiroom is enabled. It shows the leader zone's track, seeds go to the leader, and it's picked by itself when the Speakers start following.
 
 ### More Options
 
@@ -359,6 +367,7 @@ How your own JRiver playlists and smartlists play when you ask for them by voice
 - **Profiles**: save your settings as a profile (DJ, Explore, No AI...) with **Save As**, and switch between them with **Load**, which restarts 24bit7 to apply the profile; JRiver keeps playing. Tick **Enable Switch To** beside the profiles you want the **Switch Profiles** keyboard shortcut to step through (new profiles start ticked). A profile holds your playlists with their configs, settings and filters, each device's playlist choices, the Filters, JRiver Playlists, the Play tab options and Add JRiver Playlist rows, the Preview zone, the Default zone and Follow setting, the zone the keyboard shortcuts apply to, the AI Playlist window's choices, Use AI, cache and console settings. Keys, the JRiver connection, which zones are shown, the devices' names and zones, keyboard shortcuts (a playlist's included) and appearance stay as they are. A profile saved before 1.29.0 loads into the standard playlists and leaves your own alone. **Current** names the profile in use, with "(changed)" once anything differs from it. Profiles are small files in a `profiles` folder beside 24bit7, so they survive updates and can be copied to another PC.
 - **General**: **Keep Cache For** (1 Month, 1 Year or Permanent) with **Clear Cache...** (older than a month, older than a year, or everything), the JRiver host if JRiver runs on another PC, **Language** (English or Deutsch, applied with a restart; beside it, where to ask for another language), the **Theme** (Light or Dark, applied on restart), **Accent Colour** (the colour of the dark theme's tabs, buttons and titles, and of the console in either theme: **Choose Colour** opens Windows' colour picker, **Use the Default** goes back to the green, and a preview underneath shows the logo, two buttons and the console in your colour before you restart; a colour too dark to read is made lighter, one close to magenta is moved away from it, as magenta marks anything that uses AI credits, and it's saved in Profiles), **Use the Windows title bar** (unticked, the tabs run to the top of the window with their own minimise, maximise and close), **Show Credits** (Album/Current Track or Album/All Tracks, with **Show First** set to Tracks or Album), and **Enable Console Query**.
 - **Additional Outputs**: the services the Play tab's Output list offers besides your zones. **YouTube**, ticked to start with, has its **playlist length** (up to 50) and **Prefer official music videos** under it. **Tidal** says whether you're signed in, and **Open In** picks where a filled playlist opens: the Tidal app (the default) or Tidal's website. Untick the one Output is set to and Output goes back to Same zone. Discover's playlist buttons are set separately, under Settings > Discover.
+- **Multiroom**: the experimental section described under [Multiroom](#multiroom): Enable Multiroom, the Leader and Follower zones, what was found on the network, Check Clock, the DLNA server, and the Adjustments with Nudge. Kept on this PC, not in profiles.
 - **Zones**: which JRiver zones the Zone and Output lists show (untick one to hide it; **Rescan** asks JRiver for its zones again, and a DLNA speaker such as a Sonos only appears once DLNA Controller is ticked in JRiver, under Tools > Options > Media Network > Advanced), the **Default** zone Now Playing opens on when 24bit7 starts (picking a zone by hand always wins), and **Follow JRiver's active zone**, which makes Now Playing track whichever zone JRiver has active, so no zone is the default. Kept on this PC, not in profiles.
 - **Sources**: **Test My Sources** asks every source what's similar to a fixed set of seed tracks across 17 genres, and counts how many of the answers are in your library. Choose **Full** or **Quick** (the window says roughly how long each takes), and tick **Include AI** to test the AI too, which costs a few pence. It runs in the background, pausing while a build runs, so you can keep using 24bit7, and the console says when it's ready. The two tables then show each source's **Score** (how many of its suggestions are in your library, against the best source for each genre; it measures reach, not taste), **Best At** and **Worst At** (its three best and worst genres), for artist sources and track sources, and **Full Results** shows every genre against every source. Each config's sources show the same score beside them. Until you run it, the figures come from the developer's library, with a note saying yours will differ. The genre is only the label on each test seed: nothing is judged by your Genre tags.
 - **Windows**: **Start with Windows** launches 24bit7 when you sign in. **Start in the tray** keeps it hidden when Windows starts it. **Close to tray** makes the window's close button hide 24bit7 instead of quitting, so voice keeps listening; quit from the tray icon.
@@ -478,6 +487,40 @@ Every answer from every service is kept in a local database for a month by defau
 
 ---
 
+## Multiroom
+
+Multiroom plays what your Sonos plays on your main system too, in step, so the kitchen and the lounge sound like one room. It's experimental: tested on one Sonos One and a Chord Hugo over ASIO, and it needs a Sonos for now. Nothing changes for anyone who leaves it off.
+
+### How it works
+
+JRiver plays to the Sonos exactly as it does today. 24bit7 starts a small program of its own, the follower, which reads the Sonos's own clock about a hundred times a second, fetches each track from a second JRiver DLNA server with your DSP applied, at the file's own sample rate and 24-bit, and plays it to your DAC placed on that clock. Nothing is resampled; drift is held to a millisecond by dropping or repeating single samples now and then, and the samples are bit-perfect in between. JRiver's own zone for that DAC is stopped while it follows, so the DAC is free.
+
+What you hear: the two rooms start within a few milliseconds of each other and stay there through a whole album. Gapless albums stay gapless. A jump within a track is followed. A pause anywhere, in JRiver, from the Sonos app or the button on the Sonos, stops both rooms, and play starts the track from the top in both, since a resumed track can't be placed as surely. A build sent to the Sonos alone while Multiroom plays lets the main system finish its track and drop out; a new build with Output on Multiroom starts it following again, joining part way through a track if one is playing.
+
+### Setting up
+
+Two steps in JRiver, once:
+
+1. Tools > Options > Media Network > Add or configure DLNA servers: add a server called **Multiroom**, with Format set to PCM 24-bit.
+2. Save your main system's DSP Studio settings as a preset, and load that preset into the Multiroom server's DSP Studio. JRiver keeps the two separate, so a later change to the main system's DSP means loading the preset again.
+
+![Settings, Multiroom](images/settings_multiroom.png)
+
+Then in 24bit7, under Settings > Other > Multiroom: tick **Enable Multiroom**, pick the **Leader** (the zone that plays to the Sonos) and the **Follower** (the zone whose DAC follows). The **Speaker** row shows the Sonos found on the network and its profile, with **Check Clock** beside it; **Plays through** shows the DAC matched from JRiver's device for the follower zone, ASIO by preference (WASAPI is untested); **DLNA server** says whether the Multiroom server was found. Under **Adjustments**, **Start**, **Resume** and **DAC delay** come from the profiles for your kit and can be typed over; **Nudge** moves Start by five milliseconds while music plays, so the rooms can be lined up by ear, and the line underneath says where the numbers came from. **Calibrate** waits for a later release.
+
+**Check Clock** reads the speaker's clock for ten seconds while something plays and says whether it can be followed: green for a millisecond clock that keeps time, amber for one that counts whole seconds (worth trying, but the rooms may sit a few hundredths of a second apart), red when it doesn't answer or doesn't keep time with your PC.
+
+### Using it
+
+Set Output to **Multiroom** on the Play tab and build as usual: the playlist goes to the Sonos, the console says "Multiroom: Speakers following Sonos" and the main system comes in within half a second of the first note. Zone's **Multiroom** entry shows what the Sonos is playing. Stop on the Now Playing row stops both rooms; Skip Track moves both on. By voice, "ask needle drop multiroom" joins the main system to whatever the Sonos is playing, and "single room" keeps the music in the room of the Echo that heard it.
+
+### Good to know
+
+- The Sonos gets whatever JRiver's DLNA sends it (44.1 kHz, 16-bit, in the set-up it was tested on); the main system gets the file at its own rate and 24-bit. They play different renderings of the same track.
+- The follower stops when 24bit7 quits. The Sonos carries on if JRiver is still playing to it.
+- A Sonos group made in the Sonos app, other Sonos models, other DACs and WASAPI are untested. Check Clock and your ears are the test; please say how it goes.
+- The profile numbers were measured with a microphone on one Sonos One and one Hugo. Another DAC starts at a delay of zero until you nudge or type one.
+
 ## Voice Commands
 
 Voice Commands let you ask for music out loud. Say "Alexa, ask needle drop for music like Agnes Obel" in the kitchen, and a playlist from your own library starts on the kitchen speaker a second or two later.
@@ -511,6 +554,8 @@ Open the skill first ("Alexa, open needle drop"), then say the command, or say i
 | "more like this" or "more of this" | Track Matching from what's playing. The current track carries on and the new playlist replaces what was queued after it |
 | "more artists like this" or "music like this" | Similar Artists from what's playing, after the current track in the same way |
 | "switch", or "switch to *zone*" | Moves what's playing to another zone, at the same song and point; the zone it left stops |
+| "multiroom" | Your main system joins what the Sonos is playing, in step. See [Multiroom](#multiroom) |
+| "single room" | Keeps the music in the room of the Echo that heard it: said in the main system's room, the music moves there and the Sonos stops; said in the Sonos's room, the main system drops out |
 | "stop the music", "pause the music" or "resume the music" | Stops, pauses or resumes that device's zone |
 | "keep it going", "non stop" or "go continuous" | Turns on Non-stop for whatever is playing in that device's zone, once |
 | "radio *station*", "*station* radio", or just "radio" | Plays one of your [Radio](#radio) stations, with Radio's settings and Non-stop. "Radio" alone lists the last five stations played, numbered, and you answer with a name or "the second one" |

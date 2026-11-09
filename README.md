@@ -310,7 +310,14 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.31.0
+## What's new in 1.32.0
+
+- **Multiroom** (experimental): your main system plays what your Sonos plays, in step. Tick it on under Settings > Other > Multiroom, pick the zone that plays to the Sonos and the zone whose DAC follows, and Output gains **Multiroom**. A build goes to the Sonos as usual and 24bit7 plays the same music on the other DAC, placed on the Sonos's own clock, at the file's own sample rate with your DSP, from a second JRiver DLNA server you set up once. Gapless changes stay gapless, jumps are followed, a pause anywhere stops both rooms. Tested on one Sonos One and a Chord Hugo over ASIO; **Check Clock** says whether another speaker's clock can be followed.
+- **Stop** and **Skip Track** on the Now Playing row, for any zone. Stop becomes **Clear Playing Now**, in red, once the zone is stopped. Skip Track counts for the Skipped Tracks filter.
+- **Zone** gains a Multiroom entry showing the leader's track, picked by itself when the Speakers start following.
+- **Multiroom and Single Room by voice**: "ask needle drop multiroom" joins the main system to what the Sonos plays; "single room" keeps the music in the room of the Echo that heard it. Paste the skill's new interaction model and code into the Alexa console.
+
+### Earlier: 1.31.0
 
 - **Radio**, a playlist that needs no seed. 24bit7 sorts the artists you play into stations by the sources' genres (Classic Rock, Downtempo and so on), each with pillar artists: your own most played first, then the genre's best that you own. Edit a station's pillars from its page, adding any artist in your library. Each round is Consensus over a few pillars, about an hour, and it carries on from the pillars all evening; an artist that belongs in another station is left out. Stations split and join back, and any station can be a button of its own. Like any playlist it can be moved, deleted or added from a template. Its page sets how many stations there are, renames them, and holds the sources, how many of each artist's top tracks to pick, filters, the Moderator and Deep Cuts, one set for every Radio button. It rests, greyed, until you've played enough.
 - **JRiver Playlists**, a third seed tab: pick one of your JRiver playlists and **Play** it, shuffled or in order, or **Play & Embellish** it, with new tracks woven in from artists the playlist's own artists agree on: **+10%**, **+20%**, **+50%**, **Double**, **Triple** or **Build It Out**, the arrow's choices and the default set under Settings > JRiver Playlists.
@@ -323,12 +330,6 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 - **Console Query** reads each playlist's own settings and the manual, so its suggestions name the right control, playlist and config. It uses your AI's main model, as AI Playlist does.
 - **Settings > Devices** is a tab of its own again, so Playlist Settings is quieter. Non-stop now "adds more", leaving "top up" to Top-Up, and the German uses JRiver's own names for Playing Now and Media Network.
 
-### Earlier: 1.30.1
-
-- **Playlist Settings in smaller text**, the size of its notes, with **A-** and **A+** at the top right for the text size of every Settings screen. The left column and the page each scroll as one piece, header included.
-- **Consensus** and **Moderator** sit under the configs with the other whole-playlist sections. The Preview is half the size, beside Name, Take a Tour sits under Simple / Advanced, and the corners are square again.
-- **Devices** (was Device Playlists): a row opens a page with **Copy Settings From:** and a list of your playlists. Ticked, the phrase runs that playlist as it is, any kind; untick it for the device's own copy to change.
-- **Review Mode uses the same settings**, a tick under Skip tracks, replaces Separate Settings for Review Mode and the Review Mode column on Artist's Top Tracks.
 
 ### Earlier: 1.30.0
 

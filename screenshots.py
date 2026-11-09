@@ -66,6 +66,8 @@ SHOTS = [
     ("settings_voice_commands", ["Settings", "Voice Commands"], ["settings_gui.py", "voice.py"], None),
     ("settings_jriver_playlists", ["Settings", "JRiver Playlists"], ["settings_gui.py", "saved_playlists.py"], None),
     ("settings_other", ["Settings", "Other"], ["settings_gui.py", "hotkeys.py", "tray.py"], None),
+    ("settings_multiroom", ["Settings", "Other"], ["settings_gui.py", "multiroom/profiles.py", "multiroom/clockcheck.py"],
+     "multiroom"),
     ("settings_about", ["Settings", "About"], ["settings_gui.py"], None),
 ]
 
@@ -73,7 +75,8 @@ SHOTS = [
 
 DEMO_ZONES = [("10001", "Speakers"), ("10002", "Kitchen")]
 DEMO_PLAYING = {"Artist": "The Beatles", "Album": "Abbey Road", "Name": "Here Comes The Sun",
-                "PlayingNowPosition": "4", "PlayingNowTracks": "17", "FileKey": "1001", "ZoneID": "10001"}
+                "PlayingNowPosition": "4", "PlayingNowTracks": "17", "FileKey": "1001", "ZoneID": "10001",
+                "State": "2", "NextFileKey": "1002"}   # playing, with a track to follow: Stop in amber, Skip Track lit
 DEMO_KEYS = {"LASTFM_API_KEY": "demo" * 8, "LISTENBRAINZ_TOKEN": "demo" * 9, "DISCOGS_TOKEN": "demo" * 10,
              "TIDAL_CLIENT_ID": "demo" * 4, "TIDAL_CLIENT_SECRET": "demo" * 11, "TIDAL_REFRESH_TOKEN": "demo" * 6,
              "ANTHROPIC_API_KEY": "demo" * 12, "JRIVER_USER": "demo", "JRIVER_PASS": "demo" * 3,
@@ -720,6 +723,45 @@ def save_if_changed(image, name):
     return True
 
 
+def show_multiroom(settings, root):
+    """
+    The Multiroom section on, with a Sonos One, the Multiroom server and the Hugo "found" (stand-ins, nothing on
+    the network) and Check Clock's verdict shown, scrolled into view. Uses the demo zones: Kitchen leads, Speakers follow.
+    """
+    import tkinter as tk
+    from types import SimpleNamespace
+    from multiroom import sonos, fetch, mcws, output, clockcheck
+    sonos.find = lambda name=None, **k: [{"ip": "192.168.0.184", "name": "Kitchen", "model": "Sonos One",
+                                          "householdId": "h", "groupId": "g"}]
+    fetch.find_server = lambda name, **k: "http://192.168.0.133:52101"
+    mcws.JRiver.device = lambda self, zone: ("Hugo (Chord Async USB 44.1kHz-384kHz)", "ASIO")
+    output.find_device = lambda hint, found=None, prefer="ASIO": 18
+    output._sd = lambda: SimpleNamespace(query_devices=lambda i: {"name": "ASIO Chord  1.04"})
+    clockcheck.measure = lambda *a, **k: clockcheck.Verdict(
+        "green", "Clock: millisecond position, 4 ms round trip, steady. Good.", 900, True, 4.0, 1.0, "ms_good", {"rtt": "4"})
+    s = settings
+    s.vars["MULTIROOM_ENABLED"].set(True)
+    s.vars["MULTIROOM_LEADER"].set("Kitchen")
+    s.vars["MULTIROOM_FOLLOWER"].set("Speakers")
+    s._mr_leader_cb.set("Kitchen")      # the boxes show their own text, set from the vars when they were built
+    s._mr_follower_cb.set("Speakers")
+    s._sync_multiroom_parts()
+    # the lookup and the clock check run on threads and report through after(), which needs a mainloop this
+    # window hasn't got: show their answers directly
+    s._mr_refreshing = True
+    s._multiroom_show_found({"speakers": sonos.find(), "server": fetch.find_server("Multiroom"),
+                             "hint": "Hugo (Chord Async USB 44.1kHz-384kHz)", "device": "ASIO Chord  1.04",
+                             "problem": ""})
+    s._multiroom_show_verdict(clockcheck.measure())
+    settle(root, 0.3)
+    outer = s._mr_box.master
+    canvas = outer.master.master
+    settle(root, 0.2)
+    if isinstance(canvas, tk.Canvas):
+        canvas.yview_moveto(max(0, (outer.winfo_y() - 8) / max(1, outer.master.winfo_height())))
+    settle(root, 0.3)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Screenshots for the 24bit7 manual, from demo data.")
     parser.add_argument("names", nargs="*", help="shot names to take (default: all)")
@@ -793,6 +835,8 @@ def main():
                 settle(root, 0.5)
             elif action == "edit_filters":
                 dialog = play.settings._open_filters()
+            elif action == "multiroom":   # Settings > Other scrolled to Multiroom, the kit "found" (1.32.0)
+                show_multiroom(play.settings, root)
             elif action == "playlists_list":   # Road Trip chosen, the list open under the box (1.31.0)
                 play._show_more(False, save=False)
                 play._close_playlists_if_away = lambda: None   # the shot takes the keyboard from the box

@@ -13,10 +13,11 @@ Die Befehle für Alexa und die Menüs von JRiver stehen hier so, wie sie dort he
 3. [Der Entdecken-Tab](#der-entdecken-tab)
 4. [Einstellungen](#einstellungen)
 5. [Wie Playlists entstehen](#wie-playlists-entstehen)
-6. [Sprachbefehle](#sprachbefehle)
-7. [Den Alexa-Skill einrichten](#den-alexa-skill-einrichten)
-8. [Wenn etwas schiefgeht](#wenn-etwas-schiefgeht)
-9. [Quellen und deine Daten](#quellen-und-deine-daten)
+6. [Multiroom](#multiroom)
+7. [Sprachbefehle](#sprachbefehle)
+8. [Den Alexa-Skill einrichten](#den-alexa-skill-einrichten)
+9. [Wenn etwas schiefgeht](#wenn-etwas-schiefgeht)
+10. [Quellen und deine Daten](#quellen-und-deine-daten)
 
 ---
 
@@ -46,7 +47,7 @@ Die Sprache stellst du unter **Einstellungen > Sonstiges > Sprache** ein. Beim W
 
 ### Aktualisieren
 
-Deine Einstellungen und dein Verlauf liegen in zwei Dateien neben der App: `.env` (Einstellungen und Schlüssel) und `24bit7.db` (Cache und Entdecken-Verlauf). Kopier beide in den Ordner der neuen Version, und alles ist wieder da. Einstellungen älterer Versionen werden automatisch umgewandelt. Wenn eine Version den Alexa-Skill ändert, wie 1.31.0, füg die neuen Dateien `alexa\interaction_model.json` und `alexa\lambda_function.py` wie in [Schritt 4 und 5](#schritt-4-das-interaktionsmodell-hinzufügen) in die Alexa-Entwicklerkonsole ein und führ dann Build und Deploy aus.
+Deine Einstellungen und dein Verlauf liegen in zwei Dateien neben der App: `.env` (Einstellungen und Schlüssel) und `24bit7.db` (Cache und Entdecken-Verlauf). Kopier beide in den Ordner der neuen Version, und alles ist wieder da. Einstellungen älterer Versionen werden automatisch umgewandelt. Wenn eine Version den Alexa-Skill ändert, wie 1.31.0 und 1.32.0, füg die neuen Dateien `alexa\interaction_model.json` und `alexa\lambda_function.py` wie in [Schritt 4 und 5](#schritt-4-das-interaktionsmodell-hinzufügen) in die Alexa-Entwicklerkonsole ein und führ dann Build und Deploy aus.
 
 Nach neuen Versionen musst du nicht selbst Ausschau halten: Jedes Mal, wenn 24bit7 startet, fragt es bei GitHub nach der neuesten Version, und ist sie neuer als deine, sagt es eine Zeile in der Konsole, mit einem Link zum Herunterladen. Bist du auf dem neuesten Stand oder offline, sagt es nichts.
 
@@ -151,8 +152,15 @@ Beide Modi bitten die KI um etwa doppelt so viele Titel, da manche Vorschläge n
 - **Jede JRiver-Zone** mit Namen.
 - **YouTube**: Die Playlist öffnet sich in deinem Browser als YouTube-Sofort-Playlist. JRiver bleibt unberührt. Siehe [Ausgabe auf YouTube](#ausgabe-auf-youtube).
 - **Tidal**: Die Playlist kommt in deine Tidal-Playlist namens 24bit7, und die Konsole bietet **In der Tidal-App öffnen** und **Im Tidal-Web öffnen** an. JRiver bleibt unberührt. Siehe [Ausgabe auf Tidal](#ausgabe-auf-tidal).
+- **Multiroom**: Die Playlist geht an die Zone, die auf deinen Sonos spielt, und deine Hauptanlage spielt dieselbe Musik im Gleichtakt. Siehe [Multiroom](#multiroom).
 
-YouTube und Tidal erscheinen hier nur, solange sie unter Einstellungen > Sonstiges > Weitere Ausgaben angehakt sind.
+YouTube und Tidal erscheinen hier nur, solange sie unter Einstellungen > Sonstiges > Weitere Ausgaben angehakt sind; Multiroom, solange es unter Einstellungen > Sonstiges > Multiroom eingeschaltet ist.
+
+### Stopp und Titel überspringen
+
+Zwei Knöpfe sitzen zwischen dem Titel und Ausgabe in der Zeile Läuft gerade, für die Zone, die die Zeile gerade zeigt. **Stopp**, in Bernstein, stoppt die Zone; bei Multiroom stoppen beide Räume. Sobald die Zone gestoppt ist, heißt derselbe Knopf **Aktuelle Wiedergabe leeren**, in Rot, und ein Klick leert die Aktuelle Wiedergabe der Zone, ohne Nachfrage, deshalb das Rot. Er heißt wieder Stopp, sobald die Zone spielt. **Titel überspringen** geht zum nächsten Titel in der Liste der Zone und ist ausgegraut, solange die Zone gestoppt ist oder nichts folgt. Ein Überspringen zählt für den Filter [Übersprungene Titel](#filter-bearbeiten), wie ein Überspringen per Sprache. Jeder Klick schreibt eine Zeile in die Konsole.
+
+Die Liste **Zone** bekommt einen Eintrag **Multiroom**, solange Multiroom eingeschaltet ist. Er zeigt den Titel der Leitzone, Seeds gehen an die Leitzone, und er wird von selbst gewählt, sobald die Speakers zu folgen beginnen.
 
 ### Mehr Optionen
 
@@ -362,6 +370,7 @@ Wie deine eigenen JRiver-Playlists und Smartlists laufen, wenn du sie per Sprach
 - **Profile**: Speicher deine Einstellungen mit **Speichern unter...** als Profil (DJ, Entdecken, Ohne KI...) und wechsle mit **Laden** zwischen ihnen, was 24bit7 neu startet, um das Profil anzuwenden; JRiver spielt weiter. Hake **Umschalten erlauben** neben den Profilen an, die das Tastenkürzel **Profil wechseln** durchgehen soll (neue Profile sind anfangs angehakt). Ein Profil enthält deine Playlists mit ihren Configs, Einstellungen und Filtern, die Playlist-Auswahl jedes Geräts, die Filter, JRiver-Playlists, die Optionen im Abspielen-Tab und die Zeilen unter JRiver-Playlist hinzufügen, die Vorhör-Zone, Standardzone und Folgen, die Zone der Tastenkürzel, die Wahl im Fenster KI-Playlist, KI verwenden sowie Cache- und Konsolen-Einstellungen. Schlüssel, die JRiver-Verbindung, welche Zonen angezeigt werden, die Namen und Zonen der Geräte, Tastenkürzel (auch die der Playlists), Sprache und Aussehen bleiben, wie sie sind. Ein Profil, das vor 1.29.0 gespeichert wurde, lädt in die Standard-Playlists und lässt deine eigenen, wie sie sind. **Aktuell** nennt das verwendete Profil, mit "(geändert)", sobald etwas davon abweicht. Profile sind kleine Dateien in einem Ordner `profiles` neben 24bit7, sie überstehen also Updates und lassen sich auf einen anderen PC kopieren.
 - **Allgemein**: **Cache behalten für** (1 Monat, 1 Jahr oder Dauerhaft) mit **Cache leeren...** (älter als ein Monat, älter als ein Jahr oder alles), der JRiver-Host, falls JRiver auf einem anderen PC läuft, **Sprache** (Englisch oder Deutsch, mit Neustart; darunter, wo du nach einer anderen Sprache fragen kannst), das **Design** (Hell oder Dunkel, beim Neustart angewendet), **Akzentfarbe** (die Farbe der Reiter, Schaltflächen und Überschriften im dunklen Design und die der Konsole in beiden Designs: **Farbe wählen** öffnet die Farbauswahl von Windows, **Standard verwenden** kehrt zum Grün zurück, und eine Vorschau darunter zeigt Logo, zwei Schaltflächen und die Konsole in deiner Farbe, bevor du neu startest; eine Farbe, die zu dunkel zum Lesen ist, wird heller gemacht, eine Farbe nahe Magenta wird davon weggerückt, denn Magenta kennzeichnet alles, was KI-Guthaben verbraucht, und sie wird in Profilen gespeichert), **Titelleiste von Windows verwenden** (ohne Haken reichen die Tabs bis oben ins Fenster, mit eigenem Minimieren, Maximieren und Schließen), **Mitwirkende zeigen** (Album/Aktueller Titel oder Album/Alle Titel, mit **Zuerst zeigen** auf Titel oder Album) und **Konsolen-Frage einschalten**.
 - **Weitere Ausgaben**: die Dienste, die die Ausgabe-Liste im Abspielen-Tab neben deinen Zonen anbietet. **YouTube**, anfangs angehakt, hat darunter seine **Länge der YouTube-Playlist** (bis zu 50) und **Offizielle Musikvideos bevorzugen**. **Tidal** sagt, ob du angemeldet bist, und **Öffnen in** wählt, wo eine gefüllte Playlist öffnet: in der Tidal-App (Voreinstellung) oder auf der Tidal-Website. Nimmst du den Haken bei dem weg, auf das Ausgabe gerade steht, geht Ausgabe zurück auf Gleiche Zone. Die Playlist-Knöpfe von Entdecken stellst du separat ein, unter Einstellungen > Entdecken.
+- **Multiroom**: der experimentelle Abschnitt aus [Multiroom](#multiroom): Multiroom einschalten, Leitzone und Folgezone, was im Netzwerk gefunden wurde, Uhr prüfen, der DLNA-Server und die Feineinstellungen mit Nudge. Bleibt auf diesem PC, nicht in Profilen.
 - **Zonen**: welche JRiver-Zonen die Listen Zone und Ausgabe zeigen (nimm den Haken weg, um eine zu verstecken; **Neu einlesen** fragt JRiver erneut nach seinen Zonen, und ein DLNA-Lautsprecher wie Sonos erscheint erst, wenn in JRiver DLNA Controller angehakt ist, unter Extras > Optionen > Mediennetzwerk > Advanced), die **Standard**-Zone, mit der Läuft gerade beim Start von 24bit7 öffnet (eine von Hand gewählte Zone gewinnt immer), und **Der aktiven Zone von JRiver folgen**, was Läuft gerade der Zone folgen lässt, die JRiver gerade aktiv hat, sodass keine Zone die Standardzone ist. Bleibt auf diesem PC, nicht in Profilen.
 - **Quellen**: **Quellen testen** fragt jede Quelle, was einer festen Auswahl von Seed-Titeln aus 17 Genres ähnelt, und zählt, wie viele Antworten in deiner Bibliothek sind. Wähl **Vollständig** oder **Schnell** (das Fenster sagt ungefähr, wie lange jedes dauert), und hake **KI einbeziehen** an, um auch die KI zu testen, was ein paar Cent kostet. Es läuft im Hintergrund und pausiert, während eine Playlist erstellt wird, du kannst 24bit7 also weiter benutzen, und die Konsole sagt, wann es fertig ist. Die zwei Tabellen zeigen dann für jede Quelle **Wertung** (wie viele ihrer Vorschläge in deiner Bibliothek sind, verglichen mit der besten Quelle in jedem Genre; gemessen wird die Reichweite, nicht der Geschmack), **Am besten bei** und **Am schwächsten bei** (ihre drei besten und schwächsten Genres), für Künstler-Quellen und Titel-Quellen, und **Alle Ergebnisse** zeigt jedes Genre gegen jede Quelle. Die Quellen jeder Config zeigen dieselbe Wertung neben sich. Bis du es laufen lässt, stammen die Werte aus der Bibliothek des Entwicklers, mit dem Hinweis, dass deine abweichen werden. Das Genre ist nur die Beschriftung jedes Test-Seeds: Nichts wird nach deinen Genre-Tags beurteilt.
 - **Windows**: **Mit Windows starten** startet 24bit7 bei der Anmeldung. **Im Infobereich starten** hält es versteckt, wenn Windows es startet. **Ins Infobereich schließen** lässt den Schließen-Knopf des Fensters 24bit7 verstecken statt beenden, sodass Sprache weiter zuhört; beenden über das Symbol im Infobereich.
@@ -481,6 +490,40 @@ Jede Antwort jedes Dienstes wird in einer lokalen Datenbank aufbewahrt, standard
 
 ---
 
+## Multiroom
+
+Multiroom spielt das, was dein Sonos spielt, auch auf deiner Hauptanlage, im Gleichtakt, sodass Küche und Wohnzimmer wie ein Raum klingen. Es ist experimentell: getestet mit einem Sonos One und einem Chord Hugo über ASIO, und es braucht vorerst einen Sonos. Wer es aus lässt, merkt nichts davon.
+
+### Wie es funktioniert
+
+JRiver spielt auf den Sonos genau wie heute. 24bit7 startet ein kleines eigenes Programm, den Folger, der die Uhr des Sonos etwa hundertmal pro Sekunde liest, jeden Titel von einem zweiten JRiver-DLNA-Server mit deinem DSP holt, in der Abtastrate der Datei und mit 24 Bit, und ihn auf deinen DAC spielt, auf diese Uhr gesetzt. Nichts wird neu abgetastet; die Drift wird auf eine Millisekunde gehalten, indem hin und wieder ein einzelnes Sample weggelassen oder wiederholt wird, dazwischen sind die Samples bitgenau. JRivers eigene Zone für diesen DAC ist gestoppt, solange er folgt, damit der DAC frei ist.
+
+Was du hörst: Die beiden Räume starten wenige Millisekunden auseinander und bleiben so, ein ganzes Album lang. Lückenlose Alben bleiben lückenlos. Ein Sprung innerhalb eines Titels wird mitgemacht. Eine Pause, egal wo, in JRiver, aus der Sonos-App oder mit der Taste am Sonos, stoppt beide Räume, und Abspielen startet den Titel in beiden von vorn, weil ein fortgesetzter Titel sich nicht so sicher setzen lässt. Ein Build, der nur an den Sonos geht, während Multiroom spielt, lässt die Hauptanlage ihren Titel zu Ende spielen und aussteigen; ein neuer Build mit Ausgabe auf Multiroom lässt sie wieder folgen, mitten im Titel, wenn einer läuft.
+
+### Einrichten
+
+Zwei Schritte in JRiver, einmalig:
+
+1. Extras > Optionen > Mediennetzwerk > DLNA-Server hinzufügen oder konfigurieren: einen Server namens **Multiroom** anlegen, Format PCM 24-Bit.
+2. Die DSP-Studio-Einstellungen deiner Hauptanlage als Voreinstellung speichern und diese Voreinstellung im DSP Studio des Multiroom-Servers laden. JRiver hält die beiden getrennt, also heißt eine spätere Änderung am DSP der Hauptanlage: die Voreinstellung noch einmal laden.
+
+![Einstellungen, Multiroom](images/de/settings_multiroom.png)
+
+Dann in 24bit7 unter Einstellungen > Sonstiges > Multiroom: **Multiroom einschalten** anhaken, die **Leitzone** (die Zone, die auf den Sonos spielt) und die **Folgezone** (die Zone, deren DAC folgt) wählen. Die Zeile **Lautsprecher** zeigt den im Netzwerk gefundenen Sonos und sein Profil, daneben **Uhr prüfen**; **Spielt über** zeigt den DAC, passend zu JRivers Gerät für die Folgezone, ASIO bevorzugt (WASAPI ist ungetestet); **DLNA-Server** sagt, ob der Multiroom-Server gefunden wurde. Unter **Feineinstellungen** kommen **Start**, **Resume** und **DAC-Verzögerung** aus den Profilen für deine Geräte und lassen sich überschreiben; **Nudge** verschiebt Start um fünf Millisekunden, während Musik spielt, sodass sich die Räume nach Gehör ausrichten lassen, und die Zeile darunter sagt, woher die Zahlen stammen. **Kalibrieren** wartet auf eine spätere Version.
+
+**Uhr prüfen** liest die Uhr des Lautsprechers zehn Sekunden lang, während etwas spielt, und sagt, ob man ihm folgen kann: Grün für eine Millisekunden-Uhr, die Schritt hält; Bernstein für eine, die ganze Sekunden zählt (einen Versuch wert, aber die Räume liegen vielleicht ein paar Hundertstelsekunden auseinander); Rot, wenn sie nicht antwortet oder nicht mit deinem PC Schritt hält.
+
+### Benutzen
+
+Stell Ausgabe im Abspielen-Tab auf **Multiroom** und baue wie gewohnt: Die Playlist geht an den Sonos, die Konsole meldet "Multiroom: Speakers following Sonos", und die Hauptanlage setzt innerhalb einer halben Sekunde nach dem ersten Ton ein. Der Eintrag **Multiroom** unter Zone zeigt, was der Sonos spielt. Stopp in der Zeile Läuft gerade stoppt beide Räume; Titel überspringen schaltet beide weiter. Per Sprache lässt "ask needle drop multiroom" die Hauptanlage bei dem einsteigen, was der Sonos gerade spielt, und "single room" behält die Musik im Raum des Echo, der es gehört hat.
+
+### Gut zu wissen
+
+- Der Sonos bekommt, was JRivers DLNA ihm schickt (44,1 kHz, 16 Bit in der getesteten Anlage); die Hauptanlage bekommt die Datei in ihrer eigenen Rate und mit 24 Bit. Beide spielen verschiedene Wiedergaben desselben Titels.
+- Der Folger endet, wenn 24bit7 beendet wird. Der Sonos spielt weiter, wenn JRiver noch auf ihn spielt.
+- Eine in der Sonos-App gebildete Sonos-Gruppe, andere Sonos-Modelle, andere DACs und WASAPI sind ungetestet. Uhr prüfen und deine Ohren sind der Test; sag gern, wie es gelaufen ist.
+- Die Profilzahlen wurden mit einem Mikrofon an einem Sonos One und einem Hugo gemessen. Ein anderer DAC beginnt mit einer Verzögerung von null, bis du nudgest oder eine einträgst.
+
 ## Sprachbefehle
 
 Mit Sprachbefehlen bittest du laut um Musik. Sag in der Küche "Alexa, ask needle drop for music like Agnes Obel", und ein, zwei Sekunden später startet auf dem Küchenlautsprecher eine Playlist aus deiner eigenen Bibliothek.
@@ -516,6 +559,8 @@ Das läuft über einen eigenen Alexa-Skill, den du einmal einrichtest. Das geht 
 | "more like this" oder "more of this" | Titel-Abgleich zum Laufenden. Der aktuelle Titel läuft weiter, und die neue Playlist ersetzt, was danach eingereiht war |
 | "more artists like this" oder "music like this" | Ähnliche Künstler zum Laufenden, ebenso nach dem aktuellen Titel |
 | "switch" oder "switch to *zone*" | Bringt das Laufende in eine andere Zone, beim selben Song und an derselben Stelle; die verlassene Zone stoppt |
+| "multiroom" | Deine Hauptanlage steigt bei dem ein, was der Sonos spielt, im Gleichtakt. Siehe [Multiroom](#multiroom) |
+| "single room" | Die Musik bleibt im Raum des Echo, der es gehört hat: im Raum der Hauptanlage gesagt, zieht die Musik dorthin und der Sonos stoppt; im Raum des Sonos gesagt, steigt die Hauptanlage aus |
 | "stop the music", "pause the music" oder "resume the music" | Stoppt, pausiert oder setzt die Zone dieses Geräts fort |
 | "keep it going", "non stop" oder "go continuous" | Schaltet Non-stop einmalig für das ein, was in der Zone dieses Geräts läuft |
 | "radio *Sender*", "*Sender* radio" oder nur "radio" | Spielt einen deiner [Radio](#radio)-Sender, mit den Radio-Einstellungen und Non-stop. "Radio" allein nennt die letzten fünf gespielten Sender, nummeriert, und du antwortest mit einem Namen oder "the second one" |

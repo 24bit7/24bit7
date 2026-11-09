@@ -12,7 +12,8 @@ import time
 
 from . import sonos
 
-Verdict = collections.namedtuple("Verdict", "colour text answers ms_clock rtt_ms slope")
+# key and values let the app show the verdict in its own language (settings_gui.CLOCK_VERDICTS); text is the English
+Verdict = collections.namedtuple("Verdict", "colour text answers ms_clock rtt_ms slope key values")
 
 SECONDS = 10.0
 FAST_MS = 50.0        # a median round trip under this is quick enough
@@ -24,26 +25,30 @@ def check(reads):
     answers = len(reads)
     if not reads:
         return Verdict("red", "The speaker didn't answer, so its clock can't be read. Multiroom won't start.",
-                       0, False, None, None)
+                       0, False, None, None, "no_answer", {})
     playing = [r for r in reads if r.pos_ms is not None and r.state in sonos.PLAYING]
     if len(playing) < 5:
         return Verdict("amber", "The speaker answers, but nothing was playing, so the clock couldn't be checked. "
-                       "Play something on it and try again.", answers, False, None, None)
+                       "Play something on it and try again.", answers, False, None, None, "nothing_playing", {})
     rtts = sorted(r.rtt * 1000 for r in playing)
     rtt_ms = rtts[len(rtts) // 2]
     ms_clock = sum(1 for r in playing if r.pos_ms % 1000) > len(playing) / 2
     slope = _slope([(r.t, r.pos_ms / 1000) for r in playing])
     steady = slope is not None and abs(slope - 1) < STEADY
     if not steady:
-        return Verdict("red", f"The speaker's counter doesn't keep time with this PC (it runs at {slope:.3f} of "
+        shown = f"{slope:.3f}" if slope is not None else "?"
+        return Verdict("red", f"The speaker's counter doesn't keep time with this PC (it runs at {shown} of "
                        f"our clock), so the rooms would drift apart. Multiroom won't start.",
-                       answers, ms_clock, rtt_ms, slope)
+                       answers, ms_clock, rtt_ms, slope, "wrong_rate", {"rate": shown})
+    rtt = f"{rtt_ms:.0f}"
     if ms_clock:
         quick = rtt_ms < FAST_MS
-        return Verdict("green", f"Clock: millisecond position, {rtt_ms:.0f} ms round trip, steady. "
-                       + ("Good." if quick else "Slow to answer, but usable."), answers, True, rtt_ms, slope)
-    return Verdict("amber", f"Clock: whole seconds only, {rtt_ms:.0f} ms round trip, steady. Multiroom can run on it, "
-                   "but the rooms may sit a few hundredths of a second apart. Worth trying.", answers, False, rtt_ms, slope)
+        return Verdict("green", f"Clock: millisecond position, {rtt} ms round trip, steady. "
+                       + ("Good." if quick else "Slow to answer, but usable."), answers, True, rtt_ms, slope,
+                       "ms_good" if quick else "ms_slow", {"rtt": rtt})
+    return Verdict("amber", f"Clock: whole seconds only, {rtt} ms round trip, steady. Multiroom can run on it, "
+                   "but the rooms may sit a few hundredths of a second apart. Worth trying.", answers, False, rtt_ms,
+                   slope, "whole_seconds", {"rtt": rtt})
 
 
 def _slope(points):

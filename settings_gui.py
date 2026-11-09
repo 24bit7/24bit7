@@ -298,6 +298,27 @@ HELP_FG = "#666"
 MULTIROOM_KEYS = ("MULTIROOM_LEADER", "MULTIROOM_FOLLOWER", "MULTIROOM_SERVER", "MULTIROOM_SPEAKER",
                   "MULTIROOM_DEVICE", "MULTIROOM_START", "MULTIROOM_RESUME", "MULTIROOM_DAC", "MULTIROOM_FROM")
 VERDICT_FG = {"green": "#2e9e4f", "amber": "#d08a1a", "red": "#e05a5a"}   # Check Clock's verdict
+# Check Clock's verdicts and the line under the Adjustments, worded here so they go through t(); the multiroom
+# package keeps the English (clockcheck.Verdict.text, profiles.ENGLISH_LINES) for the command line
+CLOCK_VERDICTS = {
+    "no_answer": N_("The speaker didn't answer, so its clock can't be read. Multiroom won't start."),
+    "nothing_playing": N_("The speaker answers, but nothing was playing, so the clock couldn't be checked. Play "
+                          "something on it and try again."),
+    "wrong_rate": N_("The speaker's counter doesn't keep time with this PC (it runs at {rate} of our clock), so the "
+                     "rooms would drift apart. Multiroom won't start."),
+    "ms_good": N_("Clock: millisecond position, {rtt} ms round trip, steady. Good."),
+    "ms_slow": N_("Clock: millisecond position, {rtt} ms round trip, steady. Slow to answer, but usable."),
+    "whole_seconds": N_("Clock: whole seconds only, {rtt} ms round trip, steady. Multiroom can run on it, but the "
+                        "rooms may sit a few hundredths of a second apart. Worth trying."),
+}
+SOURCE_LINES = {
+    "recording": N_("From your recording of {date}."),
+    "typed": N_("Typed by hand."),
+    "generic": N_("Generic: not measured yet. The rooms may be a few hundredths of a second apart until you calibrate."),
+    "two_profiles": N_("From the {a} and {b} profiles."),
+    "one_profile": N_("From the {a} profile."),
+    "profiles": N_("From the profiles."),
+}
 LABEL_FONT = "S24.bold"
 SECTION_FG = "#1f4e8c"    # section titles, in the logo blue
 SECTION_EDGE = "#aab4c3"  # the thin line round each section
@@ -6759,7 +6780,8 @@ class SettingsTab(tk.Frame):
 
     def _multiroom_set_from(self):
         speaker, dac = self._multiroom_profiles()
-        self._mr_from.config(text=t(mr_profiles.source_line(self.vars["MULTIROOM_FROM"].get(), speaker, dac)))
+        key, values = mr_profiles.source_key(self.vars["MULTIROOM_FROM"].get(), speaker, dac)
+        self._mr_from.config(text=t(SOURCE_LINES[key], **values))
 
     def _sync_multiroom_parts(self):
         """Everything under the tick is greyed out while Multiroom is off."""
@@ -6923,7 +6945,8 @@ class SettingsTab(tk.Frame):
             try:
                 verdict = clockcheck.measure(s["ip"], s.get("householdId"), s.get("groupId"))
             except Exception as e:
-                verdict = clockcheck.Verdict("red", t("Couldn't read the clock ({e}).", e=e), 0, False, None, None)
+                verdict = clockcheck.Verdict("red", t("Couldn't read the clock ({e}).", e=e), 0, False, None, None,
+                                             None, {})
             try:
                 self.after(0, lambda: self._multiroom_show_verdict(verdict))
             except (tk.TclError, RuntimeError):
@@ -6933,7 +6956,8 @@ class SettingsTab(tk.Frame):
 
     def _multiroom_show_verdict(self, verdict):
         self._mr_check.config(state="normal", text=t("Check Clock"))
-        self._mr_clock.config(text=t(verdict.text), fg=VERDICT_FG.get(verdict.colour, PALETTE["help_fg"]))
+        text = t(CLOCK_VERDICTS[verdict.key], **verdict.values) if verdict.key in CLOCK_VERDICTS else verdict.text
+        self._mr_clock.config(text=text, fg=VERDICT_FG.get(verdict.colour, PALETTE["help_fg"]))
 
     def _build_additional_outputs(self, tab):
         """

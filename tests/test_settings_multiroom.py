@@ -46,7 +46,8 @@ def quiet_network(monkeypatch):
     monkeypatch.setattr(output, "find_device", lambda hint, found=None, prefer="ASIO": 18)
     monkeypatch.setattr(output, "_sd", lambda: SimpleNamespace(query_devices=lambda i: {"name": "ASIO Chord  1.04"}))
     monkeypatch.setattr(clockcheck, "measure", lambda *a, **k: clockcheck.Verdict(
-        "green", "Clock: millisecond position, 4 ms round trip, steady. Good.", 900, True, 4.0, 1.0))
+        "green", "Clock: millisecond position, 4 ms round trip, steady. Good.", 900, True, 4.0, 1.0,
+        "ms_good", {"rtt": "4"}))
 
 
 def buttons(widget):
