@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multiroom Design</title>
+<style>
+  :root { --ink:#1a1a1a; --muted:#5f6368; --blue:#1f4e8c; --head:#bfc3c9; --edge:#c9ccd1; --field:#9aa0a6;
+          --win:#f0f1f3; --body:#f7f8f9; --green:#7bd88f; --orange:#f28c28; --teal:#0e7490; }
+  html { background:#fff; }
+  body { margin:0; padding:24px 16px 60px; color:var(--ink); font:15px/1.5 "Segoe UI", system-ui, sans-serif; max-width:900px; margin:auto; }
+  h1 { font-size:26px; margin:0 0 4px; } h1 small { font-weight:400; color:var(--muted); font-size:15px; display:block; }
+  h2 { font-size:19px; margin:40px 0 10px; padding-top:14px; border-top:1px solid var(--edge); color:var(--blue); }
+  h3 { font-size:15px; margin:22px 0 6px; }
+  p, li { max-width:72ch; } li { margin:4px 0; }
+  table { border-collapse:collapse; margin:10px 0; font-size:14px; } th, td { text-align:left; padding:5px 12px 5px 0; vertical-align:top; border-bottom:1px solid #eceef1; } th { color:var(--muted); font-weight:600; }
+  .note { color:var(--muted); font-size:13.5px; }
+  .new { display:inline-block; font-size:11px; padding:0 6px; border-radius:8px; background:#e2f3e6; color:#1b5e2f; vertical-align:middle; margin-left:6px; font-weight:600; }
+  .box { border:1px solid var(--edge); border-radius:6px; padding:12px 16px; background:#fafbfc; margin:12px 0; }
+  .for-record { border-left:4px solid var(--orange); }
+  .shot { overflow-x:auto; margin:14px 0 6px; }
+  .win { background:var(--win); border:1px solid var(--edge); font:12px/1.35 "Segoe UI", system-ui, sans-serif; color:var(--ink); min-width:560px; display:inline-block; }
+  .sec { margin:10px; border:1px solid var(--edge); background:var(--body); }
+  .sec .hd { background:var(--head); color:var(--blue); font-weight:700; padding:5px 10px; font-size:12.5px; }
+  .sec .hd .dot { color:#8a8f96; font-weight:400; margin-left:4px; }
+  .sec .bd { padding:10px 14px 12px; }
+  .sub { font-weight:700; margin:12px 0 4px; }
+  .row { display:flex; align-items:center; gap:10px; margin:6px 0; flex-wrap:wrap; }
+  .lab { min-width:118px; }
+  .tick { display:inline-block; width:13px; height:13px; border:1px solid #6f737a; border-radius:2px; background:#fff; vertical-align:-2px; margin-right:6px; }
+  .tick.on { background:var(--blue); border-color:var(--blue); position:relative; }
+  .tick.on::after { content:""; position:absolute; left:4px; top:1px; width:3px; height:7px; border:solid #fff; border-width:0 2px 2px 0; transform:rotate(45deg); }
+  .cb { display:inline-block; background:#fff; border:1px solid var(--field); padding:2px 20px 2px 6px; position:relative; min-width:90px; }
+  .cb::after { content:"▾"; position:absolute; right:4px; top:1px; color:#333; font-size:11px; }
+  .num { display:inline-block; background:#fff; border:1px solid var(--field); padding:2px 4px; min-width:34px; text-align:right; }
+  .btn { display:inline-block; background:#fff; border:1px solid var(--edge); color:var(--blue); padding:3px 12px; font-weight:600; }
+  .btn.q { color:#fff; background:var(--blue); border-radius:50%; padding:0 5px; font-weight:700; }
+  .link { color:var(--blue); text-decoration:underline; }
+  .help { color:var(--muted); font-size:11.5px; }
+  .list { background:#fff; border:1px solid var(--field); display:inline-block; min-width:150px; }
+  .list div { padding:2px 8px; } .list .sel { background:#cfe0f5; }
+  .console { background:#000; color:var(--green); font:12px/1.45 Consolas, monospace; padding:8px 10px; white-space:pre; overflow-x:auto; }
+  .console .white { color:#fff; }
+  .dlg { background:var(--win); border:1px solid #888; box-shadow:0 6px 24px rgba(0,0,0,.25); display:inline-block; min-width:560px; }
+  .dlg .title { background:#fff; padding:5px 10px; font-weight:600; border-bottom:1px solid var(--edge); }
+  .dlg .bd { padding:12px 16px 14px; }
+  .step { display:flex; gap:10px; margin:8px 0; } .step b { color:var(--blue); min-width:18px; }
+  .ok { color:#1b7f3b; } .warn { color:#8a4b00; }
+  svg text { font:12.5px "Segoe UI", system-ui, sans-serif; fill:var(--ink); }
+</style>
+</head>
+<body>
+
+<h1>Multiroom: the Speakers follow the Sonos<small>Design for Ben to look over before any code. Mags, Monday 9 November 2026. Second draft, 13:00, after Ben's questions.</small></h1>
+
+<p>Everything below rests on this morning's tests. The audio path is bit-perfect with your DSP, the Sonos's own clock can be read to a millisecond, and real music across five sample rates came out in step. The design is what we'd build on that. Nothing here is written yet.</p>
+
+<h2>The short version</h2>
+<ul>
+  <li><b>The Sonos leads, the Speakers follow.</b> JRiver plays to the Sonos as it does today. A new part of 24bit7, the <b>follower</b>, plays the same music on the Speakers' DAC, placed on the Sonos's own clock.</li>
+  <li><b>No virtual DLNA renderer.</b> Sunday's plan had one; Monday's test showed JRiver will hand its processed audio to a plain web request, so the renderer is gone. There's a section on it below.</li>
+  <li><b>Profiles</b> <span class="new">new</span> for the speaker (Sonos One) and the DAC (Chord Hugo over ASIO), picked automatically from what the devices announce. Anything else starts as Generic. A <b>clock pre-test</b> says whether a speaker's clock can be read at all, and one <b>phone recording</b> measures the rest, including whether it repeats.</li>
+  <li><b>The three numbers are on screen</b> <span class="new">new</span>: Start, Resume and DAC delay. A profile fills them, a recording refines them, and anyone can type over them or nudge by ear.</li>
+  <li><b>One new Output on the Play tab, "Multiroom", and two voice commands:</b> "everywhere" to join and "just here" to go back to one room. A pause made at the speaker is treated as "this room only" <span class="new">new</span>.</li>
+  <li><b>Four stages</b>, each planned and approved separately. Stage one is the follower on its own, from the command line, with your numbers hard-wired.</li>
+</ul>
+
+<h2>What you'd see</h2>
+
+<h3>1. Settings &gt; Other &gt; Multiroom</h3>
+<p>A new section under Zones. Off by default. Two zones to pick; the rest is found. The DAC comes from JRiver itself (it reports each zone's output device), so there's no device picker unless the name can't be matched.</p>
+<div class="shot"><div class="win">
+  <div class="sec"><div class="hd">Zones <span class="dot">·</span></div><div class="bd help">(as now)</div></div>
+  <div class="sec"><div class="hd">Multiroom <span class="dot">·</span> <span style="font-weight:400;color:#5f6368;font-size:11.5px">experimental: tested on one Sonos One and a Chord Hugo over ASIO</span></div>
+  <div class="bd">
+    <div class="row"><span class="tick on"></span>Enable Multiroom</div>
+    <div class="row"><span class="lab">Leader</span><span class="cb">Sonos</span><span class="help">the JRiver zone that plays to the speaker</span></div>
+    <div class="row"><span class="lab">Speaker</span><span style="min-width:150px">Kitchen · Sonos One</span><span class="help">found on the network · profile: <b>Sonos One</b></span><span class="btn">Check Clock</span></div>
+    <div class="row" style="margin-left:128px"><span class="help ok">Clock: millisecond position, 4 ms round trip, steady. Good.</span></div>
+    <div class="row"><span class="lab">Follower</span><span class="cb">Speakers</span><span class="help">the zone the Speakers' DAC normally plays</span></div>
+    <div class="row"><span class="lab">Plays through</span><span style="min-width:150px">ASIO Chord 1.04</span><span class="help">from JRiver's Speakers zone (Hugo) · profile: <b>Chord Hugo, ASIO</b> · ASIO recommended</span><span class="link">Change</span></div>
+    <div class="row"><span class="lab">DLNA server</span><span style="min-width:150px">DESKTOP-6CT28HR (Multiroom)</span><span class="btn q">?</span><span class="help ok">serving 24-bit, 96 kHz</span></div>
+    <div class="sub">Adjustments</div>
+    <div class="row"><span class="lab">Start</span><span class="num">93</span> ms<span class="help">the rooms at the start of a track, and everything after</span></div>
+    <div class="row"><span class="lab">Resume</span><span class="num">95</span> ms<span class="help">after a jump, and between songs that run on without a gap</span></div>
+    <div class="row"><span class="lab">DAC delay</span><span class="num">1660</span> samples<span class="help">38 ms at 44.1 kHz, 9 ms at 192; worked out per track from its rate</span></div>
+    <div class="row"><span class="lab">Nudge</span><span class="btn">−5 ms</span><span class="btn">+5 ms</span><span class="help">while music plays, moves Start; the Speakers shift as you listen</span></div>
+    <div class="row"><span class="help">From your recording of 9 Nov 2026. Rooms sound like an echo from the first song? Change Start by ten and listen. Only after a song change or a jump? Change Resume.</span></div>
+    <div class="row" style="margin-top:8px"><span class="tick"></span>Pausing one room pauses both<span class="help">off: a pause made at the speaker ("Alexa, stop") leaves the other room playing</span></div>
+    <div class="row" style="margin-top:10px"><span class="btn">Calibrate...</span><span class="help">one phone recording, about three minutes, sitting where you listen</span></div>
+  </div></div>
+</div></div>
+<p class="note">The hover note on the section title says what it does and why you'd want it. The "?" opens the two JRiver set-up steps with a picture, like Keys does. Before a recording the adjustments line reads "From the Sonos One and Chord Hugo profiles" or, for an unknown speaker, "Generic: not measured yet. The rooms may be a few hundredths of a second apart until you calibrate."</p>
+
+<h3>2. The Play tab: Output</h3>
+<p>Output gains one entry. Picking it sends builds to the Sonos and starts the follower. Nothing else on the tab changes. The console says what the follower is doing, one line per event, never per track.</p>
+<div class="shot"><div class="win" style="min-width:0">
+  <div style="padding:10px 14px;display:flex;gap:28px;align-items:flex-start">
+    <div><span style="font-weight:600;margin-right:8px">Output</span><span class="cb" style="min-width:110px">Multiroom</span>
+      <div class="list" style="margin:2px 0 0 52px"><div>Same zone</div><div>Speakers</div><div>Kitchen</div><div class="sel">Multiroom</div><div>YouTube</div><div>Tidal</div></div></div>
+  </div>
+  <div class="console" style="margin:0 14px 12px">21:14  Similar Artists: The Beatles - Here Comes The Sun
+  Sending 33 tracks...
+  <span class="white">Queued in Sonos after the current track.</span>
+  Multiroom: Speakers following Sonos (Sonos One, Chord Hugo; your recording of 9 Nov).
+  Multiroom: Kitchen paused at the speaker; Speakers carrying on.
+  Multiroom: Kitchen back; rejoining at the next track.
+  Multiroom: lost the Sonos's clock for 12 s, kept time on its own; in step again.
+  Multiroom: Speakers stopped (Sonos stopped).</div>
+</div></div>
+
+<h3>3. By voice, and the stop button</h3>
+<table>
+  <tr><th>What's said or pressed</th><th>What happens</th><th>Alexa says</th></tr>
+  <tr><td>"ask needle drop to play everywhere" · multiroom · all rooms</td><td>Whatever the Sonos is playing joins on the Speakers, in step. If nothing is playing, nothing starts.</td><td>"Playing everywhere." / "Nothing's playing on the Sonos."</td></tr>
+  <tr><td>"ask needle drop to play just here" · single room · only here</td><td>Multiroom off. The room this device is in keeps the music: said in the Kitchen, the Speakers drop out; said in the Lounge, the Speakers take over with the existing Switch To handover and the Sonos stops.</td><td>"Just the Kitchen." / "Just the Lounge."</td></tr>
+  <tr><td>"ask needle drop to stop" or "pause" <span class="new">new</span></td><td>In the Speakers' room: the Speakers drop out, the Sonos carries on. In the Sonos's room: the music hands over to the Speakers (Switch To) and the Sonos stops. Either way the other room never loses it.</td><td>"Stopped in the Lounge." / "Stopped in the Kitchen; the Lounge carries on."</td></tr>
+  <tr><td>"Alexa, stop" to the Sonos itself, its touch control, or the Sonos app <span class="new">new</span></td><td>The Sonos pauses locally and JRiver only notices on its next poll, about five seconds later. That gap is the tell: paused at the speaker means "this room". The Speakers carry on alone on their own clock, playing on through the Sonos zone's playlist. When the Sonos resumes, it's behind by the length of the pause, so the follower rejoins its clock at the next track rather than making either room skip mid-song. Households that want "Alexa, stop" to stop everything tick <b>Pausing one room pauses both</b> in the Multiroom section (Ben, 9 Nov) <span class="new">new</span>.</td><td>(Alexa's own reply)</td></tr>
+  <tr><td>Pause in JRiver, in 24bit7, or by voice through needle drop</td><td>JRiver pauses first, so both rooms pause. Resume follows the resume rule, measured in the build.</td><td></td></tr>
+</table>
+<p class="note">Two new intents in the skill (MultiroomIntent, SingleRoomIntent) and a change to how Stop and Pause behave while Multiroom is on. The interaction model and lambda get pasted into the Amazon console once more, as for 1.31.0. Alexa stays English. "Play everywhere" starting a build from nothing is not in this version: it joins what's playing.</p>
+
+<h2>How it works</h2>
+<svg viewBox="0 0 760 290" width="100%" style="max-width:760px;display:block;margin:10px 0">
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5f6368"/></marker></defs>
+  <rect x="20" y="20" width="200" height="250" rx="8" fill="#f0f1f3" stroke="#c9ccd1"/><text x="120" y="42" text-anchor="middle" font-weight="700">JRiver</text>
+  <rect x="38" y="60" width="164" height="44" rx="5" fill="#fff" stroke="#9aa0a6"/><text x="120" y="78" text-anchor="middle">Sonos zone</text><text x="120" y="95" text-anchor="middle" fill="#5f6368" font-size="11.5">plays the playlist, as now</text>
+  <rect x="38" y="130" width="164" height="58" rx="5" fill="#fff" stroke="#9aa0a6"/><text x="120" y="150" text-anchor="middle">Multiroom DLNA server</text><text x="120" y="167" text-anchor="middle" fill="#5f6368" font-size="11.5">your Speakers DSP, 24-bit</text><text x="120" y="181" text-anchor="middle" fill="#5f6368" font-size="11.5">serves /Music/F&lt;key&gt;.wav</text>
+  <rect x="38" y="212" width="164" height="40" rx="5" fill="#fff" stroke="#9aa0a6"/><text x="120" y="230" text-anchor="middle">MCWS</text><text x="120" y="245" text-anchor="middle" fill="#5f6368" font-size="11.5">which track, which DAC, state</text>
+  <rect x="560" y="48" width="180" height="60" rx="8" fill="#fff" stroke="#0e7490" stroke-width="1.5"/><text x="650" y="72" text-anchor="middle" font-weight="700">Sonos One</text><text x="650" y="92" text-anchor="middle" fill="#5f6368" font-size="11.5">leads; plays what JRiver sends</text>
+  <rect x="300" y="128" width="220" height="104" rx="8" fill="#fff" stroke="#f28c28" stroke-width="1.5"/><text x="410" y="152" text-anchor="middle" font-weight="700">24bit7 follower</text><text x="410" y="172" text-anchor="middle" fill="#5f6368" font-size="11.5">fetches the track, places it on</text><text x="410" y="187" text-anchor="middle" fill="#5f6368" font-size="11.5">the Sonos clock, corrects for the</text><text x="410" y="202" text-anchor="middle" fill="#5f6368" font-size="11.5">DAC's delay and the drift</text><text x="410" y="222" text-anchor="middle" fill="#5f6368" font-size="11.5">(its own process)</text>
+  <rect x="560" y="150" width="180" height="60" rx="8" fill="#fff" stroke="#9aa0a6"/><text x="650" y="174" text-anchor="middle" font-weight="700">Hugo, Speakers</text><text x="650" y="194" text-anchor="middle" fill="#5f6368" font-size="11.5">ASIO at the track's rate</text>
+  <line x1="202" y1="82" x2="560" y2="78" stroke="#5f6368" stroke-width="1.3" marker-end="url(#a)"/><text x="380" y="68" text-anchor="middle" fill="#5f6368" font-size="11.5">DLNA, 16-bit, as today</text>
+  <line x1="202" y1="160" x2="300" y2="166" stroke="#5f6368" stroke-width="1.3" marker-end="url(#a)"/><text x="251" y="150" text-anchor="middle" fill="#5f6368" font-size="11.5">HTTP, ranges</text>
+  <line x1="202" y1="232" x2="300" y2="206" stroke="#5f6368" stroke-width="1.3" marker-end="url(#a)"/>
+  <line x1="560" y1="100" x2="520" y2="140" stroke="#0e7490" stroke-width="1.5" marker-end="url(#a)"/><text x="575" y="128" fill="#0e7490" font-size="11.5">positionMillis and state, 100 reads a second</text>
+  <line x1="520" y1="180" x2="560" y2="180" stroke="#5f6368" stroke-width="1.3" marker-end="url(#a)"/>
+</svg>
+
+<h3>Why there's no virtual renderer any more</h3>
+<p>Sunday's plan was a DLNA renderer of our own: a fake speaker JRiver would see as a zone and play to, with the Multiroom server's DSP applied. We needed it for one reason: to get JRiver's processed audio out of JRiver. The probe proved JRiver accepts such a renderer, sends bit-perfect audio, and applies the server's DSP and format. Then, at 12:11 on Monday, a plainer question: the addresses JRiver gave the probe were ordinary web addresses, so what happens if you just ask for one? The Multiroom server answered with the 24-bit, 96 kHz, DSP-applied file, byte-for-byte identical to the probe's download, and it answered a byte-range request too, which is what seeking needs.</p>
+<p>So the renderer was only ever a way of asking, and you can just ask. That drops SSDP, port 1900, SOAP, event subscriptions, and a zone that appears and disappears in JRiver whenever 24bit7 starts and stops. The JRiver set-up loses a step (no zone association). Every finding from the probe carries over: the DSP lives on the server, not the zone; the server's Format setting decides the bit depth; and the follower must never advertise 16-bit, which now simply means it never asks for it.</p>
+
+<h3>The pieces</h3>
+<table>
+  <tr><th>Piece</th><th>What it does</th><th>Proved by</th></tr>
+  <tr><td><b>Which track</b></td><td>24bit7 already polls the zones. When the Sonos zone's FileKey changes, it tells the follower the key and the NextFileKey, so the next track is fetched before it's needed.</td><td>Playback/Info gives both keys.</td></tr>
+  <tr><td><b>The audio</b></td><td>A plain GET of <code>/Music/F&lt;key&gt;.wav</code> from the Multiroom server. It arrives 250 to 1,700 times faster than real time, so the follower streams it into a buffer a few seconds ahead and re-fetches by byte range after a jump. A whole 24/192 track never sits in memory.</td><td>Identical to the FLAC; range requests answered.</td></tr>
+  <tr><td><b>The clock</b></td><td>A plug-in per speaker profile. For a Sonos: the local control API over a websocket, positionMillis and playback state read about a hundred times a second on one connection; the twenty quickest round trips of the last two seconds give the clock to within a millisecond. For Generic: the UPnP whole-second position, fitted across many ticks, marked untested.</td><td>Three runs within 5 ms of each other.</td></tr>
+  <tr><td><b>Fresh start or resume</b></td><td>After a fresh start the counter is honest. After a resume (a jump, or a track that ran on without a gap) the counter sits about 95 to 100 ms behind the sound, and stays there. The follower knows which it's in: it saw the jump, or it saw the new track's counter land about 100 ms after the last one should have ended.</td><td>Seven gapless changes and three jumps, all within a few ms of each other.</td></tr>
+  <tr><td><b>The DAC's delay</b></td><td>A fixed number of samples, so it shrinks at higher rates: on the Hugo about 1,660, which is 38 ms at 44.1 kHz and 9 ms at 192. Worked out per track from the file's rate.</td><td>Two rounds at five rates agreed within 2 ms.</td></tr>
+  <tr><td><b>Drift</b></td><td>The two crystals differ by about 17 parts per million, a millisecond a minute. Over a gapless album that would add up, so the follower resamples by that tiny ratio continuously, steered by the clock. At 17 ppm it's inaudible; a step correction would click.</td><td>Steady 1 ms per minute in every run.</td></tr>
+  <tr><td><b>Who paused</b> <span class="new">new</span></td><td>The follower sees the Sonos's own state within a few milliseconds; JRiver sees it on its next poll, about five seconds later. Sonos paused while JRiver still says playing means someone paused it at the speaker: that room only. JRiver paused first means everyone meant it.</td><td>The state field in today's logs; the five-second poll in the probe's log.</td></tr>
+  <tr><td><b>Its own process</b></td><td>The follower runs as <code>24bit7.exe --follow</code>, a child of the main app, talking over a local socket. At 192 kHz the DAC asks for samples every 5 ms, and a Tk app with a build running can't promise that from the same Python process. If the follower falls over, the app and the Sonos carry on.</td><td>Judgement, not a test.</td></tr>
+</table>
+
+<h3>Today's numbers</h3>
+<table>
+  <tr><th>Test</th><th>Result</th></tr>
+  <tr><td>Start of a track, on the millisecond clock</td><td>Constant −53, −58, −53 ms over three runs. (Whole-second ticks: 67 ms of scatter between starts, unusable.)</td></tr>
+  <tr><td>Ten fresh ASIO streams within a run</td><td>Within 1 to 4 ms of each other, every run.</td></tr>
+  <tr><td>Gapless track change</td><td>Counter restarts 100.3 to 100.8 ms late (five cases), sound runs on with a 1 to 2 ms gap.</td></tr>
+  <tr><td>Track change with a real gap</td><td>Counter honest; 255 to 275 ms of silence on the Sonos, which the Speakers match.</td></tr>
+  <tr><td>Jump within a track</td><td>Counter 94 to 100 ms late afterwards (three jumps).</td></tr>
+  <tr><td>Sample rate</td><td>44.1: −5 ms, 48: −6 to −11, 88.2: −22, 96: −26, 192: −33 to −35, uncorrected. All explained by 1,660 samples.</td></tr>
+  <tr><td>Real music, six tracks, five rates, all corrections</td><td>Ben: "perfect", apart from the test's own two-second shift at each new track.</td></tr>
+  <tr><td>The Multiroom server to a plain request</td><td>24-bit, 96 kHz, identical to the bit-perfect download; byte ranges answered.</td></tr>
+</table>
+
+<h3>What happens when</h3>
+<ul>
+  <li><b>You pick Multiroom and build:</b> the playlist goes to the Sonos. 24bit7 stops the Speakers zone if it's playing (it holds the DAC), starts the follower, and the Speakers come in within about half a second of the Sonos's first note. From then on every track, change and jump is seamless.</li>
+  <li><b>The join at a fresh start is a limit, not an adjustment.</b> The Sonos answers slowly for the first fraction of a second of a track (round trips of 15 to 80 ms instead of 4), and the follower can't place the Speakers until it has heard from it. So the Speakers join a third of a second or so in. Gapless changes don't have this, because the follower already knows where it is.</li>
+  <li><b>You seek in JRiver:</b> the follower sees the counter jump, re-fetches from the new place and applies the resume rule.</li>
+  <li><b>Someone pauses at the speaker, or through JRiver:</b> see the table above.</li>
+  <li><b>The clock drops out</b> (network): the follower keeps time on its own crystal, which costs about a millisecond a minute, and says so once. After a minute without the clock it stops the Speakers and says so.</li>
+  <li><b>The Sonos stops, or 24bit7 closes:</b> the Speakers stop. The Sonos carries on if JRiver is still playing to it, as now.</li>
+  <li><b>The Multiroom server isn't there:</b> a console line with the set-up steps. No silent fall-back to the Sonos server (that would be 16-bit, no DSP).</li>
+  <li><b>Volume:</b> the Sonos's is JRiver's, as now. The follower plays at full scale and the DAC or amp sets the room, which suits the Hugo. A slider only if someone asks.</li>
+</ul>
+
+<h2>Profiles <span class="new">new</span></h2>
+<p>Two small tables ship in the repo, one line per model, and 24bit7 picks from them by itself.</p>
+<table>
+  <tr><th></th><th>Keyed on</th><th>Holds</th><th>How firm</th><th>Shipped now</th></tr>
+  <tr><td><b>Speaker</b></td><td>The maker and model the device announces in its DLNA description ("Sonos, Inc.", "Sonos One").</td><td>How to read its clock, Start, Resume.</td><td>Firm: properties of the model.</td><td>Sonos One. Everything else is Generic.</td></tr>
+  <tr><td><b>DAC</b></td><td>The device name JRiver reports for the follower zone ("Hugo (Chord Async USB)") matched to the audio driver's name ("ASIO Chord 1.04").</td><td>DAC delay in samples.</td><td>A starting value: the same DAC gives a different number if its driver's buffer setting changes, or through WASAPI instead of ASIO.</td><td>Chord Hugo over ASIO. Everything else starts at zero.</td></tr>
+</table>
+<p>Profiles only fill in the Adjustments. A recording overwrites them for that set-up, and the line under the fields says which is in force: from the profiles, from your recording of such a date, or typed by hand. When someone with another speaker sends numbers that repeat, the model becomes a profile in the next release. The calibration result ends with a line to copy and paste on the forum or GitHub (model, DAC, numbers, repeatability), so the data points arrive by themselves.</p>
+
+<h3>The clock pre-test</h3>
+<p><b>Check Clock</b> plays nothing. It reads the speaker's position for ten seconds while something is playing and reports: does it answer, how fast, in milliseconds or whole seconds, and does the counter move one for one with the PC's clock. Green: a millisecond counter, steady. Amber: steady whole seconds, worth trying. Red: nothing usable, and Multiroom says why it won't start. What the pre-test can't see is whether the counter sits the same distance from the sound at each start, because software can't hear. Your Sonos's whole-second clock would have passed the pre-test and failed in the room. That's the recording's job.</p>
+
+<h2>Calibration</h2>
+<p>Three numbers belong to the user's kit: how far the speaker's sound trails its counter (about 93 ms on yours), the DAC's delay in samples (1,660 on the Hugo), and the resume lateness (about 95 ms). One recording finds all three, and also whether the speaker's clock repeats from one start to the next.</p>
+<div class="shot"><div class="dlg">
+  <div class="title">Calibrate Multiroom</div>
+  <div class="bd">
+    <div class="step"><b>1</b><div>Sit where you usually listen, with the Sonos and the Speakers both on. Start a voice recording on your phone.</div></div>
+    <div class="step"><b>2</b><div>Press <span class="btn">Play Test Sound</span>. Clicks play for about three minutes. The rooms take turns, so each can be timed on its own, and there's a stop and restart, a jump and a track change in it. Stop the recording when the clicks stop.</div></div>
+    <div class="step"><b>3</b><div>Get the recording onto this PC (Drive, email, a cable) and press <span class="btn">Load Recording...</span></div></div>
+    <div style="margin-top:12px" class="ok">Calibrated. Sonos 93 ms, DAC 1,660 samples (38 ms at 44.1 kHz), resume 95 ms. Starts repeat within 3 ms. The rooms should now be within a few milliseconds.</div>
+    <div class="help" style="margin-top:6px">Last time: 9 Nov 2026. Redo it if you change the DAC, its driver settings, or the Speakers' DSP. <span class="link">Copy a line for the forum</span></div>
+  </div>
+</div></div>
+<p>The test sound is two short tracks shipped with 24bit7: the click pattern from today's tests (uneven gaps, so it can't line up with itself at the wrong shift), one at 44.1 kHz and one at 192, the second following without a gap. The sequence: the speaker alone; the Speakers alone (the speaker's zone turned down through JRiver's own volume control, which works for any brand); a stop and a fresh start, speaker alone again, for the repeat check; a jump, speaker alone; then the second track, Speakers first, then the speaker. From the recording the solver gets each room's lag against the clock in each passage, the repeatability from the two fresh starts, and from the two rates the DAC's delay in samples. If the user's DSP resamples everything to one rate, both tracks arrive at that rate and the solver keeps one offset; that's right, because that's the only rate the follower will ever see.</p>
+<p>The test tracks play through JRiver's Playback/PlayByFilename, checked on the Sonos at 13:15: an outside file started within two seconds. JRiver adds a played file to its library while it's at it, so the calibration tidies up afterwards with File/Delete, which takes the entry out of the library and leaves the file alone.</p>
+<p>An honest result for a wobbly clock: "Your speaker's clock moved 60 ms between two starts, so the rooms won't stay within an echo. Multiroom will run, but expect to hear it." Guard tests come free: today's recordings are in the sync folder, and the solver must get 53, 1,660 and 95 back out of them.</p>
+
+<h2>Setting up</h2>
+<p><b>By hand, in JRiver, once</b> (there's no web function for DLNA server settings):</p>
+<ol>
+  <li>Tools &gt; Options &gt; Media Network &gt; Add or configure DLNA servers: add a server called <b>Multiroom</b>. Format: PCM 24-bit.</li>
+  <li>In the Speakers zone's DSP Studio, save the settings as a preset. In the Multiroom server's DSP Studio, load that preset. (JRiver keeps them separate, so a later change to the Speakers' DSP means loading the preset again.)</li>
+</ol>
+<p><b>24bit7 does itself:</b> finds the speaker on the network and reads its model; finds the Multiroom server by name every start (JRiver renumbers the ports); checks the server by fetching a track header and shows what it's serving; reads the follower zone's DAC from JRiver and matches it to the audio device; picks both profiles; stops the follower zone when Multiroom starts so the DAC is free, and hands back on "just here"; runs the pre-test; plays the calibration sound and solves the recording.</p>
+<p><b>Optional, by hand:</b> the Alexa console paste for the voice changes, as with every skill change.</p>
+<p>So the user's own list is: two JRiver steps, tick Enable Multiroom, pick the leader and follower zones, one phone recording.</p>
+
+<h2>Not in this version</h2>
+<ul>
+  <li>Multiroom driven by a non-Sonos speaker is possible but unproven: Generic runs on the whole-second clock and the recording says whether it holds.</li>
+  <li>More than one follower, or a second Sonos. The Sonos app groups Sonos speakers itself.</li>
+  <li>A volume control for the follower.</li>
+  <li>Calibrating with a microphone on the PC instead of a phone. Easy to add later if the PC can hear both rooms, which yours can't.</li>
+  <li>"Play everywhere" starting a build from nothing. It joins what the Sonos is playing.</li>
+</ul>
+
+<h2>Settled on 9 November, after the second draft</h2>
+<ol>
+  <li><b>Phone recordings (m4a): Windows decodes them itself.</b> Every Windows 10 and 11 PC has Media Foundation, and a twenty-line PowerShell script turns an m4a into a WAV with it. Tried on this morning's run one: the fit from the Windows decode matched the ffmpeg decode to 0.2 ms, burst for burst. So no ffmpeg, nothing to bundle or download, and 24bit7 is Windows-only anyway. JRiver was the other candidate, but it won't touch a file outside its library (File/GetFile answers 404). WAV and FLAC recordings need no decoding at all.</li>
+  <li><b>Playing the test sound: PlayByFilename works</b> to the Sonos zone, see Calibration above.</li>
+  <li><b>Pause through JRiver</b> is treated as a resume and measured in the build. <b>Pause at the speaker</b> is "this room" by default, with the tick <b>Pausing one room pauses both</b> for households that want everything to stop.</li>
+  <li><b>ASIO is the recommendation.</b> It's what's proven: at 10 ms it never starved, and ten fresh streams land within a millisecond or two. The override still lists WASAPI exclusive for DACs with no ASIO driver, marked untested, and the manual says to use ASIO where there is one.</li>
+</ol>
+
+<h2>Build plan</h2>
+<table>
+  <tr><th>Stage</th><th>What lands</th><th>Tests</th></tr>
+  <tr><td><b>1. The follower</b></td><td><code>multiroom\follower.py</code> and <code>multiroom\sonos.py</code>: the clock plug-in, the fetcher, the output, the fresh-or-resume rule, drift control, who-paused, the local socket. Runs from the command line against the real Sonos zone, your numbers hard-wired.</td><td>A fake Sonos clock server and a fake DLNA server in <code>tests\</code>, so the placement, the rules and the drift control are checked without hardware. One listen at home.</td></tr>
+  <tr><td><b>2. 24bit7 wiring</b></td><td>Output "Multiroom", the settings section with the profiles, the pre-test and the adjustments, the which-track watcher, start and stop, console lines, the voice changes, the skill's JSON and lambda.</td><td>Windowless tests for the watcher, the profiles and the voice commands; window tests for the section and the Output list.</td></tr>
+  <tr><td><b>3. Calibration</b></td><td>The two test tracks, the sequence, the solver with the repeat check, the dialog, the share line, the ffmpeg question.</td><td>The solver against today's recordings.</td></tr>
+  <tr><td><b>4. Release</b></td><td>Manual (both), German strings, screenshots, release notes, DECISIONS entries.</td><td>The standard build.</td></tr>
+</table>
+<p>Each stage gets its own plan and your go-ahead. Stage one is the only hard one; the rest is wiring we've done before.</p>
+
+<h2>For the record</h2>
+<div class="box for-record">
+  <p><b>Experimental section, not a Developer Options tab.</b> You suggested hiding it under Developer Options. There isn't one yet, and a tab with a single thing in it is a drawer with one sock. A section at the bottom of Other, off by default and labelled experimental with the "tested on" line, hides it just as well and costs nothing. If more experimental things turn up, that's the day to make the drawer. Your call; if you still want the tab, I'll build it there.</p>
+  <p><b>No virtual renderer.</b> Explained above. The probe wasn't wasted: without it we'd never have seen the addresses, or learned that the DSP lives on the server.</p>
+</div>
+
+<p class="note" style="margin-top:36px">Test scripts and recordings are in <code>Documents\24bit7 sync test</code>: probe_renderer.py, asio_starts.py, songs.py, jumps.py, rates.py, realmusic.py, sonos_millis.py, with the tick and millisecond logs beside them.</p>
+
+</body>
+</html>

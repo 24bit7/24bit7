@@ -4,3 +4,6 @@ requests==2.32.5
 ytmusicapi
 pystray
 Pillow
+numpy
+sounddevice
+websockets

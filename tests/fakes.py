@@ -150,6 +150,7 @@ class Zone:
         self.position_ms = 0    # how far into the current track
         self.dlna = False       # JRiver's ZoneDLNA flag
         self.volume = 1.0
+        self.device = ("Speakers (Realtek(R) Audio)", "WASAPI")   # Configuration/Audio/GetDevice: name, plugin
 
 
 class FakeJRiver:
@@ -234,8 +235,14 @@ class FakeJRiver:
             if 0 <= z.pos < len(z.playlist):
                 row = self.by_key[z.playlist[z.pos]]
                 items.update(FileKey=row["Key"], Name=row["Name"], Artist=row["Artist"], Album=row["Album"],
-                             DurationMS=int(float(row.get("Duration") or 0) * 1000))
+                             DurationMS=int(float(row.get("Duration") or 0) * 1000),
+                             NextFileKey=z.playlist[z.pos + 1] if z.pos + 1 < len(z.playlist) else -1)
             return Resp(text=_response(items))
+        if path == "Configuration/Audio/GetDevice":   # the zone's output device (Multiroom, 9 Nov 2026)
+            z = self._zone_for(params)
+            if z is None:
+                return Resp(text=_response({}, "Failure"))
+            return Resp(text=_response({"DeviceIndex": 0, "DeviceName": z.device[0], "DevicePlugin": z.device[1]}))
         if path == "Playback/Playlist":
             z = self._zone_for(params)
             fields = (params.get("Fields") or "").split(",") or None

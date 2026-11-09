@@ -1,0 +1,136 @@
+"""
+Multiroom, the Sonos's clock (9 Nov 2026): reading the millisecond counter over the websocket and finding its origin.
+Against tests/fake_sonos.py; nothing touches the real Sonos.
+"""
+
+import os
+import sys
+import time
+
+import pytest
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, REPO)
+try:
+    from multiroom import sonos
+finally:
+    sys.path.remove(REPO)
+from fake_sonos import FakeSonos, GROUP, HOUSEHOLD
+
+R = sonos.Read
+PLAY, PAUSED = "PLAYBACK_STATE_PLAYING", "PLAYBACK_STATE_PAUSED"
+
+
+def wait_for(cond, timeout=5.0):
+    end = time.perf_counter() + timeout
+    while time.perf_counter() < end:
+        if cond():
+            return True
+        time.sleep(0.01)
+    return False
+
+
+@pytest.fixture
+def fake():
+    with FakeSonos() as f:
+        yield f
+
+
+@pytest.fixture
+def clock(fake):
+    c = sonos.SonosClock(household=HOUSEHOLD, group=GROUP, url=fake.url, interval=0.005)
+    c.start()
+    yield c
+    c.stop()
+
+
+# --- the origin from a set of reads --------------------------------------------------------
+
+def test_origin_is_the_median_of_the_quickest_reads():
+    # Twenty quick reads say 100.000; five slow ones say 100.040. The slow ones mustn't move it.
+    reads = [R(100 + k + 0.0005 * (k % 3), 0.004, k * 1000, PLAY) for k in range(20)]
+    reads += [R(100.040 + k, 0.060, k * 1000, PLAY) for k in range(20, 25)]
+    assert sonos.origin_of(reads) == pytest.approx(100.0005, abs=1e-6)
+
+
+def test_origin_leaves_out_reads_that_arent_playing():
+    reads = [R(50.0, 0.001, 0, PAUSED), R(60.0, 0.001, None, PLAY), R(100.0, 0.004, 0, PLAY)]
+    assert sonos.origin_of(reads) == pytest.approx(100.0)
+    assert sonos.origin_of(reads[:2]) is None
+
+
+# --- against the fake Sonos -----------------------------------------------------------------
+
+def test_the_clock_finds_the_counter_origin(fake, clock):
+    fake.play(at_ms=12345)
+    assert wait_for(lambda: len(clock.recent(since=fake.origin + 12.4)) >= 40)
+    c = clock.origin(window=1.0)
+    assert c is not None
+    assert abs(c - fake.origin) < 0.003, f"origin off by {(c - fake.origin) * 1000:.1f} ms"
+    assert clock.state == PLAY
+
+
+def test_it_asks_the_way_the_sonos_wants(fake, clock):
+    # The key, the subprotocol, the household and the group: without any of them the real Sonos says no.
+    fake.play()
+    assert wait_for(lambda: clock.latest() is not None)
+    assert fake.refused == []
+    head = fake.requests[0][0]
+    assert (head["namespace"], head["command"]) == ("playback:1", "getPlaybackStatus")
+    assert (head["householdId"], head["groupId"]) == (HOUSEHOLD, GROUP)
+
+
+def test_lopsided_slow_reads_at_a_track_start_dont_move_the_origin(fake, clock):
+    # At a track's start the Sonos answers slowly, and a read whose answer is slow one way only has its midpoint off.
+    # Each of these is 30 ms off; the twenty quickest leave them out.
+    assert wait_for(lambda: clock.latest() is not None)
+    t0 = time.perf_counter()
+    fake.play(slow=[(0.070, 0.010)] * 5)
+    assert wait_for(lambda: len(clock.recent(since=t0)) >= 40)
+    lopsided = [r for r in clock.recent(since=t0) if r.rtt > 0.07 and r.pos_ms is not None]
+    assert lopsided and all(abs(r.t - r.pos_ms / 1000 - fake.origin) > 0.02 for r in lopsided)
+    assert abs(clock.origin(since=t0) - fake.origin) < 0.003
+
+
+def test_a_paused_sonos_gives_no_origin(fake, clock):
+    fake.play(at_ms=5000)
+    assert wait_for(lambda: clock.state == PLAY)
+    fake.pause()
+    t0 = time.perf_counter()
+    assert wait_for(lambda: len(clock.recent(since=t0 + 0.05)) >= 5)
+    assert clock.state == PAUSED
+    assert clock.origin(since=t0 + 0.05) is None
+
+
+def test_the_age_of_the_last_read_grows_when_the_sonos_goes_quiet(fake, clock):
+    fake.play()
+    assert wait_for(lambda: clock.latest() is not None)
+    assert clock.last_read_age < 0.1
+    fake.quiet.set()
+    time.sleep(0.3)
+    assert clock.last_read_age > 0.25
+    fake.quiet.clear()
+    assert wait_for(lambda: clock.last_read_age < 0.05)
+
+
+def test_the_clock_connects_again_after_the_sonos_drops_it(fake):
+    c = sonos.SonosClock(household=HOUSEHOLD, group=GROUP, url=fake.url, interval=0.005, retry=0.1)
+    c.start()
+    try:
+        fake.play()
+        assert wait_for(lambda: c.latest() is not None)
+        fake.drop()   # the Sonos restarts
+        assert wait_for(lambda: c.error is not None)
+        t0 = time.perf_counter()
+        assert wait_for(lambda: len(c.recent(since=t0)) >= 5), "no reads after the drop"
+        assert c.connected.is_set()
+    finally:
+        c.stop()
+
+
+def test_find_reads_household_and_group_from_info(fake):
+    loc = f"http://127.0.0.1:{fake.info_port}/xml/device_description.xml"
+    found = sonos.find(locations=[loc, loc])
+    assert found == [{"ip": "127.0.0.1", "name": "Living Room", "householdId": HOUSEHOLD, "groupId": GROUP}]
+    assert sonos.find("living", locations=[loc])[0]["name"] == "Living Room"
+    assert sonos.find("Kitchen", locations=[loc]) == []
