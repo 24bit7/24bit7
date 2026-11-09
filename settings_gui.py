@@ -311,6 +311,21 @@ CLOCK_VERDICTS = {
     "whole_seconds": N_("Clock: whole seconds only, {rtt} ms round trip, steady. Multiroom can run on it, but the "
                         "rooms may sit a few hundredths of a second apart. Worth trying."),
 }
+def _today():
+    """Today as "10 Nov 2026", for the calibration's date."""
+    import datetime
+    d = datetime.date.today()
+    return f"{d.day} {d.strftime('%b %Y')}"
+
+
+CALIBRATION_PROBLEMS = {   # calibrate_fit's refusals, worded here
+    "no_log": N_("The run's log is missing, so the recording can't be matched to it."),
+    "no_pattern": N_("The Sonos's clicks weren't found in the recording at all."),
+    "passage_lost": N_("The {passage} passage wasn't found where the run put it."),
+    "too_few": N_("Only {found} of {expected} clicks were clear in the {passage} passage."),
+    "scattered": N_("The {passage} passage's clicks spread by {scatter} ms, too much to trust."),
+    "dac_negative": N_("The DAC delay came out below zero ({dac} samples), which can't be right."),
+}
 SOURCE_LINES = {
     "recording": N_("From your recording of {date}."),
     "typed": N_("Typed by hand."),
@@ -6763,10 +6778,12 @@ class SettingsTab(tk.Frame):
         self._mr_from = tk.Label(box, text="", fg=PALETTE["help_fg"], font=HELP_FONT, anchor="w", justify="left",
                                  wraplength=scaled(box, 760))
         self._mr_from.grid(row=13, column=0, columnspan=4, sticky="w", padx=(24, 0), pady=(4, 0))
-        cal = tk.Button(box, text=t("Calibrate..."), width=12, state="disabled")
+        cal = self._mr_calibrate = tk.Button(box, text=t("Calibrate..."), width=12, command=self._multiroom_calibrate)
         cal.grid(row=14, column=0, sticky="w", padx=(24, 0), pady=(10, 0))
-        Tooltip(cal, t("Coming in stage three: one phone recording, about three minutes, measures Start, Resume and "
-                       "the DAC delay for your kit."))
+        Tooltip(cal, t("One phone recording, about three minutes, sitting where you listen, measures Start, Resume "
+                       "and the DAC delay for your kit, and says whether two fresh starts agree."))
+        parts.append(cal)
+        self._mr_calib_win = None
         self._multiroom_set_from()
         self._sync_multiroom_parts()
         tab.bind("<<Shown>>", lambda e: self._multiroom_refresh(), add="+")
@@ -6958,6 +6975,193 @@ class SettingsTab(tk.Frame):
         self._mr_check.config(state="normal", text=t("Check Clock"))
         text = t(CLOCK_VERDICTS[verdict.key], **verdict.values) if verdict.key in CLOCK_VERDICTS else verdict.text
         self._mr_clock.config(text=text, fg=VERDICT_FG.get(verdict.colour, PALETTE["help_fg"]))
+
+    # --- Calibrate (stage three, 9 Nov 2026) --------------------------------------------------------------
+    def _multiroom_calibrate(self):
+        """
+        The Calibrate Multiroom window: three steps, Play Test Sound (the run, in both rooms, on a thread), Load
+        Recording... (decode and solve on a thread), the result, Use These Numbers and Copy a Line for the Forum.
+        The numbers are saved only on Use These Numbers (Ben, 9 Nov 2026).
+        """
+        from multiroom import calibrate as mr_calibrate
+        win = self._mr_calib_win
+        if win is not None and win.winfo_exists():
+            win.lift()
+            win.focus_set()
+            return win
+        win = self._mr_calib_win = tk.Toplevel(self)
+        win.title(t("Calibrate Multiroom"))
+        win.transient(self.winfo_toplevel())
+        win.resizable(False, False)
+        body = tk.Frame(win, padx=16, pady=12)
+        body.pack(fill="both", expand=True)
+        wrap = scaled(body, 560)
+        steps = (t("Sit where you usually listen, with both rooms on. Start a voice recording on your phone."),
+                 t("Press Play Test Sound. Clicks play in both rooms for about three minutes: a fresh start, a jump, a "
+                   "stop and start again, then the DAC at 192 kHz. Stop the recording when the clicks stop."),
+                 t("Get the recording onto this PC (Drive, email, a cable) and press Load Recording..."))
+        for n, text in enumerate(steps, start=1):
+            row = tk.Frame(body)
+            row.pack(fill="x", pady=(0, 6))
+            tk.Label(row, text=str(n), font=LABEL_FONT, fg=PALETTE["section_fg"], width=2, anchor="n").pack(side="left")
+            tk.Label(row, text=text, justify="left", anchor="w", wraplength=wrap).pack(side="left", fill="x")
+        buttons = tk.Frame(body)
+        buttons.pack(fill="x", pady=(6, 4))
+        self._mr_play_btn = tk.Button(buttons, text=t("Play Test Sound"), width=16, command=self._calibrate_play)
+        self._mr_play_btn.pack(side="left")
+        self._mr_load_btn = tk.Button(buttons, text=t("Load Recording..."), width=18, command=self._calibrate_load)
+        self._mr_load_btn.pack(side="left", padx=(10, 0))
+        self._mr_calib_status = tk.Label(body, text="", justify="left", anchor="w", wraplength=wrap, font=HELP_FONT,
+                                         fg=PALETTE["help_fg"])
+        self._mr_calib_status.pack(fill="x", pady=(4, 0))
+        self._mr_calib_result = tk.Label(body, text="", justify="left", anchor="w", wraplength=wrap)
+        self._mr_calib_result.pack(fill="x", pady=(6, 0))
+        actions = tk.Frame(body)
+        actions.pack(fill="x", pady=(8, 0))
+        self._mr_use_btn = tk.Button(actions, text=t("Use These Numbers"), width=18, state="disabled",
+                                     command=self._calibrate_use)
+        self._mr_use_btn.pack(side="left")
+        self._mr_copy_btn = tk.Button(actions, text=t("Copy a Line for the Forum"), width=24, state="disabled",
+                                      command=self._calibrate_copy)
+        self._mr_copy_btn.pack(side="left", padx=(10, 0))
+        source = self.vars["MULTIROOM_FROM"].get()
+        last = t("Last time: {date}.", date=source[len("recording:"):]) if source.startswith("recording:") else \
+            t("Not calibrated yet: the numbers come from the profiles, or were typed.")
+        tk.Label(body, text=last + " " + t("Redo it if you change the DAC, its driver settings or the Speakers' DSP."),
+                 justify="left", anchor="w", wraplength=wrap, font=HELP_FONT, fg=PALETTE["help_fg"]).pack(fill="x", pady=(10, 0))
+        self._mr_calib_result_data = None
+        self._mr_calib_folder = os.path.join(engine.APP_DIR, "calibration")
+        if not self.vars["MULTIROOM_ENABLED"].get() or self._mr_speaker_found is None:
+            self._mr_play_btn.config(state="disabled")
+            self._mr_calib_status.config(text=t("Turn Multiroom on and let it find the speaker first; Load Recording "
+                                                "works without that."))
+        return win
+
+    def _calibrate_say(self, text, colour=None):
+        """A line in the window's status, on Tk's thread."""
+        def show():
+            try:
+                self._mr_calib_status.config(text=text, fg=colour or PALETTE["help_fg"])
+            except tk.TclError:
+                pass
+        self.after(0, show)
+
+    def _calibrate_play(self):
+        from multiroom import calibrate as mr_calibrate
+        play = getattr(self, "play", None)
+        link = getattr(play, "multiroom", None)
+        if link is None:
+            self._mr_calib_status.config(text=t("The Play tab isn't up yet, so the test sound can't play."))
+            return
+        settings = engine.multiroom_settings()
+        jr = mr_mcws.JRiver(env=engine.ENV_FILE)
+        run = mr_calibrate.Run(jr, link, settings["leader"], settings, self._mr_calib_folder, say=self._calibrate_say)
+        self._mr_play_btn.config(state="disabled")
+        self._mr_load_btn.config(state="disabled")
+
+        def work():
+            try:
+                run.go()
+                self._calibrate_say(t("Done: stop the recording, get it onto this PC, then Load Recording..."))
+            except Exception as e:
+                self._calibrate_say(t("The run stopped: {e}", e=e), VERDICT_FG["red"])
+            finally:
+                def back():
+                    try:
+                        self._mr_play_btn.config(state="normal")
+                        self._mr_load_btn.config(state="normal")
+                    except tk.TclError:
+                        pass
+                self.after(0, back)
+        import threading
+        threading.Thread(target=work, daemon=True, name="multiroom-calibration").start()
+        self._mr_calibrate_run = run   # the tests look at it
+
+    def _calibrate_load(self, path=None):
+        from tkinter import filedialog
+        from multiroom import calibrate as mr_calibrate, calibrate_fit
+        if path is None:
+            path = filedialog.askopenfilename(parent=self._mr_calib_win, title=t("Load Recording"),
+                                              filetypes=[(t("Recordings"), "*.m4a *.wav *.mp3 *.flac *.aac *.ogg *.wma"),
+                                                         (t("All files"), "*.*")])
+        if not path:
+            return
+        log_path = os.path.join(self._mr_calib_folder, mr_calibrate.LOG_NAME)
+        if not os.path.isfile(log_path):
+            self._mr_calib_status.config(text=t("There's no run to match the recording to: press Play Test Sound first."),
+                                         fg=VERDICT_FG["amber"])
+            return
+        self._mr_calib_status.config(text=t("Reading the recording..."), fg=PALETTE["help_fg"])
+        self._mr_load_btn.config(state="disabled")
+
+        def work():
+            try:
+                wav = mr_calibrate.decode(path, out_dir=self._mr_calib_folder)
+                result = calibrate_fit.solve(wav, log_path)
+            except Exception as e:
+                self.after(0, lambda: self._calibrate_show(None, str(e)))
+                return
+            self.after(0, lambda: self._calibrate_show(result, None))
+        import threading
+        threading.Thread(target=work, daemon=True, name="multiroom-solve").start()
+
+    def _calibrate_show(self, result, error):
+        try:
+            self._mr_load_btn.config(state="normal")
+        except tk.TclError:
+            return
+        if error:
+            self._mr_calib_status.config(text=t("Couldn't read the recording: {e}", e=error), fg=VERDICT_FG["red"])
+            return
+        if not result.ok:
+            lines = [t(CALIBRATION_PROBLEMS.get(key, "{passage}"), **values) for key, values in result.problems]
+            self._mr_calib_status.config(text=t("The recording couldn't be trusted, so nothing is changed."),
+                                         fg=VERDICT_FG["amber"])
+            self._mr_calib_result.config(text="\n".join(lines) + "\n" + t("Try again with the phone nearer the middle "
+                                                                          "of the two rooms, and quiet around it."),
+                                         fg=VERDICT_FG["amber"])
+            self._mr_calib_result_data = None
+            self._mr_use_btn.config(state="disabled")
+            self._mr_copy_btn.config(state="disabled")
+            return
+        self._mr_calib_result_data = result
+        self._mr_calib_status.config(text=t("Read the recording: every passage found."), fg=PALETTE["help_fg"])
+        text = t("Calibrated. Start {start} ms, Resume {resume} ms, DAC delay {dac} samples. Starts repeat within "
+                 "{repeat} ms.", start=f"{result.start:g}", resume=f"{result.resume:g}", dac=result.dac,
+                 repeat=f"{result.repeat:g}")
+        if result.repeat > 20:
+            text += " " + t("That's a big wobble between two starts: expect to hear it.")
+        self._mr_calib_result.config(text=text, fg=VERDICT_FG["green"] if result.repeat <= 20 else VERDICT_FG["amber"])
+        self._mr_use_btn.config(state="normal")
+        self._mr_copy_btn.config(state="normal")
+
+    def _calibrate_use(self):
+        r = self._mr_calib_result_data
+        if r is None:
+            return
+        self._multiroom_set_numbers(r.start, r.resume, r.dac)
+        self.vars["MULTIROOM_FROM"].set(f"recording:{_today()}")
+        self._save()
+        self._multiroom_set_from()
+        play = getattr(self, "play", None)
+        if play is not None and hasattr(play, "_sync_multiroom"):
+            play._sync_multiroom()   # a running follower takes the new numbers
+        self._mr_calib_status.config(text=t("Saved. The follower uses these numbers from its next start."),
+                                     fg=VERDICT_FG["green"])
+
+    def _calibrate_copy(self):
+        r = self._mr_calib_result_data
+        if r is None:
+            return
+        speaker, dac = self._multiroom_profiles()
+        found = self._mr_speaker_found or {}
+        line = (f"Multiroom calibration: {found.get('model') or speaker.get('name') or 'speaker'}, "
+                f"{getattr(self, '_mr_dac_name', '') or dac.get('name') or 'DAC'}, "
+                f"Start {r.start:g} ms, Resume {r.resume:g} ms, DAC {r.dac} samples, starts within {r.repeat:g} ms, "
+                f"{_today()}.")
+        self.clipboard_clear()
+        self.clipboard_append(line)
+        self._mr_calib_status.config(text=t("Copied: {line}", line=line), fg=PALETTE["help_fg"])
 
     def _build_additional_outputs(self, tab):
         """

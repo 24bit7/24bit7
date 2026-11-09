@@ -112,6 +112,79 @@ def test_typing_a_number_or_nudging_marks_it_typed_and_a_nudge_reaches_the_follo
     assert not ui.errors, ui.errors[0]
 
 
+def test_calibrate_runs_the_test_sound_reads_a_recording_and_saves_only_on_use_these_numbers(app, ui, monkeypatch):
+    """Stage 3c: the Calibrate window. The run and the solver are stand-ins; what's checked is the window's flow,
+    that nothing is saved until Use These Numbers, and that the section's line then says where the numbers came from."""
+    import json
+    from multiroom import calibrate, calibrate_fit
+    quiet_network(monkeypatch)
+    ui.play.multiroom = FakeLink()
+    s = ui.settings
+    page_named(ui, "Other")
+    s.vars["MULTIROOM_ENABLED"].set(True)
+    s.vars["MULTIROOM_LEADER"].set("Sonos")
+    s.vars["MULTIROOM_FOLLOWER"].set("Speakers")
+    s._multiroom_changed()
+    ui.pump(until=lambda: "Sonos One" in s._mr_speaker.cget("text"), timeout=10)
+    assert str(s._mr_calibrate.cget("state")) == "normal", "Calibrate is live now (stage three)"
+    runs = []
+
+    class FakeRun:
+        def __init__(self, jriver, link, leader, settings, folder, now=None, sleep=None, say=print):
+            runs.append({"leader": leader, "settings": dict(settings), "folder": folder})
+            self.folder, self.say = folder, say
+
+        def go(self):
+            import os
+            os.makedirs(self.folder, exist_ok=True)
+            log = os.path.join(self.folder, calibrate.LOG_NAME)
+            json.dump({"numbers": {"start": 90, "resume": 95, "dac": 1660}, "passages": []}, open(log, "w"))
+            self.say("Done: stop the recording")
+            return log
+    monkeypatch.setattr(calibrate, "Run", FakeRun)
+    win = s._multiroom_calibrate()
+    ui.pump(0.3)
+    texts = labels(win)
+    assert any(t.startswith("Sit where you usually listen") for t in texts) and any("Load Recording" in t for t in texts)
+    assert str(s._mr_use_btn.cget("state")) == "disabled" and str(s._mr_copy_btn.cget("state")) == "disabled"
+    s._calibrate_play()
+    ui.pump(until=lambda: str(s._mr_play_btn.cget("state")) == "normal", timeout=10)
+    assert runs and runs[0]["leader"] == "Sonos" and runs[0]["settings"]["dac"] == 1660
+    assert runs[0]["folder"].endswith("calibration")
+    assert "Done" in s._mr_calib_status.cget("text")
+
+    result = calibrate_fit.Result()
+    result.start, result.resume, result.dac, result.repeat = 87.6, 100.0, 1774, 0.0
+    monkeypatch.setattr(calibrate, "decode", lambda path, out_dir=None, **k: path)
+    monkeypatch.setattr(calibrate_fit, "solve", lambda wav, log: result)
+    s._calibrate_load(path=str(app.folder / "rec.m4a"))
+    ui.pump(until=lambda: s._mr_calib_result.cget("text").startswith("Calibrated"), timeout=10)
+    assert s._mr_calib_result.cget("text") == ("Calibrated. Start 87.6 ms, Resume 100 ms, DAC delay 1774 samples. "
+                                               "Starts repeat within 0 ms.")
+    env = (app.folder / ".env").read_text()
+    assert "MULTIROOM_START=90" in env and "MULTIROOM_DAC=1660" in env, "nothing saved until Use These Numbers"
+    assert str(s._mr_use_btn.cget("state")) == "normal"
+    s._calibrate_use()
+    ui.pump(0.3)
+    env = (app.folder / ".env").read_text()
+    assert "MULTIROOM_START=87.6" in env and "MULTIROOM_RESUME=100" in env and "MULTIROOM_DAC=1774" in env
+    assert "MULTIROOM_FROM=recording:" in env
+    assert s._mr_from.cget("text").startswith("From your recording of ")
+    s._calibrate_copy()
+    assert ui.root.clipboard_get().startswith("Multiroom calibration: Sonos One, ASIO Chord  1.04, Start 87.6 ms, Resume 100 ms, DAC 1774 samples, starts within 0 ms,")
+
+    bad = calibrate_fit.Result()
+    bad.problems = [("too_few", {"passage": "jump", "found": 3, "expected": 16})]
+    monkeypatch.setattr(calibrate_fit, "solve", lambda wav, log: bad)
+    s._calibrate_load(path=str(app.folder / "rec2.m4a"))
+    ui.pump(until=lambda: "couldn't be trusted" in s._mr_calib_status.cget("text"), timeout=10)
+    assert "Only 3 of 16 clicks were clear in the jump passage." in s._mr_calib_result.cget("text")
+    assert str(s._mr_use_btn.cget("state")) == "disabled"
+    assert "MULTIROOM_START=87.6" in (app.folder / ".env").read_text(), "a refused recording changes nothing"
+    win.destroy()
+    assert not ui.errors, ui.errors[0]
+
+
 def test_unticking_multiroom_puts_output_back_to_same_zone_and_stops_the_follower(app, ui, monkeypatch):
     quiet_network(monkeypatch)
     link = ui.play.multiroom = FakeLink()
