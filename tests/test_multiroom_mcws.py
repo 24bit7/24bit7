@@ -38,6 +38,14 @@ def test_the_leader_zones_track_and_the_next(jr):
     assert jr.info("Sonos")["next_key"] is None
 
 
+def test_the_leader_zones_playlist_is_its_keys_in_order(jr):
+    # The Speakers play on through the list while the Sonos is paused at the speaker, so they need the order.
+    tracks = jr.fake.tracks[:4]
+    jr.fake.play("Sonos", [r["Key"] for r in tracks], pos=1)
+    assert jr.playlist("Sonos") == [(int(r["Key"]), r["Name"]) for r in tracks]
+    assert jr.playlist("Kitchen") == []
+
+
 def test_a_stopped_zone_has_no_track(jr):
     i = jr.info("Kitchen")
     assert (i["state"], i["key"], i["next_key"]) == (mcws.STOPPED, None, None)

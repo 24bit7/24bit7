@@ -88,6 +88,18 @@ class JRiver:
     def stop(self, zone):
         self.call("Playback/Stop", Zone=self.zone_id(zone))
 
+    def playlist(self, zone):
+        """A zone's Playing Now, in order, as [(key, name)]."""
+        r = requests.get(f"{self.base}/Playback/Playlist", params={"Zone": self.zone_id(zone), "Fields": "Key,Name"},
+                         auth=self.auth, timeout=self.timeout)
+        r.raise_for_status()
+        out = []
+        for item in ET.fromstring(r.text).findall(".//Item"):
+            f = {x.get("Name"): x.text or "" for x in item.findall("Field")}
+            if _int(f.get("Key")) >= 0:
+                out.append((_int(f.get("Key")), f.get("Name", "")))
+        return out
+
     def device(self, zone):
         """(device name, plugin) a zone plays through, such as ("Hugo (Chord Async USB 44.1kHz-384kHz)", "WASAPI")."""
         d = self.call("Configuration/Audio/GetDevice", Zone=self.zone_id(zone))

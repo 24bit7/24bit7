@@ -392,3 +392,6 @@ Edit on a station's row opens its pillars and the library side by side. Edits ar
 
 **7 Nov 2026: Play & Embellish's amounts are a setting, with a default.**
 Ben asked for the notes under the menu's rows to go and for six amounts (+10%, +20%, +50%, Double, Triple, Build It Out), with the menu's contents and the default chosen in Settings > JRiver Playlists. With a default you choose, the button runs the default and a pick from the arrow runs once; before, the last pick became what the button ran. Kept in the database, not in Profiles: it's how the menu reads, not how a build behaves. An older Add Half carries over as +50%.
+
+**9 Nov 2026: Multiroom stops and restarts the Speakers rather than pausing them.**
+Ben's call after the first Indie-Chill listen. The follower paused the Speakers with JRiver and played them on alone when the Sonos was paused at the speaker. The listen showed a pause at the speaker reaches JRiver as a stop, so playing on alone never came into it, and one JRiver pause came back as an echo. Now any pause stops the Speakers, and when the Sonos plays again they join it, placed from its clock. Fewer moving parts and no `--pause-both` switch. It doesn't settle how late the Sonos's counter runs after a resume (95 ms is assumed, as for a jump); the phone-recording calibration in stage three is what will.

@@ -43,13 +43,17 @@ class SimSonos(sonos.ReadLog):
         self.c0 = None
         self.errs = []
         self.next_t = sim.t
+        self.idle = "PLAYBACK_STATE_IDLE"   # the state it reads while not playing
+        self.quiet = False                  # no answers at all
 
     def _fill(self):
         while self.next_t <= self.sim.t:
             t = self.next_t
             self.next_t += self.every
+            if self.quiet:
+                continue
             if self.c0 is None:
-                self._keep(sonos.Read(t, self.rtt, None, "PLAYBACK_STATE_IDLE"))
+                self._keep(sonos.Read(t, self.rtt, None, self.idle))
             else:
                 back = self.back + (self.errs.pop(0) if self.errs else 0.0)
                 a, b = t - (self.rtt - self.back), t + back
@@ -72,7 +76,14 @@ class SimSonos(sonos.ReadLog):
 
     def stop(self):
         self._fill()
-        self.c0 = None
+        self.c0, self.idle = None, "PLAYBACK_STATE_IDLE"
+
+    def pause(self):
+        """Pauses the counter. Returns the position it paused at, in ms."""
+        self._fill()
+        pos = int((self.sim.t - self.c0) * 1000)
+        self.c0, self.idle = None, "PLAYBACK_STATE_PAUSED"
+        return pos
 
 
 class SimStream:
@@ -114,29 +125,40 @@ class SimStream:
 
 
 class SimSource:
-    def __init__(self, rate=44100, seconds=300):
+    """Every track the same rate and length, but those in tracks: {key: (rate, seconds)}."""
+
+    def __init__(self, rate=44100, seconds=300, tracks=None):
         self.rate, self.seconds = rate, seconds
+        self.tracks = tracks or {}
         self.streams = []
 
     def format(self, key):
-        frames = int(self.seconds * self.rate)
-        return fetch.Format(self.rate, 2, 24, False, 44, frames * 6)
+        rate, seconds = self.tracks.get(key, (self.rate, self.seconds))
+        frames = int(seconds * rate)
+        return fetch.Format(rate, 2, 24, False, 44, frames * 6)
 
     def open(self, key, fmt, from_sample):
         s = SimStream(fmt, from_sample)
+        s.key = key
         self.streams.append(s)
         return s
 
 
 class StubJRiver:
+    """Each zone's state, key, next key and playlist, set by the tests."""
+
     def __init__(self):
-        self.zones = {"Sonos": {"state": 0, "key": None}, "Speakers": {"state": 0, "key": None}}
+        self.zones = {"Sonos": {"state": 0, "key": None, "next": None, "list": []},
+                      "Speakers": {"state": 0, "key": None, "next": None, "list": []}}
         self.stopped = []
 
     def info(self, zone):
         z = self.zones[zone]
-        return {"state": z["state"], "key": z["key"], "next_key": None, "position_ms": 0, "name": f"Track {z['key']}",
-                "status": ""}
+        return {"state": z["state"], "key": z["key"], "next_key": z["next"], "position_ms": 0,
+                "name": f"Track {z['key']}", "status": ""}
+
+    def playlist(self, zone):
+        return [(k, f"Track {k}") for k in self.zones[zone]["list"]]
 
     def stop(self, zone):
         self.zones[zone]["state"] = 0
@@ -162,9 +184,12 @@ class World:
                                    start_ms=START * 1000, resume_ms=RESUME * 1000, dac=DAC, now=self.sim.now,
                                    say=self.lines.append)
 
-    def play(self, key=1, at_ms=0, errs=()):
-        self.jr.zones["Sonos"].update(state=mcws.PLAYING, key=key)
+    def play(self, key=1, at_ms=0, errs=(), next=None):
+        self.jr.zones["Sonos"].update(state=mcws.PLAYING, key=key, next=next)
         return self.sonos.play(at_ms, errs)
+
+    def run_to(self, t, step=0.02):
+        self.run(t - self.sim.t, step)
 
     def run(self, seconds, step=0.02):
         end = self.sim.t + seconds
@@ -195,6 +220,15 @@ class World:
 
     def said(self, fragment):
         return [line for line in self.lines if fragment in line]
+
+    def music(self, since):
+        """Whether every block since our time since had music in it."""
+        out = self.outs[-1]
+        return all(b.any() for (_, b), t in zip(out.blocks, out.slots) if t >= since)
+
+    def silent(self, since):
+        out = self.outs[-1]
+        return not any(b.any() for (_, b), t in zip(out.blocks, out.slots) if t >= since)
 
 
 # --- rule 1: placement -----------------------------------------------------------------------------
@@ -303,6 +337,7 @@ def test_a_big_error_is_moved_at_once():
 def test_joining_a_track_already_playing():
     w = World()
     c0 = w.play(key=3, at_ms=40000)
+    w.sonos.reads.clear()   # the clock starts with the follower: no read before the run, so it was already going
     w.sim.t += 1.5          # the Sonos has been playing a while before the follower starts
     w.run(5.0)
     off = w.offsets(c0 + START, since=w.sim.t - 3)
@@ -359,6 +394,149 @@ def test_a_new_track_starts_fresh():
     off = w.offsets(c2 + START, since=c2 + 2.5)
     assert len(off) > 50 and np.abs(off).max() < TOL
     assert w.said("Track 2: 44.1 kHz")
+
+
+# --- rule 3: gapless or gapped ---------------------------------------------------------------------
+
+def test_a_gapless_change_carries_straight_on():
+    # The Sonos plays the next track straight on; its counter for the new track runs about 100 ms behind the sound
+    # (9 Nov 2026). The Speakers have already carried on into it on the same DAC run, and stay as they are.
+    w = World(seconds=30)
+    w.jr.zones["Sonos"]["list"] = [1, 2, 3]
+    w.run(0.5)
+    c0 = w.play(key=1, next=2)
+    e = c0 + START + 30                  # where track 1's sound ends
+    w.run_to(e - START + 0.100)
+    w.play(key=2, next=3)
+    w.run(6.0)
+    assert len(w.outs) == 1, "the DAC was opened again"
+    assert [s.key for s in w.src.streams] == [1, 2]
+    off = w.offsets(e, since=e + 0.2)     # track 2 against the end of track 1, from its first blocks
+    assert len(off) > 50 and np.abs(off).max() < TOL, f"out by up to {np.abs(off).max():.2f} ms"
+    assert w.f.player.moves == []
+    # by name, though JRiver hadn't named it yet (9 Nov 2026: "track 10372: carried straight on")
+    assert w.said("Track 2: carried straight on")
+
+
+def test_a_gapped_change_steps_back_to_match():
+    # The Sonos left 400 ms between the tracks: the Speakers, already into track 2, wait for it.
+    w = World(seconds=30)
+    w.run(0.5)
+    c0 = w.play(key=1, next=2)
+    e = c0 + START + 30
+    w.run_to(e - START + 0.400)
+    c2 = w.play(key=2, next=3)
+    w.run(6.0)
+    assert len(w.outs) == 1
+    off = w.offsets(c2 + START, since=c2 + 1.0)
+    assert len(off) > 50 and np.abs(off).max() < TOL, f"out by up to {np.abs(off).max():.2f} ms"
+    assert w.said("left a gap of 400 ms")
+
+
+def test_a_new_rate_starts_the_dac_afresh():
+    w = World(source=SimSource(44100, 5, tracks={2: (96000, 60)}))
+    w.run(0.5)
+    w.play(key=1, next=2)
+    w.run(5.3)
+    c2 = w.play(key=2)
+    w.run(4.0)
+    assert len(w.outs) == 2 and w.outs[1].rate == 96000
+    assert [s.key for s in w.src.streams] == [1, 2]
+    assert w.said("a new rate, so the Speakers start it afresh")
+    off = w.offsets(c2 + START, rate=96000, since=c2 + 2.5)
+    assert len(off) > 50 and np.abs(off).max() < TOL
+
+
+@pytest.mark.parametrize("rate", [44100, 96000])
+def test_jriver_moving_on_a_moment_before_the_sonos_doesnt_restart_anything(rate):
+    # A short track, so its own run is under five seconds old when JRiver moves on: it mustn't count as the new
+    # one. The next track at the same rate is carried on into; at a new rate it isn't opened ahead, so only the
+    # Sonos's own start can start it.
+    w = World(seconds=4)
+    w.src.tracks = {2: (rate, 30)}
+    w.run(0.5)
+    c0 = w.play(key=1, next=2)
+    e = c0 + START + 4
+    w.run_to(e - 0.6)
+    w.jr.zones["Sonos"].update(key=2, next=3)   # JRiver first
+    w.run_to(e - START + 0.100)
+    c2 = w.sonos.play()                         # then the Sonos
+    w.run(4.0)
+    if rate == 44100:
+        assert len(w.outs) == 1 and w.said("carried straight on")
+        assert np.abs(w.offsets(e, since=e + 0.2)).max() < TOL
+    else:
+        assert len(w.outs) == 2 and len(w.said("Track 1:")) == 1
+        assert w.outs[0].slots[-1] > e - 0.1, "track 1 was cut short"
+        assert np.abs(w.offsets(c2 + START, rate=rate, since=c2 + 2.5)).max() < TOL
+
+
+# --- rule 6: a pause stops the Speakers, and play starts them again ----------------------------------------
+
+@pytest.mark.parametrize("where", ["jriver", "speaker"])
+def test_a_pause_stops_the_speakers_and_play_starts_them_again_in_step(where):
+    # Ben, 9 Nov 2026: stop and restart rather than pause. A pause in JRiver, or at the Sonos with JRiver still
+    # saying playing, stops the Speakers; when the Sonos plays on, they join it, the counter Resume late.
+    w = World()
+    w.run(0.5)
+    w.play()
+    w.run(10.0)
+    if where == "jriver":
+        w.jr.zones["Sonos"]["state"] = mcws.PAUSED
+    pos = w.sonos.pause()
+    w.run(3.0)
+    assert w.f.out is None and w.outs[-1].closed
+    assert w.said("The Sonos paused, so the Speakers have stopped; they start again when it plays.")
+    w.run(10.0)
+    assert len(w.outs) == 1, "started again while the Sonos was still paused"
+    w.jr.zones["Sonos"]["state"] = mcws.PLAYING
+    c1 = w.sonos.play(at_ms=pos)
+    w.run(5.0)
+    assert len(w.outs) == 2
+    assert w.outs[1].t0 - (c1 + pos / 1000) < 0.2, "slow to start again"
+    assert not w.said("Jumped"), "the restart was placed twice"
+    off = w.offsets(c1 + START - RESUME, since=w.outs[1].t0 + 0.5)
+    assert len(off) > 50 and np.abs(off).max() < TOL, f"out by up to {np.abs(off).max():.2f} ms"
+
+
+def test_a_sonos_buffering_between_tracks_isnt_taken_for_a_pause():
+    w = World()
+    w.run(0.5)
+    w.play()
+    w.run(5.0)
+    w.sonos.pause()
+    w.sonos.idle = "PLAYBACK_STATE_BUFFERING"
+    w.run(3.0)
+    assert w.f.out is not None and not w.said("paused")
+    w.run(3.0)                             # five seconds of it, and JRiver still playing: give up
+    assert w.f.out is None and w.said("The Sonos stopped playing, so the Speakers have too.")
+
+
+# --- rule 8: losing the clock ---------------------------------------------------------------------------
+
+def test_a_lost_clock_carries_on_then_picks_up_again():
+    w = World()
+    w.run(0.5)
+    c0 = w.play()
+    w.run(5.0)
+    w.sonos.quiet = True
+    w.run(10.0)
+    assert w.said("Lost the Sonos's clock") and w.f.out is not None and w.music(since=w.sim.t - 4)
+    w.sonos.quiet = False
+    w.run(4.0)
+    assert w.said("The Sonos's clock is back.")
+    assert np.abs(w.offsets(c0 + START, since=w.sim.t - 2)).max() < TOL
+
+
+def test_a_minute_without_the_clock_stops_the_speakers():
+    w = World()
+    w.run(0.5)
+    w.play()
+    w.run(5.0)
+    w.sonos.quiet = True
+    w.run(66.0, step=0.1)
+    assert w.f.out is None and w.outs[-1].closed and len(w.outs) == 1
+    assert w.said("Nothing from the Sonos for a minute, so the Speakers have stopped.")
 
 
 # --- rule 7: a dry buffer ----------------------------------------------------------------------------
