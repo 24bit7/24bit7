@@ -468,35 +468,166 @@ def test_jriver_moving_on_a_moment_before_the_sonos_doesnt_restart_anything(rate
     else:
         assert len(w.outs) == 2 and len(w.said("Track 1:")) == 1
         assert w.outs[0].slots[-1] > e - 0.1, "track 1 was cut short"
-        assert np.abs(w.offsets(c2 + START, rate=rate, since=c2 + 2.5)).max() < TOL
+        # placed where track 1's sound ended, as the Sonos ran straight on, not on the counter as a fresh start
+        assert np.abs(w.offsets(e, rate=rate, since=c2 + 2.5)).max() < TOL
 
 
-# --- rule 6: a pause stops the Speakers, and play starts them again ----------------------------------------
+# --- rule 7: a change of rate is placed on the Sonos's change, like a gapless one --------------------------------
+
+def counter_behind(w, prefix):
+    """The ms the console said the Sonos's counter was behind at a change, from the line starting prefix."""
+    import re
+    line = next(line for line in w.lines if line.startswith(prefix))
+    m = re.search(r"straight on from the last track; the Sonos's counter is (-?\d+) ms behind", line)
+    assert m, line
+    return int(m.group(1))
+
+
+def test_a_new_rate_is_placed_where_the_last_tracks_sound_ended():
+    # 9 Nov 2026, two clean listens: the step down from 192 to 44.1 kHz was out by about 150 ms to Ben's ear while
+    # the follower saw nothing wrong. It had opened the new rate as a fresh start on the counter, which at a change
+    # runs about 100 ms behind the sound: the Speakers came in that far ahead. The Sonos gets 44.1 kHz whatever the
+    # file, so every change is gapless from its side, and the new track is placed where the last one's sound ended.
+    w = World(source=SimSource(44100, 5, tracks={2: (96000, 60)}))
+    w.jr.zones["Sonos"]["list"] = [1, 2]
+    w.run(0.5)
+    c0 = w.play(key=1, next=2)
+    e = c0 + START + 5
+    w.run_to(e - START + 0.100)
+    w.play(key=2)                               # JRiver names it on time; the counter 100 ms behind the sound
+    w.run(4.0)
+    assert len(w.outs) == 2 and w.outs[1].rate == 96000
+    off = w.offsets(e, rate=96000, since=e + 2.5)
+    assert len(off) > 50 and np.abs(off).max() < TOL, f"out by up to {np.abs(off).max():.2f} ms"
+    assert counter_behind(w, "Track 2: 96 kHz, 24-bit") == pytest.approx(100, abs=3)
+
+
+# --- rule 6: the next track is trusted over JRiver's late name for it ------------------------------------------
+
+@pytest.mark.parametrize("d", [0.100, 0.0])
+def test_the_next_track_starts_while_jriver_still_names_the_last(d):
+    # 9 Nov 2026, twice: at a change of rate JRiver went on naming the old track for about six seconds, and the
+    # Speakers played it from the top over the new one until it caught up. The next track was known twenty seconds
+    # before the end: a fresh run as the track ends is the Sonos starting it. d is how far the counter runs behind
+    # the sound; at 0 the run shows before the Speakers have run out of the old track.
+    w = World(source=SimSource(44100, 5, tracks={2: (96000, 60)}))
+    w.jr.zones["Sonos"]["list"] = [1, 2]
+    w.run(0.5)
+    c0 = w.play(key=1, next=2)
+    e = c0 + START + 5
+    w.run_to(e - START + d)
+    w.sonos.play()                              # the Sonos moves on; JRiver still says track 1
+    w.run(3.0)
+    w.jr.zones["Sonos"].update(key=2, next=None)
+    w.run(3.0)
+    assert [s.key for s in w.src.streams] == [1, 2], "track 1 was started over"
+    assert len(w.outs) == 2 and w.outs[1].rate == 96000 and not w.said("Jumped")
+    assert w.outs[0].slots[-1] > e - 0.1, "track 1 was cut short"
+    assert w.outs[1].t0 - e < 0.6, "waited for JRiver rather than trusting the next track it had given"
+    off = w.offsets(e, rate=96000, since=e + 2.5)
+    assert len(off) > 50 and np.abs(off).max() < TOL, f"out by up to {np.abs(off).max():.2f} ms"
+    assert counter_behind(w, "Track 2: 96 kHz, 24-bit") == pytest.approx(d * 1000, abs=3)
+
+
+def test_a_next_track_added_late_is_read_from_the_list_after_a_second():
+    # Nothing came after track 1 when the follower asked, twenty seconds before the end; a top-up then added track
+    # 2. JRiver still names track 1 as the Sonos starts the new one: after a second the list says what it is.
+    w = World(source=SimSource(44100, 30, tracks={2: (96000, 60)}))
+    w.run(0.5)
+    c0 = w.play(key=1)
+    e = c0 + START + 30
+    w.run_to(e - 5)
+    w.jr.zones["Sonos"]["list"] = [1, 2]
+    w.run_to(e - START + 0.100)
+    w.sonos.play()
+    w.run(4.0)
+    assert [s.key for s in w.src.streams] == [1, 2]
+    assert w.outs[1].t0 - e < 1.6, "slow to start the next track"
+    assert np.abs(w.offsets(e, rate=96000, since=e + 2.5)).max() < TOL
+
+
+# --- rule 8: a skip to another track mid-track ------------------------------------------------------------------
+
+def test_a_skip_to_another_track_starts_it_on_the_sonos_run():
+    # 9 Nov 2026, twice: a track started over another mid-track showed first as the Sonos's counter going back to
+    # zero, taken for a restart of the old track, and JRiver's name for the new one a moment later couldn't use
+    # that run, so the new track waited five seconds. The Speakers hold until JRiver names it, then start it there.
+    w = World(seconds=300)
+    w.run(0.5)
+    w.play(key=1)
+    w.run(10.0)
+    c2 = w.sonos.play()                         # the Sonos starts the new track; JRiver still names the old
+    w.run(0.8)
+    w.jr.zones["Sonos"].update(key=2)
+    w.run(5.0)
+    assert not w.said("Jumped"), "the old track was taken as started over"
+    assert len(w.outs) == 2 and w.outs[1].t0 - c2 < 1.2, "slow to start the new track"
+    assert w.said("Track 2: 44.1 kHz, 24-bit.")
+    off = w.offsets(c2 + START, since=c2 + 2.5)
+    assert len(off) > 50 and np.abs(off).max() < TOL, f"out by up to {np.abs(off).max():.2f} ms"
+
+
+def test_a_track_started_over_is_followed_after_the_wait():
+    w = World(seconds=300)
+    w.run(0.5)
+    w.play(key=1)
+    w.run(10.0)
+    c1 = w.sonos.play()                         # the same track again from the top, and JRiver keeps naming it
+    w.run(5.0)
+    assert len(w.said("Jumped to 0.0 s.")) == 1 and len(w.outs) == 1
+    off = w.offsets(c1 + START - RESUME, since=c1 + 3.0)
+    assert len(off) > 50 and np.abs(off).max() < TOL, f"out by up to {np.abs(off).max():.2f} ms"
+
+
+# --- rules 1 and 2: a pause stops both rooms; a track played on from a pause isn't joined ---------------------
 
 @pytest.mark.parametrize("where", ["jriver", "speaker"])
-def test_a_pause_stops_the_speakers_and_play_starts_them_again_in_step(where):
-    # Ben, 9 Nov 2026: stop and restart rather than pause. A pause in JRiver, or at the Sonos with JRiver still
-    # saying playing, stops the Speakers; when the Sonos plays on, they join it, the counter Resume late.
+def test_a_pause_stops_both_rooms_and_play_starts_the_track_from_the_top(where):
+    # Ben, 9 Nov 2026: a resume came back half a second out, and a fresh start never has. A pause in JRiver, or at
+    # the Sonos with JRiver still saying playing, stops the Speakers and the Sonos zone too, so play starts the
+    # track from the top in both rooms, and the Speakers are placed on it as a fresh start.
     w = World()
     w.run(0.5)
     w.play()
     w.run(10.0)
     if where == "jriver":
         w.jr.zones["Sonos"]["state"] = mcws.PAUSED
-    pos = w.sonos.pause()
+    w.sonos.pause()
     w.run(3.0)
     assert w.f.out is None and w.outs[-1].closed
-    assert w.said("The Sonos paused, so the Speakers have stopped; they start again when it plays.")
+    assert w.jr.stopped == ["Sonos"] and w.jr.zones["Sonos"]["state"] == mcws.STOPPED
+    assert w.said("The Sonos paused, so both rooms have stopped; play starts the track from the top.")
     w.run(10.0)
-    assert len(w.outs) == 1, "started again while the Sonos was still paused"
+    assert len(w.outs) == 1, "started again while the Sonos was stopped"
     w.jr.zones["Sonos"]["state"] = mcws.PLAYING
-    c1 = w.sonos.play(at_ms=pos)
+    c1 = w.sonos.play()
+    w.run(5.0)
+    assert len(w.outs) == 2 and w.outs[1].t0 - c1 < 0.5, "slow to start again"
+    off = w.offsets(c1 + START, since=c1 + 2.5)
+    assert len(off) > 50 and np.abs(off).max() < TOL, f"out by up to {np.abs(off).max():.2f} ms"
+
+
+def test_a_track_played_on_from_a_pause_isnt_joined_until_the_next_track():
+    # The stop didn't take, or play came from the Sonos itself, and the track carries on from where it paused: how
+    # late the counter runs after a resume isn't known, so the Speakers sit the track out and join the next.
+    w = World(seconds=60)
+    w.run(0.5)
+    w.play(key=1)
+    w.run(10.0)
+    w.jr.zones["Sonos"]["state"] = mcws.PAUSED
+    pos = w.sonos.pause()
+    w.run(3.0)
+    assert w.f.out is None
+    w.jr.zones["Sonos"]["state"] = mcws.PLAYING
+    w.sonos.play(at_ms=pos)
+    w.run(10.0)
+    assert len(w.outs) == 1, "joined a track played on from a pause"
+    assert len(w.said("The Sonos played on from where it paused, so the Speakers wait for the next track.")) == 1
+    c2 = w.play(key=2)
     w.run(5.0)
     assert len(w.outs) == 2
-    assert w.outs[1].t0 - (c1 + pos / 1000) < 0.2, "slow to start again"
-    assert not w.said("Jumped"), "the restart was placed twice"
-    off = w.offsets(c1 + START - RESUME, since=w.outs[1].t0 + 0.5)
-    assert len(off) > 50 and np.abs(off).max() < TOL, f"out by up to {np.abs(off).max():.2f} ms"
+    off = w.offsets(c2 + START, since=c2 + 2.5)
+    assert len(off) > 50 and np.abs(off).max() < TOL
 
 
 def test_a_sonos_buffering_between_tracks_isnt_taken_for_a_pause():

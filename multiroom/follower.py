@@ -12,11 +12,15 @@ Terms, as in mockups/multiroom_stage1_plan.md:
   at the moment the Sonos plays it.
 
 What it does: places a fresh start on the Sonos's first reads and refines it two seconds in; joins a track already
-playing; carries straight on into the next track when the rate is the same, and steps back to match if the Sonos
-left a gap after all; follows a jump; holds drift to a millisecond; keeps its place through a dry buffer; stops
-when the Sonos pauses or stops, and starts again when it plays (Ben, 9 Nov 2026: stop and restart rather than pause,
-since a pause at the speaker shows in JRiver as a stop anyway); carries on through a lost clock for a minute; stops
-the follower zone in JRiver so its DAC is free.
+playing; carries straight on into the next track when the rate is the same, and at a new rate opens the DAC afresh
+but still places the track on the Sonos's change from the last one, its counter measured against where the last
+track's sound ended (the change is gapless from the Sonos's side whatever the files' rates, since JRiver sends it
+44.1 kHz throughout); steps back to match if the Sonos left a gap after all; trusts the next track it was told of
+over JRiver's name for it, which can lag the Sonos by seconds at a change; follows a jump; holds drift to a
+millisecond; keeps its place through a dry buffer; on a pause stops the Speakers and the leader zone too, so play
+starts the track from the top in both rooms (Ben, 9 Nov 2026: a resumed track is never joined, since the counter's
+lateness after a resume isn't known; one played on from a pause is left until the next track); carries on through a
+lost clock for a minute; stops the follower zone in JRiver so its DAC is free.
 
   py -m multiroom.follower --leader Sonos --follower Speakers [--server Multiroom] [--start 90] [--resume 95]
                            [--dac 1660] [--device NAME] [--sonos ROOM] [--env PATH]
@@ -45,7 +49,11 @@ STOPPED_FOR = 1.0       # seconds the Sonos must stay stopped before the Speaker
 WAIT_FOR = 5.0          # and buffering or idle while JRiver still plays, before they give up on it
 ANCHOR_FROM = 1.0       # the DAC's rate is measured from this far after its first block,
 WINDOW = 2.0            # over windows this long
-GAPLESS_MS = (80, 120)  # a new track's counter this late against the last one's end means the sound ran straight on
+CHANGE_MS = (-30, 250)  # a new track's counter this far behind the last one's sound end means the sound ran straight
+#                         on (about 100 ms at the same rate, 9 Nov 2026; the band is wide until a rate change is
+#                         measured); further behind, the Sonos left a gap and the new track is a fresh start
+CHANGE_WINDOW = 1.5     # a fresh run this close to a track's sound end is the Sonos moving on to the next track
+SKIP_WAIT = 1.5         # seconds a fresh run mid-track waits for JRiver to name the track, before it's a restart
 PREFETCH = 20.0         # seconds before a track's end that the next one is opened
 LOST_AFTER = 5.0        # seconds without a read before the Speakers carry on on their own
 GIVE_UP = 60.0          # and before they stop
@@ -288,7 +296,11 @@ class Follower:
         self._dry_at = None
         self._lost = False
         self._chains = 0                     # the player's carry-ons dealt with
-        self.last = None                     # (key, run time, our time) of the track that last finished
+        self.last = None                     # the track that last finished: key, run_t, at (our time), end (our
+        #                                      time its sound ended, if it ran out) and next (the key after it)
+        self._paused = None                  # the key of a track the Sonos paused on: not joined until the next
+        self._paused_other = None            # our time JRiver first named another track meanwhile, with no fresh run
+        self._said_wait = False
 
     # --- watching the Sonos and JRiver --------------------------------------------------------
     def _scan(self):
@@ -345,21 +357,48 @@ class Follower:
         if not (self._sonos_playing() and info["state"] == mcws.PLAYING and info["key"]):
             return
         run = self.runs[-1] if self.runs else None
-        if self.last is not None:
-            if not (run and run.t > self.last[1]):
+        last, end = self.last, None
+        if last is not None:
+            if not (run and run.t > last["run_t"]):
                 # The track that just finished is still ending on the Sonos, or the next hasn't begun there yet.
                 # If JRiver has moved on and the Sonos's counter never showed it, join after five seconds.
-                if info["key"] == self.last[0] or now - self.last[2] < 5:
+                if info["key"] == last["key"] or now - last["at"] < 5:
                     return
                 run = None
-            elif run.fresh and info["key"] == self.last[0] and now - run.t < 1.0:
-                # The Sonos has started a track but JRiver, asked every half second, still names the last one:
-                # ask again rather than start the old one over (a track played twice gets a second). A run from
-                # mid-track is the same track playing again after a pause: start it at once.
-                if now - self.info_at >= 0.05:
-                    self.info_at = None
-                return
-        self._start(info["key"], run, now)
+            elif run.fresh:
+                if last["end"] is not None and abs(run.t - last["end"]) < CHANGE_WINDOW:
+                    end = last["end"]   # the Sonos moved on as the last track ran out
+                    if info["key"] == last["key"]:
+                        # JRiver, asked every half second, still names the track that just ended; on a DLNA zone it
+                        # can take six seconds to catch up (9 Nov 2026, twice). The next track it gave us before the
+                        # end is the one playing. Without one, or with the same track twice in the list, JRiver gets
+                        # a second, then its list is read again (a top-up may have added the track late).
+                        if last["next"] not in (None, last["key"]):
+                            self._start(last["next"], run, now, end=end, from_key=last["key"])
+                        elif now - run.t < 1.0:
+                            if now - self.info_at >= 0.05:
+                                self.info_at = None
+                        else:
+                            key = self._after(last["key"]) or info["key"]
+                            self._start(key, run, now, end=end, from_key=last["key"] if key != info["key"] else None)
+                        return
+            elif self._paused is not None:
+                # The Sonos played on from where it paused (the leader zone couldn't be stopped, or play came from
+                # the Sonos itself): how late its counter runs after a resume isn't known, so the Speakers sit this
+                # track out rather than play it out of step, and start again on a fresh run, the next track's
+                # start. JRiver naming another track without one (its start missed) joins after five seconds.
+                if info["key"] == self._paused:
+                    self._paused_other = None
+                    if not self._said_wait:
+                        self._said_wait = True
+                        self.say(f"The {self.leader} played on from where it paused, so the Speakers wait for the "
+                                 f"next track.")
+                    return
+                self._paused_other = self._paused_other or now
+                if now - self._paused_other < 5:
+                    return
+                run = None
+        self._start(info["key"], run, now, end=end)
 
     def _follow(self, now):
         info = self.info
@@ -381,6 +420,9 @@ class Follower:
                 self._settle_carry(None, now)
             self._housekeeping(now)
             return
+        fresh = run is not None and run.fresh and run.t > t["run_t"]
+        end = self._end()
+        changing = fresh and end is not None and abs(run.t - end) < CHANGE_WINDOW   # the Sonos moving on at the end
         if info["key"] == t["key"]:
             t.pop("from_key", None)
             t.pop("other_since", None)
@@ -391,25 +433,63 @@ class Follower:
             nxt = p.next
             if nxt is not None and getattr(nxt, "key", None) == info["key"]:
                 pass
-            elif run and run.fresh and run.t > t["run_t"] and now - run.t < 5:
-                self.finish()
-                self._start(info["key"], run, now)
+            elif fresh and now - run.t < 5:
+                self.finish(end=end if changing else None)
+                self._start(info["key"], run, now, end=self.last["end"])
                 return
             elif now - t.setdefault("other_since", now) > 5:
                 self.finish()
                 self._start(info["key"], run, now)
                 return
         if run and run.t > t["run_t"]:
+            if changing:
+                if p.next is None:
+                    # The next track isn't chained (a new rate, or none known): this one ends here, and _idle starts
+                    # the next on this run, placed by the Sonos's change. Taking the run for a jump to the start of
+                    # this track is what played six seconds of the old one over the new (9 Nov 2026).
+                    self.finish(end=end)
+                else:
+                    self._housekeeping(now)   # the player is about to carry on into it; _settle_carry takes it then
+                return
+            if run.fresh:
+                # The Sonos started a track from the top mid-track: a skip to another track, which JRiver names
+                # within a second or so of the Sonos starting it, or this track started over. The Speakers hold
+                # where they are and ask JRiver quickly; another name is dealt with above on the next step. Taking
+                # the run for a restart at once put the old track's opening over the new one for five seconds
+                # (9 Nov 2026, twice).
+                since = t.setdefault("fresh_since", now)
+                if now - since < SKIP_WAIT:
+                    if now - self.info_at >= 0.05:
+                        self.info_at = None
+                    self._housekeeping(now)
+                    return
+                t.pop("fresh_since", None)
             self._jumped(run, now)
             return
         self._keep_in_step(now)
 
+    def _end(self):
+        """Our time at which the track the Speakers are on ends on the Sonos, if its length is known."""
+        p = self.player
+        frames = p.stream.fmt.frames
+        return None if frames is None else p.origin + frames / p.rate
+
     # --- starting ------------------------------------------------------------------------------
-    def _start(self, key, run, now):
-        """A track begins on the Speakers: on the first reads of the Sonos's run, or mid-track on the recent reads."""
-        late = 0.0
+    def _start(self, key, run, now, end=None, from_key=None):
+        """
+        A track begins on the Speakers: on the first reads of the Sonos's run, or mid-track on the recent reads.
+        end: our time the last track's sound ended, when the Sonos moved straight on to this one from it; the
+        counter is then measured against it, and the track placed where the sound ran on (the Sonos's counter
+        runs about 100 ms behind its sound at a change, so taking the run for a fresh start put the Speakers that
+        far ahead, 9 Nov 2026). from_key: the track JRiver may still be naming while this one plays.
+        """
+        late, d = 0.0, None
         if run is not None and run.fresh and now - run.t < 5:
             c, how = self.clock.first_origin_after(run.t), "start"
+            if c is not None and end is not None:
+                d = (c + self.start_s - end) * 1000
+                if CHANGE_MS[0] <= d <= CHANGE_MS[1]:
+                    late, how = d / 1000, "change"
         else:
             # Joining: a run we watched begin mid-track was a jump or a resume, with the counter Resume late; one
             # already going when we came, or a track's start, we take as on time.
@@ -430,12 +510,22 @@ class Follower:
         self.out = self.open_output(self.device, fmt.rate, fmt.channels, self.player.callback)
         self.out.start()
         self._chains = 0
-        self.track = {"key": key, "fmt": fmt, "run_t": run.t, "c": c, "late": late,
+        self.track = {"key": key, "fmt": fmt, "run_t": run.t, "c": c, "late": late, "carried": how == "change",
                       "refined": how == "join" and now - run.t >= REFINE_AFTER,   # a run joined young is refined later
-                      "checked": now, "next": None}
-        self._said_in = False
+                      "checked": now, "next": None, "next_key": None}
+        if from_key is not None:
+            self.track["from_key"] = from_key
+        self._paused = self._paused_other = None
+        self._said_wait = self._said_in = False
         self._dry = stream.short_reads
-        self.say(f"{self.name(key)}: {self._format(fmt)}.")
+        line = f"{self.name(key)}: {self._format(fmt)}"
+        if how == "change":
+            line += f", straight on from the last track; the {self.leader}'s counter is {d:.0f} ms behind."
+        elif d is not None:
+            line += f", after a gap of {d:.0f} ms."
+        else:
+            line += "."
+        self.say(line)
 
     @staticmethod
     def _format(fmt):
@@ -445,13 +535,18 @@ class Follower:
     def _next_key(self):
         """The track after the one the Speakers are on: JRiver's next while it's on the same track, else from its list."""
         key = self.track["key"]
+        after = self._after(key)
+        if self.info.get("key") == key:
+            return self.info.get("next_key")
+        return after
+
+    def _after(self, key):
+        """The track after key in the leader zone's list, from JRiver; None at the end of it or if it isn't there."""
         try:
             listed = self.jriver.playlist(self.leader)
         except Exception:
-            listed = []
-        self.names.update((k, n) for k, n in listed if n)   # so a carried-on track's line can name it
-        if self.info.get("key") == key:
-            return self.info.get("next_key")
+            return None
+        self.names.update((k, n) for k, n in listed if n)   # so a track's line can name it before JRiver does
         keys = [k for k, _ in listed]
         if key in keys:
             i = keys.index(key)
@@ -468,6 +563,7 @@ class Follower:
             return
         t["next"] = t["key"]   # asked once a track
         key = self._next_key()
+        t["next_key"] = key     # kept past the end: JRiver may still name this track when the Sonos is on the next
         if not key:
             return
         fmt = self.source.format(key)
@@ -488,9 +584,9 @@ class Follower:
 
     def _settle_carry(self, run, now):
         """
-        The Sonos's counter has shown how it went into the new track. Within 80 to 120 ms of the end of the last,
-        the sound ran straight on, as the Speakers did. Otherwise the Sonos left a gap, and the Speakers step back
-        to match it.
+        The Sonos's counter has shown how it went into the new track. Within CHANGE_MS of the end of the last, the
+        sound ran straight on, as the Speakers did. Otherwise the Sonos left a gap, and the Speakers step back to
+        match it.
         """
         t, p = self.track, self.player
         c = self.clock.first_origin_after(run.t) if run else self.clock.origin(window=1.0)
@@ -499,9 +595,9 @@ class Follower:
         d = (c + self.start_s - t["end"]) * 1000
         name = self.name(t["key"])
         run_t = run.t if run else now
-        if GAPLESS_MS[0] <= d <= GAPLESS_MS[1]:
+        if CHANGE_MS[0] <= d <= CHANGE_MS[1]:
             t.update(late=d / 1000, c=c, run_t=run_t, refined=False, checked=now, carried=True)
-            self.say(f"{name}: carried straight on, as the {self.leader} did.")
+            self.say(f"{name}: carried straight on, as the {self.leader} did; its counter is {d:.0f} ms behind.")
         else:
             t.update(late=0.0, c=c, run_t=run_t, refined=False, checked=now)
             if p.set_origin(c + self.start_s, self._chains):
@@ -592,9 +688,11 @@ class Follower:
     # --- stopping ------------------------------------------------------------------------------------
     def _sonos_stopped(self, now):
         """
-        The Sonos isn't playing. After a second, the Speakers stop if it was stopped or paused, by JRiver or at the
-        speaker, and start again as a join when it plays. Buffering or idle while JRiver still plays (between
-        tracks, or a slow network): they carry on for five seconds, then stop.
+        The Sonos isn't playing. After a second, the Speakers stop if it was stopped. If it was paused, by JRiver or
+        at the speaker, the Speakers stop and so does the leader zone in JRiver, which forgets its place in the
+        track: play then starts the track from the top in both rooms, the case that's in step (Ben, 9 Nov 2026,
+        after a resume came back half a second out). Buffering or idle while JRiver still plays (between tracks, or
+        a slow network): they carry on for five seconds, then stop.
         """
         if self._stopped_since is None:
             self._stopped_since = now
@@ -608,19 +706,29 @@ class Follower:
         if state == mcws.STOPPED:
             self.finish(f"The {self.leader} stopped, so the Speakers have too.")
         elif state == mcws.PAUSED or (r is not None and r.state == PAUSED):
-            self.finish(f"The {self.leader} paused, so the Speakers have stopped; they start again when it plays.")
+            self._paused = self.track["key"]
+            self.finish()
+            try:
+                self.jriver.stop(self.leader)
+            except Exception as e:
+                self.say(f"Couldn't stop the {self.leader} zone in JRiver ({e}).")
+            self.say(f"The {self.leader} paused, so both rooms have stopped; play starts the track from the top.")
         elif held >= WAIT_FOR:
             self.finish(f"The {self.leader} stopped playing, so the Speakers have too.")
 
-    def finish(self, why=None):
-        """Stops the Speakers."""
+    def finish(self, why=None, end=None):
+        """Stops the Speakers. end: our time the track's sound ends on the Sonos, if it ran (or is running) out."""
+        p = self.player
         if self.out is not None:
             self.out.close()
-        if self.player is not None:
-            self.player.stream.close()
-            if self.player.next is not None:
-                self.player.next.close()
-            self.last = (self.track["key"], self.track["run_t"], self.now())
+        if p is not None:
+            if end is None and p.next is None and p.stream.done:
+                end = self._end()
+            p.stream.close()
+            if p.next is not None:
+                p.next.close()
+            self.last = {"key": self.track["key"], "run_t": self.track["run_t"], "at": self.now(), "end": end,
+                         "next": self.track.get("next_key")}
         self.out = self.player = None
         self._stopped_since = None
         if why:
