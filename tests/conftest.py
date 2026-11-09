@@ -77,6 +77,8 @@ def app(tmp_path, monkeypatch):
             shutil.copy2(os.path.join(REPO, name), folder / name)
     shutil.copytree(os.path.join(REPO, "alexa"), folder / "alexa")
     shutil.copytree(os.path.join(REPO, "locale"), folder / "locale")
+    shutil.copytree(os.path.join(REPO, "multiroom"), folder / "multiroom",   # gui.pyw imports multiroom.link
+                    ignore=shutil.ignore_patterns("__pycache__"))
     (folder / "docs").mkdir()
     for name in ("MANUAL.md", "MANUAL.de.md"):   # Console Query's reference (8 Nov 2026)
         shutil.copy2(os.path.join(REPO, "docs", name), folder / "docs" / name)

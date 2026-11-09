@@ -745,7 +745,43 @@ class Follower:
             self.finish()
 
 
-# --- the command line ------------------------------------------------------------------------
+# --- setting up, and the command line ---------------------------------------------------------
+
+class SetupError(Exception):
+    """Something the follower needs isn't there. str() is the line for the console."""
+
+
+def build(leader="Sonos", follower="Speakers", server="Multiroom", sonos_name=None, device=None, start=90.0,
+          resume=95.0, dac=1660, env=".env", say=print):
+    """
+    Finds the Sonos, the DLNA server and the DAC, and returns (clock, follower, description): the clock not yet
+    started, the description one line saying what follows what. Raises SetupError with the line to show when
+    something isn't there. Used by the command line here and by multiroom.service inside 24bit7.
+    """
+    jr = mcws.JRiver(env=env)
+    found = sonos.find(sonos_name)
+    if not found:
+        raise SetupError("No Sonos found on the network." if not sonos_name else f"No Sonos called {sonos_name}.")
+    if len(found) > 1 and not sonos_name:
+        raise SetupError("More than one Sonos answered: say which under Settings > Other > Multiroom ("
+                         + " / ".join(d["name"] for d in found) + ").")
+    s = found[0]
+    base = fetch.find_server(server)
+    if not base:
+        raise SetupError(f"No DLNA server called {server}: is it on in JRiver's Media Network settings?")
+    try:
+        hint = device or jr.device(follower)[0]
+    except KeyError:
+        raise SetupError(f"There's no zone called {follower} in JRiver.")
+    dev = output.find_device(hint)
+    if dev is None:
+        raise SetupError(f"No output device matches {hint!r}.")
+    description = (f"Speakers following {leader} ({s['name']}, {output._sd().query_devices(dev)['name']}); "
+                   f"Start {start:g} ms, Resume {resume:g} ms, DAC {dac} samples.")
+    clock = sonos.SonosClock(s["ip"], s["householdId"], s["groupId"])
+    f = Follower(clock, jr, leader, follower, Source(base), output.Output, dev, start, resume, dac, say=say)
+    return clock, f, description
+
 
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="py -m multiroom.follower",
@@ -761,27 +797,13 @@ def main(argv=None):
     ap.add_argument("--env", default=".env", help="the .env with JRiver's address")
     a = ap.parse_args(argv)
 
-    jr = mcws.JRiver(env=a.env)
-    found = sonos.find(a.sonos)
-    if not found:
-        raise SystemExit("No Sonos found on the network." if not a.sonos else f"No Sonos called {a.sonos}.")
-    if len(found) > 1 and not a.sonos:
-        raise SystemExit("More than one Sonos: say which with --sonos " + " / ".join(d["name"] for d in found))
-    s = found[0]
-    base = fetch.find_server(a.server)
-    if not base:
-        raise SystemExit(f"No DLNA server called {a.server}: is it on in JRiver's Media Network settings?")
-    hint = a.device or jr.device(a.follower)[0]
-    dev = output.find_device(hint)
-    if dev is None:
-        raise SystemExit(f"No output device matches {hint!r}.")
-    print(f"Leader {a.leader} ({s['name']}, {s['ip']}); follower {a.follower} on "
-          f"{output._sd().query_devices(dev)['name']}; tracks from {base}.")
-    print(f"Start {a.start:g} ms, Resume {a.resume:g} ms, DAC {a.dac} samples. Ctrl+C to stop.")
-    clock = sonos.SonosClock(s["ip"], s["householdId"], s["groupId"])
+    try:
+        clock, f, description = build(a.leader, a.follower, a.server, a.sonos, a.device, a.start, a.resume, a.dac,
+                                      a.env, say=lambda line: print(time.strftime("%H:%M:%S "), line, flush=True))
+    except SetupError as e:
+        raise SystemExit(str(e))
+    print(description, "Ctrl+C to stop.")
     clock.start()
-    f = Follower(clock, jr, a.leader, a.follower, Source(base), output.Output, dev, a.start, a.resume, a.dac,
-                 say=lambda line: print(time.strftime("%H:%M:%S "), line, flush=True))
     try:
         f.run()
     except KeyboardInterrupt:

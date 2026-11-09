@@ -321,6 +321,20 @@ def _builtin_key(name):
 BUILTIN_LASTFM_KEY = _builtin_key("LASTFM_API_KEY")
 
 
+def _float_env(name, default):
+    try:
+        return float(os.getenv(name, "").strip() or default)
+    except ValueError:
+        return default
+
+
+def _int_env(name, default):
+    try:
+        return int(float(os.getenv(name, "").strip() or default))
+    except ValueError:
+        return default
+
+
 def load_settings():
     """
     (Re)reads every setting from .env into module-level globals. Called once at
@@ -349,6 +363,8 @@ def load_settings():
     global NONSTOP, NONSTOP_USING, NONSTOP_RESEED, NONSTOP_TOP_REST, NONSTOP_TOP_REST_COUNT, NONSTOP_VIBE
     global NONSTOP_BY, LONG_CLOSERS, AI_MODERATOR_BY, RUN_AFTER, INNER_CIRCLE
     global CONSOLE_QUERY, USE_AI, CREDITS_SCOPE, CREDITS_FIRST
+    global MULTIROOM_ENABLED, MULTIROOM_LEADER, MULTIROOM_FOLLOWER, MULTIROOM_SERVER, MULTIROOM_SPEAKER
+    global MULTIROOM_DEVICE, MULTIROOM_START, MULTIROOM_RESUME, MULTIROOM_DAC
 
     load_dotenv(ENV_FILE, override=True)
     os.environ.update(PROFILE)   # the button's settings, for the build in progress
@@ -533,16 +549,31 @@ def load_settings():
     RUN_AFTER = {g: (os.getenv(f"RUN_AFTER_{g.upper()}", "0").strip().lower() in ("1", "true", "yes"),
                      os.getenv(f"RUN_AFTER_{g.upper()}_PATH", "").strip().strip('"'))
                  for g in PLAYED_GROUPS}
+    # Multiroom (Settings > Other, experimental): the Speakers' DAC follows the Sonos zone, in step. The zones,
+    # what to find and the three numbers; the follower runs as a child process (multiroom.link). Kit settings,
+    # like Zones, so not in Profiles (DECISIONS, 9 Nov 2026).
+    MULTIROOM_ENABLED = os.getenv("MULTIROOM_ENABLED", "0").strip().lower() in ("1", "true", "yes")
+    MULTIROOM_LEADER = os.getenv("MULTIROOM_LEADER", "").strip()
+    MULTIROOM_FOLLOWER = os.getenv("MULTIROOM_FOLLOWER", "").strip()
+    MULTIROOM_SERVER = os.getenv("MULTIROOM_SERVER", "Multiroom").strip() or "Multiroom"
+    MULTIROOM_SPEAKER = os.getenv("MULTIROOM_SPEAKER", "").strip()
+    MULTIROOM_DEVICE = os.getenv("MULTIROOM_DEVICE", "").strip()
+    MULTIROOM_START = _float_env("MULTIROOM_START", 90.0)
+    MULTIROOM_RESUME = _float_env("MULTIROOM_RESUME", 95.0)
+    MULTIROOM_DAC = _int_env("MULTIROOM_DAC", 1660)
+    if not (MULTIROOM_LEADER and MULTIROOM_FOLLOWER):
+        MULTIROOM_ENABLED = False
     # Where finished playlists go: "jriver" = Same zone (the default), "zone:<name>"
-    # = a named JRiver zone, or "youtube" (opens in the browser). Zone names keep
-    # their case, as JRiver's do.
+    # = a named JRiver zone, "multiroom" (the leader zone, with the Speakers following), or
+    # "youtube" (opens in the browser). Zone names keep their case, as JRiver's do.
     raw_output = os.getenv("OUTPUT_TARGET", "jriver").strip()
     if raw_output.lower().startswith("zone:") and raw_output[5:].strip():
         OUTPUT_TARGET = "zone:" + raw_output[5:].strip()
     else:
         OUTPUT_TARGET = raw_output.lower()
-        if OUTPUT_TARGET not in ("jriver", "youtube", "tidal") or (
-                OUTPUT_TARGET in ("youtube", "tidal") and OUTPUT_TARGET not in EXTRA_OUTPUTS):   # unticked
+        if OUTPUT_TARGET not in ("jriver", "youtube", "tidal", "multiroom") or (
+                OUTPUT_TARGET in ("youtube", "tidal") and OUTPUT_TARGET not in EXTRA_OUTPUTS) or (
+                OUTPUT_TARGET == "multiroom" and not MULTIROOM_ENABLED):   # unticked
             OUTPUT_TARGET = "jriver"
     # Zones hidden from the Play tab's Zone and Output lists (names separated by |)
     HIDDEN_ZONES = {x.strip() for x in os.getenv("HIDDEN_ZONES", "").split("|") if x.strip()}
@@ -804,6 +835,25 @@ except OSError:
 # there is no stdout, so without this they went nowhere.
 OUTPUT_HOOK = None
 _builtin_print = print
+# gui.pyw points MULTIROOM_HOOK at the follower's link: called, with no arguments, once a playlist has gone to the
+# leader zone with Output on Multiroom, so the Speakers follow it (a child already running is left be).
+MULTIROOM_HOOK = None
+
+
+def multiroom_settings():
+    """What the follower needs to start, as multiroom.service takes it."""
+    return {"leader": MULTIROOM_LEADER, "follower": MULTIROOM_FOLLOWER, "server": MULTIROOM_SERVER,
+            "sonos": MULTIROOM_SPEAKER, "device": MULTIROOM_DEVICE, "start": MULTIROOM_START,
+            "resume": MULTIROOM_RESUME, "dac": MULTIROOM_DAC, "env": ENV_FILE}
+
+
+def _multiroom_sent(zone):
+    """A playlist has gone to zone: if that's the leader with Output on Multiroom, the Speakers follow."""
+    if MULTIROOM_HOOK is not None and OUTPUT_TARGET == "multiroom" and zone == zone_id(MULTIROOM_LEADER):
+        try:
+            MULTIROOM_HOOK()
+        except Exception as e:
+            print(t("Problem: Multiroom couldn't start ({e}).", e=e))
 
 
 def print(*args, **kwargs):   # shadows the builtin inside engine only
@@ -4631,7 +4681,8 @@ def output_zone(seed_info=None, zone_name=None, report=print):
     and the Now Playing tab's zone for a run with no seed (Vibe). Returns None,
     after a log line, when a named zone can't be found.
     """
-    name = zone_name or OUTPUT_OVERRIDE or (OUTPUT_TARGET[5:] if OUTPUT_TARGET.startswith("zone:") else None)
+    name = zone_name or OUTPUT_OVERRIDE or (OUTPUT_TARGET[5:] if OUTPUT_TARGET.startswith("zone:") else
+                                            MULTIROOM_LEADER if OUTPUT_TARGET == "multiroom" else None)
     if name:
         zid = zone_id(name)
         if zid is None:
@@ -4772,6 +4823,7 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
         if keys:
             queue_tracks(keys, zone)
             debug(f"Added {len(keys)} track{'' if len(keys) == 1 else 's'} to {zone_label(zone)}")
+            _multiroom_sent(zone)
         return
     seed_zone_id = (seed_info or {}).get("ZoneID")
     if seed_info and not typed and seed_key and seed_zone_id and seed_zone_id != zone:
@@ -4786,10 +4838,12 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
             debug(f"{zone_label(zone)} was stopped, so the playlist starts there now")
         requests.get(f"{JRIVER_BASE}/Playback/PlayByKey",
                      params={"Key": ",".join(keys), "Zone": zone}, auth=AUTH)
+        _multiroom_sent(zone)
         return
     report("  " + t("Queued in {zone_label} after the current track.", zone_label=zone_label(zone)))
     clear_around_current(zone)
     queue_tracks(keys, zone)
+    _multiroom_sent(zone)
 
 
 SEED_ARTIST_SHARE = 0.25   # the seed artist's share of a YouTube queue playlist

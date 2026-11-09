@@ -10,6 +10,14 @@ The Play tab drives engine.py on a background thread, streaming progress into
 its log via a thread-safe queue so the window never freezes.
 """
 
+import sys
+
+if "--follow" in sys.argv[1:]:
+    # The Multiroom follower, run as a child of the app (24bit7.exe --follow --port N): no window, no Tk, and
+    # none of the start-up below. See multiroom/service.py.
+    from multiroom import service
+    sys.exit(service.main(sys.argv[1:]))
+
 import os
 import queue
 import re
@@ -51,6 +59,9 @@ import buildlog
 import support_gui
 import window_chrome
 import ai_usage
+from multiroom import link as multiroom_link
+
+MULTIROOM_LABEL = "Multiroom"   # the Output entry; a feature name, so not translated
 
 
 REFRESH_MS = 10000   # Now Playing panel; paused while minimised or in the tray
@@ -170,7 +181,10 @@ class PlayTab(tk.Frame):
         root.bind("<<RadioRecount>>", lambda e: self.on_radio_analyse(False), add="+")   # Radio's page: a new count
         root.bind("<<EmbellishAmounts>>", lambda e: self._sync_amounts(), add="+")   # Settings > JRiver Playlists
         self.log_queue = queue.Queue()
-        engine.OUTPUT_HOOK = self.log_queue.put   # engine's print() and [debug] lines land here
+        engine.OUTPUT_HOOK = self.log_queue.put
+        # Multiroom: the follower's child process, its lines in the console as "Multiroom: ..."
+        self.multiroom = multiroom_link.Link(say=self.log_queue.put)
+        engine.MULTIROOM_HOOK = self.multiroom_build_sent   # engine's print() and [debug] lines land here
         self.running = False
         self.last_playing = None
         self.voice_jobs = queue.Queue()   # (job, heading) from voice commands, run one at a time
@@ -1770,6 +1784,8 @@ class PlayTab(tk.Frame):
             return "YouTube"
         if target == "tidal":
             return "Tidal"
+        if target == "multiroom":
+            return MULTIROOM_LABEL
         if target.startswith("zone:"):
             return target[5:]
         return t(SAME_ZONE_LABEL)
@@ -1779,23 +1795,32 @@ class PlayTab(tk.Frame):
 
     @staticmethod
     def _extra_outputs():
-        """The services ticked under Settings > Other > Additional Outputs, as Output offers them."""
+        """
+        The services ticked under Settings > Other > Additional Outputs, as Output offers them, and Multiroom
+        while it's enabled under Settings > Other > Multiroom.
+        """
         engine.refresh_settings_if_changed()
-        return [label for code, label in sorted(engine.OUTPUT_OPTIONS, key=lambda o: o[1])
-                if code in engine.EXTRA_OUTPUTS]
+        extra = [label for code, label in sorted(engine.OUTPUT_OPTIONS, key=lambda o: o[1])
+                 if code in engine.EXTRA_OUTPUTS]
+        if engine.MULTIROOM_ENABLED:
+            extra.insert(0, MULTIROOM_LABEL)
+        return extra
 
     def outputs_changed(self):
         """Additional Outputs changed: an Output that's been unticked goes back to Same zone, and says so."""
         was = self.output_var.get()
-        if was in dict(engine.OUTPUT_OPTIONS).values() and was not in self._extra_outputs():
+        if was in list(dict(engine.OUTPUT_OPTIONS).values()) + [MULTIROOM_LABEL] and was not in self._extra_outputs():
             self.output_var.set(t(SAME_ZONE_LABEL))
             self._on_output_changed()
-            messagebox.showinfo(t("Output"), t("{was} is no longer ticked under Additional Outputs, so Output is "
-                                               "back to {same}.", was=was, same=t(SAME_ZONE_LABEL)), parent=self)
+            where = t("Multiroom") if was == MULTIROOM_LABEL else t("Additional Outputs")
+            messagebox.showinfo(t("Output"), t("{was} is no longer ticked under {where}, so Output is "
+                                               "back to {same}.", was=was, where=where, same=t(SAME_ZONE_LABEL)),
+                                parent=self)
 
     def _on_output_changed(self, *_):
         choice = self.output_var.get()
         target = ("youtube" if choice == "YouTube" else "tidal" if choice == "Tidal" else
+                  "multiroom" if choice == MULTIROOM_LABEL else
                   "jriver" if choice == t(SAME_ZONE_LABEL) else "zone:" + choice)
         try:
             write_env({"OUTPUT_TARGET": target})
@@ -1805,11 +1830,33 @@ class PlayTab(tk.Frame):
         if target == "tidal" and not engine.tidal_signed_in():
             messagebox.showinfo("Tidal", t("To send playlists to Tidal, sign in first: Settings > Keys, "
                                            "Sign In to Tidal."), parent=self)
+        self._sync_multiroom(target)
         self._sync_behaviour()
         self._sync_top_up()
         panel = getattr(self, "review_panel", None)
         if panel is not None:
             panel.output_changed()   # Review's actions go wherever Output now says
+
+    # --- Multiroom ---------------------------------------------------------------------------------
+
+    def _sync_multiroom(self, target=None):
+        """
+        The follower runs while Output is Multiroom: picked, or left so when 24bit7 opens, the child starts and
+        the Speakers join whatever the Sonos is playing, or wait for it to play. Any other Output stops it.
+        """
+        engine.refresh_settings_if_changed()
+        if target is None:
+            target = engine.OUTPUT_TARGET
+        if target == "multiroom" and engine.MULTIROOM_ENABLED:
+            self.multiroom.start(engine.multiroom_settings())
+        elif self.multiroom.wanted or self.multiroom.running():
+            self.multiroom.stop()
+            self.log_queue.put(multiroom_link.PREFIX + t("off: the Speakers have stopped following."))
+
+    def multiroom_build_sent(self):
+        """engine.MULTIROOM_HOOK: a playlist went to the leader zone. A child already running is left be."""
+        if not self.multiroom.running():
+            self.multiroom.start(engine.multiroom_settings())
 
     # --- Top-Up -----------------------------------------------------------------------------------
 
@@ -3280,6 +3327,7 @@ def main():
     # Non-stop (Settings > Playlist): tops up 24bit7 playlists as they reach their last track
     nonstop.attach(lambda job, heading, origin=None: play.voice_jobs.put((job, heading, origin)))
     nonstop.start()
+    root.after(1500, play._sync_multiroom)   # Output left on Multiroom: the Speakers follow from the start
     settings.refresh_hotkey_notes(problems)
     if problems:
         names = ", ".join(hotkeys.shown(c) for c in problems)
@@ -3310,6 +3358,7 @@ def main():
         voice.stop()
         hotkeys.stop()
         nonstop.stop()
+        play.multiroom.stop()   # the Speakers stop with the app; the Sonos carries on if JRiver is playing to it
         library.stop()
         _forget_pid()
         root.destroy()

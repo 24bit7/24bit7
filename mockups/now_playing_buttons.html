@@ -1,0 +1,102 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Now Playing: Stop and Skip Track</title><style>
+  :root { --bg: #1e1f22; --panel: #232428; --text: #d8d8d8; --muted: #8a8a8a; --green: #7ee08a; --orange: #f08a24;
+          --amber: #ffb224; --red: #ff5a5a; --btn: #2b2c30; --edge: #3a3b40; --teal: #3dd6c8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #111; color: var(--text); font: 13px "Segoe UI", system-ui, sans-serif; width: 1000px; }
+  .head { color: #fff; font: 700 20px "Segoe UI"; padding: 16px 20px 2px; }
+  .sub { color: #bbb; padding: 0 20px 14px; font-size: 14px; }
+  .cap { color: var(--green); font: 700 16px "Segoe UI"; padding: 14px 20px 6px; }
+  .win { background: var(--bg); padding: 12px 16px 16px; margin: 0 20px; }
+  .tabs { display: flex; gap: 4px; padding-left: 6px; }
+  .tab { padding: 5px 14px; border-radius: 6px 6px 0 0; background: #000; color: var(--green); font-weight: 700;
+         font-size: 12px; border: 1px solid var(--edge); border-bottom: none; }
+  .tab.on { background: var(--panel); }
+  .panel { background: var(--panel); border-top: 1px solid var(--edge); padding: 10px 26px; display: flex;
+           align-items: center; gap: 28px; height: 62px; }
+  .dd { background: var(--btn); border: 1px solid #44464c; border-radius: 3px; padding: 2px 6px; width: 160px;
+        display: flex; justify-content: space-between; font-size: 12px; }
+  .dd::after { content: "\25BE"; color: var(--green); }
+  .zone { display: flex; gap: 8px; align-items: center; font-weight: 700; font-size: 12px; color: var(--muted); }
+  .np { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; }
+  .np-title { font-weight: 700; font-size: 14px; color: #6fb1ff; }
+  .np-title small, .np-sub small { color: var(--muted); font-weight: 400; font-size: 10px; margin-right: 6px; }
+  .np-sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .ctl { display: flex; gap: 8px; align-items: center; }
+  .sb { height: 26px; padding: 0 12px; border-radius: 4px; background: var(--btn); font-weight: 700; font-size: 12px;
+        display: flex; align-items: center; border: 1px solid var(--edge); color: var(--green); }
+  .sb.stop { color: var(--amber); border-color: var(--amber); }
+  .sb.clear { color: var(--red); border-color: var(--red); }
+  .sb.dim { color: #666; border-color: var(--edge); }
+  .out { display: flex; gap: 8px; align-items: center; }
+  .out b { font-size: 12px; }
+  .buttons { display: flex; gap: 8px; padding-top: 10px; }
+  .fb { width: 120px; height: 34px; border-radius: 6px; background: var(--btn); border: 1px solid var(--edge);
+        border-bottom: 3px solid var(--orange); color: var(--green); font-weight: 700; font-size: 12px;
+        display: flex; align-items: center; justify-content: center; position: relative; }
+  .fb.teal { border-bottom-color: var(--teal); }
+  .fb.arrow { width: 140px; padding-right: 26px; }
+  .fb.arrow::after { content: "\25BE"; position: absolute; right: 0; width: 26px; text-align: center;
+                     border-left: 1px solid #000; font-size: 10px; }
+  .console { background: #000; color: var(--green); font: 12px/1.5 Consolas, monospace; padding: 8px 12px;
+             margin: 8px 20px 0; white-space: pre; }
+  .console .w { color: #fff; }
+  .notes { color: #ddd; padding: 16px 22px 22px; font-size: 14px; line-height: 1.5; }
+  .notes h2 { margin: 0 0 6px; font-size: 15px; color: var(--green); }
+  .notes ul { margin: 0; padding-left: 20px; }
+  .notes li { margin: 3px 0; }
+</style></head><body>
+<div class="head">Now Playing: Stop and Skip Track</div>
+<div class="sub">Two buttons next to the track, for any zone. Stop turns into Clear Playing Now once the zone has stopped.</div>
+
+<div class="cap">1. Playing</div>
+<div class="win">
+  <div class="tabs"><div class="tab on">Now Playing</div><div class="tab">JRiver Playlists</div><div class="tab">Search</div></div>
+  <div class="panel">
+    <div class="zone">Zone <div class="dd">Sonos</div></div>
+    <div class="np"><div class="np-title"><small>Track:</small>The Sound Of Silence</div>
+      <div class="np-sub"><small>Artist:</small>Disturbed &nbsp;·&nbsp; Immortalized (2015)</div></div>
+    <div class="ctl"><div class="sb stop">Stop</div><div class="sb">Skip Track</div></div>
+    <div class="out"><b>Output</b><div class="dd">Multiroom</div></div>
+  </div>
+  <div class="buttons">
+    <div class="fb teal">Similar Artists</div><div class="fb teal">Similar Tracks</div><div class="fb">Artist's Top Tracks</div>
+    <div class="fb">Artist + Guests</div><div class="fb">Consensus</div><div class="fb">AI Playlist</div><div class="fb arrow">Radio</div>
+  </div>
+</div>
+
+<div class="cap">2. After Stop</div>
+<div class="win">
+  <div class="tabs"><div class="tab on">Now Playing</div><div class="tab">JRiver Playlists</div><div class="tab">Search</div></div>
+  <div class="panel">
+    <div class="zone">Zone <div class="dd">Sonos</div></div>
+    <div class="np"><div class="np-title"><small>Track:</small>The Sound Of Silence</div>
+      <div class="np-sub"><small>Artist:</small>Disturbed &nbsp;·&nbsp; Immortalized (2015) &nbsp;·&nbsp; stopped</div></div>
+    <div class="ctl"><div class="sb clear">Clear Playing Now</div><div class="sb dim">Skip Track</div></div>
+    <div class="out"><b>Output</b><div class="dd">Multiroom</div></div>
+  </div>
+  <div class="buttons">
+    <div class="fb teal">Similar Artists</div><div class="fb teal">Similar Tracks</div><div class="fb">Artist's Top Tracks</div>
+    <div class="fb">Artist + Guests</div><div class="fb">Consensus</div><div class="fb">AI Playlist</div><div class="fb arrow">Radio</div>
+  </div>
+</div>
+
+<div class="cap">3. What the console says, Output on Multiroom</div>
+<div class="console">20:14  Similar Artists: Disturbed - The Sound Of Silence
+  Sending 31 tracks...
+  <span class="w">Queued in Sonos after the current track.</span>
+Multiroom: Speakers following Sonos (Kitchen, Chord Hugo over ASIO).
+Multiroom: Nine Million Bicycles, 44.1 kHz; straight on from the last track.
+Multiroom: the Sonos paused, so both rooms have stopped; play starts the track from the top.
+Multiroom: Speakers stopped (Sonos stopped).</div>
+
+<div class="notes">
+  <h2>Notes</h2>
+  <ul>
+    <li><b>Stop</b>, amber text and border: stops the Now Playing zone in JRiver. In multiroom both rooms stop, since the Speakers follow the Sonos.</li>
+    <li>Once the zone has stopped the button reads <b>Clear Playing Now</b> in red. One click empties the list, no confirmation (Ben, 9 Nov 2026). It turns back into Stop as soon as the zone plays.</li>
+    <li><b>Skip Track</b>: the next track in the zone's Playing Now; a fresh start, so the two rooms stay in step. Greyed while the zone is stopped or nothing follows the current track.</li>
+    <li>Both work for any zone, multiroom or not. By voice, needle drop's stop and next do the same thing.</li>
+    <li>Hover notes (Play tab style, shown with the ? on): "Stop: stops this zone. In multiroom, both rooms." "Clear Playing Now: empties this zone's list." "Skip Track: the next track in this zone's list."</li>
+  </ul>
+</div>
+</body></html>
