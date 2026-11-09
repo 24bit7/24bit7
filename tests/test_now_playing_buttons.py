@@ -19,6 +19,9 @@ class FakeLink:
     def stop(self):
         self.wanted = False
 
+    def leave(self):
+        self.wanted = False
+
     def running(self):
         return self.wanted
 

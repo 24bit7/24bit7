@@ -1683,7 +1683,6 @@
   "Problem: Multiroom couldn't start ({e}).": "Problem: Multiroom konnte nicht starten ({e}).",
   "Multiroom": "Multiroom",
   "{was} is no longer ticked under {where}, so Output is back to {same}.": "{was} ist unter {where} nicht mehr angehakt, daher steht Ausgabe wieder auf {same}.",
-  "off: the Speakers have stopped following.": "aus: die Speakers folgen nicht mehr.",
   "Skip Track": "Titel überspringen",
   "Clear Playing Now": "Aktuelle Wiedergabe leeren",
   "Stops this zone; in multiroom, both rooms. Once the zone is stopped the button reads Clear Playing Now, in red, and one click empties the zone's list.": "Stoppt diese Zone; bei Multiroom beide Räume. Sobald die Zone gestoppt ist, heißt der Knopf Aktuelle Wiedergabe leeren, in Rot, und ein Klick leert die Liste der Zone.",

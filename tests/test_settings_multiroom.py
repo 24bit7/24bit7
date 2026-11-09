@@ -25,6 +25,10 @@ class FakeLink:
         self.stopped += 1
         self.wanted = False
 
+    def leave(self):   # Output moved away: the Speakers finish the track, then stop
+        self.stopped += 1
+        self.wanted = False
+
     def running(self):
         return self.wanted
 

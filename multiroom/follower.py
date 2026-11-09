@@ -301,6 +301,8 @@ class Follower:
         self._paused = None                  # the key of a track the Sonos paused on: not joined until the next
         self._paused_other = None            # our time JRiver first named another track meanwhile, with no fresh run
         self._said_wait = False
+        self.leaving = False                 # finish the track the Speakers are on, then stop following
+        self._left = False                   # done: run() returns
 
     # --- watching the Sonos and JRiver --------------------------------------------------------
     def _scan(self):
@@ -354,6 +356,9 @@ class Follower:
 
     def _idle(self, now):
         info = self.info
+        if self.leaving:
+            self._left = True   # nothing more starts: Output moved away from Multiroom while nothing was playing
+            return
         if not (self._sonos_playing() and info["state"] == mcws.PLAYING and info["key"]):
             return
         run = self.runs[-1] if self.runs else None
@@ -564,7 +569,7 @@ class Follower:
         t["next"] = t["key"]   # asked once a track
         key = self._next_key()
         t["next_key"] = key     # kept past the end: JRiver may still name this track when the Sonos is on the next
-        if not key:
+        if not key or self.leaving:   # leaving: this track is the last the Speakers play
             return
         fmt = self.source.format(key)
         if (fmt.rate, fmt.channels) != (p.rate, p.channels):
@@ -716,6 +721,24 @@ class Follower:
         elif held >= WAIT_FOR:
             self.finish(f"The {self.leader} stopped playing, so the Speakers have too.")
 
+    def leave_at_track_end(self):
+        """
+        Output moved away from Multiroom (Ben, 9 Nov 2026): the Speakers finish the track they're on, then stop
+        following, as a new playlist never cuts the track that's playing. A next track already opened is let go,
+        so the player can't carry on into it. Nothing playing: they stop following at once.
+        """
+        self.leaving = True
+        p = self.player
+        if p is None:
+            self._left = True
+            self.say("The Speakers have stopped following.")
+            return
+        with p.lock:
+            nxt, p.next = p.next, None
+        if nxt is not None:
+            nxt.close()
+        self.say("The Speakers finish this track, then stop following.")
+
     def nudge(self, ms):
         """Moves Start by ms while music plays (Settings > Other > Multiroom, Nudge): the Speakers shift as you listen."""
         self.start_s += ms / 1000
@@ -740,14 +763,17 @@ class Follower:
                          "next": self.track.get("next_key")}
         self.out = self.player = None
         self._stopped_since = None
+        if self.leaving:
+            self._left = True
         if why:
             self.say(why)
 
     def run(self, stop=None, every=0.02):
+        """The loop, until stop is set or the Speakers have left (leave_at_track_end)."""
         stop = stop or threading.Event()
         self.begin()
         try:
-            while not stop.is_set():
+            while not stop.is_set() and not self._left:
                 self.step()
                 stop.wait(every)
         finally:

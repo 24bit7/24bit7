@@ -91,6 +91,16 @@ class Link:
             except Exception:
                 pass
 
+    def leave(self):
+        """
+        Output moved away from Multiroom: the Speakers finish the track they're on, then stop following (the
+        follower says so). The child stays connected, idle, for a later start. Nothing running: nothing to do.
+        """
+        with self.lock:
+            self.wanted = False
+            if self.conn is not None:
+                self._send(cmd="leave")
+
     def running(self):
         return self.conn is not None
 

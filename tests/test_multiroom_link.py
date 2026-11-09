@@ -46,11 +46,18 @@ class FakeFollower:
         self.nudges.append(ms)
         self.say(f"Start is now {90 + sum(self.nudges):.0f} ms.")
 
+    def leave_at_track_end(self):
+        self.say("The Speakers finish this track, then stop following.")
+        self.left.set()
+
     def run(self, stop=None):
+        import threading
+        self.left = threading.Event()
         if self.die:
             raise RuntimeError("the DAC went away")
         self.say("The Sound Of Silence: 48 kHz, 24-bit.")
-        stop.wait(10)
+        while not stop.is_set() and not self.left.is_set():
+            stop.wait(0.05)
         self.say("stopped")
 
 
@@ -175,6 +182,21 @@ def test_a_nudge_reaches_the_running_follower():
     assert until(lambda: lk.state == "following")
     lk.nudge(5)
     assert until(lambda: "Multiroom: Start is now 95 ms." in lines)
+    lk.stop()
+
+
+def test_leave_lets_the_follower_finish_and_keeps_the_child_for_later():
+    lines = []
+    lk = link.Link(say=lines.append, spawn=thread_spawn(make_build()))
+    lk.start(SETTINGS)
+    assert until(lambda: lk.state == "following")
+    lk.leave()
+    assert until(lambda: lk.state == "idle")
+    assert "Multiroom: The Speakers finish this track, then stop following." in lines
+    assert not lk.wanted and lk.running(), "the child stays connected for a later start"
+    lk.start(SETTINGS)   # Output back on Multiroom: the same child follows again
+    assert until(lambda: lk.state == "following")
+    assert lines.count("Multiroom: Speakers following Sonos (Kitchen, ASIO Chord 1.04)") == 2
     lk.stop()
 
 

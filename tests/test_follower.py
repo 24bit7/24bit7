@@ -643,6 +643,61 @@ def test_a_sonos_buffering_between_tracks_isnt_taken_for_a_pause():
     assert w.f.out is None and w.said("The Sonos stopped playing, so the Speakers have too.")
 
 
+# --- leaving: Output moved away from Multiroom --------------------------------------------------------------
+
+@pytest.mark.parametrize("at", [5.0, 15.0])
+def test_leaving_finishes_the_track_and_starts_nothing_else(at):
+    # Ben, 9 Nov 2026: a new playlist never cuts the track that's playing, so the Speakers finish the track they're
+    # on, then stop following. Told before the next track is opened (5 s in) or after (15 s in, with 20 s to go).
+    w = World(seconds=30)
+    w.jr.zones["Sonos"]["list"] = [1, 2, 3]
+    w.run(0.5)
+    c0 = w.play(key=1, next=2)
+    e = c0 + START + 30
+    w.run_to(c0 + at)
+    w.f.leave_at_track_end()
+    assert w.said("The Speakers finish this track, then stop following.")
+    assert w.f.player is not None and w.f.out is not None, "the track carries on"
+    w.run_to(e - START + 0.100)
+    w.play(key=2, next=3)   # the Sonos moves on
+    w.run(3.0)
+    assert w.outs[0].slots[-1] > e - 0.1, "track 1 was cut short"
+    assert w.f.out is None and w.f._left, "the Speakers didn't stop at the end of the track"
+    assert all(s.closed for s in w.src.streams) and not any(b.any() for (_, b), t in zip(w.outs[0].blocks, w.outs[0].slots) if t > e + 0.2), \
+        "track 2 was played"
+    assert len(w.outs) == 1 and not w.said("Track 2:")
+
+
+def test_leaving_while_nothing_plays_stops_at_once():
+    w = World()
+    w.run(0.5)
+    w.f.leave_at_track_end()
+    w.run(0.5)
+    assert w.f._left and w.said("The Speakers have stopped following.") and not w.outs
+    w.play()
+    w.run(2.0)
+    assert not w.outs, "started following after leaving"
+
+
+def test_run_returns_once_the_speakers_have_left():
+    w = World(seconds=5)
+    w.run(0.5)
+    w.play()
+    w.run(1.0)
+    w.f.leave_at_track_end()
+    stop = __import__("threading").Event()
+    steps = 0
+    while not w.f._left and steps < 2000:   # run()'s loop, by hand on the simulated clock
+        w.f.step()
+        o = w.f.out
+        if o is not None and not o.closed:
+            o.run(0.02)
+        else:
+            w.sim.t += 0.02
+        steps += 1
+    assert w.f._left and not stop.is_set()
+
+
 # --- rule 8: losing the clock ---------------------------------------------------------------------------
 
 def test_a_lost_clock_carries_on_then_picks_up_again():

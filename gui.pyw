@@ -1918,7 +1918,8 @@ class PlayTab(tk.Frame):
     def _sync_multiroom(self, target=None):
         """
         The follower runs while Output is Multiroom: picked, or left so when 24bit7 opens, the child starts and
-        the Speakers join whatever the Sonos is playing, or wait for it to play. Any other Output stops it.
+        the Speakers join whatever the Sonos is playing, or wait for it to play. Any other Output lets the Speakers
+        finish their track, then stops them following.
         """
         engine.refresh_settings_if_changed()
         if target is None:
@@ -1926,8 +1927,9 @@ class PlayTab(tk.Frame):
         if target == "multiroom" and engine.MULTIROOM_ENABLED:
             self.multiroom.start(engine.multiroom_settings())
         elif self.multiroom.wanted or self.multiroom.running():
-            self.multiroom.stop()
-            self.log_queue.put(multiroom_link.PREFIX + t("off: the Speakers have stopped following."))
+            # the Speakers finish the track they're on, then stop (Ben, 9 Nov 2026): a new playlist never cuts
+            # the track that's playing, and the follower says so in the console
+            self.multiroom.leave()
 
     def multiroom_build_sent(self):
         """engine.MULTIROOM_HOOK: a playlist went to the leader zone. A child already running is left be."""

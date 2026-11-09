@@ -7,7 +7,8 @@ The follower as 24bit7's child process (Multiroom, stage two, 9 Nov 2026).
 The app listens on 127.0.0.1 and the child connects to the port it was given. JSON, one object a line, each way:
   app -> child   {"cmd": "start", "leader": .., "follower": .., "server": .., "sonos": .., "device": ..,
                   "start": 90, "resume": 95, "dac": 1660, "env": "...\\.env"}
-                 {"cmd": "stop"}   {"cmd": "quit"}
+                 {"cmd": "stop"}   {"cmd": "leave"} (finish the track first)   {"cmd": "nudge", "ms": 5}
+                 {"cmd": "quit"}
   child -> app   {"line": "..."}   {"state": "following" | "idle"}   {"problem": "..."}
 
 Nothing here prints: a windowed exe has no console. The child runs its own process because at 192 kHz the DAC asks
@@ -58,6 +59,10 @@ class Service:
                     f = self.follower
                     if f is not None:
                         f.nudge(float(cmd.get("ms", 0)))
+                elif what == "leave":   # finish the track, then stop following; the child stays for a later start
+                    f = self.follower
+                    if f is not None:
+                        f.leave_at_track_end()
                 elif what == "quit":
                     break
         finally:
