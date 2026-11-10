@@ -6909,6 +6909,11 @@ class SettingsTab(tk.Frame):
 
     def _multiroom_show_found(self, found):
         self._mr_refreshing = False
+        try:
+            if not self._mr_speaker.winfo_exists():
+                return   # the page was torn down while the lookup ran (Settings reopened)
+        except tk.TclError:
+            return
         if not self.vars["MULTIROOM_ENABLED"].get():
             return
         speakers = found["speakers"]
@@ -6972,9 +6977,12 @@ class SettingsTab(tk.Frame):
         threading.Thread(target=work, daemon=True, name="multiroom-clock").start()
 
     def _multiroom_show_verdict(self, verdict):
-        self._mr_check.config(state="normal", text=t("Check Clock"))
-        text = t(CLOCK_VERDICTS[verdict.key], **verdict.values) if verdict.key in CLOCK_VERDICTS else verdict.text
-        self._mr_clock.config(text=text, fg=VERDICT_FG.get(verdict.colour, PALETTE["help_fg"]))
+        try:
+            self._mr_check.config(state="normal", text=t("Check Clock"))
+            text = t(CLOCK_VERDICTS[verdict.key], **verdict.values) if verdict.key in CLOCK_VERDICTS else verdict.text
+            self._mr_clock.config(text=text, fg=VERDICT_FG.get(verdict.colour, PALETTE["help_fg"]))
+        except tk.TclError:
+            pass   # the page was torn down while the clock was read
 
     # --- Calibrate (stage three, 9 Nov 2026) --------------------------------------------------------------
     def _multiroom_calibrate(self):
