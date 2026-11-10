@@ -91,17 +91,26 @@ rooms, which has been in step every time.
 
 ## 6. Calibration
 
-Not built yet. This is stage three of the plan, and I'm not going to describe what it does until it exists. What
-ships now: a profile per known speaker and DAC (Sonos One: Start 90 ms, Resume 95 ms; Chord Hugo over ASIO: 1,660
-samples), the three numbers on screen to type over, and Nudge buttons that move Start by 5 ms while music plays so
-you can set it by ear.
+One phone recording of about three minutes, made where you listen. Calibrate plays a click track to the Sonos
+through JRiver (1 kHz clicks at uneven gaps, so the pattern can't line up with itself at the wrong shift) while
+the follower plays 3.5 kHz clicks on the DAC, placed with the numbers as they stand; the recording measures what's
+left over. Four passages: a fresh start, a jump within the track, a stop and restart, and the DAC reopened at 192
+kHz. The residual of each gives one thing: Start, Resume (jump minus start), whether starts repeat (restart minus
+start), and the DAC delay in samples from the two rates (a delay in samples is 38 ms at 44.1 kHz and 9 ms at 192).
 
-What I can say about the planned method, since the measurements behind it are done: the numbers were found with a
-phone voice recording of click tracks played by each room in turn, decoded (m4a, via Windows Media Foundation) and
-fitted. The offsets are properties of the kit, not of a session: on the millisecond clock the Sonos's start offset
-repeated within about 5 ms across three fresh starts on the same day, and the DAC delay is fixed in samples. So
-the intent is no redo after a restart or reboot, only after a change of DAC, driver settings or DSP. Whether the
-offsets hold across days hasn't been measured.
+Record on anything: a plain WAV is read as it is; a phone's m4a, mp3 or FLAC is decoded by Windows Media
+Foundation, no ffmpeg. The recording never leaves the PC; it gets there by Drive, email or a cable and is loaded
+with a file picker. The solver finds each room's clicks in its own pitch band, anchors on the earliest alignment
+of the click pattern, takes a click only when both rooms are well above the background, and measures each
+passage's gap as a median with a robust spread. It refuses a recording with a faint room, too few clicks or too
+much spread, and says why. Nothing is saved until you press Use These Numbers.
+
+Measured so far, two recordings on my kit on 9 Nov: a run with the numbers in use (90, 95, 1,660) gave Start 87.6,
+Resume 100.0, DAC 1,774; a run deliberately given Start 60 and DAC 0 gave 93.1, 99.5 and 1,746, so the method
+finds the numbers from nothing. The two fresh starts within each run agreed to within a millisecond. The numbers
+include where the phone sat (about 3 ms a metre), which is intended: the rooms meet at the listening position.
+The offsets are properties of the kit, so no redo after a restart or reboot, only after a change of DAC, driver
+settings or DSP. Whether they hold across days hasn't been measured.
 
 ## 7. Results so far
 
@@ -140,7 +149,8 @@ Windows 10 Home (19045), JRiver Media Center 36, Sonos One (model S13, software 
 Settings > Other > Multiroom: tick Enable Multiroom; pick Leader (the zone that plays to the Sonos) and Follower
 (the zone whose DAC follows); the Speaker row shows what was found on the network with Check Clock beside it;
 Plays Through shows the matched ASIO device; DLNA Server names the server; under Adjustments are Start, Resume,
-DAC Delay and Nudge; Calibrate is greyed until stage three.
+DAC Delay and Nudge; Calibrate... opens the window with Play Test Sound, Load Recording..., Use These Numbers and
+Copy a Line for the Forum.
 
 Play tab: Output gains Multiroom. A build sent with it goes to the leader zone and the follower starts; so does
 leaving Output on Multiroom when 24bit7 opens, if the Sonos is playing. Zone gains a Multiroom entry that shows

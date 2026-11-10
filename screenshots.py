@@ -68,6 +68,7 @@ SHOTS = [
     ("settings_other", ["Settings", "Other"], ["settings_gui.py", "hotkeys.py", "tray.py"], None),
     ("settings_multiroom", ["Settings", "Other"], ["settings_gui.py", "multiroom/profiles.py", "multiroom/clockcheck.py"],
      "multiroom"),
+    ("settings_calibrate", ["Settings", "Other"], ["settings_gui.py", "multiroom/calibrate_fit.py"], "calibrate"),
     ("settings_about", ["Settings", "About"], ["settings_gui.py"], None),
 ]
 
@@ -762,6 +763,18 @@ def show_multiroom(settings, root):
     settle(root, 0.3)
 
 
+def show_calibrate(settings, root):
+    """The Calibrate Multiroom window, with the result of a run shown (the numbers from Ben's second run, 9 Nov)."""
+    from multiroom import calibrate_fit
+    win = settings._multiroom_calibrate()
+    r = calibrate_fit.Result()
+    r.start, r.resume, r.dac, r.repeat = 93.1, 99.5, 1746, 0.5
+    settings._mr_load_btn.config(state="disabled")
+    settings._calibrate_show(r, None)
+    settle(root, 0.4)
+    return win
+
+
 def main():
     parser = argparse.ArgumentParser(description="Screenshots for the 24bit7 manual, from demo data.")
     parser.add_argument("names", nargs="*", help="shot names to take (default: all)")
@@ -837,6 +850,9 @@ def main():
                 dialog = play.settings._open_filters()
             elif action == "multiroom":   # Settings > Other scrolled to Multiroom, the kit "found" (1.32.0)
                 show_multiroom(play.settings, root)
+            elif action == "calibrate":   # the Calibrate Multiroom window with a result shown (1.32.0)
+                show_multiroom(play.settings, root)
+                dialog = show_calibrate(play.settings, root)
             elif action == "playlists_list":   # Road Trip chosen, the list open under the box (1.31.0)
                 play._show_more(False, save=False)
                 play._close_playlists_if_away = lambda: None   # the shot takes the keyboard from the box
