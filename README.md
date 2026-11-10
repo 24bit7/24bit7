@@ -310,7 +310,15 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.32.0
+## What's new in 1.33.0
+
+- **Play & Embellish has settings of its own.** Settings > JRiver Playlists > Play & Embellish is a table: **Shuffle**, **Deep Cuts** with its share, and the **Moderator**, on one All amounts line for every amount, or untick **Use the same settings for every amount** and give +10% to Build It Out a line each. Deep Cuts top up what Embellish added, and the Moderator checks only the new tracks against your playlist.
+- **Shuffle is the default** wherever a JRiver playlist plays: Play & Embellish, and a playlist or smartlist asked for by voice on a fresh install. What you had chosen before is kept.
+- **No build waits in silence.** On a stopped zone Play & Embellish starts the playlist's own first track, Radio starts a pillar's song, and AI Playlist makes a quick first request for an opener that plays while the full list is found.
+- **Radio and Play & Embellish show their working**: each pillar and agreeing artist is a line in the console, each top track In library or Not in library, and every one is listed in Discover.
+- **Multiroom's running commentary** is in the Advanced console only. Its problems, and notes about something you can hear, show in Simple too.
+
+### Earlier: 1.32.0
 
 - **Multiroom** (experimental): your main system plays what your Sonos plays, in step. Tick it on under Settings > Other > Multiroom, pick the zone that plays to the Sonos and the zone whose DAC follows, and Output gains **Multiroom**. A build goes to the Sonos as usual and 24bit7 plays the same music on the other DAC, placed on the Sonos's own clock, at the file's own sample rate with your DSP, from a second JRiver DLNA server you set up once. Gapless changes stay gapless, jumps are followed, a pause anywhere stops both rooms. Tested on one Sonos One and a Chord Hugo TT over ASIO; **Check Clock** says whether another speaker's clock can be followed.
 - **Calibrate** measures Multiroom's three timing numbers for your own kit from one phone recording of about three minutes: clicks in both rooms, the recording loaded back in, the numbers out, with how well two fresh starts agree. Nothing changes until you press Use These Numbers.
