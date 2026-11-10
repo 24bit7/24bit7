@@ -119,14 +119,14 @@
         },
         {
           "name": "RadioIntent",
-          "slots": [{"name": "query", "type": "STATION"}],
-          "samples": ["radio", "the radio", "some radio", "radio {query}", "{query} radio", "the {query} station",
-                      "station {query}", "radio station {query}", "the radio station {query}"]
+          "slots": [{"name": "station", "type": "STATION"}],
+          "samples": ["radio", "the radio", "some radio", "radio {station}", "{station} radio", "the {station} station",
+                      "station {station}", "radio station {station}", "the radio station {station}"]
         },
         {
           "name": "StationIntent",
-          "slots": [{"name": "query", "type": "STATION"}],
-          "samples": ["{query}", "the {query} one", "the {query}", "number {query}", "{query} please"]
+          "slots": [{"name": "station", "type": "STATION"}],
+          "samples": ["{station}", "the {station} one", "the {station}", "number {station}", "{station} please"]
         },
         {
           "name": "TopUpIntent",

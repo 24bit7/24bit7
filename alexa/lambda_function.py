@@ -138,13 +138,20 @@ class LaunchHandler(AbstractRequestHandler):
                 .response)
 
 
+def heard_words(handler_input):
+    """The words in the request's slot: "query" for most intents, "station" for Radio and Station (10 Nov 2026:
+    the console wants one slot name to mean one slot type across the model, and STATION is its own type)."""
+    return (ask_utils.get_slot_value(handler_input, "query")
+            or ask_utils.get_slot_value(handler_input, "station") or "")
+
+
 class CommandHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
         return any(ask_utils.is_intent_name(name)(handler_input) for name in INTENTS)
 
     def handle(self, handler_input):
         intent = INTENTS[ask_utils.get_intent_name(handler_input)]
-        value = ask_utils.get_slot_value(handler_input, "query") or ""
+        value = heard_words(handler_input)
         device = handler_input.request_envelope.context.system.device.device_id
         return respond(handler_input, *send(intent, value, device, topping_up(handler_input)))
 
@@ -182,7 +189,7 @@ class StationHandler(AbstractRequestHandler):
 
     def handle(self, handler_input):
         session = handler_input.attributes_manager.session_attributes
-        heard = ask_utils.get_slot_value(handler_input, "query") or ""
+        heard = heard_words(handler_input)
         if session.get("ask") != "station" or not heard:
             return handler_input.response_builder.speak(NOT_CAUGHT).set_should_end_session(False).response
         device = handler_input.request_envelope.context.system.device.device_id

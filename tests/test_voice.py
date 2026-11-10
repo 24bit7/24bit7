@@ -40,7 +40,9 @@ class Alexa:
         }
 
     def say(self, intent, query=None, device=KITCHEN, new=True):
-        slots = {"query": {"name": "query", "value": query}} if query is not None else {}
+        # the slot is named as the interaction model names it: "station" for Radio and Station, "query" elsewhere
+        slot = "station" if intent in ("RadioIntent", "StationIntent") else "query"
+        slots = {slot: {"name": slot, "value": query}} if query is not None else {}
         out = self.skill.lambda_handler(self._envelope(
             {"type": "IntentRequest", "intent": {"name": intent, "confirmationStatus": "NONE", "slots": slots}},
             device, new), None)
@@ -329,6 +331,21 @@ def test_model_has_every_intent_the_skill_handles(app, alexa):
     for intent in model["interactionModel"]["languageModel"]["intents"]:
         for sample in intent.get("samples", []):
             assert "-" not in sample and not sample.lower().startswith("play "), sample
+
+
+def test_a_slot_name_has_one_type_across_the_model(app):
+    # 10 Nov 2026: the Alexa console warned "Slot query in intent SongsByIntent cannot reference more than one slot
+    # type" because Radio and Station gave "query" the STATION type while every other intent had AMAZON.SearchQuery
+    import json
+    model = json.load(open(app.folder / "alexa" / "interaction_model.json", encoding="utf-8"))
+    types = {}
+    for intent in model["interactionModel"]["languageModel"]["intents"]:
+        for slot in intent.get("slots", []):
+            types.setdefault(slot["name"], set()).add(slot["type"])
+            for sample in intent.get("samples", []):
+                assert "{query}" not in sample or slot["name"] == "query", (intent["name"], sample)
+    assert all(len(v) == 1 for v in types.values()), types
+    assert types["station"] == {"STATION"}
 
 
 # --- devices ------------------------------------------------------------------------
