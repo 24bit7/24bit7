@@ -32,6 +32,15 @@ def test_closes_only_the_packaged_copy():
     assert "$_.Path -eq $exe" in close
 
 
+def test_keeps_closing_until_no_copy_is_left():
+    """24bit7 starts its Multiroom follower once more if that dies while it's wanted, so one pass could leave a
+    follower born as its parent closed: it kept a file open and PyInstaller couldn't clear the folder, which
+    failed the 1.33.0 build after every test had passed (10 Nov 2026). The close step goes round until none is left."""
+    close = lines()[first(lambda l: "Stop-Process" in l)]
+    assert "foreach ($round in 1..5)" in close and "if (-not $open) { break }" in close, close
+    assert close.index("Get-Process 24bit7") > close.index("foreach ($round"), "each round looks again"
+
+
 def test_opens_the_new_24bit7_after_publishing():
     publish = first(lambda l: "release.ps1" in l)
     reopen = first(lambda l: l.startswith("if exist") and "start " in l and r"dist\24bit7\24bit7.exe" in l)

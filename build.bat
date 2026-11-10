@@ -21,7 +21,9 @@ if errorlevel 1 (
 echo.
 
 rem --- 0a. Close the packaged 24bit7, or its files can't be replaced (a copy run from gui.pyw is left alone) ---
-powershell -NoProfile -Command "$exe = (Resolve-Path 'dist\24bit7\24bit7.exe' -ErrorAction SilentlyContinue).Path; if ($exe) { Get-Process 24bit7 -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe } | ForEach-Object { Write-Host 'Closing 24bit7 so it can be rebuilt.'; Stop-Process -Id $_.Id -Force; $_.WaitForExit(10000) | Out-Null } }; exit 0"
+rem     In rounds, until none is left: 24bit7 starts its Multiroom follower again if that dies first, and a
+rem     follower born as its parent closes kept a file open and failed the 1.33.0 build (10 Nov 2026).
+powershell -NoProfile -Command "$exe = (Resolve-Path 'dist\24bit7\24bit7.exe' -ErrorAction SilentlyContinue).Path; if ($exe) { foreach ($round in 1..5) { $open = @(Get-Process 24bit7 -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe }); if (-not $open) { break }; if ($round -eq 1) { Write-Host 'Closing 24bit7 so it can be rebuilt.' }; $open | ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue; $_.WaitForExit(10000) | Out-Null }; Start-Sleep -Seconds 2 } }; exit 0"
 
 rem --- 1. Back up settings and history (a rebuild deletes dist\24bit7) ---
 for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd_HHmm"') do set STAMP=%%i
