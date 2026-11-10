@@ -52,6 +52,10 @@ def test_headliner_carries_on_alone_when_guests_run_short(app, monkeypatch):
     import buttons
     e = app.engine
     monkeypatch.setattr(e, "blended_similar_artists", lambda *a, **k: ([("Queen", ["Last.fm"])], "Last.fm"))
+    # Queen's one pick is random among her top tracks, and the fake sources name one nobody owns: picked, Queen
+    # gives nothing and the test saw six tracks, about one run in four (it stopped the 1.33.0 build, 10 Nov 2026).
+    # The pick isn't what this test is about, so it takes the first.
+    monkeypatch.setattr(e.random, "sample", lambda names, n: list(names)[:n])
     r = app.Lines()
     buttons.run(headliner(app), report=r, seed_info=seed(app, "The Beatles"))
     titles = app.jriver.titles("Speakers")
