@@ -12,7 +12,7 @@ import json
 import contextlib
 import types as _types
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import i18n
 from i18n import N_, t, tn
@@ -1026,6 +1026,10 @@ def db():
                 con.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
                 if "seed" not in [c[1] for c in con.execute("PRAGMA table_info(discoveries)")]:
                     con.execute("ALTER TABLE discoveries ADD COLUMN seed TEXT")   # 1.17.0: the sample a row came from
+                if "zone" not in [c[1] for c in con.execute("PRAGMA table_info(sessions)")]:
+                    con.execute("ALTER TABLE sessions ADD COLUMN zone TEXT")       # 1.34.0: where it played
+                    con.execute("ALTER TABLE sessions ADD COLUMN asked_by TEXT")   # ...and who asked for it
+                    _backfill_session_zones(con)
                 con.commit()
                 _db = con
                 import_legacy_csv()
@@ -1235,6 +1239,46 @@ _SESSION_STARTED = {}
 CURRENT_SESSION = None   # the build in progress, for what's logged after its picks (Deep Cuts)
 
 
+JOB_SESSIONS = []   # the sessions started since the last build was kept in the Log: they get its zone and asker
+
+
+def _backfill_session_zones(con):
+    """
+    Sessions from before 1.34.0 learn their zone and who asked from the console's Log (Ben, 10 Nov 2026): the
+    first build kept at or after the session started, within twenty minutes (a build is kept when it ends, and
+    a mix starts several sessions for one build). One with no build to match gets "" (not known), so the next
+    build doesn't claim it. The Log keeps the last few hundred builds a tab and began on 5 Oct 2026.
+    """
+    try:
+        builds = con.execute("SELECT at, zone, from_label FROM builds ORDER BY at").fetchall()
+    except sqlite3.OperationalError:   # no Log yet
+        builds = []
+    for sid, started in con.execute("SELECT id, started_at FROM sessions WHERE zone IS NULL").fetchall():
+        zone = asked = ""
+        try:
+            begun = datetime.strptime(started or "", "%Y-%m-%d %H:%M")
+        except ValueError:
+            begun = None
+        if begun:
+            first, last = begun.strftime("%Y-%m-%d %H:%M:00"), (begun + timedelta(minutes=20)).strftime("%Y-%m-%d %H:%M:00")
+            hit = next(((z, f) for at, z, f in builds if first <= (at or "") < last), None)
+            if hit:
+                zone, asked = hit[0] or "", hit[1] or ""
+        con.execute("UPDATE sessions SET zone=?, asked_by=? WHERE id=?", (zone, asked, sid))
+
+
+def sessions_kept(zone, asked_by):
+    """A build was kept in the Log: the sessions it started get its zone and who asked (buildlog.record_job)."""
+    ids = list(JOB_SESSIONS)
+    JOB_SESSIONS.clear()
+    if not ids:
+        return
+    marks = ",".join("?" * len(ids))
+    db().execute(f"UPDATE sessions SET zone=?, asked_by=? WHERE zone IS NULL AND id IN ({marks})",
+                 (zone or "", asked_by or "", *ids))
+    db().commit()
+
+
 def session_start(mode, seed_info, sources=""):
     globals()["CLOSERS_DROPPED"] = 0
     ai_off_reset()
@@ -1252,6 +1296,7 @@ def session_start(mode, seed_info, sources=""):
     db().commit()
     _SESSION_STARTED[cur.lastrowid] = time.time()
     globals()["CURRENT_SESSION"] = cur.lastrowid
+    JOB_SESSIONS.append(cur.lastrowid)
     try:   # a finished source test the user hasn't opened yet: say so again
         import source_test
         source_test.remind_if_ready()

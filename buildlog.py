@@ -136,7 +136,12 @@ def record_job(origin, text):
                     con.execute("UPDATE builds SET chain_id=?, chain_pos=1 WHERE id=?", (pid, pid))
                     chain_id, chain_pos = pid, 1
                 row.update(tab=tab, chain_id=chain_id, chain_pos=chain_pos + 1)
-        return _insert(con, row)
+        rid = _insert(con, row)
+    try:   # Discover's Statistics: where the build's sessions played and who asked
+        engine.sessions_kept(row["zone"], row["from_label"])
+    except Exception as e:
+        engine.debug(f"Log: couldn't note the zone on the build's sessions ({e})")
+    return rid
 
 
 def record_instant(device_id, intent, text, zone=""):

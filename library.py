@@ -353,6 +353,12 @@ def ensure_loaded():
         load()
 
 
+def has_artist(name):
+    """Whether an artist of that name is in the library, by the rules every name match uses (Discover's Statistics)."""
+    ensure_loaded()
+    return norm(name or "") in _artists
+
+
 def played_time(raw):
     """
     JRiver's Last Played as Unix seconds, or None. It can arrive as Unix seconds,
