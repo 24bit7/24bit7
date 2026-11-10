@@ -123,18 +123,24 @@ def test_nothing_like_the_pattern_is_refused():
     assert not r.ok and r.problems
 
 
-REAL = os.path.join(SYNC, "calibration_run1_2318.m4a")
-REAL_LOG = os.path.join(SYNC, "calibration_run1_2318.json")
+REAL = {name: (os.path.join(SYNC, f"calibration_{name}.m4a"), os.path.join(SYNC, f"calibration_{name}.json"))
+        for name in ("run1_2318", "run2_2356")}
 
 
-@pytest.mark.skipif(not (os.path.isfile(REAL) and os.path.isfile(REAL_LOG)), reason="Ben's recording isn't on this PC")
-def test_bens_recording_of_9_nov_gives_his_numbers_back(tmp_path):
-    # the run used 90 / 95 / 1660 and both rooms were heard aligned, so the solver should hand the same numbers
-    # back, give or take the phone's place in the room and the scatter of a phone recording
-    wav = calibrate.decode(REAL, out_dir=str(tmp_path))
-    r = calibrate_fit.solve(wav, REAL_LOG)
+@pytest.mark.parametrize("name", list(REAL))
+def test_bens_recordings_of_9_nov_give_his_numbers_back(tmp_path, name):
+    # run one used 90 / 95 / 1660 and both rooms were heard aligned; run two used 60 / 95 / 0 on purpose. Both
+    # should hand back about 90, 100 and 1700-odd: the phone's place in the room and a phone recording's scatter
+    # are in the tolerances, and the DAC delay is good to about 150 samples from one recording
+    m4a, log = REAL[name]
+    if not (os.path.isfile(m4a) and os.path.isfile(log)):
+        pytest.skip("Ben's recording isn't on this PC")
+    wav = calibrate.decode(m4a, out_dir=str(tmp_path))
+    r = calibrate_fit.solve(wav, log)
     assert r.ok, r.problems
     assert r.start == pytest.approx(90.0, abs=8.0), r.start
-    assert r.resume == pytest.approx(95.0, abs=8.0), r.resume
-    assert r.dac == pytest.approx(1660, abs=300), r.dac
-    assert r.repeat < 8.0, r.repeat
+    assert r.resume == pytest.approx(100.0, abs=6.0), r.resume
+    assert r.dac == pytest.approx(1750, abs=250), r.dac
+    assert r.repeat < 5.0, r.repeat
+    for p in r.passages.values():   # about a third of the clicks read 30 ms out on an echo; the rest agree closely
+        assert p["scatter"] < 3.0 and p["found"] >= 0.5 * p["expected"], p

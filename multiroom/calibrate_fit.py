@@ -172,10 +172,14 @@ def solve_signal(x, rate, log):
             res.passages[name] = entry
             res.problems.append(("too_few", {"passage": name, "found": len(gaps), "expected": len(window)}))
             continue
-        # the gap: the median, and its scatter over the clicks within 30 ms of it (the rest are misreads)
+        # the gap: the median, and its spread as a robust scatter (1.4826 times the median absolute deviation),
+        # since a few clicks read 30 ms out when the onset lands on an echo or the other room's leak (run two,
+        # 9 Nov 2026: fourteen clicks within a millisecond and three thirty out; a standard deviation said 11 ms)
         med = float(np.median(gaps))
-        near = gaps[np.abs(gaps - med) <= 30]
-        gap, scatter = float(np.median(near)), float(np.std(near)) if len(near) > 1 else 0.0
+        mad = float(np.median(np.abs(gaps - med)))
+        scatter = 1.4826 * mad
+        near = gaps[np.abs(gaps - med) <= max(3 * scatter, 5.0)]   # the clicks that agree, to within 5 ms at least
+        gap = float(np.median(near)) if len(near) else med
         entry.update(gap=gap, scatter=scatter, found=int(len(near)))
         res.passages[name] = entry
         if scatter > SCATTER_MS:
