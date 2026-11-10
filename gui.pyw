@@ -61,7 +61,7 @@ import window_chrome
 import ai_usage
 from multiroom import link as multiroom_link
 
-MULTIROOM_LABEL = "Multiroom"   # the Output entry; a feature name, so not translated
+MULTIROOM_LABEL = engine.MULTIROOM_NAME   # the Output entry; a feature name, so not translated
 
 
 REFRESH_MS = 10000   # Now Playing panel; paused while minimised or in the tray
@@ -828,7 +828,8 @@ class PlayTab(tk.Frame):
 
     def _fill_zone_list(self):
         engine.refresh_settings_if_changed()
-        self.zone_cb.config(values=engine.zone_names() + ([MULTIROOM_LABEL] if engine.MULTIROOM_ENABLED else []))
+        self.zone_cb.config(values=engine.listed_zone_names()
+                            + ([MULTIROOM_LABEL] if engine.MULTIROOM_ENABLED else []))
 
     def _zone_name(self):
         """The JRiver zone the row reads: Multiroom in the list means the leader zone (Ben, 9 Nov 2026)."""
@@ -1867,7 +1868,7 @@ class PlayTab(tk.Frame):
         return t(SAME_ZONE_LABEL)
 
     def _fill_output_list(self):
-        self.output_cb.config(values=[t(SAME_ZONE_LABEL)] + engine.zone_names() + self._extra_outputs())
+        self.output_cb.config(values=[t(SAME_ZONE_LABEL)] + engine.listed_zone_names() + self._extra_outputs())
 
     @staticmethod
     def _extra_outputs():
@@ -1885,7 +1886,10 @@ class PlayTab(tk.Frame):
     def outputs_changed(self):
         """Additional Outputs changed: an Output that's been unticked goes back to Same zone, and says so."""
         was = self.output_var.get()
-        if was in list(dict(engine.OUTPUT_OPTIONS).values()) + [MULTIROOM_LABEL] and was not in self._extra_outputs():
+        offered = self._extra_outputs()   # rereads the settings first
+        if engine.OUTPUT_TARGET.startswith("zone:"):
+            return   # a JRiver zone, whatever it's called: nothing was unticked from under it
+        if was in list(dict(engine.OUTPUT_OPTIONS).values()) + [MULTIROOM_LABEL] and was not in offered:
             self.output_var.set(t(SAME_ZONE_LABEL))
             self._on_output_changed()
             where = t("Multiroom") if was == MULTIROOM_LABEL else t("Additional Outputs")
@@ -1895,9 +1899,10 @@ class PlayTab(tk.Frame):
 
     def _on_output_changed(self, *_):
         choice = self.output_var.get()
+        engine.refresh_settings_if_changed()
+        # "Multiroom" is the feature only while it's on; off, it's a JRiver zone of that name (10 Nov 2026)
         target = ("youtube" if choice == "YouTube" else "tidal" if choice == "Tidal" else
-                  "multiroom" if choice == MULTIROOM_LABEL else
-                  "jriver" if choice == t(SAME_ZONE_LABEL) else "zone:" + choice)
+                  "jriver" if choice == t(SAME_ZONE_LABEL) else engine.multiroom_or_zone(choice))
         try:
             write_env({"OUTPUT_TARGET": target})
         except Exception as e:

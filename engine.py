@@ -36,6 +36,8 @@ ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
 OUTPUT_OVERRIDE = None  # a zone name that beats the Output setting for one run (voice commands)
+OUTPUT_DROPPED = None   # "multiroom", "youtube" or "tidal": what Output asks for in .env while it isn't switched on
+MULTIROOM_NAME = "Multiroom"   # the feature's entry in the Output and Zone lists; a feature name, never translated
 MODERATOR_OVERRIDE = None  # True/False beats the AI_MODERATOR setting for one run
 PROFILE = {}               # a button's settings (buttons.run), laid over .env for the build in progress
 RELEASES_API = "https://api.github.com/repos/24bit7/24bit7/releases/latest"
@@ -352,7 +354,7 @@ def load_settings():
     global LISTENBRAINZ_TRACK_ALGORITHM_SETTING
     global TRACKS_PER_ARTIST_PICK, TOP_TRACKS_COUNT, TOP_TRACKS_ORDER, CACHE_DAYS, CACHE_KEEP
     global TABLE_FONT_SIZE, VIBE_TRACK_COUNT, VIBE_PER_ARTIST
-    global OUTPUT_TARGET, YOUTUBE_PLAYLIST_LENGTH, HIDDEN_ZONES, DEFAULT_ZONE, FOLLOW_ACTIVE_ZONE
+    global OUTPUT_TARGET, OUTPUT_DROPPED, YOUTUBE_PLAYLIST_LENGTH, HIDDEN_ZONES, DEFAULT_ZONE, FOLLOW_ACTIVE_ZONE
     global PREFER_OFFICIAL_VIDEOS, THEME, ACCENT_COLOUR, UI_LANGUAGE
     global VOICE_ENABLED, VOICE_KEY, VOICE_PORT, VOICE_NEW_PLAYLISTS
     global START_IN_TRAY, CLOSE_TO_TRAY
@@ -567,6 +569,7 @@ def load_settings():
     # = a named JRiver zone, "multiroom" (the leader zone, with the Speakers following), or
     # "youtube" (opens in the browser). Zone names keep their case, as JRiver's do.
     raw_output = os.getenv("OUTPUT_TARGET", "jriver").strip()
+    OUTPUT_DROPPED = None
     if raw_output.lower().startswith("zone:") and raw_output[5:].strip():
         OUTPUT_TARGET = "zone:" + raw_output[5:].strip()
     else:
@@ -574,6 +577,8 @@ def load_settings():
         if OUTPUT_TARGET not in ("jriver", "youtube", "tidal", "multiroom") or (
                 OUTPUT_TARGET in ("youtube", "tidal") and OUTPUT_TARGET not in EXTRA_OUTPUTS) or (
                 OUTPUT_TARGET == "multiroom" and not MULTIROOM_ENABLED):   # unticked
+            if OUTPUT_TARGET in ("youtube", "tidal", "multiroom"):
+                OUTPUT_DROPPED = OUTPUT_TARGET   # asked for but not switched on: the next build says so
             OUTPUT_TARGET = "jriver"
     # Zones hidden from the Play tab's Zone and Output lists (names separated by |)
     HIDDEN_ZONES = {x.strip() for x in os.getenv("HIDDEN_ZONES", "").split("|") if x.strip()}
@@ -1512,6 +1517,25 @@ def zone_names(include_hidden=False):
     refresh_settings_if_changed()
     zones, _ = _read_zones()
     return [n for _, n in zones if include_hidden or n not in HIDDEN_ZONES]
+
+
+def listed_zone_names():
+    """
+    zone_names() for the Play tab's Zone and Output lists. While Multiroom is on, a JRiver zone that shares its
+    name is left out, so "Multiroom" in a list means one thing (10 Nov 2026: Ben's test zone of that name showed
+    twice beside the feature's entry).
+    """
+    names = zone_names()
+    return [n for n in names if n != MULTIROOM_NAME] if MULTIROOM_ENABLED else names
+
+
+def multiroom_or_zone(choice):
+    """
+    How Output's pick of a name is kept in .env: "Multiroom" is the feature only while the feature is on. With it
+    off, the only Multiroom in the list is a JRiver zone of that name, and that's where the playlist goes
+    (10 Nov 2026: picked with the feature off, it was kept as the feature and fell back to Same zone unsaid).
+    """
+    return "multiroom" if choice == MULTIROOM_NAME and MULTIROOM_ENABLED else "zone:" + choice
 
 
 def zone_id(name=None):
@@ -4761,6 +4785,29 @@ def drop_long_closers(keys, keep=(), report=print, group=None):
     return kept
 
 
+_DROPPED_SAID = None   # the build (BUILD_STARTED) that has had its "Output is set to..." note
+
+
+def _say_output_dropped(zone, zone_name, report):
+    """
+    Output asks for Multiroom, YouTube or Tidal while that isn't switched on, so the playlist went where Same zone
+    sends it. Said once a build, never silently (10 Nov 2026). A voice command's own zone and a Non-stop top-up
+    don't go by Output, so they say nothing.
+    """
+    global _DROPPED_SAID
+    if not OUTPUT_DROPPED or zone_name or OUTPUT_OVERRIDE or NONSTOP_APPEND:
+        return
+    if BUILD_STARTED is not None and BUILD_STARTED == _DROPPED_SAID:
+        return
+    _DROPPED_SAID = BUILD_STARTED
+    if OUTPUT_DROPPED == "multiroom":
+        report("  " + t("Note: Output is set to Multiroom, but Multiroom isn't switched on (Settings > Other > "
+                        "Multiroom), so this went to {zone}.", zone=zone_label(zone)))
+    else:
+        report("  " + t("Note: Output is set to {name}, but {name} isn't ticked under Settings > Other > Additional "
+                        "Outputs, so this went to {zone}.", name=STREAM_OUTPUTS[OUTPUT_DROPPED], zone=zone_label(zone)))
+
+
 def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=None, append=False,
                    closer_group=None):
     """
@@ -4794,6 +4841,7 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
     zone = output_zone(seed_info, zone_name, report)
     if zone is None:
         return
+    _say_output_dropped(zone, zone_name, report)
     LAST_OUTPUT = zone_label(zone)
     globals()["LAST_OUTPUT_ID"] = zone
     globals()["SENT_ANY"] = True

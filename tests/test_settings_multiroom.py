@@ -207,3 +207,43 @@ def test_unticking_multiroom_puts_output_back_to_same_zone_and_stops_the_followe
     assert any("Multiroom" in str(a) for a in ui.answers), "the message says which section unticked it"
     assert link.stopped >= 1 and "MULTIROOM_ENABLED=0" in (app.folder / ".env").read_text()
     assert not ui.errors, ui.errors[0]
+
+
+def test_a_zone_named_multiroom_is_kept_as_the_zone_while_the_feature_is_off(app, ui, monkeypatch):
+    """
+    10 Nov 2026: Ben's house copy had the feature off and a JRiver zone called Multiroom. Picked in Output it was
+    kept as the feature, which wasn't on, so the playlist went to Same zone unsaid. Off, the name is the zone;
+    on, the zone leaves the list so the name shows once.
+    """
+    from fakes import Zone
+    quiet_network(monkeypatch)
+    link = ui.play.multiroom = FakeLink()
+    j = app.jriver
+    j.zones["10016"] = Zone("10016", "Multiroom")
+    j.zone_order.append("10016")
+    app.engine._zone_list(fresh=True)
+    ui.play._fill_output_list()
+    assert list(ui.play.output_cb["values"]).count("Multiroom") == 1
+    ui.play.output_var.set("Multiroom")
+    ui.play._on_output_changed()
+    ui.pump(0.3)
+    assert "OUTPUT_TARGET=zone:Multiroom" in (app.folder / ".env").read_text()
+    assert not link.started, "the zone isn't the feature, so nothing follows"
+
+    s = ui.settings
+    page_named(ui, "Other")
+    s.vars["MULTIROOM_ENABLED"].set(True)
+    s.vars["MULTIROOM_LEADER"].set("Sonos")
+    s.vars["MULTIROOM_FOLLOWER"].set("Speakers")
+    s._multiroom_changed()
+    ui.pump(0.3)
+    ui.play._fill_output_list()
+    ui.play._fill_zone_list()
+    assert list(ui.play.output_cb["values"]).count("Multiroom") == 1, "the zone and the feature both showed"
+    assert list(ui.play.zone_cb["values"]).count("Multiroom") == 1
+    ui.play.output_var.set("Multiroom")
+    ui.play._on_output_changed()
+    ui.pump(0.3)
+    assert "OUTPUT_TARGET=multiroom" in (app.folder / ".env").read_text()
+    assert link.started, "on, the name is the feature"
+    assert not ui.errors, ui.errors[0]

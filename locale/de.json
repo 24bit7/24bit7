@@ -621,6 +621,8 @@
   "Note: no track has credits of its own on this release.": "Hinweis: Auf dieser Veröffentlichung hat kein Titel eigene Mitwirkende.",
   "Note: no usable sources in the setting {setting_name}, so Last.fm is used.": "Hinweis: keine verwendbaren Quellen in der Einstellung {setting_name}, daher wird Last.fm verwendet.",
   "Note: nothing is in Playing Now, so seeding from the last track played: {artist} - {name}.": "Hinweis: Die Aktuelle Wiedergabe ist leer, daher ist der zuletzt gespielte Titel der Seed: {artist} - {name}.",
+  "Note: Output is set to Multiroom, but Multiroom isn't switched on (Settings > Other > Multiroom), so this went to {zone}.": "Hinweis: Ausgabe steht auf Multiroom, aber Multiroom ist nicht eingeschaltet (Einstellungen > Sonstiges > Multiroom), daher ging das an {zone}.",
+  "Note: Output is set to {name}, but {name} isn't ticked under Settings > Other > Additional Outputs, so this went to {zone}.": "Hinweis: Ausgabe steht auf {name}, aber {name} ist unter Einstellungen > Sonstiges > Weitere Ausgaben nicht angehakt, daher ging das an {zone}.",
   "Note: nothing new to add, as every track found had already been sent to this zone.": "Hinweis: nichts Neues hinzuzufügen, da jeder gefundene Titel schon an diese Zone geschickt wurde.",
   "Note: settings changed since \"{current}\" was loaded weren't saved to it.": "Hinweis: Einstellungen, die seit dem Laden von \"{current}\" geändert wurden, wurden nicht darin gespeichert.",
   "Note: the AI request didn't work, so trying once more...": "Hinweis: Die Anfrage an die KI hat nicht geklappt, versuche es noch einmal...",
