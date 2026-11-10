@@ -19,6 +19,35 @@ import threading
 import time
 
 PREFIX = "Multiroom: "
+
+
+def _said(line):
+    """What a Multiroom console line says after its prefix, or None for any other line. The indent and the time
+    the console stamps on a build's first line don't count."""
+    body = str(line).strip()
+    if len(body) > 7 and body[2] == ":" and body[:2].isdigit() and body[3:5].isdigit() and body[5:7] == "  ":
+        body = body[7:]
+    return body[len(PREFIX):] if body.startswith(PREFIX) else None
+
+
+def is_problem(line):
+    """A Multiroom line that says something went wrong: it shows in every console, in the problem colour."""
+    return (_said(line) or "").startswith("Problem")
+
+
+def is_note(line):
+    """A Multiroom line that explains something you can hear (the Speakers quiet, both rooms stopped): it shows
+    in every console too, as a note."""
+    return (_said(line) or "").startswith("Note")
+
+
+def advanced_only(line):
+    """
+    Whether a console line is the follower's own commentary ("Speakers in from the first note", "Clock refined
+    by..."), which the Simple console leaves out and Advanced shows (Ben, 10 Nov 2026): it's plumbing, not music.
+    A problem always shows, and so does a note about something you can hear.
+    """
+    return _said(line) is not None and not is_problem(line) and not is_note(line)
 ACCEPT_TIMEOUT = 15.0
 STEADY_FOR = 60.0   # a child that ran this long before dying earns another restart
 

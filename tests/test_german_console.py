@@ -35,6 +35,21 @@ def test_german_lines_keep_their_colours(app, german):
     assert kind("  Note: an older English line") == "note", "English lines from before still colour"
 
 
+def test_multirooms_commentary_is_a_detail_line_and_its_problems_and_notes_keep_their_colours(app):
+    """10 Nov 2026: Simple hides the follower's commentary (the debug tag is the one Simple leaves out)."""
+    import importlib
+    gui = importlib.import_module("conftest").load_gui(app.folder)
+    kind = gui.PlayTab._line_kind
+    assert kind("Multiroom: Speakers in from the first note.") == "debug"
+    assert kind("15:02  Multiroom: Clock refined by +1.2 ms.") == "debug"
+    assert kind("Multiroom: Problem: the follower didn't start.") == "problem"
+    assert kind("Multiroom: Note: the Sonos paused, so both rooms have stopped; play starts the track from the top.") == "note"
+    assert kind("[debug] Fast start: the first track is playing") == "debug"
+    assert gui.advanced_only("Multiroom: Jumped to 42.0 s.") and gui.advanced_only("  [debug] a detail")
+    assert not gui.advanced_only("Multiroom: Problem: the follower didn't start.")
+    assert not gui.advanced_only("Done: 30 tracks queued in Sonos.")
+
+
 def test_the_log_counts_german_and_english_lines(app, german):
     import buildlog
     text = ("10:00  Ähnliche Titel: The Beatles - Something\n"

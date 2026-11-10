@@ -684,6 +684,7 @@ class FakeAI:
         self.calls = []                 # (model, prompt/system first line)
         self.script = []                # queued replies (text, stop_reason) used before the defaults
         self.remove = []                # moderator: indexes to remove
+        self.opener = []                # AI Playlist's quick first call: [(artist, track)]; none unless a test sets it
         self.fail = None                # an exception to raise
         outer = self
 
@@ -698,8 +699,8 @@ class FakeAI:
         self.sent = getattr(self, "sent", []) + [str(prompt)]
         if self.fail:
             raise self.fail
-        if self.script:
-            text, stop = self.script.pop(0)
+        if self.script and "to open a playlist" not in prompt:   # a test's queued replies are for the calls it
+            text, stop = self.script.pop(0)                        # knows about, not AI Playlist's quick opener
         else:
             text, stop = self._answer(prompt, system), "end_turn"
         return SimpleNamespace(content=[SimpleNamespace(type="text", text=text)], stop_reason=stop,
@@ -730,6 +731,8 @@ class FakeAI:
             return json.dumps([{"artist": a, "track": t} for a, t in pairs])
         if "playlist moods" in prompt:
             return json.dumps(["Sunday morning coffee", "Late night drive", "Summer garden party"])
+        if "to open a playlist" in prompt:
+            return json.dumps([{"artist": a, "track": t} for a, t in self.opener])
         if "fit this mood" in prompt:
             pairs = [(r["Artist"], r["Name"]) for r in self.web.j.tracks if r["Artist"] != "Various Artists"][::2]
             return json.dumps([{"artist": a, "track": t} for a, t in pairs] + [{"artist": "Nobody", "track": "Nothing"}])

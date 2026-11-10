@@ -117,10 +117,10 @@ def test_a_build_reads_its_own_settings_and_lane(app, radio):
     seen = {}
     real = radio._owned_top
 
-    def spy(artist, have, played, limit, pool=None):
+    def spy(artist, have, played, limit, pool=None, **more):
         if pool:
             seen["pick"] = limit
-        return real(artist, have, played, limit, pool)
+        return real(artist, have, played, limit, pool, **more)
     radio._owned_top = spy
     try:
         r = app.Lines()

@@ -596,7 +596,7 @@ def test_a_pause_stops_both_rooms_and_play_starts_the_track_from_the_top(where):
     w.run(3.0)
     assert w.f.out is None and w.outs[-1].closed
     assert w.jr.stopped == ["Sonos"] and w.jr.zones["Sonos"]["state"] == mcws.STOPPED
-    assert w.said("The Sonos paused, so both rooms have stopped; play starts the track from the top.")
+    assert w.said("Note: the Sonos paused, so both rooms have stopped; play starts the track from the top.")
     w.run(10.0)
     assert len(w.outs) == 1, "started again while the Sonos was stopped"
     w.jr.zones["Sonos"]["state"] = mcws.PLAYING
@@ -707,7 +707,7 @@ def test_a_lost_clock_carries_on_then_picks_up_again():
     w.run(5.0)
     w.sonos.quiet = True
     w.run(10.0)
-    assert w.said("Lost the Sonos's clock") and w.f.out is not None and w.music(since=w.sim.t - 4)
+    assert w.said("Note: lost the Sonos's clock") and w.f.out is not None and w.music(since=w.sim.t - 4)
     w.sonos.quiet = False
     w.run(4.0)
     assert w.said("The Sonos's clock is back.")

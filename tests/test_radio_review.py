@@ -101,7 +101,7 @@ def test_a_pillars_own_songs_come_at_random_from_its_best_known_five(app, radio,
     play_counts(app, EVERYONE)
     calls = []
 
-    def owned_top(artist, have, played, limit, pool=None):
+    def owned_top(artist, have, played, limit, pool=None, **more):
         calls.append((artist, limit, pool))
         return []
     monkeypatch.setattr(radio, "_owned_top", owned_top)

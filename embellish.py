@@ -20,6 +20,14 @@ far: the lot goes in when it finishes or is stopped, so Ordered stays in your or
 
 The playlist's first track plays first. Ordered keeps your order with the new tracks
 spread evenly between; Shuffled shuffles the lot, with the artists spread.
+
+How an amount builds is set in the same place (Ben, 10 Nov 2026): Shuffle, Deep Cuts and the
+Moderator, in one row that serves every amount (the default) or a row per amount. Shuffle is
+on to start. Deep Cuts top up what Embellish adds, from the genre most of the playlist
+shares, and the Moderator checks the new tracks against the playlist; the More Options
+switches beat both while that row is open, as they do for every playlist. Play's arrow
+(Play Shuffled, Play Ordered) is Play's alone. Anything asked for by voice runs the default
+amount with that amount's row.
 """
 
 import json
@@ -43,6 +51,9 @@ BIG = 30            # Build It Out over more artists than this says up front it 
 RECENT = 5          # the most recent shown at the top of the list
 RECENT_KEY = "jriver_playlists_recent"
 CHOICE_KEY = "jriver_playlists_choices"
+SETTINGS_KEY = "embellish_settings"   # {"all": "1" or "0", "all_row": row, "rows": {amount: row}}
+DEFAULT_ROW = {"shuffle": "1", "deep_cuts": "off", "deep_share": "10", "moderator": "off"}
+REFERENCE = 15      # the playlist's own tracks shown to the Moderator as what fits
 
 
 # --- what's remembered: the recent five, and the two arrows' last choices ---------------------------
@@ -117,6 +128,75 @@ def set_amounts(shown=None, default=None):
     return {"shown": shown, "default": default}
 
 
+# --- how an amount builds: one row for every amount, or a row each ------------------------------------
+
+def _tidy_row(row, base):
+    out = dict(base)
+    if isinstance(row, dict):
+        out.update({k: str(v) for k, v in row.items() if k in DEFAULT_ROW})
+    out["shuffle"] = "1" if out.get("shuffle") == "1" else "0"
+    if out.get("deep_cuts") not in engine.DEEP_CUT_MODES:
+        out["deep_cuts"] = "off"
+    share = int(out["deep_share"]) if str(out.get("deep_share")).isdigit() else 10
+    out["deep_share"] = str(min(100, max(10, share - share % 10)))
+    if out.get("moderator") not in engine.MODERATOR_LEVELS:
+        out["moderator"] = "off"
+    return out
+
+
+def _tidy(data):
+    data = data if isinstance(data, dict) else {}
+    all_row = _tidy_row(data.get("all_row"), DEFAULT_ROW)
+    rows = {a: _tidy_row(r, all_row) for a, r in (data.get("rows") or {}).items()
+            if a in AMOUNTS and isinstance(r, dict)}
+    return {"all": "0" if str(data.get("all")) == "0" else "1", "all_row": all_row, "rows": rows}
+
+
+def settings():
+    """
+    {"all": "1" while one row serves every amount (the default), "all_row": that row, "rows": {amount: its own}}.
+    A row is {"shuffle", "deep_cuts" (off, spaced or shuffled), "deep_share" (what Deep Cuts top up by, ten to a
+    hundred per cent of what Embellish adds), "moderator" (a level)}. Before this table Embellish followed Play's
+    arrow, so the first read keeps that order as the All amounts row's Shuffle, once: nobody's Embellish changes
+    at the upgrade, and from then on the arrow is Play's alone.
+    """
+    saved = _meta(SETTINGS_KEY, None)
+    if not isinstance(saved, dict):
+        was = _meta(CHOICE_KEY, {}).get("order")
+        saved = {"all": "1", "all_row": dict(DEFAULT_ROW, shuffle="0" if was == "ordered" else "1"), "rows": {}}
+        try:
+            _set_meta(SETTINGS_KEY, saved)
+        except Exception:
+            pass   # the database can't be written just now: the same answer is worked out next time
+    return _tidy(saved)
+
+
+def set_settings(data):
+    """Settings > JRiver Playlists > Play & Embellish: the tick, the All amounts row and the amounts' own rows."""
+    data = _tidy(data)
+    _set_meta(SETTINGS_KEY, data)
+    return data
+
+
+def row_for(amount, data=None):
+    """The row one amount builds with: the All amounts row, or its own (a copy of that row until it's changed)."""
+    data = settings() if data is None else _tidy(data)
+    if data["all"] == "1":
+        return dict(data["all_row"])
+    return dict(data["rows"].get(OLD_AMOUNTS.get(amount, amount)) or data["all_row"])
+
+
+def _plan(amount, report):
+    """An amount's row for this build, the More Options switches over it while that row is open (and said so)."""
+    row = row_for(amount)
+    import overrides
+    if overrides.active():
+        on = overrides.switches()
+        report(t("More Options: {switches}, over this playlist's own settings.", switches=overrides.summary()))
+        row["moderator"], row["deep_cuts"] = on["moderator"], on["deep_cuts"]
+    return row
+
+
 # --- the build ------------------------------------------------------------------------------------
 
 def want_for(amount, count):
@@ -155,6 +235,7 @@ def weave(keys, new, ordered):
 def _artists(keys):
     """The playlist's artists: {artist key: name as tagged}, in order of first appearance."""
     import library
+    library.ensure_loaded()   # asked before the build reads the library: the count in the first line, the fast start
     out = {}
     for k in keys:
         row = library.track_row(k) or {}
@@ -165,10 +246,14 @@ def _artists(keys):
     return out
 
 
-def find(keys, name, amount, report):
+def find(keys, name, amount, report, spare=0, session_id=None):
     """
     New tracks for the playlist: (new keys, what happened). Returns None when there's nothing for the
-    circle to agree on (one artist), having said so.
+    circle to agree on (one artist), having said so. spare: a share more than the amount asks for, found
+    up front so the Moderator's removals are replaced (never for Build It Out, which takes everything).
+    Each agreeing artist is a line in the console, and each of its top tracks looked up is said, In library or
+    Not in library, and logged to the session for Discover, as Similar Artists does (10 Nov 2026: Embellish
+    worked in silence and its sessions were empty).
     """
     import library
     library.ensure_loaded()
@@ -178,7 +263,9 @@ def find(keys, name, amount, report):
         report(t("Embellish: every track on {name} is by {artist}, so there's nothing for the curation rules to "
                  "agree on. Similar Artists from one of its tracks would grow it.", name=name, artist=only))
         return None
-    want = want_for(amount, len(keys))
+    asked = want = want_for(amount, len(keys))
+    if want is not None and spare:
+        want += max(1, int(want * spare))
     if amount == "out" and len(on_list) > BIG:
         report("  " + t("Build It Out: {name} has {tracks} by {artists} artists. That can mean several hundred tracks "
                         "and a few minutes; Cancel keeps whatever is in.", name=name,
@@ -202,8 +289,14 @@ def find(keys, name, amount, report):
             circle += members
             agreed, _same = engine.inner_circle(circle, lambda m: lists[engine.artist_key(m)], AGREE,
                                                 key=engine.artist_key)
+            guests = agreed[len(circle):]
+            report("  " + t("Consensus: {names} (circle of {size}, agree on {agree})", names=", ".join(members),
+                            size=len(circle), agree=AGREE))
+            report("  " + t("{agreed} artists on {agree} or more of their lists; {already} already on {name}.",
+                            agreed=len(guests), agree=AGREE, name=name,
+                            already=sum(1 for g, _why in guests if engine.artist_key(g) in on_list)))
             picks = {}
-            for artist, _why in agreed[len(circle):]:
+            for artist, _why in guests:
                 a = engine.artist_key(artist)
                 agreed_all.add(a)
                 if a in on_list:
@@ -214,9 +307,16 @@ def find(keys, name, amount, report):
                 tried.add(a)
                 engine.check_cancelled()
                 top, _label = engine.blended_top_tracks(artist, limit=engine.TRACKS_PER_ARTIST_POOL)
+                report("  " + t("{artist}...", artist=artist))
+                if not top:
+                    report("    " + t("No top tracks returned for {artist}.", artist=artist))
                 owned = []
                 for title, _sources in top:
                     key = library.find_track_key(artist, title)
+                    report("    " + t("{found_label}: {track_name}", track_name=title,
+                                      found_label=t("In library") if key else t("Not in library")))
+                    if session_id is not None:
+                        engine.session_log(session_id, artist, title, ["Embellish"], found=bool(key))
                     key = played.pick(key) if key and str(key) not in have else None
                     if key and str(key) not in have and str(key) not in owned:
                         owned.append(str(key))
@@ -242,12 +342,74 @@ def find(keys, name, amount, report):
                         tracks=tn("{count} track", "{count} tracks", len(new))))
     finally:
         played.done()
-    return new, {"agreed": len(agreed_all), "already": len(already), "want": want, "artists": len(on_list)}
+    return new, {"agreed": len(agreed_all), "already": len(already), "want": asked, "artists": len(on_list)}
 
 
-def say_result(name, new, stats, report):
-    """The honest line: what was added, or why not as many as asked."""
+def _tracks(keys):
+    """[(key, artist, title)] as the Moderator takes them."""
+    import library
+    out = []
+    for k in keys:
+        row = library.track_row(k) or {}
+        out.append((str(k), row.get("Artist") or "", row.get("Name") or ""))
+    return out
+
+
+def moderator_seed(name, keys):
+    """What the Moderator judges the new tracks against: the playlist, by its name and the artists on it."""
+    artists = list(_artists(keys).values())[:10]
+    return f"vibe: the playlist {name}, in the sound of {', '.join(artists)}"
+
+
+def moderate(new, keys, name, level, report):
+    """
+    The Moderator on what Embellish adds (10 Nov 2026): the new tracks checked against the playlist, with some of
+    its own tracks, spread through it, as what fits. Your own tracks are never checked. Returns (kept, how many
+    went). Off, or with no AI to run it (said once by the engine), nothing goes.
+    """
+    if level in ("", "off") or not new:
+        return new, 0
+    keys = [str(k) for k in keys]
+    step = max(1, len(keys) // REFERENCE)
+    removed = engine.moderate(_tracks(new), moderator_seed(name, keys), report, level=level,
+                              reference=_tracks(keys[::step][:REFERENCE]))
+    return ([k for k in new if k not in removed], len(removed)) if removed else (new, 0)
+
+
+def deep_cuts(out, keys, new, name, row, report):
+    """
+    Deep Cuts on an embellished playlist (10 Nov 2026): lesser-played artists from the genre most of your playlist
+    shares, as Radio picks them, topping up what Embellish added by the row's share (your own playlist is yours,
+    so the share is of the new tracks). Spaced or Shuffled through the lot, the first track still leading.
+    """
+    if row["deep_cuts"] == "off" or not new:
+        return out
+    try:
+        import deepcuts
+        genre = deepcuts.common_genre(keys, share=0.3)
+    except Exception:
+        genre = None
+    if not genre:
+        report("  " + t("Deep Cuts: none this time, as no one genre is shared by enough of the tracks on {name}.",
+                        name=name))
+        return out
+    share = int(row["deep_share"])
+    return engine.add_deep_cuts(out, None, report, group="artists", genres=[genre],
+                                moderator_seed=moderator_seed(name, keys),
+                                cfg={"mode": row["deep_cuts"], "share": share}, level=row["moderator"],
+                                count=max(1, round(len(new) * share / 100)))
+
+
+def say_result(name, new, stats, report, removed=0):
+    """The honest line: what was added, or why not as many as asked. removed: how many the Moderator took out."""
     added, want, agreed, already = len(new), stats["want"], stats["agreed"], stats["already"]
+    if removed and not added:
+        report(t("Embellish: nothing to add, as the Moderator removed every track found for {name}.", name=name))
+        return
+    if removed and want is not None and added < want:
+        report("  " + t("Embellish: added {added}, fewer than the {want} asked for, as the Moderator removed {removed}.",
+                        added=tn("{count} track", "{count} tracks", added), want=want, removed=removed))
+        return
     if not added:
         if not agreed:
             report(t("Embellish: the artists on {name} don't agree on anyone else, so there's nothing to add.",
@@ -298,28 +460,44 @@ def play(playlist, order, report):
 
 
 def embellish(playlist, order, amount, report):
-    """Play & Embellish: the playlist with new tracks woven in."""
+    """
+    Play & Embellish: the playlist with new tracks woven in, as the amount's row under Settings > JRiver Playlists
+    has it (Shuffle, Deep Cuts, the Moderator). order: "ordered" or "shuffled" beats the row's Shuffle for this
+    run; None, as the Play tab passes, takes the row's.
+    """
     name, keys = _read(playlist, report)
     if keys is None:
         return
-    ordered = order == "ordered"
     artists = len(_artists(keys))
     amount = OLD_AMOUNTS.get(amount, amount)
     report(t("Embellish: {name}, {tracks} by {artists} artists, {amount}.", name=name,
              tracks=tn("{count} track", "{count} tracks", len(keys)), artists=artists, amount=t(AMOUNT_NAMES[amount])))
+    row = _plan(amount, report)
+    ordered = (order == "ordered") if order else row["shuffle"] != "1"
+    level = row["moderator"]
+    can_moderate = level != "off" and engine.ai_configured() and engine.USE_AI
     session_id = engine.session_start("embellish", {"Artist": "", "Name": name})
-    result = find(keys, name, amount, report)
+    # Fast start (10 Nov 2026): the playlist's own first track leads whatever is added, so on a stopped zone it
+    # plays now and the rest follows it in when the build is done. One artist: nothing to build, nothing started.
+    fast = engine.FastStart(None, report, enabled=artists > 1)
+    fast.play(keys[0])
+    result = find(keys, name, amount, report, spare=engine.MODERATOR_EXTRA[level] if can_moderate else 0,
+                  session_id=session_id)
     if result is None:
         engine.session_finish(session_id, 0, sources="none", report=report)
         return
     new, stats = result
-    say_result(name, new, stats, report)
+    new, removed = moderate(new, keys, name, level, report)
+    if stats["want"] is not None:
+        new = new[:stats["want"]]   # the spares found for the Moderator, if it didn't need them
+    say_result(name, new, stats, report, removed=removed)
     if new:
         report("  " + t("Added {tracks} from the agreeing artists, woven between yours, {how}.",
                         tracks=tn("{count} track", "{count} tracks", len(new)),
                         how=t("in your order") if ordered else t("shuffled")))
     out = weave(keys, new, ordered)
-    engine.send_to_jriver(out, typed=True, report=report)
+    out = deep_cuts(out, keys, new, name, row, report)
+    engine.send_to_jriver(fast.rest(out), typed=True, report=report, append=fast.started)
     note_recent(playlist, "embellished")
     engine.session_finish(session_id, len(out), report=report)
     engine.SAVE_NAME = t("{name} (Embellished)", name=name)

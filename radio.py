@@ -969,11 +969,13 @@ def join_new_artists(report, limit=10):
 
 # --- a build ----------------------------------------------------------------------------------------
 
-def _owned_top(artist, have, played, limit, pool=None):
+def _owned_top(artist, have, played, limit, pool=None, seen=None):
     """
     An artist's top tracks you own, then your most played of theirs, up to limit. pool: pick limit at
     random from the owned ones among the artist's top pool (Radio's page: "pick 3 of each artist's top 5"),
     as Artist Matching does; None takes them in the sources' order (a pillar's own songs: its best known).
+    seen(title, found): told about each of the pool's tracks as it's looked up, hit or miss (the console and
+    Discover, 10 Nov 2026); what's taken beyond the pool, or from your own most played, isn't a suggestion.
     """
     import library
     out = []
@@ -982,6 +984,8 @@ def _owned_top(artist, have, played, limit, pool=None):
         owned = []
         for title, _sources in top[:pool]:
             key = library.find_track_key(artist, title)
+            if seen is not None:
+                seen(title, bool(key))
             key = played.pick(key) if key and str(key) not in have else None
             if key and str(key) not in have and str(key) not in owned:
                 owned.append(str(key))
@@ -1020,10 +1024,14 @@ def _minutes(keys):
     return total / 60.0
 
 
-def find(lane_, report, minutes=TARGET_MINUTES, avoid=(), own=None):
+def find(lane_, report, minutes=TARGET_MINUTES, avoid=(), own=None, first=None, session_id=None):
     """
     The tracks for one round: (keys, the pillars used). avoid: keys already sent (Non-stop's rounds).
-    own: a list that gets the pillars' own songs (the Moderator's yardstick).
+    own: a list that gets the pillars' own songs (the Moderator's yardstick). first: called with the round's
+    first track as soon as it's known (the fast start, 10 Nov 2026): a pillar's own song, which is why the
+    pillars' songs are found before anything is asked about who is like them. Each pillar and agreeing artist
+    is a line in the console, and each of its top tracks looked up is said, In library or Not in library, and
+    logged to the session for Discover (10 Nov 2026: Radio worked in silence and its sessions were empty).
     """
     pillars = list(lane_["pillars"])
     random.shuffle(pillars)
@@ -1034,6 +1042,14 @@ def find(lane_, report, minutes=TARGET_MINUTES, avoid=(), own=None):
     circle, lists, picks, seen_artists, off = [], {}, [], set(), []
     own = [] if own is None else own
     fits = fitter(lane_)
+
+    def seen_for(artist):
+        def seen(title, found):
+            report("    " + t("{found_label}: {track_name}", track_name=title,
+                              found_label=t("In library") if found else t("Not in library")))
+            if session_id is not None:
+                engine.session_log(session_id, artist, title, ["Radio"], found=found)
+        return seen
     try:
         while pillars and len(circle) < CIRCLE_MAX and (not picks or _minutes(picks) < minutes):
             engine.check_cancelled()
@@ -1042,17 +1058,20 @@ def find(lane_, report, minutes=TARGET_MINUTES, avoid=(), own=None):
             if circle:
                 report("  " + t("Short of {minutes} minutes: {artist} joins ({count} of {most} pillars).",
                                 minutes=minutes, artist=joining[0], count=len(circle) + 1, most=CIRCLE_MAX))
+            for p in joining:   # a couple of each pillar's own, at random from its best known five
+                report("  " + t("Pillar: {artist}...", artist=p))
+                for key in _owned_top(p, have, played, 2, pool=PILLAR_SONGS, seen=seen_for(p)):
+                    have.add(key)
+                    picks.append(key)
+                    own.append(key)
+                    if first is not None and len(picks) == 1:
+                        first(key)
             for p in joining:
                 found, _label = engine.blended_similar_artists(p, limit=30, report=report)
                 lists[engine.artist_key(p)] = [a for a, _ in found]
             circle += joining
             agreed, _same = engine.inner_circle(circle, lambda m: lists[engine.artist_key(m)],
                                                 min(AGREE, len(circle)), key=engine.artist_key)
-            for p in joining:   # a couple of each pillar's own, at random from its best known five
-                for key in _owned_top(p, have, played, 2, pool=PILLAR_SONGS):
-                    have.add(key)
-                    picks.append(key)
-                    own.append(key)
             fits.learn([artist for artist, _why in agreed[len(circle):]])
             for artist, _why in agreed[len(circle):]:   # Radio's page: pick n of each artist's top m
                 a = engine.artist_key(artist)
@@ -1062,8 +1081,10 @@ def find(lane_, report, minutes=TARGET_MINUTES, avoid=(), own=None):
                 if not fits(artist):
                     off.append(artist)
                     continue
+                report("  " + t("{artist}...", artist=artist))
                 for key in _owned_top(artist, have, played, engine.TRACKS_PER_ARTIST_PICK,
-                                      pool=max(engine.TRACKS_PER_ARTIST_POOL, engine.TRACKS_PER_ARTIST_PICK)):
+                                      pool=max(engine.TRACKS_PER_ARTIST_POOL, engine.TRACKS_PER_ARTIST_PICK),
+                                      seen=seen_for(artist)):
                     have.add(key)
                     picks.append(key)
         if off:
@@ -1199,7 +1220,10 @@ def build(lane_id, report=print):
                 if entry.get("radio_lane") == lane_id:
                     avoid |= set(entry.get("keys") or ())
     own = []
-    picks, circle = find(lane_, report, avoid=avoid, own=own)
+    # Fast start (10 Nov 2026): on a stopped zone the round's first pillar song plays while the rest is found.
+    # A Non-stop round only ever adds, so it starts nothing.
+    fast = engine.FastStart(None, report, enabled=not appending)
+    picks, circle = find(lane_, report, avoid=avoid, own=own, first=fast.play, session_id=session_id)
     report("  " + t("Pillars this round: {names}.", names=", ".join(circle)))
     if not picks:
         report(t("Radio: nothing found for {name} this time. The sources may not be answering; try again in a "
@@ -1208,7 +1232,8 @@ def build(lane_id, report=print):
         return
     seed = moderator_seed(lane_, circle)
     picks = moderate(picks, own, seed, report)
-    first, rest = picks[0], picks[1:]
+    first = fast.key if fast.started else picks[0]   # the track that's already playing leads
+    rest = [k for k in picks if str(k) != str(first)]
     random.shuffle(rest)
     keys = engine.spread_artists([first] + rest, keep=first)
     keys = deep_cuts(keys, seed, report)
@@ -1217,12 +1242,15 @@ def build(lane_id, report=print):
     report("  " + t("{tracks}, about {minutes} minutes, from {artists} artists.",
                     tracks=tn("{count} track", "{count} tracks", len(keys)), minutes=round(_minutes(keys)),
                     artists=len(artists)))
-    engine.send_to_jriver(keys, typed=True, report=report, append=appending)
+    engine.send_to_jriver(fast.rest(keys), typed=True, report=report, append=appending or fast.started)
     zone = engine.LAST_OUTPUT_ID
     if zone is not None:
         with engine._nonstop_lock:
             entry = engine.NONSTOP_ZONES.get(zone)
             if entry is not None:
                 entry.update(radio_lane=lane_id, origin="radio", kind="radio")
+                if fast.started:   # the opener was sent too: Non-stop's later rounds don't repeat it
+                    entry["keys"].add(fast.key)
+                    entry.setdefault("original", set()).add(fast.key)
     engine.session_finish(session_id, len(keys), report=report)
     engine.SAVE_NAME = t("{name} Radio", name=lane_["name"])

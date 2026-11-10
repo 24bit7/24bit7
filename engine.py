@@ -2260,6 +2260,13 @@ AI_VIBE_PROMPT = (
     "Respond with a JSON array of objects with keys \"artist\" and \"track\" only, "
     "compact on a single line with no indentation or line breaks, no commentary, no code fences."
 )
+AI_VIBE_OPENER_PROMPT = (
+    "Suggest {count} songs to open a playlist for this mood or description: \"{vibe}\".\n"
+    "Pick famous recordings that a large music collection is very likely to hold, each by a different artist. "
+    "Respond with a JSON array of objects with keys \"artist\" and \"track\" only, "
+    "compact on a single line with no indentation or line breaks, no commentary, no code fences."
+)
+VIBE_OPENER_COUNT = 8   # more than one, as some won't be in the library
 AI_TONE_PROMPT = (
     "Here are some tracks a listener is playing:\n{tracks}\n\n"
     "Describe their shared tone in one short phrase a DJ would understand: genre or era, "
@@ -2748,6 +2755,73 @@ def ai_vibe_suggestions():
     if isinstance(data, list):
         return [str(x).strip() for x in data if str(x).strip()][:3]
     return []
+
+
+def ai_vibe_opener(vibe):
+    """
+    A few well-known tracks for a vibe from the quick model, asked while the main model works on the full list
+    (Ben, 10 Nov 2026): the first one the library holds starts playing, so an AI Playlist isn't silence until the
+    whole list is back. One try, and any failure is nothing: the playlist starts when the main list arrives.
+    Returns [(artist, track)].
+    """
+    try:
+        reply = ai_request(AI_VIBE_OPENER_PROMPT.format(vibe=vibe, count=VIBE_OPENER_COUNT), 600, "AI Playlist",
+                           tier="quick", announce=False)
+        data = json.loads(_json_body(reply.text))
+    except Exception as e:
+        debug(f"AI Playlist opener: nothing ({e})")
+        return []
+    if not isinstance(data, list):
+        return []
+    return [(canonicalise_conjunction(str(x["artist"]).strip()), str(x["track"]).strip())
+            for x in data if isinstance(x, dict) and x.get("artist") and x.get("track")]
+
+
+def vibe_opener_wanted(fast, prompt, check):
+    """
+    Whether an AI Playlist asks for an opener: only when a fast start could play it (a stopped JRiver zone, not
+    Review, nothing started yet), for a plain description (Steer has a prompt of its own, and its BPM check),
+    and not on a local model, where two requests at once slow each other down.
+    """
+    return (fast.zone is not None and not fast.started and prompt is None and check is None
+            and USE_AI and AI_PROVIDER != "ollama")
+
+
+def vibe_with_opener(vibe, ask, fast, played, drift, session_id, report):
+    """
+    The full list asked for on a thread of its own (ask) while this one asks the quick model for an opener and
+    starts the first of its picks that the library holds and the filters allow. Returns (the full list, the
+    opener's key or None). Everything that touches the build stays on the build's thread; the other only asks,
+    and anything it raises (Cancel included) is raised here.
+    """
+    box = {}
+
+    def main():
+        try:
+            box["pairs"] = ask()
+        except BaseException as e:
+            box["error"] = e
+    worker = threading.Thread(target=main, daemon=True, name="ai-playlist")
+    worker.start()
+    opener = None
+    for artist, track in ai_vibe_opener(vibe):
+        key = find_jriver_key_by_track(artist, track)
+        use = played.pick(key) if key else None
+        if use and drift._room(artist, use) > 0:
+            fast.play(use)
+            if fast.started:
+                opener = use
+                drift.note(artist, track, use, 1)
+                session_log(session_id, artist, track, "AI", found=True)
+                report("    " + t("Playing first, while the AI finds the rest: {artist} - {track}",
+                                  artist=artist, track=track))
+            break
+    while worker.is_alive():
+        worker.join(0.2)
+        check_cancelled()
+    if "error" in box:
+        raise box["error"]
+    return box.get("pairs"), opener
 
 
 def ai_vibe_tracks(vibe, count, avoid=(), prompt=None):
@@ -5426,6 +5500,7 @@ class FastStart:
         globals()["LAST_OUTPUT"] = zone_label(self.zone)
         globals()["LAST_OUTPUT_ID"] = self.zone
         debug(f"Fast start: the first track is playing in {zone_label(self.zone)} while the rest is found")
+        _multiroom_sent(self.zone)   # Output on Multiroom: the Speakers follow from the first track, not the last
 
     def lead(self, keys, first_key=None):
         """Puts the playing (or searched) track at the front, once."""
@@ -5981,7 +6056,8 @@ def deep_cut_genres(seed_info, keys=()):
     return ([genre], where) if genre else ([], "")
 
 
-def add_deep_cuts(keys, seed_info, report=print, group=None, genres=None, moderator_seed=None):
+def add_deep_cuts(keys, seed_info, report=print, group=None, genres=None, moderator_seed=None,
+                  cfg=None, level=None, count=None):
     """
     Deep Cuts (Settings > Playlist, per Play option): tops a finished playlist up with
     tracks from the corners of the seed's genre that rarely get played, by the set share
@@ -5991,12 +6067,16 @@ def add_deep_cuts(keys, seed_info, report=print, group=None, genres=None, modera
     The Moderator, if on, checks them too. Says in the console what it added, or why none.
     Radio (6 Nov 2026) passes group "artists" (its settings are Artist Matching's), the genres to
     pick from (its round's own) and the Moderator's seed line (the lane).
+    Play & Embellish (10 Nov 2026) has settings of its own, so it also passes them: cfg ({"mode", "share"}),
+    the Moderator's level, and how many to add (its share is of the tracks it added, not of your playlist).
     """
     kind = group or NONSTOP_CONTEXT.get("kind")
-    cfg = DEEP_CUTS.get(kind) if kind in DEEP_CUT_GROUPS else None
+    if cfg is None:
+        cfg = DEEP_CUTS.get(kind) if kind in DEEP_CUT_GROUPS else None
     if not cfg or cfg["mode"] == "off" or not keys:
         return keys
-    count = max(1, round(len(keys) * cfg["share"] / 100))
+    if count is None:
+        count = max(1, round(len(keys) * cfg["share"] / 100))
     try:
         import deepcuts
         import library
@@ -6007,8 +6087,11 @@ def add_deep_cuts(keys, seed_info, report=print, group=None, genres=None, modera
         in_build = [k for k in keys if library.track_row(k)]
         artists = seeds + [deepcuts.first_artist(library.track_row(k)) for k in in_build]
         played = PlayedFilter(kind, report=lambda *_: None, filters=True)
-        moderating = ((AI_MODERATOR_BY.get(kind, "off") if ai_configured() else "off") if group
-                      else moderator_level()) != "off"
+        if level is not None:
+            moderating = level != "off" and ai_configured()
+        else:
+            moderating = ((AI_MODERATOR_BY.get(kind, "off") if ai_configured() else "off") if group
+                          else moderator_level()) != "off"
         want = count * 2 if moderating else count   # spares, so the Moderator's removals are replaced
         if kind == "artists":
             picks, note = deepcuts.pick_by_artist(genres, want, artists, in_build, played.fresh,
@@ -6023,7 +6106,8 @@ def add_deep_cuts(keys, seed_info, report=print, group=None, genres=None, modera
         return keys
     if moderating and len(picks) > 1:
         seed = moderator_seed or (f"vibe: {NONSTOP_CONTEXT.get('vibe')}" if kind == "vibe" else seed_label(seed_info or {}))
-        removed = moderate(picks, seed, report, level=AI_MODERATOR_BY.get(kind) if group else None)
+        removed = moderate(picks, seed, report,
+                           level=level if level is not None else AI_MODERATOR_BY.get(kind) if group else None)
         picks = [p for p in picks if p[0] not in removed]
     picks = picks[:count]
     cut_keys = []
@@ -7913,14 +7997,19 @@ def create_vibe_playlist(vibe, report=print, count=None, prompt=None, if_short=N
     wanted = min(100, target * 2)   # about twice as many as needed: some won't be in the library
 
     report("  " + t("Asking the AI for tracks..."))
-    pairs = ai_vibe_tracks(vibe, count=wanted, prompt=prompt.replace("{count}", str(wanted)) if prompt else None)
+    ask = lambda: ai_vibe_tracks(vibe, count=wanted, prompt=prompt.replace("{count}", str(wanted)) if prompt else None)
+    opener = None
+    if vibe_opener_wanted(fast, prompt, check):   # a quick call for a first track, while the full list is found
+        pairs, opener = vibe_with_opener(vibe, ask, fast, played, drift, session_id, report)
+    else:
+        pairs = ask()
     if not pairs:
         report("  " + t("Problem: the AI returned nothing usable."))
         session_finish(session_id, send_mix_only(fast, None, report), report=report)
         return
 
     prefetch_youtube_ids(pairs)
-    keys, misses, over, left_out = [], 0, 0, 0
+    keys, misses, over, left_out = [opener] if opener else [], 0, 0, 0
     for artist, track in pairs:
         key = find_jriver_key_by_track(artist, track)
         if key and check is not None and not check.allows(key, artist, track):

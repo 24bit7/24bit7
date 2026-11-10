@@ -64,6 +64,16 @@ from multiroom import link as multiroom_link
 MULTIROOM_LABEL = engine.MULTIROOM_NAME   # the Output entry; a feature name, so not translated
 
 
+def advanced_only(line):
+    """
+    A console line the Simple console leaves out and Advanced shows: the engine's [debug] lines, and the Multiroom
+    follower's commentary (Ben, 10 Nov 2026). Hidden on screen, and left out of Copy and Console Query in Simple,
+    which read what you see. A Multiroom problem always shows, and so does a note about something you can hear.
+    """
+    body = re.sub(r"^\d\d:\d\d  ", "", line.strip())
+    return body.startswith("[debug]") or multiroom_link.advanced_only(line)
+
+
 REFRESH_MS = 10000   # Now Playing panel; paused while minimised or in the tray
 POLL_MS = 100
 DONATE_URL = "https://paypal.me/24bit7"
@@ -614,7 +624,8 @@ class PlayTab(tk.Frame):
             chosen["amount"] = amount
         top_up = bool(getattr(self, "top_up_armed", False))
         if embellish_it:
-            target = lambda: embellish.embellish(playlist, chosen["order"], chosen["amount"], self.report)
+            # the order is the amount's own (Settings > JRiver Playlists): Play's arrow is Play's alone (10 Nov 2026)
+            target = lambda: embellish.embellish(playlist, None, chosen["amount"], self.report)
         else:
             target = lambda: embellish.play(playlist, chosen["order"], self.report)
         self._run_job(target, needs_playing=False, mix=False, review=True, top_up=top_up)
@@ -2286,8 +2297,12 @@ class PlayTab(tk.Frame):
     def _line_kind(line):
         """Which colour a console line takes, from how it's written."""
         body = re.sub(r"^\d\d:\d\d  ", "", line.strip())
-        if body.startswith("[debug]"):
+        if advanced_only(line):
             return "debug"
+        if multiroom_link.is_problem(line):
+            return "problem"
+        if multiroom_link.is_note(line):
+            return "note"
         if body.startswith(i18n.either(PROBLEM)):
             return "problem"
         if body.startswith(i18n.either(NOTE)):
@@ -2866,7 +2881,7 @@ class PlayTab(tk.Frame):
         except tk.TclError:
             text = self.log.get("1.0", "end-1c")
         if self.console_mode == "simple":
-            text = "\n".join(x for x in text.split("\n") if not x.lstrip().startswith("[debug]"))
+            text = "\n".join(x for x in text.split("\n") if not advanced_only(x))
         self.clipboard_clear()
         self.clipboard_append(text)
         b = self.console_buttons["Copy"]
@@ -2957,7 +2972,7 @@ class PlayTab(tk.Frame):
         self._greeting_active = False
         console = self.log.get("1.0", "end-1c")
         if self.console_mode == "simple":   # Query reads what you see: Advanced sends the debug lines too
-            console = "\n".join(x for x in console.split("\n") if not x.lstrip().startswith("[debug]"))
+            console = "\n".join(x for x in console.split("\n") if not advanced_only(x))
         self._query_busy = True
         self.query_send.config(text=t("Asking..."), state="disabled")
         self.query_var.set("")

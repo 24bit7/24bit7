@@ -24,7 +24,9 @@ import requests
 import engine
 from i18n import t, tn
 
-DEFAULT_ROW = {"shuffle": "0", "blend": "no", "nonstop": "no", "reseed": "last", "skip": "0"}   # new playlists: as saved
+# A fresh install shuffles a playlist asked for by voice (Ben, 10 Nov 2026: shuffle is the default for every way of
+# playing a JRiver playlist). Rows already saved keep what they say, ticked or not.
+DEFAULT_ROW = {"shuffle": "1", "blend": "no", "nonstop": "no", "reseed": "last", "skip": "0"}
 SEND_CHUNK = 400   # keys per JRiver call, so a long playlist doesn't make an over-long address
 META_KEY = "saved_playlists"
 

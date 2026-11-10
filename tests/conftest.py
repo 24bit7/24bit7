@@ -127,6 +127,11 @@ def app(tmp_path, monkeypatch):
     monkeypatch.setattr(buttons_mod, "arrange_shipped", lambda items: items)
     importlib.import_module("mode").set_current("advanced")   # the fake world runs Advanced: its tests set every section
     saved_playlists = importlib.import_module("saved_playlists")
+    # The fake world plays a playlist asked for by voice as saved, which its tests were written against (many
+    # write part of a row and take the rest from the default). A fresh install shuffles since 10 Nov 2026: the
+    # real default is kept on ns.voice_default_row, and tests/test_embellish_settings.py runs with it.
+    voice_default_row = dict(saved_playlists.DEFAULT_ROW)
+    monkeypatch.setattr(saved_playlists, "DEFAULT_ROW", dict(voice_default_row, shuffle="0"))
 
     def set_env(**values):
         env.update({k: str(v) for k, v in values.items()})
@@ -138,7 +143,7 @@ def app(tmp_path, monkeypatch):
 
     ns = SimpleNamespace(folder=folder, env=env, set_env=set_env, engine=engine, library=library, voice=voice,
                          saved_playlists=saved_playlists, jriver=jriver, web=web, ai=ai, yt=yt, printed=printed, opened=opened,
-                         Lines=Lines, arrange_shipped=arrange_shipped)
+                         Lines=Lines, arrange_shipped=arrange_shipped, voice_default_row=voice_default_row)
     yield ns
     try:
         voice.stop()

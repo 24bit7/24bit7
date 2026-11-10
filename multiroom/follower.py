@@ -342,7 +342,7 @@ class Follower:
                 self.jriver.stop(self.follower)
                 self.say(f"Stopped the {self.follower} zone in JRiver so its DAC is free.")
         except KeyError:
-            self.say(f"There's no zone called {self.follower} in JRiver.")
+            self.say(f"Problem: there's no zone called {self.follower} in JRiver.")
 
     def step(self):
         now = self.now()
@@ -662,7 +662,8 @@ class Follower:
         dry = p.stream.short_reads
         if dry > self._dry:   # one line a stall: a stall is over after a second with no dry block
             if self._dry_at is None or now - self._dry_at > 1.0:
-                self.say("The music isn't arriving fast enough: the Speakers are quiet until it does, still in step.")
+                self.say("Note: the music isn't arriving fast enough: the Speakers are quiet until it does, "
+                         "still in step.")
             self._dry_at = now
         self._dry = dry
         if p.next is None and p.stream.done and p.lead == 0 and self.out is not None:
@@ -679,7 +680,7 @@ class Follower:
                 return True
             if not self._lost:
                 self._lost = True
-                self.say(f"Lost the {self.leader}'s clock: the Speakers carry on on their own for now.")
+                self.say(f"Note: lost the {self.leader}'s clock: the Speakers carry on on their own for now.")
             self._carried_on(now)
             if self.player is not None:
                 self._housekeeping(now)
@@ -716,8 +717,9 @@ class Follower:
             try:
                 self.jriver.stop(self.leader)
             except Exception as e:
-                self.say(f"Couldn't stop the {self.leader} zone in JRiver ({e}).")
-            self.say(f"The {self.leader} paused, so both rooms have stopped; play starts the track from the top.")
+                self.say(f"Problem: couldn't stop the {self.leader} zone in JRiver ({e}).")
+            self.say(f"Note: the {self.leader} paused, so both rooms have stopped; play starts the track from "
+                     "the top.")
         elif held >= WAIT_FOR:
             self.finish(f"The {self.leader} stopped playing, so the Speakers have too.")
 
