@@ -149,6 +149,7 @@ MONTHS = (N_("Jan"), N_("Feb"), N_("Mar"), N_("Apr"), N_("May"), N_("Jun"), N_("
           N_("Oct"), N_("Nov"), N_("Dec"))
 BUTTON_GAP = 8   # between the Play tab's buttons, and between its rows of them
 LIST_BOX_GAP = 24   # JRiver Playlists: between the Playlist box and Play
+LIST_BOX_HEIGHT = 0.82   # and the box's height, as a share of the buttons'
 
 
 class DropPill(tk.Canvas):
@@ -373,15 +374,18 @@ class PlayTab(tk.Frame):
                              (self.embellish_button, "Play & Embellish")):
             Tooltip(widget, t(PLAY_NOTES[name]), when=on, wrap=wrap)
         self.extra_list_buttons = [self.play_list_button, self.embellish_button]
+        # the box stands a little taller than a text box usually does, nearer the buttons beside it (10 Nov 2026)
+        self.playlist_entry.set_pixel_height(self.play_list_button._size[1] * LIST_BOX_HEIGHT)
         self._list_widths = (self.playlist_entry._box_w, self.play_list_button._size[0], self.embellish_button._size[0])
         tab.bind("<Map>", lambda e: e.widget is tab and self.after_idle(self._line_up_lists), add="+")
 
     def _line_up_lists(self):
         """
-        Play and Play & Embellish over the row's last two playlist buttons, each as wide as the one under it,
-        and the Playlist box stretching to meet them (Ben, 7 Nov 2026). The last two on the row's first line,
-        should it wrap, that end clear of Output at the tab's right (else the two before them); with no such
-        pair, or no room for the box, they keep their own widths.
+        The Playlist box, Play and Play & Embellish at three equal widths (Ben, 10 Nov 2026), from the box's left
+        edge to the right edge of the row's last playlist button that ends clear of Output, on the row's first
+        line should it wrap. Before that Play and Play & Embellish each matched the button under them and the box
+        took the rest (7 Nov), which left the box twice the width of either. With no such button, or no room,
+        the three keep their own widths.
         """
         tab = getattr(self, "playlists_tab", None)
         if tab is None or not self._seed_is_playlists() or not tab.winfo_ismapped():
@@ -394,13 +398,13 @@ class PlayTab(tk.Frame):
         out = getattr(self, "output_box", None)
         limit = (out.winfo_rootx() if out is not None and out.winfo_ismapped()
                  else tab.winfo_rootx() + tab.winfo_width()) - LIST_BOX_GAP   # Output stays clear at the right
-        pairs = [(first[i], first[i + 1]) for i in range(len(first) - 2, -1, -1)]   # the last two first
-        for under_play, under_emb in pairs:
-            if under_emb.winfo_rootx() + under_emb.winfo_width() > limit:
-                continue   # Output's there: the pair before
-            room = under_play.winfo_rootx() - entry.winfo_rootx() - LIST_BOX_GAP
-            if room >= box_w // 2:
-                box_w, play_w, emb_w = room, under_play._size[0], under_emb._size[0]
+        for last in reversed(first[1:]):   # the row's last button that ends clear of Output
+            right = last.winfo_rootx() + last.winfo_width()
+            if right > limit:
+                continue
+            thirds = tabs.equal_thirds(right - entry.winfo_rootx(), LIST_BOX_GAP, BUTTON_GAP)
+            if thirds[1] >= play_w // 2:
+                box_w, play_w, emb_w = thirds
             break
         entry.set_pixel_width(box_w)
         play.set_pixel_width(play_w)

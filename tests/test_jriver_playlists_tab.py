@@ -56,7 +56,7 @@ def test_play_and_embellish_then_save_playlist(app, ui):
     p = lists_tab(ui)
     road_trip = next(x for x in j.playlists if x["ID"] == "202")
     p._pick_playlist({"ID": "202", "Name": "Road Trip", "Folder": "Mixes", "Type": "Playlist"})
-    embellish.set_choice("order", "ordered")
+    embellish.set_row(None, shuffle="0")   # the order is the amount's own setting now, not Play's arrow (10 Nov 2026)
     p.embellish_button._command()
     ui.wait_idle()
     z = j.zone("Speakers").playlist
@@ -125,21 +125,24 @@ def lined_up_pair(p):
     return next(pair for pair in pairs if pair[1].winfo_rootx() + pair[1].winfo_width() <= limit)
 
 
-def test_play_and_embellish_line_up_with_the_last_two_playlists(app, ui):
-    """Ben, 7 Nov 2026: the two buttons sit over the row's last two playlists clear of Output, as wide, the box
-    meeting them."""
+def test_the_box_play_and_embellish_share_the_row_in_equal_thirds(app, ui):
+    """Ben, 10 Nov 2026: the Playlist box, Play and Play & Embellish are three equal widths, from the box's left
+    edge to the end of the row's last playlist clear of Output, and the box stands nearer the buttons' height.
+    Before (7 Nov) each button matched the one under it and the box was twice as wide as either."""
     p = lists_tab(ui)
     root = p.winfo_toplevel()
     for width in (1180, 1600):
         root.geometry(f"{width}x{root.winfo_height()}")
         ui.pump(0.6)
-        under_play, under_emb = lined_up_pair(p)
-        for top, under in ((p.play_list_button, under_play), (p.embellish_button, under_emb)):
-            assert abs(top.winfo_rootx() - under.winfo_rootx()) <= 1, (width, top.cget("text"), top.winfo_rootx(),
-                                                                       under.winfo_rootx())
-            assert abs(top.winfo_width() - under.winfo_width()) <= 1, (width, top.cget("text"))
-        box_right = p.playlist_entry.winfo_rootx() + p.playlist_entry.winfo_width()
-        assert abs(box_right + 24 - p.play_list_button.winfo_rootx()) <= 1, "the box stretches to meet Play"
-        assert p.embellish_button.winfo_rootx() + p.embellish_button.winfo_width() <= p.output_box.winfo_rootx(), \
-            "Output stays clear"
+        _under_play, under_emb = lined_up_pair(p)
+        box, play, emb = p.playlist_entry, p.play_list_button, p.embellish_button
+        widths = (box.winfo_width(), play.winfo_width(), emb.winfo_width())
+        assert widths[1] == widths[2] and 0 <= widths[0] - widths[1] <= 2, (width, widths)
+        assert abs(box.winfo_rootx() + widths[0] + 24 - play.winfo_rootx()) <= 1, "the usual gap after the box"
+        assert abs(play.winfo_rootx() + widths[1] + 8 - emb.winfo_rootx()) <= 1, "and between the buttons"
+        right = under_emb.winfo_rootx() + under_emb.winfo_width()
+        assert abs(emb.winfo_rootx() + widths[2] - right) <= 1, (width, "the row ends where it did")
+        assert emb.winfo_rootx() + widths[2] <= p.output_box.winfo_rootx(), "Output stays clear"
+        assert 0.75 * play.winfo_height() <= box.winfo_height() < play.winfo_height(), \
+            (box.winfo_height(), play.winfo_height())
     assert not ui.errors, ui.errors[0]

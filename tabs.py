@@ -1362,6 +1362,17 @@ class TCombobox(ttk.Combobox):
         self._en.set(value)
 
 
+def equal_thirds(span, first_gap, gap):
+    """
+    Three widths that share a span of pixels equally: (first, second, third), with first_gap after the first and
+    gap after the second. What doesn't divide by three goes to the first, so the three end exactly where the span
+    does. The JRiver Playlists row: the Playlist box, Play and Play & Embellish (Ben, 10 Nov 2026).
+    """
+    room = max(0, int(span) - first_gap - gap)
+    each = room // 3
+    return room - 2 * each, each, each
+
+
 class RoundedEntry(tk.Frame):
     """
     A text box with fully rounded ends, drawn like the buttons so it looks the same on any PC.
@@ -1388,7 +1399,7 @@ class RoundedEntry(tk.Frame):
         fg = PALETTE.get("field_fg") or PALETTE.get("text") or "#000000"
         edge = PALETTE.get("field_edge") or PALETTE["button_outline"]
         self._edges = (edge, PALETTE["button_fg"])
-        self._shape = lambda colour: rounded_shape(self, self._box_w, h, px(CORNER), fill, colour, px(1))   # as the buttons
+        self._shape = lambda colour: rounded_shape(self, self._box_w, self._h, px(CORNER), fill, colour, px(1))   # as the buttons
         self._back = tk.Label(self, image=self._shape(edge), bd=0, highlightthickness=0, bg=back)
         self._back.pack()
         options = {"textvariable": textvariable} if textvariable is not None else {}
@@ -1443,6 +1454,16 @@ class RoundedEntry(tk.Frame):
 
     def focus_set(self):
         self.entry.focus_set()
+
+    def set_pixel_height(self, height):
+        """Draws the box this many pixels tall, never shorter than its text needs (the JRiver Playlists tab's box
+        stands nearer the height of the buttons beside it)."""
+        height = max(int(height), self._line + 4 * self._px1)
+        if height == self._h:
+            return
+        self._h = height
+        width, self._box_w = self._box_w, 0   # so set_pixel_width redraws and re-places at the new height
+        self.set_pixel_width(width)
 
     def set_pixel_width(self, width):
         """Draws the box this many pixels wide (the JRiver Playlists tab stretches it to the buttons beside it)."""
