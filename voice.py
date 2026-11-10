@@ -191,6 +191,9 @@ def _job(intent, value, zone, button, device=None, top_up=False):
                 _running[0] = zone
             engine.refresh_settings_if_changed()
             engine.OUTPUT_OVERRIDE = zone
+            engine.VOICE_BUILD = True
+            if intent not in MORE and not top_up:
+                _own_room(zone, lambda line: report("  " + line))
             # More like this and more artists like this keep the current track playing and replace what's
             # queued after it, so they use the Play tab's rule (queue after a busy zone), not a takeover
             engine.VOICE_TAKEOVER = intent not in MORE and not top_up
@@ -204,6 +207,7 @@ def _job(intent, value, zone, button, device=None, top_up=False):
             report("  " + t("Stopped: a newer voice command for {zone} took over.", zone=zone))
         finally:
             engine.OUTPUT_OVERRIDE = None
+            engine.VOICE_BUILD = False
             engine.VOICE_TAKEOVER = False
             engine.VOICE_WAIT = False
             engine.TOP_UP = False
@@ -292,6 +296,8 @@ def _play_now(intent, value, zone, device=None, top_up=False):
             return _topped_up(saved_playlists.playlist_keys(str(matches[0].get("ID"))), zid, zone,
                               f"playlist {matches[0].get('Name')}")
         # Shuffle, Non-stop and Skip recently played from Settings > JRiver Playlists
+        if device:   # by voice (a shortcut's shuffle comes here with no device)
+            _own_room(zone)
         ok, what = saved_playlists.play(matches[0], zid, device)
     elif intent in ("album", "song"):
         finder = library.find_album if intent == "album" else library.find_song
@@ -311,6 +317,8 @@ def _play_now(intent, value, zone, device=None, top_up=False):
         keys = keys if intent == "album" else [keys]
         if top_up:
             return _topped_up(keys, zid, zone, f"{intent} {title} by {library.spoken(artist)}")
+        if device:
+            _own_room(zone)
         ok, what = _play_keys(keys, zid), f"{intent} {title} by {library.spoken(artist)}"
         engine.nonstop_forget(zid)   # an album or song ends as normal
     else:
@@ -333,6 +341,8 @@ def _play_now(intent, value, zone, device=None, top_up=False):
         lead = _top_five_start(artist, keys)
         if lead:   # a shuffle opens on one of their best known songs
             keys = [lead] + [k for k in keys if str(k) != str(lead)]
+        if device:
+            _own_room(zone)
         ok, what = _play_keys(keys[:SHUFFLE_CAP], zid), f"{min(len(keys), SHUFFLE_CAP)} songs by {library.spoken(artist)}, shuffled"
         if ok:   # non-stop: when the shuffle ends, the opening track seeds a new playlist
             engine.nonstop_record(zid, keys[:SHUFFLE_CAP], kind="top", stage="rest", vibe=None,
@@ -484,13 +494,34 @@ def _zone_command(intent, device, body):
 # --- multiroom and single room (stage two, 9 Nov 2026) ----------------------------
 # Ben's three room commands: switch (below), multiroom and single room. The GUI hands over the follower's link
 # with attach_multiroom; without it the commands say Multiroom isn't set up.
-_multiroom = None   # {"start": fn(), "stop": fn(), "running": fn() -> bool}
+_multiroom = None   # {"start": fn(), "stop": fn(), "running": fn() -> bool, "leave": fn(), "following": fn() -> bool}
 
 
-def attach_multiroom(start, stop, running):
-    """The GUI hands over how to start and stop the follower, and whether it's running."""
+def attach_multiroom(start, stop, running, leave=None, following=None):
+    """
+    The GUI hands over how to start and stop the follower and whether it's running; leave lets the Speakers
+    finish their track before they stop, and following says whether they're meant to be following just now.
+    """
     global _multiroom
-    _multiroom = {"start": start, "stop": stop, "running": running}
+    _multiroom = {"start": start, "stop": stop, "running": running, "leave": leave or stop,
+                  "following": following or running}
+
+
+def _own_room(zone, say=print):
+    """
+    Music asked for by voice plays in the room of the Echo that heard it (Ben, 10 Nov 2026). Asked for in the
+    leader's room while the Speakers follow, they finish the track they're on and drop out, as when Output moves
+    away from Multiroom; "multiroom" by voice brings them back. More like this and Top-Up add to what's playing,
+    so they leave the rooms as they are and don't come here.
+    """
+    if _multiroom is None or not engine.MULTIROOM_ENABLED or not zone:
+        return
+    zid = engine.zone_id(zone)
+    if zid is None or zid != engine.zone_id(engine.MULTIROOM_LEADER) or not _multiroom["following"]():
+        return
+    _multiroom["leave"]()
+    say(t("[Voice] Asked for on {zone}, so the {follower} drop out after this track", zone=zone,
+          follower=engine.MULTIROOM_FOLLOWER))
 
 
 def _room_command(intent, device, body):

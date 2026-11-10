@@ -1949,8 +1949,12 @@ class PlayTab(tk.Frame):
             self.multiroom.leave()
 
     def multiroom_build_sent(self):
-        """engine.MULTIROOM_HOOK: a playlist went to the leader zone. A child already running is left be."""
-        if not self.multiroom.running():
+        """
+        engine.MULTIROOM_HOOK: a playlist went to the leader zone. A follower already following is left be; one
+        that was told to leave (a request by voice in the leader's room) sits idle, still connected, so it's
+        whether it's wanted that counts, not whether it's running.
+        """
+        if not self.multiroom.wanted:
             self.multiroom.start(engine.multiroom_settings())
 
     # --- Top-Up -----------------------------------------------------------------------------------
@@ -3421,7 +3425,8 @@ def main():
     voice.attach_badge(lambda asked, said: play.badge_problems.put((asked, said)))
     # "multiroom" and "single room" by voice start and stop the follower (stage two, 9 Nov 2026)
     voice.attach_multiroom(start=lambda: play.multiroom.start(engine.multiroom_settings()),
-                           stop=play.multiroom.stop, running=play.multiroom.running)
+                           stop=play.multiroom.stop, running=play.multiroom.running,
+                           leave=play.multiroom.leave, following=lambda: play.multiroom.wanted)
     voice.restart()
     # Keyboard shortcuts (Settings > Other): queued on the Play tab like voice commands
     hotkeys.attach(lambda job, heading, origin=None: play.voice_jobs.put((job, heading, origin)),

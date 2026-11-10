@@ -36,6 +36,7 @@ ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved
 OUTPUT_OVERRIDE = None  # a zone name that beats the Output setting for one run (voice commands)
+VOICE_BUILD = False     # True while a build asked for by voice runs: it plays in the room of the Echo that heard it
 OUTPUT_DROPPED = None   # "multiroom", "youtube" or "tidal": what Output asks for in .env while it isn't switched on
 MULTIROOM_NAME = "Multiroom"   # the feature's entry in the Output and Zone lists; a feature name, never translated
 MODERATOR_OVERRIDE = None  # True/False beats the AI_MODERATOR setting for one run
@@ -853,7 +854,14 @@ def multiroom_settings():
 
 
 def _multiroom_sent(zone):
-    """A playlist has gone to zone: if that's the leader with Output on Multiroom, the Speakers follow."""
+    """
+    A playlist has gone to zone: if that's the leader with Output on Multiroom, the Speakers follow. Not for a
+    build asked for by voice, which plays in the room of the Echo that heard it, nor for Non-stop adding to what's
+    there, which leaves the rooms as they are (Ben, 10 Nov 2026: "music like Disturbed", asked at the Sonos, played
+    in both rooms because the Play tab's Output had been left on Multiroom).
+    """
+    if VOICE_BUILD or NONSTOP_APPEND:
+        return
     if MULTIROOM_HOOK is not None and OUTPUT_TARGET == "multiroom" and zone == zone_id(MULTIROOM_LEADER):
         try:
             MULTIROOM_HOOK()

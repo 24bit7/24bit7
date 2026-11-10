@@ -1747,6 +1747,7 @@
   "unknown DAC": "unbekannter DAC",
   "[Voice] {name}: multiroom, the {follower} follow {leader}": "[Voice] {name}: Multiroom, die {follower} folgen {leader}",
   "[Voice] {name}: single room, the music stays in {zone}": "[Voice] {name}: Single Room, die Musik bleibt in {zone}",
+  "[Voice] Asked for on {zone}, so the {follower} drop out after this track": "[Voice] Auf {zone} angefordert, also steigen die {follower} nach diesem Titel aus",
   "[Voice] {name}: single room, the {follower} drop out": "[Voice] {name}: Single Room, die {follower} steigen aus",
   "The speaker didn't answer, so its clock can't be read. Multiroom won't start.": "Der Lautsprecher hat nicht geantwortet, also lässt sich seine Uhr nicht lesen. Multiroom startet nicht.",
   "The speaker answers, but nothing was playing, so the clock couldn't be checked. Play something on it and try again.": "Der Lautsprecher antwortet, aber es lief nichts, also konnte die Uhr nicht geprüft werden. Spiel etwas darauf ab und versuch es noch einmal.",

@@ -525,7 +525,7 @@ Das Ergebnis lautet etwa "Kalibriert. Start 93 ms, Resume 100 ms, DAC-Verzögeru
 
 ### Benutzen
 
-Stell Ausgabe im Abspielen-Tab auf **Multiroom** und baue wie gewohnt: Die Playlist geht an den Sonos, die Konsole meldet, in Erweitert, "Multiroom: Speakers following Sonos", und die Hauptanlage setzt innerhalb einer halben Sekunde nach dem ersten Ton ein. Der Eintrag **Multiroom** unter Zone zeigt, was der Sonos spielt. Stopp in der Zeile Läuft gerade stoppt beide Räume; Titel überspringen schaltet beide weiter. Per Sprache lässt "ask needle drop multiroom" die Hauptanlage bei dem einsteigen, was der Sonos gerade spielt, und "single room" behält die Musik im Raum des Echo, der es gehört hat.
+Stell Ausgabe im Abspielen-Tab auf **Multiroom** und baue wie gewohnt: Die Playlist geht an den Sonos, die Konsole meldet, in Erweitert, "Multiroom: Speakers following Sonos", und die Hauptanlage setzt innerhalb einer halben Sekunde nach dem ersten Ton ein. Der Eintrag **Multiroom** unter Zone zeigt, was der Sonos spielt. Stopp in der Zeile Läuft gerade stoppt beide Räume; Titel überspringen schaltet beide weiter. Per Sprache lässt "ask needle drop multiroom" die Hauptanlage bei dem einsteigen, was der Sonos gerade spielt, und "single room" behält die Musik im Raum des Echo, der es gehört hat. Per Sprache angeforderte Musik läuft im Raum des Echo, der sie gehört hat, egal, was unter Ausgabe steht: Im Raum des Sonos angefordert, während die Hauptanlage folgt, spielt die Hauptanlage ihren Titel zu Ende und steigt aus, und "multiroom" holt sie zurück. "more like this" und Top-Up fügen dem Laufenden etwas hinzu und lassen die Räume, wie sie sind.
 
 ### Gut zu wissen
 

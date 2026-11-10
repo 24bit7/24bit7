@@ -522,7 +522,7 @@ The result reads like "Calibrated. Start 93 ms, Resume 100 ms, DAC delay 1,746 s
 
 ### Using it
 
-Set Output to **Multiroom** on the Play tab and build as usual: the playlist goes to the Sonos, the console, in Advanced, says "Multiroom: Speakers following Sonos" and the main system comes in within half a second of the first note. Zone's **Multiroom** entry shows what the Sonos is playing. Stop on the Now Playing row stops both rooms; Skip Track moves both on. By voice, "ask needle drop multiroom" joins the main system to whatever the Sonos is playing, and "single room" keeps the music in the room of the Echo that heard it.
+Set Output to **Multiroom** on the Play tab and build as usual: the playlist goes to the Sonos, the console, in Advanced, says "Multiroom: Speakers following Sonos" and the main system comes in within half a second of the first note. Zone's **Multiroom** entry shows what the Sonos is playing. Stop on the Now Playing row stops both rooms; Skip Track moves both on. By voice, "ask needle drop multiroom" joins the main system to whatever the Sonos is playing, and "single room" keeps the music in the room of the Echo that heard it. Music asked for by voice plays in the room of the Echo that heard it, whatever Output says: asked for in the Sonos's room while the main system is following, the main system finishes the track it's on and drops out, and "multiroom" brings it back. More like this and Top-Up add to what's playing, so they leave the rooms as they are.
 
 ### Good to know
 

@@ -316,6 +316,7 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 - **Shuffle is the default** wherever a JRiver playlist plays: Play & Embellish, and a playlist or smartlist asked for by voice on a fresh install. What you had chosen before is kept.
 - **No build waits in silence.** On a stopped zone Play & Embellish starts the playlist's own first track, Radio starts a pillar's song, and AI Playlist makes a quick first request for an opener that plays while the full list is found.
 - **Radio and Play & Embellish show their working**: each pillar and agreeing artist is a line in the console, each top track In library or Not in library, and every one is listed in Discover.
+- **Voice requests stay in their own room.** With Output left on Multiroom, music asked for at the Sonos's Echo played on the main system too. Now it plays in the room of the Echo that heard it: a main system that's following finishes its track and drops out, and "multiroom" by voice brings it back.
 - **Multiroom's running commentary** is in the Advanced console only. Its problems, and notes about something you can hear, show in Simple too.
 
 ### Earlier: 1.32.0
