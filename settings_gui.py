@@ -3543,21 +3543,113 @@ class SettingsTab(tk.Frame):
 
     def _embellish_section(self, tab):
         """
-        Play & Embellish (Ben, 7 Nov 2026): a tick per amount for the arrow's menu and a round button for the
-        default, which the button itself runs. At least one stays ticked; unticking the default moves it to the
-        first still ticked. Kept in the database with the rest of Play & Embellish, not in Profiles: it's how
-        the menu reads, not how a build behaves.
+        Play & Embellish. Per amount, a tick for the arrow's menu and a round button for the default, which the
+        button itself runs (Ben, 7 Nov 2026): at least one stays ticked, and unticking the default moves it to
+        the first still ticked. And how an amount builds (10 Nov 2026): Shuffle, Deep Cuts (how, and by what
+        share) and the Moderator, on the All amounts line while "Use the same settings for every amount" is
+        ticked, the amounts' own lines greyed and showing it, or a line each when it isn't, each a copy of the
+        one line until it's changed. The model is embellish.settings; kept in the database with the rest of
+        Play & Embellish.
         """
         import embellish
         box = section(tab, t("Play & Embellish"),
-                      t("Which amounts the arrow beside Play & Embellish offers, and which the button itself runs. "
-                        "+10%, +20% and +50% add one new track for every ten, five or two on the playlist; Double "
-                        "adds as many as it has, Triple twice as many; Build It Out adds every agreeing artist's top "
-                        "tracks you own, ten artists at a time, and Cancel keeps what's in. Leave one ticked and "
-                        "the arrow goes."))
-        tk.Label(box, text=t("In the Menu"), fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=0, column=0, sticky="w")
-        tk.Label(box, text=t("Default"), fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=0, column=1, sticky="w",
-                                                                                     padx=(24, 0))
+                      t("Which amounts the arrow beside Play & Embellish offers, which the button itself runs, and "
+                        "how each one builds. +10%, +20% and +50% add one new track for every ten, five or two on "
+                        "the playlist; Double adds as many as it has, Triple twice as many; Build It Out adds every "
+                        "agreeing artist's top tracks you own, ten artists at a time, and Cancel keeps what's in. "
+                        "Leave one ticked and the arrow goes.\n"
+                        "Shuffle plays the result shuffled; unticked, your playlist keeps its order with the new "
+                        "tracks woven in. Deep Cuts adds tracks you've played least, from the genre most of the "
+                        "playlist shares, spaced through it or shuffled in; the percentage is how many, as a share "
+                        "of what Embellish added. The Moderator checks the new tracks against the playlist and "
+                        "removes any that clash, which uses AI credits.\n"
+                        "Ticked, Use the same settings for every amount runs every amount from the All amounts "
+                        "row. Unticked, each amount has a row of its own, a copy of that one until you change it."))
+        one = tk.BooleanVar(value=embellish.settings()["all"] == "1")
+        lines, loading = {}, [False]   # lines: None (All amounts) or an amount -> its controls and their values
+
+        def refresh(*_):
+            """Every line from what's saved: an amount shows the row it would run, live only when it's its own."""
+            data = embellish.settings()
+            ai = self._ai_set_up()
+            loading[0] = True
+            try:
+                one.set(data["all"] == "1")
+                for amount, line in lines.items():
+                    row = data["all_row"] if amount is None else embellish.row_for(amount, data)
+                    live = (data["all"] == "1") == (amount is None)
+                    line["live"] = live
+                    line["shuffle"].set(row["shuffle"] == "1")
+                    line["deep_cuts"].set(option_label(DEVICE_DEEP_CUTS, row["deep_cuts"]))
+                    line["deep_share"].set(row["deep_share"])
+                    line["moderator"].set(row["moderator"].title())
+                    for name in ("shuffle_box", "deep_box"):
+                        line[name].state(["!disabled"] if live else ["disabled"])
+                    line["mod_box"].state(["!disabled"] if live and ai else ["disabled"])
+                    line["share_box"].config(state="readonly" if live and row["deep_cuts"] != "off" else "disabled")
+                    line["percent"].config(state="normal" if live else "disabled")
+                    if amount is None:
+                        line["title"].config(state="normal" if live else "disabled")
+            finally:
+                loading[0] = False
+
+        def store(amount):
+            """A line's controls into its row. The Moderator's first switch-on anywhere gets the credits note."""
+            if loading[0]:
+                return
+            line = lines[amount]
+            level = line["moderator"].get().lower()
+            if level != "off":
+                warn_moderator_once(self)
+            embellish.set_row(amount, shuffle="1" if line["shuffle"].get() else "0",
+                              deep_cuts=option_code(DEVICE_DEEP_CUTS, line["deep_cuts"].get()),
+                              deep_share=line["deep_share"].get(), moderator=level)
+            refresh()
+
+        def one_toggled():
+            embellish.use_one_row(one.get())
+            refresh()
+
+        ttk.Checkbutton(box, text=t("Use the same settings for every amount"), variable=one,
+                        command=one_toggled).grid(row=0, column=0, columnspan=6, sticky="w", pady=(0, 8))
+        heads = {}
+        for c, text in enumerate((N_("In the Menu"), N_("Default"), N_("Shuffle"), "Deep Cuts", N_("Moderator")),
+                                 start=1):
+            heads[text] = tk.Label(box, text=t(text), font=HELP_FONT,
+                                   fg=PALETTE["ai_purple"] if text == "Moderator" else PALETTE["help_fg"])
+            heads[text].grid(row=1, column=c, sticky="w", padx=(22, 0))
+        Tooltip(heads["Moderator"], t(MODERATOR_LEVELS_HELP))
+
+        def controls(r, amount):
+            """Shuffle, Deep Cuts with its share, and the Moderator for one line of the table."""
+            line = {"shuffle": tk.BooleanVar(), "deep_cuts": tk.StringVar(), "deep_share": tk.StringVar(),
+                    "moderator": tk.StringVar(), "live": True}
+            line["shuffle_box"] = ttk.Checkbutton(box, variable=line["shuffle"], command=lambda: store(amount))
+            line["shuffle_box"].grid(row=r, column=3, sticky="w", padx=(30, 0))
+            cell = tk.Frame(box)
+            cell.grid(row=r, column=4, sticky="w", padx=(22, 0), pady=1)
+            deep = TCombobox(cell, textvariable=line["deep_cuts"], values=[shown for _, shown in DEVICE_DEEP_CUTS],
+                             state="readonly", width=11)
+            deep.pack(side="left")
+            deep.bind("<<ComboboxSelected>>", lambda e: (deep.selection_clear(), store(amount)))
+            line["share_box"] = tk.Spinbox(cell, from_=10, to=100, increment=10, width=4, state="readonly",
+                                           textvariable=line["deep_share"], command=lambda: store(amount))
+            line["share_box"].pack(side="left", padx=(8, 0))
+            line["percent"] = tk.Label(cell, text="%")
+            line["percent"].pack(side="left", padx=(2, 0))
+            mod = TCombobox(box, textvariable=line["moderator"], values=MODERATOR_CHOICES, state="readonly",
+                            width=max(9, max(len(t(c)) for c in MODERATOR_CHOICES) + 2))
+            mod.grid(row=r, column=5, sticky="w", padx=(22, 0))
+            mod.bind("<<ComboboxSelected>>", lambda e: (mod.selection_clear(), store(amount)))
+            Tooltip(mod, t(NO_KEY_TEXT), when=lambda: line["live"] and not self._ai_set_up())
+            line["deep_box"], line["mod_box"] = deep, mod
+            lines[amount] = line
+            return line
+
+        every = controls(2, None)
+        every["title"] = tk.Label(box, text=t("All amounts"), font=LABEL_FONT)
+        every["title"].grid(row=2, column=0, sticky="w", pady=(0, 6))
+
         now = embellish.amounts()
         default = tk.StringVar(value=now["default"])
         ticks, radios = {}, {}
@@ -3581,17 +3673,22 @@ class SettingsTab(tk.Frame):
             embellish.set_amounts(shown=shown)
             sync()
 
-        for r, code in enumerate(embellish.AMOUNTS, start=1):
+        for r, code in enumerate(embellish.AMOUNTS, start=3):
+            tk.Label(box, text=t(embellish.AMOUNT_NAMES[code])).grid(row=r, column=0, sticky="w")
             var = tk.BooleanVar(value=code in now["shown"])
             ticks[code] = var
-            ttk.Checkbutton(box, text=t(embellish.AMOUNT_NAMES[code]), variable=var,
-                            command=lambda c=code: ticked(c)).grid(row=r, column=0, sticky="w", pady=1)
+            ttk.Checkbutton(box, variable=var, command=lambda c=code: ticked(c)).grid(row=r, column=1, sticky="w",
+                                                                                      padx=(30, 0), pady=1)
             radio_ = ttk.Radiobutton(box, variable=default, value=code,
                                      command=lambda c=code: (embellish.set_amounts(default=c), sync()))
-            radio_.grid(row=r, column=1, sticky="w", padx=(30, 0))
+            radio_.grid(row=r, column=2, sticky="w", padx=(30, 0))
             radios[code] = radio_
+            controls(r, code)
         sync()
+        refresh()
+        box.bind("<Map>", refresh, add="+")   # back from Settings > Keys: the Moderator's boxes follow the AI's set-up
         self._embellish_ticks, self._embellish_default = ticks, default
+        self._embellish_one, self._embellish_lines, self._embellish_refresh = one, lines, refresh
 
     def _fill_saved(self, tab, p):
         """

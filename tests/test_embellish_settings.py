@@ -77,6 +77,31 @@ def test_an_amount_has_its_own_row_once_the_tick_is_off(app):
     assert embellish.settings()["rows"]["triple"]["shuffle"] == "0", "and the amounts' rows are kept for next time"
 
 
+def test_the_tables_tick_and_a_changed_line(app):
+    """The table's two writes (stage two): nothing is copied until a line is changed, and a changed line is its
+    own from then on."""
+    import embellish
+    embellish.set_row(None, moderator="relaxed", deep_cuts="spaced", deep_share="30")
+    one = {"shuffle": "1", "deep_cuts": "spaced", "deep_share": "30", "moderator": "relaxed"}
+    assert embellish.row_for("triple") == one
+    embellish.use_one_row(False)
+    s = embellish.settings()
+    assert s["all"] == "0" and s["rows"] == {} and s["all_row"] == one, "unticking copies nothing"
+    assert embellish.row_for("triple") == one
+    embellish.set_row("triple", shuffle="0")
+    assert embellish.row_for("triple") == dict(one, shuffle="0"), "the rest of its row is a copy of All amounts"
+    assert embellish.row_for("double") == one, "the others still follow the one row"
+    embellish.set_row(None, moderator="strict")
+    assert embellish.row_for("triple")["moderator"] == "relaxed", "a row of its own is its own from then on"
+    assert embellish.row_for("double")["moderator"] == "strict"
+    embellish.use_one_row(True)
+    assert embellish.row_for("triple") == embellish.settings()["all_row"], "ticked, every amount runs the one row"
+    embellish.use_one_row(False)
+    assert embellish.row_for("triple")["shuffle"] == "0", "and its own row was kept for next time"
+    embellish.set_row("half", shuffle="1")   # 1.31.0's first name for +50%
+    assert set(embellish.settings()["rows"]) == {"triple", "p50"}
+
+
 # --- Shuffle --------------------------------------------------------------------------------------------
 
 def test_embellish_takes_its_order_from_the_row(app):

@@ -136,7 +136,8 @@ PLAY_NOTES = {
                    "here most recently at the top; type to narrow it."),
     "Play": N_("Plays the playlist as it is. The arrow chooses Play Shuffled or Play Ordered."),
     "Play & Embellish": N_("Plays the playlist with new tracks woven in: the top tracks you own by artists that the "
-                           "playlist's own artists agree on. The arrow chooses how many."),
+                           "playlist's own artists agree on. The arrow chooses how many; Shuffle, Deep Cuts "
+                           "and the Moderator are under Settings > JRiver Playlists."),
     "Radio": N_("Plays a station of what you listen to, with no seed: your stations come from your plays and "
                 "the sources' genres. Click Radio for the last station you played; the arrow lists them all. "
                 "Right-click a station to split it or add it as a button."),

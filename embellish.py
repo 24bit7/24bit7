@@ -186,6 +186,30 @@ def row_for(amount, data=None):
     return dict(data["rows"].get(OLD_AMOUNTS.get(amount, amount)) or data["all_row"])
 
 
+def use_one_row(on):
+    """
+    The table's tick, "Use the same settings for every amount". Off, each amount runs its own row: the rows made
+    while it was off before are kept, and an amount never given one runs a copy of the All amounts row.
+    """
+    data = settings()
+    data["all"] = "1" if on else "0"
+    return set_settings(data)
+
+
+def set_row(amount, **changes):
+    """
+    One line of the table changed: amount None is the All amounts row. An amount's first change gives it a row
+    of its own, the rest of it copied from the All amounts row as it stood.
+    """
+    data = settings()
+    if amount is None:
+        data["all_row"].update(changes)
+    else:
+        amount = OLD_AMOUNTS.get(amount, amount)
+        data["rows"].setdefault(amount, dict(data["all_row"])).update(changes)
+    return set_settings(data)
+
+
 def _plan(amount, report):
     """An amount's row for this build, the More Options switches over it while that row is open (and said so)."""
     row = row_for(amount)

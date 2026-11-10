@@ -262,7 +262,7 @@ def test_saved_playlists_global_rows_stick_after_rescan(app, ui):
     ui.pump(0.6)   # the rescan runs 200 ms after the page opens
     combos = [c for c in find_saved_global_combos(holder) if c.winfo_ismapped() or True]
     skip_global = combos[-1]   # the last of the global rows' four dropdowns... found below more precisely
-    box_combos = [c for c in combos if "Off" in c.cget("values") or "1 day" in c.cget("values")]
+    box_combos = [c for c in combos if "1 day" in c.cget("values")]   # not Off: Play & Embellish's table has those too
     assert box_combos, "Skip recent dropdowns not found"
     target = box_combos[0]   # the All playlists row's Skip recent
     target.set("7 days")
