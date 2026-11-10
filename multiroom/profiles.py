@@ -20,7 +20,7 @@ GENERIC = {"name": "Generic", "clock": "upnp", "start": 90.0, "resume": 95.0, "t
 # DACs: words that must both appear across the device's name and the driver's name; the delay in samples, which
 # is a starting value: the same DAC gives another number through WASAPI, or with another driver buffer setting.
 DACS = [
-    {"match": ("chord", "hugo"), "name": "Chord Hugo", "dac": 1660, "api": "ASIO", "tested": True},
+    {"match": ("chord", "hugo"), "name": "Chord Hugo TT", "dac": 1660, "api": "ASIO", "tested": True},
 ]
 UNKNOWN_DAC = {"name": "", "dac": 0, "api": "", "tested": False}
 

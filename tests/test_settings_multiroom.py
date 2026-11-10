@@ -77,11 +77,11 @@ def test_the_section_is_off_by_default_and_enabling_it_adds_multiroom_to_output(
     assert "MULTIROOM_ENABLED=1" in env and "MULTIROOM_LEADER=Sonos" in env and "MULTIROOM_FOLLOWER=Speakers" in env
     assert ui.play._extra_outputs()[0] == "Multiroom"
     assert s._mr_speaker.cget("text") == "Kitchen · Sonos One  ·  profile: Sonos One"
-    assert s._mr_device.cget("text") == "ASIO Chord  1.04  ·  profile: Chord Hugo"
+    assert s._mr_device.cget("text") == "ASIO Chord  1.04  ·  profile: Chord Hugo TT"
     assert not s._mr_device_entry.winfo_ismapped(), "the device box shows only when nothing matched"
     assert s._mr_server.cget("text") == "Found at http://10.0.0.1:52101."
     assert (s.vars["MULTIROOM_START"].get(), s.vars["MULTIROOM_RESUME"].get(), s.vars["MULTIROOM_DAC"].get()) == ("90", "95", "1660")
-    assert s._mr_from.cget("text") == "From the Sonos One and Chord Hugo profiles."
+    assert s._mr_from.cget("text") == "From the Sonos One and Chord Hugo TT profiles."
     assert str(s._mr_check.cget("state")) == "normal"
 
     s._multiroom_check_clock()

@@ -492,7 +492,7 @@ Jede Antwort jedes Dienstes wird in einer lokalen Datenbank aufbewahrt, standard
 
 ## Multiroom
 
-Multiroom spielt das, was dein Sonos spielt, auch auf deiner Hauptanlage, im Gleichtakt, sodass Küche und Wohnzimmer wie ein Raum klingen. Es ist experimentell: getestet mit einem Sonos One und einem Chord Hugo über ASIO, und es braucht vorerst einen Sonos. Wer es aus lässt, merkt nichts davon.
+Multiroom spielt das, was dein Sonos spielt, auch auf deiner Hauptanlage, im Gleichtakt, sodass Küche und Wohnzimmer wie ein Raum klingen. Es ist experimentell: getestet mit einem Sonos One und einem Chord Hugo TT über ASIO, und es braucht vorerst einen Sonos. Wer es aus lässt, merkt nichts davon.
 
 ### Wie es funktioniert
 
@@ -530,7 +530,7 @@ Stell Ausgabe im Abspielen-Tab auf **Multiroom** und baue wie gewohnt: Die Playl
 - Der Sonos bekommt, was JRivers DLNA ihm schickt (44,1 kHz, 16 Bit in der getesteten Anlage); die Hauptanlage bekommt die Datei in ihrer eigenen Rate und mit 24 Bit. Beide spielen verschiedene Wiedergaben desselben Titels.
 - Der Folger endet, wenn 24bit7 beendet wird. Der Sonos spielt weiter, wenn JRiver noch auf ihn spielt.
 - Eine in der Sonos-App gebildete Sonos-Gruppe, andere Sonos-Modelle, andere DACs und WASAPI sind ungetestet. Uhr prüfen und deine Ohren sind der Test; sag gern, wie es gelaufen ist.
-- Die Profilzahlen wurden mit einem Mikrofon an einem Sonos One und einem Hugo gemessen. Ein anderer DAC beginnt mit einer Verzögerung von null, bis du nudgest oder eine einträgst.
+- Die Profilzahlen wurden mit einem Mikrofon an einem Sonos One und einem Hugo TT gemessen. Jeder Chord Hugo passt auf dieses Profil, ein anderes Hugo-Modell sollte also kalibrieren; ein anderer DAC beginnt mit einer Verzögerung von null, bis du nudgest oder eine einträgst.
 
 ## Sprachbefehle
 

@@ -6666,10 +6666,10 @@ class SettingsTab(tk.Frame):
             tab, t("Multiroom"),
             t("The Speakers play what the Sonos plays, in step and with your Speakers DSP, so the two rooms sound "
               "as one. Tick Enable Multiroom and the Play tab's Output list gains Multiroom: a build goes to the "
-              "leader zone and the Speakers follow it. Experimental: tested on one Sonos One and a Chord Hugo over "
+              "leader zone and the Speakers follow it. Experimental: tested on one Sonos One and a Chord Hugo TT over "
               "ASIO. Two steps in JRiver first: see the note on DLNA server."))
         env = self.env
-        tk.Label(box, text=t("experimental: tested on one Sonos One and a Chord Hugo over ASIO"),
+        tk.Label(box, text=t("experimental: tested on one Sonos One and a Chord Hugo TT over ASIO"),
                  fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=0, column=0, columnspan=4, sticky="w")
         self.vars["MULTIROOM_ENABLED"] = tk.BooleanVar(value=env.get("MULTIROOM_ENABLED", "0") in ("1", "true", "yes"))
         tick = ttk.Checkbutton(box, text=t("Enable Multiroom"), variable=self.vars["MULTIROOM_ENABLED"],

@@ -28,14 +28,14 @@ def test_the_sonos_one_and_the_hugo_are_known_and_anything_else_is_generic():
     generic = profiles.pick_speaker("Denon", "HEOS 5")
     assert generic["name"] == "Generic" and generic["clock"] == "upnp" and not generic["tested"]
     hugo = profiles.pick_dac("Hugo (Chord Async USB 44.1kHz-384kHz)", "ASIO Chord  1.04")
-    assert hugo["name"] == "Chord Hugo" and hugo["dac"] == 1660
+    assert hugo["name"] == "Chord Hugo TT" and hugo["dac"] == 1660
     assert profiles.pick_dac("Speakers (Xonar SoundCard)", "")["dac"] == 0
     assert profiles.pick_speaker("Sonos", "Sonos One") is not profiles.pick_speaker("Sonos", "Sonos One"), "a copy each time"
 
 
 def test_the_line_under_the_numbers_says_where_they_came_from():
     one, hugo = profiles.pick_speaker("Sonos", "Sonos One"), profiles.pick_dac("Hugo", "ASIO Chord")
-    assert profiles.source_line("profiles", one, hugo) == "From the Sonos One and Chord Hugo profiles."
+    assert profiles.source_line("profiles", one, hugo) == "From the Sonos One and Chord Hugo TT profiles."
     assert profiles.source_line("typed", one, hugo) == "Typed by hand."
     assert profiles.source_line("recording:9 Nov 2026", one, hugo) == "From your recording of 9 Nov 2026."
     assert profiles.source_line("profiles", profiles.pick_speaker("", ""), hugo).startswith("Generic: not measured yet.")
