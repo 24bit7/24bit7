@@ -147,19 +147,32 @@ class ArtistsView(tk.Frame):
         self.tree.tag_configure("cell", font=self._cell_font)
         for c, heading, width, numbers in cols:
             title = t(heading)
-            self.tree.heading(c, text=title, command=lambda cc=c: self._sort_by(cc))
+            # a title sits over its column's contents: centred over numbers, at the left over text (Ben, 11 Nov 2026)
+            self.tree.heading(c, text=title, anchor="center" if numbers else "w",
+                              command=lambda cc=c: self._sort_by(cc))
             fits = self._head_measure(title) + PAD
-            if numbers:   # as wide as the title needs, the number centred under it (Ben, 11 Nov 2026)
+            if numbers:   # as wide as the title needs, the number centred under it
                 self.tree.column(c, width=fits, minwidth=fits, anchor="center", stretch=False)
-            else:         # the text columns share the rest, never narrower than their title
-                self.tree.column(c, width=max(width, fits), minwidth=fits, anchor="w", stretch=True)
+            else:         # Artist fits its names (see _fit_columns); the last column takes the rest
+                self.tree.column(c, width=max(width, fits), minwidth=fits, anchor="w", stretch=c != "artist")
 
-    def _fit_numbers(self, rows):
-        """Widens a number column if one of its numbers is wider than its title."""
+    def _fit_columns(self, rows):
+        """
+        A number column widens if one of its numbers is wider than its title. Artist is as wide as its longest
+        name, never narrower than its title nor wider than a third of the table, so Sound or the songs get the
+        room (Ben, 11 Nov 2026: the Artist column was far wider than its names).
+        """
         for n, (c, heading, _w, numbers) in enumerate(COLUMNS[self.kind]):
+            title = t(heading)
             if numbers:
-                fits = number_width(t(heading), [r[n] for r in rows], self._head_measure, self._cell_measure)
+                fits = number_width(title, [r[n] for r in rows], self._head_measure, self._cell_measure)
                 self.tree.column(c, width=fits, minwidth=fits)
+            elif c == "artist":
+                least = self._head_measure(title) + PAD
+                widest = max([self._cell_measure(str(r[n])) for r in rows], default=0) + PAD
+                room = self.tree.winfo_width()
+                most = room // 3 if room > 1 else widest
+                self.tree.column(c, width=max(least, min(widest, most)), minwidth=least)
 
     def restyle(self):
         """A new table text size (Sessions' A- and A+): measured again and the rows put back."""
@@ -402,9 +415,10 @@ class ArtistsView(tk.Frame):
     def _populate(self):
         self.tree.delete(*self.tree.get_children())
         rows = [self._cells(item) for item in self._items]
+        self.tree.tag_configure("stripe", background=tabs.stripe_colour())
         for i, row in enumerate(rows):
-            self.tree.insert("", "end", iid=str(i), values=row, tags=("cell",))
-        self._fit_numbers(rows)
+            self.tree.insert("", "end", iid=str(i), values=row, tags=("cell", "stripe") if i % 2 else ("cell",))
+        self._fit_columns(rows)
         self._open_row()
 
     def _sort_value(self, item, col):

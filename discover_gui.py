@@ -23,7 +23,7 @@ from datetime import datetime
 
 import engine
 from i18n import t, tn
-from tabs import PALETTE, FlatButton, RoundedEntry, TabbedPane
+from tabs import PALETTE, FlatButton, RoundedEntry, TabbedPane, stripe_colour
 from artists_gui import ArtistsView, Shared
 
 # Search URL builders per store. Each takes an "artist track" query string.
@@ -387,6 +387,7 @@ class DiscoverTab(tk.Frame):
         term = self.search_var.get().strip().lower() if hasattr(self, "search_var") else ""
         self.tree.delete(*self.tree.get_children())
         self._visible = []
+        self.tree.tag_configure("stripe", background=stripe_colour())   # every other row shaded (Ben, 11 Nov 2026)
         for i, r in enumerate(self._rows):
             seed = self._seed_text(r)
             found = t("yes") if r["found"] else t("no")
@@ -396,7 +397,7 @@ class DiscoverTab(tk.Frame):
                 continue
             self.tree.insert("", "end", iid=str(i), values=(
                 self._tick_mark(r), seed, r["artist"], r["track"] or "", r["sources"] or "", found, r["date"]),
-                tags=("cell",))
+                tags=("cell", "stripe") if len(self._visible) % 2 else ("cell",))
             self._visible.append((seed, r["artist"] or "", r["track"] or "",
                                   r["sources"] or "", found, r["date"] or ""))
         self._show_count()

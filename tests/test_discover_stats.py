@@ -241,3 +241,14 @@ def test_a_number_column_is_as_wide_as_its_title_or_its_widest_number(app):
     cell = lambda text: 10 * len(text)
     assert artists_gui.number_width("Your Artists", [7, 10], head, cell) == 240 + artists_gui.PAD
     assert artists_gui.number_width("Gefunden", [1234567890123456789], head, cell) == 190 + artists_gui.PAD
+
+
+def test_the_stripe_is_a_shade_off_the_page_either_way(app):
+    """Ben, 11 Nov 2026: every other row a little lighter on a dark theme, a little darker on a light one."""
+    import tabs
+    def brightness(c):
+        r, g, b = (int(c[i:i + 2], 16) for i in (1, 3, 5))
+        return r + g + b
+    dark, light = "#1b1b1b", "#f3f4f6"
+    assert 0 < brightness(tabs.stripe_colour(dark)) - brightness(dark) < 90
+    assert 0 < brightness(light) - brightness(tabs.stripe_colour(light)) < 90

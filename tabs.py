@@ -163,6 +163,18 @@ def tint(colour, amount):
     return _rgb_hex(v + (1 - v) * amount for v in _hex_rgb(colour))
 
 
+def stripe_colour(bg=None):
+    """
+    Every other row of a table (Ben, 11 Nov 2026): a shade off the page, lighter on a dark theme and darker on
+    a light one, so a row is easy to follow across without lines between them.
+    """
+    bg = bg or PALETTE["window_bg"]
+    r, g, b = _hex_rgb(bg)
+    if 0.299 * r + 0.587 * g + 0.114 * b < 0.5:
+        return tint(bg, 0.07)
+    return shade(bg, 0.95)
+
+
 def _hue_gap(h, centre):
     return abs((h - centre + 180) % 360 - 180)
 

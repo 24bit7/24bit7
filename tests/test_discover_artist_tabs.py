@@ -153,3 +153,37 @@ def test_column_titles_fit_on_a_screen_scaled_up(app, ui):
     finally:
         ui.root.tk.call("tk", "scaling", old)
     assert not ui.errors, ui.errors[0]
+
+
+def test_rows_are_striped_and_the_artist_column_fits_its_names(app, ui):
+    """Ben, 11 Nov 2026: every other row shaded on all three tabs, so a row is easy to follow across; the
+    Artist column as wide as its names need, Sound or the songs taking the rest; text titles over their text."""
+    import tkinter.font as tkfont
+    import engine
+    import tabs
+    history(app)
+    stations_meta(app)
+    more_metal(app)
+    session(app, artist="The Kinks", started="2026-11-11 21:00",   # the latest, so Sessions opens on it
+            seen=[("Nonpoint", "Victim", "Last.fm", 0), ("Crossfade", "Cold", "Last.fm", 0)])
+    for kind in ("Missing Artists", "Gaps in Your Artists"):
+        s = artist_tab(ui, kind)
+        kids = s.tree.get_children()
+        assert len(kids) >= 2, kind
+        assert ["stripe" in s.tree.item(i, "tags") for i in kids[:4]] == [False, True, False, True][:len(kids[:4])]
+        assert str(s.tree.tag_configure("stripe", "background")) == tabs.stripe_colour(), kind
+        cell = tkfont.Font(family="Segoe UI", size=getattr(engine, "TABLE_FONT_SIZE", 9))
+        widest = max(cell.measure(s.tree.set(i, "artist")) for i in kids)
+        assert int(s.tree.column("artist", "width")) <= max(widest, 200) + 40, (kind, s.tree.column("artist", "width"))
+        assert not s.tree.column("artist", "stretch") and s.tree.column(s.tree.cget("columns")[-1], "stretch")
+        assert str(s.tree.heading("artist", "anchor")) == "w" and \
+            str(s.tree.heading(s.tree.cget("columns")[-1], "anchor")) == "w", kind
+    d = ui.discover
+    d.pane.select(d.sessions_page)
+    ui.pump(0.3)
+    d._populate()
+    kids = d.tree.get_children()
+    assert len(kids) >= 2
+    assert ["stripe" in d.tree.item(i, "tags") for i in kids[:2]] == [False, True]
+    assert str(d.tree.tag_configure("stripe", "background")) == tabs.stripe_colour()
+    assert not ui.errors, ui.errors[0]
