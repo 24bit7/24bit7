@@ -354,7 +354,7 @@ def ensure_loaded():
 
 
 def has_artist(name):
-    """Whether an artist of that name is in the library, by the rules every name match uses (Discover's Statistics)."""
+    """Whether an artist of that name is in the library, by the rules every name match uses (Discover's Missing Artists)."""
     ensure_loaded()
     return norm(name or "") in _artists
 

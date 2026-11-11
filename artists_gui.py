@@ -1,10 +1,12 @@
 """
-24bit7 - Discover > Statistics (Ben, 10 Nov 2026).
+24bit7 - Discover's Missing Artists and Gaps in Your Artists tabs (Ben, 10 and 11 Nov 2026).
 
-What the history says across builds, from discover_stats: Missing Artists, Gaps in Your Artists and
-Sources, chosen with a pill at the top, and narrowed by Genre (Radio's stations), Period, Zone (with who
-asked) and Sound (the artists' own Last.fm tags). A Missing Artists or Gaps row opens underneath: who
-points to the artist, the songs named, and the same store and reference buttons as Sessions.
+What the history says across builds, from discover_stats, one view a tab beside Sessions: artists the sources
+keep naming that you don't own, and songs you don't have by artists you do. Narrowed by Genre (Radio's
+stations), Period and Zone (with who asked), which both tabs share, and Sound (the artists' own Last.fm tags),
+which each keeps for itself. A row opens underneath: who points to the artist, the songs named, and the same
+store and reference buttons as Sessions. (A third view, Sources, was dropped on 11 Nov 2026: nothing on it led
+anywhere.)
 
 The numbers are worked out on a thread (the library may need reading), and the first time the tab is shown
 Last.fm is asked, in the background, for the tags of artists not yet known, after which Sound fills in.
@@ -34,10 +36,17 @@ COLUMNS = {   # view -> [(column, heading, width, numbers)]
                         ("builds", N_("Builds"), 70, True), ("sound", N_("Sound"), 260, False)],
     "Gaps in Your Artists": [("artist", N_("Artist"), 200, False), ("matched", N_("Matched"), 80, True),
                              ("missed", N_("Missed"), 80, True), ("songs", N_("Songs You Don't Have"), 320, False)],
-    "Sources": [("source", N_("Source"), 160, False), ("named", N_("Songs Named"), 110, True),
-                ("in_library", N_("In Your Library"), 110, True), ("alone", N_("Found by It Alone"), 130, True)],
 }
-DEFAULT_SORT = {"Missing Artists": "yours", "Gaps in Your Artists": "missed", "Sources": "named"}
+
+
+class Shared:
+    """What the two tabs share: Genre, Period and Zone, and whether Last.fm has been asked for tags yet."""
+
+    def __init__(self):
+        self.period = "All time"
+        self.zone = None
+        self.station_id = None
+        self.fetched = False
 
 
 def _list(names, most=3):
@@ -49,21 +58,19 @@ def _list(names, most=3):
     return shown
 
 
-class StatisticsView(tk.Frame):
-    def __init__(self, master, sites=None):
+class ArtistsView(tk.Frame):
+    def __init__(self, master, kind, shared, sites=None):
         super().__init__(master)
         self._sites = sites or (lambda: [])   # Discover's site list: [(label, "track" or "artist", url builder)]
-        self.kind = "Missing Artists"
-        self.station_id = None
-        self.zone = None
-        self.sound = None
+        self.kind = kind     # "Missing Artists" or "Gaps in Your Artists"
+        self.shared = shared
+        self.sound = None    # each tab its own: the two lists hold different artists
         self.result = None
         self._items = []
         self._sort = (None, False)
         self._busy = 0          # a newer request supersedes an older one still working
         self.ready = False
         self._fetching = False
-        self._fetched = False
         self._all_sounds = False
         self._inbox = queue.Queue()   # results from the worker threads, picked up on Tk's own thread
         self._polling = None
@@ -73,21 +80,8 @@ class StatisticsView(tk.Frame):
     # --- layout ------------------------------------------------------------
 
     def _build(self):
-        top = tk.Frame(self, padx=22)
-        top.pack(fill="x", pady=(14, 0))
-        pill = tk.Frame(top, highlightthickness=1, highlightbackground=PALETTE["button_fg"],
-                        highlightcolor=PALETTE["button_fg"])
-        pill.pack(side="left")
-        self._view_labels = {}
-        for kind in ds.VIEWS:
-            lab = tk.Label(pill, text=t(kind), font=("Segoe UI", 9, "bold"), padx=12, pady=3, cursor="hand2")
-            lab.pack(side="left")
-            lab.bind("<Button-1>", lambda e, k=kind: self.show_view(k))
-            self._view_labels[kind] = lab
-        self._paint_pill()
-
         bar = tk.Frame(self, padx=22)
-        bar.pack(fill="x", pady=(10, 0))
+        bar.pack(fill="x", pady=(14, 0))
         tk.Label(bar, text=t("Genre:")).pack(side="left")
         self.genre_menu = ttk.Combobox(bar, state="readonly", width=34)
         self.genre_menu.pack(side="left", padx=(4, 14))
@@ -97,7 +91,7 @@ class StatisticsView(tk.Frame):
         self.period_var = tk.StringVar(value="All time")
         self.period_menu = TCombobox(bar, textvariable=self.period_var, values=ds.PERIODS, state="readonly", width=15)
         self.period_menu.pack(side="left", padx=(4, 14))
-        self.period_menu.bind("<<ComboboxSelected>>", lambda e: (self.period_menu.selection_clear(), self.refresh()))
+        self.period_menu.bind("<<ComboboxSelected>>", self._period_picked)
         tk.Label(bar, text=t("Zone:")).pack(side="left")
         self.zone_menu = ttk.Combobox(bar, state="readonly", width=36)
         self.zone_menu.pack(side="left", padx=(4, 0), fill="x", expand=True)
@@ -132,12 +126,6 @@ class StatisticsView(tk.Frame):
         self._open_buttons.pack(fill="x", pady=(6, 0))
         self._set_columns()
 
-    def _paint_pill(self):
-        for kind, lab in self._view_labels.items():
-            on = kind == self.kind
-            lab.config(bg=PALETTE["button_fg"] if on else lab.master.cget("bg"),
-                       fg=PALETTE.get("window_bg", "#ffffff") if on else PALETTE["button_fg"])
-
     def _set_columns(self):
         cols = COLUMNS[self.kind]
         self.tree.configure(columns=[c for c, _h, _w, _n in cols])
@@ -150,25 +138,22 @@ class StatisticsView(tk.Frame):
 
     # --- choices -----------------------------------------------------------
 
-    def show_view(self, kind):
-        if kind == self.kind:
-            return
-        self.kind, self.sound, self._sort = kind, None, (None, False)
-        self._paint_pill()
-        self._set_columns()
-        self.refresh()
-
     def _genre_picked(self, _e=None):
         i = self.genre_menu.current()
-        self.station_id = self._genre_ids[i] if 0 <= i < len(self._genre_ids) else None
+        self.shared.station_id = self._genre_ids[i] if 0 <= i < len(self._genre_ids) else None
         self.sound = None
         self.genre_menu.selection_clear()
         self.refresh()
 
     def _zone_picked(self, _e=None):
         i = self.zone_menu.current()
-        self.zone = self._zone_values[i] if 0 <= i < len(self._zone_values) else None
+        self.shared.zone = self._zone_values[i] if 0 <= i < len(self._zone_values) else None
         self.zone_menu.selection_clear()
+        self.refresh()
+
+    def _period_picked(self, _e=None):
+        self.shared.period = self.period_var.get()
+        self.period_menu.selection_clear()
         self.refresh()
 
     def pick_sound(self, key):
@@ -182,7 +167,9 @@ class StatisticsView(tk.Frame):
         self._busy += 1
         self.ready = False   # until these numbers are shown (the tests wait on it)
         ticket = self._busy
-        choice = (self.kind, self.period_var.get(), self.zone, self.station_id, self.sound)
+        if self.period_var.get() != self.shared.period:   # the other tab may have changed it
+            self.period_var.set(self.shared.period)
+        choice = (self.kind, self.shared.period, self.shared.zone, self.shared.station_id, self.sound)
         self.count_label.config(text=t("Working it out..."))
 
         def work():
@@ -221,7 +208,7 @@ class StatisticsView(tk.Frame):
         """
         tops, why = ds.stations()
         counts = {}
-        if tops and kind != "Sources":
+        if tops:
             view = ds.rows(period, zone)
             items = ds.missing_artists(view) if kind == "Missing Artists" else ds.gaps(view)
             station = ds.station_finder()
@@ -233,8 +220,8 @@ class StatisticsView(tk.Frame):
         if ticket != self._busy or not self.winfo_exists():
             return
         if error is not None:
-            self.count_label.config(text=t("Couldn't work the statistics out ({error}).", error=error))
-            engine.debug(f"Statistics: {error!r}")
+            self.count_label.config(text=t("Couldn't work the numbers out ({error}).", error=error))
+            engine.debug(f"Discover {self.kind}: {error!r}")
             return
         self.result = result
         self.ready = True
@@ -244,8 +231,8 @@ class StatisticsView(tk.Frame):
         self._apply_sort()
         self._populate()
         self._say_count()
-        if not self._fetched:
-            self._fetched = True
+        if not self.shared.fetched:
+            self.shared.fetched = True
             self._fetch_tags()
 
     def _fill_menus(self, extra):
@@ -257,9 +244,9 @@ class StatisticsView(tk.Frame):
             labels.append(f"{x['name']} ({n})" if n is not None else x["name"])
             self._genre_ids.append(x["id"])
         self.genre_menu.config(values=labels)
-        if self.station_id not in self._genre_ids:
-            self.station_id = None
-        self.genre_menu.current(self._genre_ids.index(self.station_id))
+        if self.shared.station_id not in self._genre_ids:
+            self.shared.station_id = None
+        self.genre_menu.current(self._genre_ids.index(self.shared.station_id))
         self.genre_menu.config(state="readonly" if tops else "disabled")
         self._genre_why = t(extra["why"]) if extra["why"] else ""
         self._note(self.genre_menu, self._genre_why)
@@ -271,9 +258,9 @@ class StatisticsView(tk.Frame):
             labels.append(f"{name} ({who})" if who else name)
             self._zone_values.append(zone)
         self.zone_menu.config(values=labels)
-        if self.zone not in self._zone_values:
-            self.zone = None
-        self.zone_menu.current(self._zone_values.index(self.zone))
+        if self.shared.zone not in self._zone_values:
+            self.shared.zone = None
+        self.zone_menu.current(self._zone_values.index(self.shared.zone))
 
     def _note(self, widget, text):
         """A hover note saying why a control is greyed (or none)."""
@@ -291,11 +278,8 @@ class StatisticsView(tk.Frame):
             w.destroy()
         result = self.result or {}
         listed = result.get("sounds") or []
-        off = self.kind == "Sources"
         muted = PALETTE["text_muted"]
-        if off:
-            tk.Label(self.chips, text=t("Sound doesn't apply to sources."), fg=muted).pack(side="left")
-        elif self._fetching:
+        if self._fetching:
             tk.Label(self.chips, text=t("Asking Last.fm for the artists' tags..."), fg=muted).pack(side="left")
         elif not listed:
             tk.Label(self.chips, text=t("No sound is shared by three or more of these artists."),
@@ -319,7 +303,6 @@ class StatisticsView(tk.Frame):
                                 else t("and {count} more", count=len(listed) - SOUNDS_SHOWN))
                 more.pack(side="left")
                 more.bind("<Button-1>", lambda e: self._toggle_sounds())
-        self._sound_title.config(fg=muted if off else PALETTE.get("text", "#000000"))
         self.chips.after_idle(self.chips.reflow)
 
     def _toggle_sounds(self):
@@ -337,13 +320,10 @@ class StatisticsView(tk.Frame):
             else:
                 text = tn("{count} artist you don't own, from {builds} builds.",
                           "{count} artists you don't own, from {builds} builds.", n, builds=r["builds"])
-        elif self.kind == "Gaps in Your Artists":
+        else:
             text = tn("{count} artist you own was named, in {builds} builds.",
                       "{count} artists you own were named, in {builds} builds.", n, builds=r["builds"])
-        else:
-            text = tn("{count} song looked up in {builds} builds.", "{count} songs looked up in {builds} builds.",
-                      r["looked_up"], builds=r["builds"])
-        if self.kind != "Sources" and r.get("untagged"):
+        if r.get("untagged"):
             text += " " + tn("{count} has no tags to go by.", "{count} have no tags to go by.", r["untagged"])
         self.count_label.config(text=text)
 
@@ -364,7 +344,7 @@ class StatisticsView(tk.Frame):
             try:
                 ds.fetch_tags(todo, cancelled=lambda: not self.winfo_exists())
             except Exception as e:
-                engine.debug(f"Statistics: tags ({e!r})")
+                engine.debug(f"Discover: tags ({e!r})")
             self._inbox.put(self._fetched_tags)
         threading.Thread(target=work, daemon=True).start()
         if self._polling is None:
@@ -381,10 +361,7 @@ class StatisticsView(tk.Frame):
         if self.kind == "Missing Artists":
             sounds = ", ".join(name for _k, name in ds.sounds_of(item["artist"], self._cache())[:2])
             return item["artist"], len(item["yours"]), len(item["builds"]), sounds
-        if self.kind == "Gaps in Your Artists":
-            return item["artist"], item["matched"], len(item["missed"]), ", ".join(item["missed"])
-        share = f"{round(100 * item['in_library'] / item['named'])}%" if item["named"] else ""
-        return item["source"], f"{item['named']:,}", share, f"{item['alone']:,}"
+        return item["artist"], item["matched"], len(item["missed"]), ", ".join(item["missed"])
 
     def _cache(self):
         if getattr(self, "_cache_for", None) is not self.result:
@@ -398,7 +375,7 @@ class StatisticsView(tk.Frame):
         self._open_row()
 
     def _sort_value(self, item, col):
-        if col in ("artist", "source"):
+        if col == "artist":
             return (item.get(col) or "").lower()
         value = item.get(col)
         if col == "songs":
@@ -413,7 +390,7 @@ class StatisticsView(tk.Frame):
 
     def _sort_by(self, col):
         col0, reverse = self._sort
-        numbers = col not in ("artist", "source")
+        numbers = col != "artist"
         self._sort = (col, (not reverse) if col == col0 else numbers)   # numbers start most first
         self._apply_sort()
         self._populate()
@@ -428,7 +405,7 @@ class StatisticsView(tk.Frame):
         for w in self._open_lines.winfo_children() + self._open_buttons.winfo_children():
             w.destroy()
         item = self.selected()
-        if item is None or self.kind == "Sources":
+        if item is None:
             return
         muted = PALETTE["text_muted"]
 

@@ -1,5 +1,5 @@
 """
-Discover's Statistics (Ben, 10 Nov 2026): Missing Artists, Gaps in Your Artists and Sources, filtered by
+Discover's Missing Artists and Gaps in Your Artists (Ben, 10 and 11 Nov 2026), filtered by
 Period, Zone, Genre (Radio's stations) and Sound (an artist's own Last.fm tags). Also the zone and asker each
 session now keeps, and the back-fill from the console's Log for sessions from before. Nothing here opens a window.
 
@@ -77,16 +77,11 @@ def test_gaps_list_the_songs_you_dont_have_by_artists_you_own(app):
     assert ds.gaps(ds.rows())[0]["artist"] == "Pink Floyd", "most songs missed first"
 
 
-def test_sources_count_songs_once_and_what_each_found_alone(app):
+def test_the_sources_view_is_gone(app):
+    """Ben, 11 Nov 2026: the Sources scoreboard led nowhere, so Discover has two artist tabs and no third view."""
     import discover_stats as ds
-    history(app)
-    got = {s["source"]: s for s in ds.sources(ds.rows())}
-    assert "seed" not in got, "seed isn't a source"
-    # Last.fm: Bullet With a Name, Alive and Kicking, Echoes, Victim, Crosstown Traffic
-    assert got["Last.fm"]["named"] == 5 and got["Last.fm"]["in_library"] == 2
-    assert got["Last.fm"]["alone"] == 1, "Echoes was named by Deezer too; Crosstown Traffic by Last.fm alone"
-    assert got["Deezer"]["named"] == 3 and got["Deezer"]["alone"] == 0
-    assert got["AI"] == {"source": "AI", "named": 1, "in_library": 0, "alone": 0}
+    assert ds.VIEWS == ("Missing Artists", "Gaps in Your Artists")
+    assert not hasattr(ds, "sources")
 
 
 def test_period_and_zone_narrow_the_builds_in_view(app):

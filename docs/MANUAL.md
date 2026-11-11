@@ -237,7 +237,7 @@ They are for the Play tab only, with JRiver output. Voice, keyboard shortcuts an
 
 ![The Discover tab](images/discover.png)
 
-Discover has two tabs. **Sessions** lists every track a build looked for and whether you own it, one build at a time. **Statistics** adds them up across builds.
+Discover has three tabs. **Sessions** lists every track a build looked for and whether you own it, one build at a time. **Missing Artists** and **Gaps in Your Artists** add them up across builds.
 
 ### Sessions
 
@@ -251,22 +251,24 @@ Radio and Play & Embellish are builds like any other here, with Radio or Embelli
 - **Clear All** empties the history and **Clear Selected** removes just the ticked rows. Both ask first.
 - **CSV** saves the list as a spreadsheet file. **A-** and **A+**, at the top right, set the size of the table text.
 
-### Statistics
+### Missing Artists
 
-![Discover > Statistics](images/discover_statistics.png)
+![Discover > Missing Artists](images/discover_missing_artists.png)
 
-Statistics reads the same history across every build. The pill at the top picks one of three views:
+Artists the sources named that aren't in your library, across every build. It's checked against the library itself, so an artist you own with a missing song is a gap, not a missing artist. The ones most of your artists point to come first. **Your Artists** says how many of the artists you own led to it, and **Builds** how many builds it came up in. Select a row to see which of your artists have it on their lists and the songs the sources named, with Label and your store and reference buttons underneath.
 
-- **Missing Artists**: artists the sources named that aren't in your library, checked against the library itself, so an artist you own with a missing song is a gap, not a missing artist. The ones most of your artists point to come first. **Your Artists** says how many of the artists you own led to it, and **Builds** how many builds it came up in. Select a row to see which of your artists have it on their lists and the songs the sources named, with Label and your store and reference buttons underneath.
-- **Gaps in Your Artists**: artists you own that the sources named, with the songs that matched and the songs you don't have.
-- **Sources**: each source with the songs it named, how many of them are in your library, and how many it found in your library that no other source named.
+### Gaps in Your Artists
 
-Narrow any of them with:
+Artists you own that the sources named, with how many songs matched and the songs you don't have, the most missed first. Select a row for the same buttons.
 
-- **Genre**: Radio's stations, each with a count. A missing artist counts under the stations of your artists that point to it, and Your Artists is counted again inside the station. A build with no seed artist, such as an AI Playlist or Radio, only counts under All genres. Greyed while Radio is resting.
+### Narrowing them down
+
+Both tabs share Genre, Period and Zone, so a choice made on one holds on the other. Sound is each tab's own.
+
+- **Genre**: Radio's stations, each with a count. A missing artist counts under the stations of your artists that point to it, and Your Artists is counted again inside the station. On Gaps, an artist counts under its own station. A build with no seed artist, such as an AI Playlist or Radio, only counts under All genres. Greyed while Radio is resting.
 - **Period**: All time, the last six months or the last twelve.
 - **Zone**: where the build played, with who asked beside it: the Main Window, a shortcut, an Echo or Non-stop. Builds from before 1.34.0 take this from the console's Log, which began on 5 October 2026; any it can't place show under Not known.
-- **Sound**: the artists' own Last.fm tags that three or more of them share, most common first. Different spellings count as one (synthpop and synth pop), decades stay, and a tag that only restates the station (metal in a Metal station) is greyed. Click one to show just those artists, and click it again to clear it. The first time Statistics opens, 24bit7 asks Last.fm in the background for the tags of any artist it doesn't know yet, a minute or two on a long history, and keeps them with Radio's, so neither asks twice. Sound doesn't apply to Sources.
+- **Sound**: the artists' own Last.fm tags that three or more of them share, most common first. Different spellings count as one (synthpop and synth pop), decades stay, and a tag that only restates the station (metal in a Metal station) is greyed. Click one to show just those artists, and click it again to clear it. The first time either tab opens, 24bit7 asks Last.fm in the background for the tags of any artist it doesn't know yet, a minute or two on a long history, and keeps them with Radio's, so neither asks twice.
 
 Neither Genre nor Sound reads your library's own Genre tags, which can be anything from tidy to empty.
 

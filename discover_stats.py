@@ -1,13 +1,15 @@
 """
-24bit7 - Discover's Statistics (Ben, 10 Nov 2026).
+24bit7 - Discover's Missing Artists and Gaps in Your Artists (Ben, 10 and 11 Nov 2026).
 
-Reads the history every build logs (sessions and discoveries) and answers three questions:
+Reads the history every build logs (sessions and discoveries) and answers two questions:
 
 - Missing Artists: artists the sources named that aren't in the library, ranked by how many of your
   artists point to them. Checked against the library, not the build's "found" flag, so an artist you
   own whose song was missing is a gap, not a missing artist.
 - Gaps in Your Artists: artists you own, with the songs matched and the songs named that you don't have.
-- Sources: what each source named, how much of it is in your library, and what it found alone.
+
+(A third view, Sources, a scoreboard of what each source named and found, was dropped on 11 Nov 2026: Ben
+found nothing on it to act on, and Test My Sources already says whether a source works.)
 
 Filters: Period, Zone (where it played, from the build kept in the Log), Genre (Radio's stations: a row
 counts under the stations of the seed artists that led to it) and Sound (an artist's own Last.fm tags,
@@ -26,8 +28,7 @@ from i18n import N_
 
 PERIODS = (N_("All time"), N_("Last 6 months"), N_("Last 12 months"))
 PERIOD_DAYS = {"All time": None, "Last 6 months": 183, "Last 12 months": 365}
-VIEWS = (N_("Missing Artists"), N_("Gaps in Your Artists"), N_("Sources"))
-NOT_SOURCES = {"seed", "deep cuts"}   # logged as sources, but not suggestions from outside
+VIEWS = (N_("Missing Artists"), N_("Gaps in Your Artists"))
 NO_SEED_ARTIST = {"vibe", "radio", "embellish", "jriver_playlist", "blend"}   # their seed_artist isn't an artist
 SOUND_MIN = 3        # a sound is listed when at least this many artists in view share it
 SOUNDS_PER_ARTIST = 8
@@ -160,30 +161,6 @@ def gaps(view):
     return out
 
 
-def sources(view):
-    """
-    Each source, as dicts: source, named (distinct songs it named), in_library (how many of those were in the
-    library), alone (songs in the library no other source named, in the builds in view). Most named first.
-    """
-    by_song = defaultdict(lambda: {"by": set(), "found": False})
-    for r in view:
-        if not r["track"]:
-            continue
-        s = by_song[(_key(r["artist"]), _song(r["track"]))]
-        s["by"].update(x for x in r["sources"] if x.lower() not in NOT_SOURCES)
-        s["found"] = s["found"] or r["found"]
-    out = defaultdict(lambda: {"named": 0, "in_library": 0, "alone": 0})
-    for s in by_song.values():
-        for name in s["by"]:
-            o = out[name]
-            o["named"] += 1
-            if s["found"]:
-                o["in_library"] += 1
-                if len(s["by"]) == 1:
-                    o["alone"] += 1
-    return sorted(({"source": n, **o} for n, o in out.items()), key=lambda o: (-o["named"], o["source"].lower()))
-
-
 # --- Genre: Radio's stations ---------------------------------------------------------------------
 
 def stations():
@@ -227,9 +204,8 @@ def station_finder(cache=None):
 def in_station(kind, items, view, station_id, station):
     """
     The rows of a view that belong to a station. Missing Artists: the ones a seed artist in the station
-    points to, with Your Artists recounted within it. Gaps: the artists you own that sit in it. Sources:
-    counted again from the names a seed artist in it led to. A build with no seed artist (an AI Playlist,
-    Radio, Play & Embellish) only shows under All genres.
+    points to, with Your Artists recounted within it. Gaps: the artists you own that sit in it. A build with
+    no seed artist (an AI Playlist, Radio, Play & Embellish) only shows under All genres.
     """
     if station_id is None:
         return items
@@ -241,9 +217,7 @@ def in_station(kind, items, view, station_id, station):
                 out.append(dict(m, yours=yours))
         out.sort(key=lambda m: (-len(m["yours"]), -len(m["builds"]), m["artist"].lower()))
         return out
-    if kind == "Gaps in Your Artists":
-        return [g for g in items if station(g["artist"]) == station_id]
-    return sources([r for r in view if r["seed_artist"] and station(r["seed_artist"]) == station_id])
+    return [g for g in items if station(g["artist"]) == station_id]
 
 
 # --- Sound: an artist's own Last.fm tags ----------------------------------------------------------
@@ -367,7 +341,7 @@ def fetch_tags(names, cancelled=lambda: False):
 
 def build(kind="Missing Artists", period="All time", zone=None, station_id=None, sound=None, cache=None, now=None):
     """
-    Everything the Statistics tab shows for one choice of view and filters:
+    Everything an artists tab shows for one choice of view and filters:
     {"items", "builds" (sessions in view), "looked_up" (names in view), "sounds", "untagged", "station"}.
     """
     cache = tag_cache() if cache is None else cache
@@ -375,17 +349,9 @@ def build(kind="Missing Artists", period="All time", zone=None, station_id=None,
     tops, _why = stations()
     station = station_finder(cache)
     chosen = next((x for x in tops if x["id"] == station_id), None)
-    if kind == "Missing Artists":
-        items = missing_artists(view)
-    elif kind == "Gaps in Your Artists":
-        items = gaps(view)
-    else:
-        items = sources(view)
+    items = missing_artists(view) if kind == "Missing Artists" else gaps(view)
     items = in_station(kind, items, view, chosen and station_id, station)
-    sounds, bare = [], 0
-    if kind != "Sources":
-        names = [x["artist"] for x in items]
-        sounds, bare = sound_list(names, cache, chosen)
-        items = with_sound(items, sound, cache)
+    sounds, bare = sound_list([x["artist"] for x in items], cache, chosen)
+    items = with_sound(items, sound, cache)
     return {"items": items, "builds": len({r["session"] for r in view}), "looked_up": len(view),
             "sounds": sounds, "untagged": bare, "station": chosen}

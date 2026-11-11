@@ -53,7 +53,7 @@ SHOTS = [
     ("console_tabs", ["Play", "Now Playing"], ["gui.pyw", "buildlog.py"], "tabs_kitchen"),
     ("console_log", ["Play", "Now Playing"], ["gui.pyw", "buildlog.py"], "tabs_log"),
     ("discover", ["Discover"], ["discover_gui.py", "tabs.py"], "sessions"),
-    ("discover_statistics", ["Discover"], ["statistics_gui.py", "discover_stats.py", "tabs.py"], "statistics"),
+    ("discover_missing_artists", ["Discover"], ["artists_gui.py", "discover_stats.py", "tabs.py"], "missing_artists"),
     # Settings > Buttons: a button of your own with a filter and a shortcut, the standard Similar Artists'
     # Playlist page with its columns, an AI Playlist's page, the Edit Filters window, and the Kitchen zone
     ("settings_buttons", ["Settings", "Playlist Settings"], ["settings_gui.py", "buttons.py"], "button:Artist + Guests:Sources"),
@@ -158,7 +158,7 @@ DEMO_DISCOVERIES = [
     ("Electric Light Orchestra", "Mr. Blue Sky", "Last.fm, YouTube", False),
     ("The Turtles", "Happy Together", "Last.fm, Deezer, YouTube", False),
 ]
-# Discover > Statistics (1.34.0): three more builds from artists you own, the artists you own, and Last.fm's tags
+# Discover > Missing Artists (1.34.0): three more builds from artists you own, the artists you own, and Last.fm's tags
 # as Radio keeps them, so Missing Artists has rows, Your Artists counts above one, and Sound has chips
 DEMO_OWNED = ["The Beatles", "The Kinks", "The Hollies", "The Byrds", "Badfinger", "Simon & Garfunkel", "Nick Drake",
               "The Rolling Stones", "Jimi Hendrix", "Cream"]
@@ -446,7 +446,7 @@ def start_demo(gui, temp):
     engine.DB_FILE = os.path.join(temp, "24bit7.db")
     engine.CSV_FILE = os.path.join(temp, "none.csv")   # never import your old discoveries log
     con = engine.db()
-    for started, seed, zone, asked, seen in DEMO_MORE_SESSIONS:   # Discover > Statistics (1.34.0), before the session Sessions opens on
+    for started, seed, zone, asked, seen in DEMO_MORE_SESSIONS:   # Discover > Missing Artists (1.34.0), before the session Sessions opens on
         sid = con.execute("INSERT INTO sessions (started_at, mode, seed_artist, seed_track, seed_album, sources, queued, "
                           "zone, asked_by) VALUES (?,?,?,?,?,?,?,?,?)",
                           (started, "similar", seed, "", "", "Last.fm, ListenBrainz, Deezer", 30, zone, asked)).lastrowid
@@ -501,7 +501,7 @@ def start_demo(gui, temp):
         import embellish
         import radio
         analysis = json.loads(json.dumps(DEMO_RADIO))
-        for lane in analysis["lanes"]:   # where Discover > Statistics files an artist (1.34.0)
+        for lane in analysis["lanes"]:   # where Discover > Missing Artists files an artist (1.34.0)
             lane["centroid"] = DEMO_CENTROIDS.get(lane["id"], {})
         radio._set_meta(radio.ANALYSIS_KEY, analysis)
         radio._set_meta(radio.TAGS_KEY, {engine.artist_key(k): v for k, v in DEMO_TAGS.items()})   # keyed as Radio keys them
@@ -937,13 +937,13 @@ def main():
                     settle(root, 0.3)
                 play._open_radio(play._radio_buttons()[0]._button)
                 popup = play._children_popup
-            if action in ("sessions", "statistics"):   # Discover's two tabs (1.34.0)
+            if action in ("sessions", "missing_artists"):   # Discover's tabs (1.34.0)
                 discover = page
                 if action == "sessions":
                     discover.pane.select(discover.sessions_page)
                 else:
-                    discover.show_statistics()
-                    stats = discover.stats_page
+                    discover.show_view("Missing Artists")
+                    stats = discover.missing_page
                     end = time.time() + 15
                     while not stats.ready and time.time() < end:
                         settle(root, 0.2)
