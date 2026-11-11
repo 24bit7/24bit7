@@ -14,7 +14,7 @@ def test_artist_only_title_has_no_trailing_dash(app):
     r = app.Lines()
     app.engine.create_similar_playlist(report=r, seed_info=app.engine.typed_seed_info("The Beatles", ""))
     first = next(line for line in r if line.strip())
-    assert first.strip() == "Similar Artists: The Beatles", first
+    assert first.strip() == "Artist Matching: The Beatles", first
 
 
 def test_artist_and_track_title_unchanged(app):
@@ -22,7 +22,7 @@ def test_artist_and_track_title_unchanged(app):
     app.engine.create_similar_playlist(report=r,
                                        seed_info=app.engine.typed_seed_info("The Beatles", "Something"))
     first = next(line for line in r if line.strip())
-    assert first.strip() == "Similar Artists: The Beatles - Something", first
+    assert first.strip() == "Artist Matching: The Beatles - Something", first
 
 
 def test_youtube_only_still_needs_a_track(app):

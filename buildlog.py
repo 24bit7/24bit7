@@ -24,17 +24,20 @@ KEEP = 50
 MAIN = "main"   # the Main Window's tab key; a device's is its device ID
 _lock = threading.Lock()
 
-KINDS = {"similar": N_("Similar Artists"), "youtube_queue": N_("Similar Artists"), "similar_tracks": N_("Similar Tracks"),
+KINDS = {"similar": N_("Artist Matching"), "youtube_queue": N_("Artist Matching"), "similar_tracks": N_("Track Matching"),
          "top_tracks": N_("Artist's Top Tracks"), "headliner": N_("Artist + Guests"), "vibe": N_("AI Playlist"),
          "embellish": N_("Embellish"), "jriver_playlist": N_("Play"), "radio": N_("Radio")}
-HEADINGS = (N_("Similar Artists"), N_("Similar Tracks"), N_("Artist's Top Tracks"), N_("Artist + Guests"), N_("AI Playlist"), N_("Show Credits"),
+HEADINGS = (N_("Artist Matching"), N_("Track Matching"), N_("Similar Artists"), N_("Similar Tracks"), N_("Artist's Top Tracks"), N_("Artist + Guests"), N_("AI Playlist"), N_("Show Credits"),
             N_("Blend"), N_("Embellish"), N_("Play"), N_("Radio"))
-INSTANT = {"songs_by": N_("Artist's Top Tracks"), "music_like": N_("Similar Artists"), "tracks_like": N_("Similar Tracks"),
+INSTANT = {"songs_by": N_("Artist's Top Tracks"), "music_like": N_("Artist Matching"), "tracks_like": N_("Track Matching"),
            "genre": N_("AI Playlist"), "only": N_("Only"), "album": N_("Album"), "song": N_("Song"), "playlist": N_("Playlist"),
            "shuffle": N_("Shuffle Songs by Artist"), "skip": N_("Skip"), "who_is_this": N_("Who Is This"),
            "more_like": N_("More Like This"),
            "more_artists": N_("More Artists Like This"), "switch_zones": N_("Switch"), "stop": N_("Stop"), "pause": N_("Pause"),
            "resume": N_("Resume"), "keep_going": N_("Keep It Going")}
+# The console headed these builds "Similar Artists:" and "Similar Tracks:" until 1.34.1; they're Artist Matching
+# and Track Matching, as on the playlist pages (Ben, 11 Nov 2026). Older Log entries read the new names too.
+RENAMED = {"Similar Artists": "Artist Matching", "Similar Tracks": "Track Matching"}
 _TIME = re.compile(r"^\d\d:\d\d  ")
 
 
@@ -53,7 +56,7 @@ def _kind_from_text(text):
     for body in _bodies(text):
         for heading in HEADINGS:
             if body.startswith(tuple(h + ":" for h in i18n.either(heading))):
-                return heading
+                return RENAMED.get(heading, heading)
     return ""
 
 
@@ -198,10 +201,11 @@ def tab_for_zone(zone_id):
 
 
 def playlist_type(row):
-    """'Similar Tracks', or 'Similar Tracks · Non-stop 003' for a build in a chain. Kept in English; shown translated."""
+    """'Track Matching', or 'Track Matching · Non-stop 003' for a build in a chain. Kept in English; shown translated."""
     kind = row.get("kind") or ""
     cancelled = kind.endswith(" (Cancelled)")
-    kind = t(kind[:-len(" (Cancelled)")] if cancelled else kind) + (" (" + t("Cancelled") + ")" if cancelled else "")
+    kind = kind[:-len(" (Cancelled)")] if cancelled else kind
+    kind = t(RENAMED.get(kind, kind)) + (" (" + t("Cancelled") + ")" if cancelled else "")
     if row.get("chain_pos"):
         return f"{kind} · Non-stop {row['chain_pos']:03d}"
     return kind

@@ -6912,22 +6912,22 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
         pn_rows = playing_now_rows(seed_info.get("ZoneID") or seed_zone())
         artists = playing_now_artists(pn_rows)
         if len(pn_rows) < 2 or not artists:
-            report(t("Similar Artists: {seed_label}", seed_label=seed_label(seed_info)))
+            report(t("Artist Matching: {seed_label}", seed_label=seed_label(seed_info)))
             report("  " + t("Note: Seed is Playing Now, but it has fewer than 2 tracks, so the current track seeds this build instead."))
             pn_rows = []
         elif similar_needs_track():
-            report(t("Similar Artists: {seed_label}", seed_label=seed_label(seed_info)))
+            report(t("Artist Matching: {seed_label}", seed_label=seed_label(seed_info)))
             report("  " + t("Note: Seed is Playing Now, but YouTube is the only Similar Artists source and it works from one track, so the current track seeds this build instead."))
             pn_rows = []
         else:
             sample = random.sample(artists, min(figs["PN_SAMPLE_ARTISTS"], len(artists)))
-            report(t("Similar Artists: Playing Now ({pn_rows_count} tracks, {artists_count} artists)", pn_rows_count=len(pn_rows), artists_count=len(artists)))
+            report(t("Artist Matching: Playing Now ({pn_rows_count} tracks, {artists_count} artists)", pn_rows_count=len(pn_rows), artists_count=len(artists)))
             report("  " + t("Artists sampled from Playing Now: {items}", items=', '.join(sample)))
     if sample is None:
         figs = None
         seeds = seed_artists(seed_info)
         if not (playing_now and not seed_info.get("Typed")):
-            report(t("Similar Artists: {seed_label}", seed_label=seed_label(seed_info)))
+            report(t("Artist Matching: {seed_label}", seed_label=seed_label(seed_info)))
         # YouTube ticked on its own: play its up next queue as is, no artist blend
         if similar_needs_track():
             create_youtube_queue_playlist(seed_info, seeds, report=report)
@@ -7436,7 +7436,7 @@ def _similar_tracks_from_playing_now(report, seed_info, rows, figs):
     samples = sample_playing_now_tracks(rows, figs["PN_SAMPLE_TRACKS"])
     per_sample, per_artist = figs["PN_TRACKS_PER_SAMPLE"], figs["PN_SIMILAR_TRACK_PER_ARTIST"]
     target = per_sample * len(samples)
-    report(t("Similar Tracks: Playing Now ({rows_count} tracks)  (target {target}, at most {per_artist} per artist)", rows_count=len(rows), target=target, per_artist=per_artist))
+    report(t("Track Matching: Playing Now ({rows_count} tracks)  (target {target}, at most {per_artist} per artist)", rows_count=len(rows), target=target, per_artist=per_artist))
     report("  Tracks sampled from Playing Now: " + "; ".join(f"{a} - {tval}" for a, tval in samples))
     label = "Playing Now: " + "; ".join(f"{a} - {title}" for a, title in samples)
     session_id = session_start("similar_tracks", dict(seed_info, Artist=PLAYING_NOW_SESSION, Name="", Album=""))
@@ -7600,7 +7600,7 @@ def create_similar_tracks_playlist(report=print, seed_info=None, playing_now=Fal
         return
     seeds = seed_artists(seed_info)
     target, per_artist = SIMILAR_TRACK_COUNT, SIMILAR_TRACK_PER_ARTIST
-    report(t("Similar Tracks: {artist} - {track}  (target {target}, at most {per_artist} per artist)", artist=seed_info['Artist'], track=track, target=target, per_artist=per_artist))
+    report(t("Track Matching: {artist} - {track}  (target {target}, at most {per_artist} per artist)", artist=seed_info['Artist'], track=track, target=target, per_artist=per_artist))
     if fell_back:
         report("  " + t("Note: Seed is Playing Now, but it has fewer than 2 tracks, so the current track seeds this build instead."))
     session_id = session_start("similar_tracks", seed_info)

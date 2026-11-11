@@ -107,7 +107,7 @@ def test_rounded_search_boxes(app, ui):
     ui.pump(0.2)
     p.on_similar()
     ui.wait_idle()
-    assert "Similar Artists: The Beatles" in console(ui), console(ui)
+    assert "Artist Matching: The Beatles" in console(ui), console(ui)
 
 
 def test_help_switch_gates_the_play_tab_notes(app, ui):

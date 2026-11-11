@@ -247,7 +247,7 @@ def test_headliner_runs_its_two_configs_and_top_tracks_alone_runs_one(app):
     r = app.Lines()
     buttons.run(by["Artist + Guests"], report=r, seed_info=seed(app, "The Beatles", ""))
     assert r.has("Config 1 of 2: Artist's Top Tracks") and r.has("Config 2 of 2: Artist Matching"), r.text()
-    assert r.has("Artist's Top Tracks: The Beatles") and r.has("Similar Artists: The Beatles"), r.text()
+    assert r.has("Artist's Top Tracks: The Beatles") and r.has("Artist Matching: The Beatles"), r.text()
     r = app.Lines()
     buttons.run(by["Artist's Top Tracks"], report=r, seed_info=seed(app, "The Beatles", ""))
     assert r.has("Artist's Top Tracks: The Beatles") and not r.has("Config"), r.text()

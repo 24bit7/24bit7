@@ -20,7 +20,7 @@ def test_a_build_reads_in_german(app, german):
                                                                                               "Here Comes The Sun"))
     text = r.text()
     assert "Fertig:" in text and "Done:" not in text, text
-    assert "Ähnliche Titel: The Beatles - Here Comes The Sun" in text, "names stay as they are; the words around them change"
+    assert "Titel-Abgleich: The Beatles - Here Comes The Sun" in text, "names stay as they are; the words around them change"
     assert len(app.jriver.titles("Speakers")) > 10, "and the build itself is unchanged"
 
 
@@ -57,13 +57,13 @@ def test_the_log_counts_german_and_english_lines(app, german):
             "Fertig: 3 Titel eingereiht, 0 nicht in der Bibliothek.")
     assert buildlog._count(text, "Note:") == 2
     assert buildlog._count(text, "Problem:") == 1
-    assert buildlog._kind_from_text(text) == "Similar Tracks", "kept in English, shown translated"
+    assert buildlog._kind_from_text(text) == "Track Matching", "kept in English, shown translated, under its new name"
 
 
 def test_the_log_shows_its_columns_in_german(app, german):
     import buildlog
     assert buildlog.playlist_type({"kind": "Similar Tracks (Cancelled)", "chain_pos": 2}) == \
-        "Ähnliche Titel (Abgebrochen) · Non-stop 002"
+        "Titel-Abgleich (Abgebrochen) · Non-stop 002"
     assert buildlog.moderator_shown("Balanced, 3 removed") == "Ausgewogen, 3 entfernt"
 
 

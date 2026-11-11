@@ -52,7 +52,7 @@ def test_playing_now_samples_artists(app):
     app.engine.create_similar_playlist(report=r, seed_info=seed, playing_now=True)
     line = next((l for l in r if "Artists sampled from Playing Now:" in l), "")
     assert len(line.split(":", 1)[1].split(",")) == 3, r.text()
-    assert r.has("Similar Artists: Playing Now (5 tracks, 5 artists)"), r.text()
+    assert r.has("Artist Matching: Playing Now (5 tracks, 5 artists)"), r.text()
     assert r.has("Done:"), r.text()
 
 
@@ -86,7 +86,7 @@ def test_playing_now_with_one_track_uses_the_current_track(app):
     app.engine.create_similar_playlist(report=r, seed_info=app.engine.seed_or_last_played(report=r),
                                        playing_now=True)
     assert r.has("fewer than 2 tracks"), r.text()
-    assert r.has("Similar Artists: The Beatles - Something"), r.text()
+    assert r.has("Artist Matching: The Beatles - Something"), r.text()
     assert r.has("Done:"), r.text()
 
 
@@ -96,7 +96,7 @@ def test_search_seed_ignores_playing_now(app):
     r = app.Lines()
     app.engine.create_similar_playlist(report=r, seed_info=app.engine.typed_seed_info("The Beatles", "Something"),
                                        playing_now=True)
-    assert r.has("Similar Artists: The Beatles - Something"), r.text()
+    assert r.has("Artist Matching: The Beatles - Something"), r.text()
     assert not r.has("Artists sampled from Playing Now"), r.text()
 
 

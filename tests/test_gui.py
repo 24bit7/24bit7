@@ -169,7 +169,7 @@ def test_play_tab_similar_artists_button(app, ui):
     assert "Done:" in text, text
     import buildlog
     rows = buildlog.recent()
-    assert rows and rows[0]["kind"] == "Similar Artists" and rows[0]["from_label"] == "Main Window"
+    assert rows and rows[0]["kind"] == "Artist Matching" and rows[0]["from_label"] == "Main Window"
     assert rows[0]["queued"] == len(j.zone("Speakers").playlist) - 1, rows[0]   # the playing track stays first
     assert not ui.errors, ui.errors
 
@@ -209,7 +209,7 @@ def test_nonstop_top_up_numbers_the_chain(app, ui):
     rows = buildlog.recent()
     assert rows[0]["from_label"] == "Non-stop" and rows[0]["chain_pos"] == 2, rows[:2]
     assert rows[1]["chain_pos"] == 1
-    assert buildlog.playlist_type(rows[0]) == "Similar Tracks · Non-stop 002"
+    assert buildlog.playlist_type(rows[0]) == "Track Matching · Non-stop 002"
 
 
 def test_log_keeps_last_50_per_source(app, ui):
@@ -1329,7 +1329,7 @@ def test_review_column_same_as_play_then_own_figures(app, ui):
     play.behaviour_var.set("Play"); play._on_behaviour_changed()
     play.on_similar_tracks()
     ui.wait_idle()
-    assert "(target 30" in console(ui).split("Similar Tracks:")[-1]
+    assert "(target 30" in console(ui).split("Track Matching:")[-1]
 
 
 def test_cost_note_wraps_inside_the_window(app, ui):

@@ -205,7 +205,7 @@ DEMO_CENTROIDS = {"1": {"classic rock": 0.7, "rock": 0.6, "psychedelic": 0.3},
 # Fixed times, so Discover and the device list come out the same on every run
 DEMO_SESSION_TIME = "2026-10-04 10:30"
 DEMO_CONSOLE = [
-    "21:14  Similar Tracks: The Beatles - Here Comes The Sun  (target 30, at most 2 per artist)",
+    "21:14  Track Matching: The Beatles - Here Comes The Sun  (target 30, at most 2 per artist)",
     "  Last.fm: 50 similar tracks",
     "  ListenBrainz: 40 similar tracks (from cache)",
     "  YouTube: 25 similar tracks",
@@ -230,7 +230,7 @@ DEMO_CONSOLE = [
 # The console's Log: kept builds, with fixed times so the shots repeat. (at, tab, from, zone, zone ID, kind,
 # sources, queued, misses, moderator, problems, notes, chain ID, chain position, text); chain IDs are row numbers.
 KITCHEN_TEXT = """21:20  Voice, Kitchen Echo: tracks like Here Comes The Sun by The Beatles, to Kitchen
-Similar Tracks: The Beatles - Here Comes The Sun  (target 30, at most 2 per artist)
+Track Matching: The Beatles - Here Comes The Sun  (target 30, at most 2 per artist)
   Last.fm: 50 similar tracks
   Problem: Deezer didn't answer for similar tracks (timed out).
   ListenBrainz: 40 similar tracks (from cache)
@@ -250,8 +250,8 @@ Done: 30 tracks queued in Kitchen, 62 not in library, 14 s."""
 # The demo console's lines in German (--lang de), as 24bit7 writes them; a line not here stays as it is
 DEMO_GERMAN = {
     "Kitchen Tracks": "Küchen-Titel", "Stereo only": "Nur Stereo",   # the demo button and filter
-    "Similar Tracks: The Beatles - Here Comes The Sun  (target 30, at most 2 per artist)":
-        "Ähnliche Titel: The Beatles - Here Comes The Sun  (Ziel 30, höchstens 2 pro Künstler)",
+    "Track Matching: The Beatles - Here Comes The Sun  (target 30, at most 2 per artist)":
+        "Titel-Abgleich: The Beatles - Here Comes The Sun  (Ziel 30, höchstens 2 pro Künstler)",
     "Last.fm: 50 similar tracks": "Last.fm: 50 ähnliche Titel",
     "ListenBrainz: 40 similar tracks (from cache)": "ListenBrainz: 40 ähnliche Titel (aus dem Cache)",
     "YouTube: 25 similar tracks": "YouTube: 25 ähnliche Titel",
@@ -325,20 +325,20 @@ DEMO_BUILDS = [
     ("2026-10-04 19:12:40", "main", "Main Window", "Speakers", "10001", "AI Playlist", "AI", 22, 0, "", 0, 1,
      None, None, "19:12  AI Playlist: rainy Sunday morning  (target 25 tracks)\nDone: 22 tracks queued in Speakers, "
      "0 not in library, 11 s."),
-    ("2026-10-04 20:40:12", "main", "Shortcut", "Speakers", "10001", "Similar Tracks", "Last.fm, ListenBrainz", 30,
+    ("2026-10-04 20:40:12", "main", "Shortcut", "Speakers", "10001", "Track Matching", "Last.fm, ListenBrainz", 30,
      47, "Relaxed, 0 removed", 0, 0, None, None, "20:40  Shortcut: Similar Tracks\nDone: 30 tracks queued in "
      "Speakers, 47 not in library, 12 s."),
     ("2026-10-04 20:51:03", "demo-lounge", "Lounge Dot", "", "", "Album", "", None, None, "", 1, 0, None, None,
      "20:51  Voice, Lounge Dot: album Abbey Raod\n  Problem: Alexa said \"I couldn't find an album called "
      "Abbey Raod.\""),
-    ("2026-10-04 21:14:22", "main", "Main Window", "Speakers", "10001", "Similar Tracks",
+    ("2026-10-04 21:14:22", "main", "Main Window", "Speakers", "10001", "Track Matching",
      "Last.fm, ListenBrainz, YouTube", 30, 62, "Balanced, 1 removed", 0, 0, None, None, "\n".join(DEMO_CONSOLE)),
-    ("2026-10-04 21:20:05", "demo-kitchen", "Kitchen Echo", "Kitchen", "10002", "Similar Tracks",
+    ("2026-10-04 21:20:05", "demo-kitchen", "Kitchen Echo", "Kitchen", "10002", "Track Matching",
      "Last.fm, ListenBrainz, YouTube", 30, 62, "Balanced, 2 removed", 1, 1, 5, 1, KITCHEN_TEXT),
-    ("2026-10-04 21:31:47", "demo-kitchen", "Non-stop", "Kitchen", "10002", "Similar Tracks",
+    ("2026-10-04 21:31:47", "demo-kitchen", "Non-stop", "Kitchen", "10002", "Track Matching",
      "Last.fm, ListenBrainz, YouTube", 30, 55, "Balanced, 3 removed", 0, 0, 5, 2,
      "21:31  Non-stop: Kitchen reached its last track\nDone: 30 tracks queued in Kitchen, 55 not in library, 12 s."),
-    ("2026-10-04 21:42:09", "demo-kitchen", "Non-stop", "Kitchen", "10002", "Similar Tracks",
+    ("2026-10-04 21:42:09", "demo-kitchen", "Non-stop", "Kitchen", "10002", "Track Matching",
      "Last.fm, ListenBrainz, YouTube", 28, 41, "Balanced, 1 removed", 0, 0, 5, 3,
      "21:42  Non-stop: Kitchen reached its last track\nDone: 28 tracks queued in Kitchen, 41 not in library, 13 s."),
 ]
@@ -652,7 +652,8 @@ def show_review(play):
     panel = play.review_panel
     rows = [{"key": str(2000 + n), "artist": a, "title": t, "album": al, "seconds": s, "bpm": b}
             for n, (a, t, al, s, b) in enumerate(DEMO_REVIEW)]
-    panel.load(rows, "Similar Artists: The Beatles - Here Comes The Sun", DEMO_ZONES[0][0])
+    panel.load(rows, i18n.t("Artist Matching: {seed_label}", seed_label="The Beatles - Here Comes The Sun"),   # as the console heads it
+               DEMO_ZONES[0][0])
     panel.preview_name, panel.preview_zone = "Kitchen", DEMO_ZONES[1][0]   # set directly: no JRiver in demo mode
     panel._render()
     for key in ("2003", "2001", "2004"):

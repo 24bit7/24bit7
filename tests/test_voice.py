@@ -613,7 +613,7 @@ def test_more_artists_like_this_keeps_current_track(app, alexa):
     assert r.started and "more artists like The Beatles" in alexa.jobs[0][1], r
     log = alexa.run_jobs()[0]
     z = app.jriver.zone("Kitchen")
-    assert log.has("Similar Artists:"), log.text()
+    assert log.has("Artist Matching:"), log.text()
     assert z.playlist[0] == first and z.pos == 0, log.text()
     assert len(z.playlist) > 2
 

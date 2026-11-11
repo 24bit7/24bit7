@@ -68,7 +68,7 @@ def test_one_track_falls_back_to_current_track(app):
     j = app.jriver
     j.play("Speakers", [j.key_of("The Beatles", "Something")])
     r = build(app)
-    assert r[0].startswith("Similar Tracks: The Beatles - Something") or r.has("Similar Tracks: The Beatles - Something")
+    assert r[0].startswith("Track Matching: The Beatles - Something") or r.has("Track Matching: The Beatles - Something")
     assert r.has("fewer than 2 tracks"), r.text()
     assert r.has("Done:"), r.text()
 
