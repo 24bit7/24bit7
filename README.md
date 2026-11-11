@@ -310,7 +310,13 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.33.0
+## What's new in 1.34.0
+
+- **Discover > Statistics**: what your builds add up to. **Missing Artists** lists the artists the sources keep naming that you don't own, ranked by how many of your artists point to them, with the songs named and your store buttons. **Gaps in Your Artists** shows the songs you don't have by artists you do. **Sources** scores each source: what it named, how much is in your library, and what it found alone.
+- Narrow them by **Genre** (Radio's stations), **Period**, **Zone** (with who asked) and **Sound**, the artists' own Last.fm tags shared by three or more, spellings merged and decades kept. Your library's Genre tags aren't needed.
+- The old Discover is the **Sessions** tab beside it, unchanged. Each build now keeps the zone it played in and who asked; earlier builds take theirs from the console's Log.
+
+### Earlier: 1.33.0
 
 - **Play & Embellish has settings of its own.** Settings > JRiver Playlists > Play & Embellish is a table: **Shuffle**, **Deep Cuts** with its share, and the **Moderator**, on one All amounts line for every amount, or untick **Use the same settings for every amount** and give +10% to Build It Out a line each. Deep Cuts top up what Embellish added, and the Moderator checks only the new tracks against your playlist.
 - **Shuffle is the default** wherever a JRiver playlist plays: Play & Embellish, and a playlist or smartlist asked for by voice on a fresh install. What you had chosen before is kept.

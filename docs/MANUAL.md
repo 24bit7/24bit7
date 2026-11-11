@@ -237,7 +237,11 @@ They are for the Play tab only, with JRiver output. Voice, keyboard shortcuts an
 
 ![The Discover tab](images/discover.png)
 
-Discover lists every track a build looked for and whether you own it. Radio and Play & Embellish are builds like any other here, with Radio or Embellish as the source.
+Discover has two tabs. **Sessions** lists every track a build looked for and whether you own it, one build at a time. **Statistics** adds them up across builds.
+
+### Sessions
+
+Radio and Play & Embellish are builds like any other here, with Radio or Embellish as the source.
 
 - **Show** picks Misses (tracks you don't own), Hits, or All.
 - **Session** narrows it to one build. It opens on the latest build until you pick one yourself, with **All sessions** first in the list and the rest newest first. **Search** looks across every column. A build seeded from Playing Now reads **Playing Now (Multiple Tracks)**, and each of its rows shows the Playing Now track it came from as its Seed.
@@ -246,6 +250,25 @@ Discover lists every track a build looked for and whether you own it. Radio and 
 - Tick rows, or **Select All**, and **Create YouTube Playlist** opens them in your browser as one playlist, so you can hear the misses before you buy. **Create Tidal Playlist** puts them in your Tidal playlist called 24bit7 instead, in place of what was there, with **Open in Tidal app** and **Open in Tidal web** beside the line that says how it went. Which of these buttons show is set under Settings > Discover > Create Playlist.
 - **Clear All** empties the history and **Clear Selected** removes just the ticked rows. Both ask first.
 - **CSV** saves the list as a spreadsheet file. **A-** and **A+**, at the top right, set the size of the table text.
+
+### Statistics
+
+![Discover > Statistics](images/discover_statistics.png)
+
+Statistics reads the same history across every build. The pill at the top picks one of three views:
+
+- **Missing Artists**: artists the sources named that aren't in your library, checked against the library itself, so an artist you own with a missing song is a gap, not a missing artist. The ones most of your artists point to come first. **Your Artists** says how many of the artists you own led to it, and **Builds** how many builds it came up in. Select a row to see which of your artists have it on their lists and the songs the sources named, with Label and your store and reference buttons underneath.
+- **Gaps in Your Artists**: artists you own that the sources named, with the songs that matched and the songs you don't have.
+- **Sources**: each source with the songs it named, how many of them are in your library, and how many it found in your library that no other source named.
+
+Narrow any of them with:
+
+- **Genre**: Radio's stations, each with a count. A missing artist counts under the stations of your artists that point to it, and Your Artists is counted again inside the station. A build with no seed artist, such as an AI Playlist or Radio, only counts under All genres. Greyed while Radio is resting.
+- **Period**: All time, the last six months or the last twelve.
+- **Zone**: where the build played, with who asked beside it: the Main Window, a shortcut, an Echo or Non-stop. Builds from before 1.34.0 take this from the console's Log, which began on 5 October 2026; any it can't place show under Not known.
+- **Sound**: the artists' own Last.fm tags that three or more of them share, most common first. Different spellings count as one (synthpop and synth pop), decades stay, and a tag that only restates the station (metal in a Metal station) is greyed. Click one to show just those artists, and click it again to clear it. The first time Statistics opens, 24bit7 asks Last.fm in the background for the tags of any artist it doesn't know yet, a minute or two on a long history, and keeps them with Radio's, so neither asks twice. Sound doesn't apply to Sources.
+
+Neither Genre nor Sound reads your library's own Genre tags, which can be anything from tidy to empty.
 
 ---
 

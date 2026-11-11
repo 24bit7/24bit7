@@ -240,7 +240,11 @@ Sie gelten nur für den Abspielen-Tab, mit Ausgabe an JRiver. Sprache, Tastenkü
 
 ![Der Entdecken-Tab](images/de/discover.png)
 
-Entdecken listet jeden Titel, nach dem eine Playlist gesucht hat, und ob du ihn besitzt. Radio und Abspielen & Embellish stehen hier wie jede andere Playlist, mit Radio oder Embellish als Quelle.
+Entdecken hat zwei Tabs. **Sitzungen** listet jeden Titel, nach dem eine Playlist gesucht hat, und ob du ihn besitzt, eine Playlist nach der anderen. **Statistik** zählt sie über alle Playlists zusammen.
+
+### Sitzungen
+
+Radio und Abspielen & Embellish stehen hier wie jede andere Playlist, mit Radio oder Embellish als Quelle.
 
 - **Zeigen** wählt Fehlende (Titel, die du nicht besitzt), Vorhandene oder Alle.
 - **Sitzung** beschränkt auf eine Playlist. Es öffnet mit der neuesten, bis du selbst eine wählst, mit **Alle Sitzungen** zuerst in der Liste und dem Rest, neueste zuerst. **Suchen** sucht in allen Spalten. Eine Playlist mit Playing Now als Seed heißt **Playing Now (Multiple Tracks)**, und jede ihrer Zeilen zeigt den Titel aus der Aktuellen Wiedergabe, von dem sie kam, als Seed.
@@ -249,6 +253,25 @@ Entdecken listet jeden Titel, nach dem eine Playlist gesucht hat, und ob du ihn 
 - Hake Zeilen an oder nimm **Alle wählen**, und **YouTube-Playlist erstellen** öffnet sie in deinem Browser als eine Playlist, sodass du die Fehlenden vor dem Kauf hören kannst. **Tidal-Playlist erstellen** legt sie stattdessen in deine Tidal-Playlist namens 24bit7, anstelle dessen, was dort war, mit **In der Tidal-App öffnen** und **Im Tidal-Web öffnen** neben der Zeile, die sagt, wie es gelaufen ist. Welche dieser Knöpfe erscheinen, stellst du unter Einstellungen > Entdecken > Playlist erstellen ein.
 - **Alle löschen** leert den Verlauf, und **Auswahl löschen** entfernt nur die angehakten Zeilen. Beide fragen vorher.
 - **CSV** speichert die Liste als Tabellendatei. **A-** und **A+** oben rechts stellen die Schriftgröße der Tabelle ein.
+
+### Statistik
+
+![Entdecken > Statistik](images/de/discover_statistics.png)
+
+Statistik liest denselben Verlauf über alle Playlists hinweg. Die Leiste oben wählt eine von drei Ansichten:
+
+- **Fehlende Künstler**: Künstler, die die Quellen genannt haben und die nicht in deiner Bibliothek sind, geprüft gegen die Bibliothek selbst. Ein Künstler, den du hast, dem aber ein Song fehlt, ist also eine Lücke, kein fehlender Künstler. Zuerst stehen die, auf die die meisten deiner Künstler zeigen. **Deine Künstler** sagt, wie viele deiner Künstler zu ihm geführt haben, und **Builds**, in wie vielen Playlists er auftauchte. Wähl eine Zeile, um zu sehen, auf wessen Listen er steht und welche Songs die Quellen genannt haben, darunter Label und deine Shop- und Nachschlage-Knöpfe.
+- **Lücken bei deinen Künstlern**: Künstler, die du hast und die die Quellen genannt haben, mit den Songs, die gefunden wurden, und denen, die dir fehlen.
+- **Quellen**: jede Quelle mit den Songs, die sie genannt hat, wie viele davon in deiner Bibliothek sind und wie viele sie in deiner Bibliothek gefunden hat, die keine andere Quelle genannt hat.
+
+Jede Ansicht lässt sich eingrenzen mit:
+
+- **Genre**: die Sender von Radio, jeder mit einer Zahl. Ein fehlender Künstler zählt unter den Sendern deiner Künstler, die auf ihn zeigen, und Deine Künstler wird innerhalb des Senders neu gezählt. Eine Playlist ohne Seed-Künstler, etwa eine AI Playlist oder Radio, zählt nur unter Alle Genres. Ausgegraut, solange Radio ruht.
+- **Zeitraum**: Gesamte Zeit, die letzten sechs oder die letzten zwölf Monate.
+- **Zone**: wo die Playlist lief, daneben, wer sie angefordert hat: das Hauptfenster, ein Tastenkürzel, ein Echo oder Non-stop. Playlists von vor 1.34.0 nehmen das aus dem Log der Konsole, das am 5. Oktober 2026 begann; was sich nicht zuordnen lässt, steht unter Unbekannt.
+- **Sound**: die eigenen Last.fm-Tags der Künstler, die drei oder mehr von ihnen teilen, die häufigsten zuerst. Verschiedene Schreibweisen zählen als eine (synthpop und synth pop), Jahrzehnte bleiben, und ein Tag, der nur den Sender wiederholt (metal in einem Metal-Sender), ist ausgegraut. Klick einen an, um nur diese Künstler zu zeigen, und noch einmal, um ihn wegzunehmen. Beim ersten Öffnen von Statistik fragt 24bit7 im Hintergrund Last.fm nach den Tags aller Künstler, die es noch nicht kennt, bei einem langen Verlauf ein, zwei Minuten, und behält sie bei denen von Radio, sodass keiner zweimal fragt. Sound gilt nicht für Quellen.
+
+Weder Genre noch Sound lesen die Genre-Tags deiner Bibliothek, die von ordentlich bis leer alles sein können.
 
 ---
 
