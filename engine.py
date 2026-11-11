@@ -32,6 +32,43 @@ def app_dir():
 
 APP_DIR = app_dir()
 VERSION = "1.34.0"
+
+
+def git_branch(folder):
+    """
+    The branch a source checkout in folder is on, read from its .git (a folder, or a worktree's file pointing
+    at one), without running git. '' for no checkout, a detached HEAD or anything unreadable.
+    """
+    git = os.path.join(folder, ".git")
+    try:
+        if os.path.isfile(git):
+            with open(git, encoding="utf-8") as f:
+                line = f.read().strip()
+            if not line.startswith("gitdir:"):
+                return ""
+            gitdir = line[len("gitdir:"):].strip()
+            gitdir = gitdir if os.path.isabs(gitdir) else os.path.join(folder, gitdir)
+        elif os.path.isdir(git):
+            gitdir = git
+        else:
+            return ""
+        with open(os.path.join(gitdir, "HEAD"), encoding="utf-8") as f:
+            head = f.read().strip()
+    except OSError:
+        return ""
+    prefix = "ref: refs/heads/"
+    return head[len(prefix):] if head.startswith(prefix) else ""
+
+
+def dev_copy():
+    """
+    True for a copy run from source on a branch other than main, such as Ben's dev folder, so the window can
+    say so and he can tell which 24bit7 is running (11 Nov 2026). The packaged app and a main checkout: False.
+    """
+    if getattr(sys, "frozen", False):
+        return False
+    branch = git_branch(APP_DIR)
+    return bool(branch) and branch != "main"
 ENV_FILE = os.path.join(APP_DIR, ".env")
 ACTIVE_ZONE = "-1"      # MCWS shorthand for whichever zone JRiver has active
 SEED_ZONE_NAME = None   # the Now Playing tab's Zone choice; None = active zone. Set by the GUI, never saved

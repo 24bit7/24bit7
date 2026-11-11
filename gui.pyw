@@ -228,6 +228,11 @@ class PlayTab(tk.Frame):
         # The version, on the right of the header line (the window has no title bar to show it)
         tk.Label(header, text=f"v{engine.VERSION}", font=("Segoe UI", 9),
                  fg=PALETTE["text_muted"]).pack(side="right", anchor="s", pady=(0, 5))
+        self.dev_tag = None
+        if engine.dev_copy():   # a copy run from a dev checkout says so beside the version (Ben, 11 Nov 2026)
+            self.dev_tag = tk.Label(header, text="Dev", font=("Segoe UI", 9, "bold"), fg="#ffffff",
+                                    bg=PALETTE["logo_bit"], padx=6)
+            self.dev_tag.pack(side="right", anchor="s", padx=(0, 8), pady=(0, 5))
         title = tk.Frame(header)
         title.pack(side="left", anchor="w")
         BLUE, BIT = PALETTE["brand_blue"], PALETTE["logo_bit"]
@@ -3346,6 +3351,11 @@ def note_window_state(root, memo, save):
         save(zoomed)
 
 
+def window_title():
+    """The taskbar's and Alt+Tab's name for the window: '24bit7 Dev' for a dev copy (Ben, 11 Nov 2026)."""
+    return f"24bit7{' Dev' if engine.dev_copy() else ''}  v{engine.VERSION}"
+
+
 def main():
     _enable_dpi_awareness()
     _set_app_id()
@@ -3356,7 +3366,7 @@ def main():
     root.withdraw()   # built out of sight and shown once it's ready, so it doesn't flash up small first
     _set_window_icon(root)
     apply_theme(root, engine.THEME, engine.ACCENT_COLOUR)   # before any widgets, so they all pick it up
-    root.title(f"24bit7  v{engine.VERSION}")
+    root.title(window_title())
     # Open at 75% of the screen so it fits any monitor/DPI, then centre it.
     sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
     w, h = int(sw * 0.75), int(sh * 0.75)

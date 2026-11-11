@@ -436,6 +436,7 @@ def start_demo(gui, temp):
     engine._env_mtime = os.path.getmtime(env_path)
     engine._read_zones = lambda: (list(DEMO_ZONES), DEMO_ZONES[0][0])
     engine.get_playing_info = lambda zone=None: dict(DEMO_PLAYING)
+    engine.dev_copy = lambda: False   # the manual shows the app as people get it, even when shot from a dev folder
     saved_playlists.scan = lambda: [dict(p) for p in DEMO_PLAYLISTS]
     voice._status = f"Listening on 127.0.0.1:{engine.VOICE_PORT}"   # shown as running; nothing is started
 

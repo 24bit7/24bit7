@@ -99,9 +99,14 @@ def start(root, show, quit):
     menu = pystray.Menu(
         pystray.MenuItem("Open 24bit7", lambda icon, item: root.after(0, show), default=True),
         pystray.MenuItem("Quit", lambda icon, item: root.after(0, quit)))
-    _icon = pystray.Icon("24bit7", _icon_image(), "24bit7", menu)
+    _icon = pystray.Icon("24bit7", _icon_image(), tooltip(), menu)
     _icon.run_detached()
     return True
+
+
+def tooltip():
+    """The tray icon's name on hover: '24bit7 Dev' for a dev copy, so two icons can be told apart."""
+    return "24bit7 Dev" if engine.dev_copy() else "24bit7"
 
 
 def stop():
