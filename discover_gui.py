@@ -135,6 +135,8 @@ class DiscoverTab(tk.Frame):
         self._apply_table_font()
         if getattr(self, "_rows", None) is not None:
             self._populate()   # re-insert rows so the new tag font takes effect
+        for page in (self.missing_page, self.gaps_page):
+            page.restyle()     # their columns are measured from the font
         try:
             from settings_gui import write_env
             write_env({"TABLE_FONT_SIZE": str(size)})

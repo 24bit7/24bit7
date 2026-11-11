@@ -127,3 +127,29 @@ def test_genre_is_greyed_while_radio_rests(app, ui):
     assert str(s.genre_menu.cget("state")) == "disabled"
     assert "resting" in s._genre_why
     assert not ui.errors, ui.errors[0]
+
+
+def test_column_titles_fit_on_a_screen_scaled_up(app, ui):
+    """Ben, 11 Nov 2026: at his display scaling "Your Artists" read "Your /" and "Builds" "Buil"; the number
+    columns had fixed pixel widths. Now each is measured from its title in the heading font, numbers centred."""
+    import tkinter.font as tkfont
+    history(app)
+    stations_meta(app)
+    old = float(ui.root.tk.call("tk", "scaling"))
+    ui.root.tk.call("tk", "scaling", old * 2)
+    try:
+        for kind in ("Missing Artists", "Gaps in Your Artists"):
+            s = artist_tab(ui, kind)
+            s.restyle()
+            ui.pump(0.2)
+            size = getattr(__import__("engine"), "TABLE_FONT_SIZE", 9)
+            head = tkfont.Font(family="Segoe UI", size=size, weight="bold")
+            for c in s.tree.cget("columns"):
+                title = s.tree.heading(c, "text")
+                assert int(s.tree.column(c, "minwidth")) >= head.measure(title), (kind, title)
+                assert int(s.tree.column(c, "width")) >= head.measure(title), (kind, title)
+            numbers = [c for c in s.tree.cget("columns") if c not in ("artist", "sound", "songs")]
+            assert {str(s.tree.column(c, "anchor")) for c in numbers} == {"center"}, kind
+    finally:
+        ui.root.tk.call("tk", "scaling", old)
+    assert not ui.errors, ui.errors[0]

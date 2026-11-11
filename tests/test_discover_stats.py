@@ -232,3 +232,12 @@ def test_no_lastfm_key_asks_nothing(app, monkeypatch):
     monkeypatch.setattr(app.engine, "LASTFM_KEY", "")
     before = len(app.web.calls)
     assert ds.fetch_tags(["The Kinks"]) == 0 and len(app.web.calls) == before
+
+
+def test_a_number_column_is_as_wide_as_its_title_or_its_widest_number(app):
+    """Ben, 11 Nov 2026: on a screen scaled up, "Your Artists" read "Your /" in a column of fixed width."""
+    import artists_gui
+    head = lambda text: 20 * len(text)    # a bold font on a screen scaled to double
+    cell = lambda text: 10 * len(text)
+    assert artists_gui.number_width("Your Artists", [7, 10], head, cell) == 240 + artists_gui.PAD
+    assert artists_gui.number_width("Gefunden", [1234567890123456789], head, cell) == 190 + artists_gui.PAD

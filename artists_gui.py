@@ -16,6 +16,7 @@ import os
 import queue
 import threading
 import tkinter as tk
+import tkinter.font as tkfont
 import urllib.parse
 import webbrowser
 from tkinter import ttk
@@ -30,6 +31,7 @@ ALL_GENRES = N_("All genres")
 ALL_ZONES = N_("All zones")
 NOT_KNOWN = N_("Not known")
 SOUNDS_SHOWN = 12   # chips before "and N more"
+PAD = 24   # room around a column's title, for the edges and the sort arrow
 
 COLUMNS = {   # view -> [(column, heading, width, numbers)]
     "Missing Artists": [("artist", N_("Artist"), 200, False), ("yours", N_("Your Artists"), 100, True),
@@ -37,6 +39,15 @@ COLUMNS = {   # view -> [(column, heading, width, numbers)]
     "Gaps in Your Artists": [("artist", N_("Artist"), 200, False), ("matched", N_("Matched"), 80, True),
                              ("missed", N_("Missed"), 80, True), ("songs", N_("Songs You Don't Have"), 320, False)],
 }
+
+
+def number_width(title, values, head, cell):
+    """
+    A number column's width (Ben, 11 Nov 2026): its title in the heading font or its widest number, whichever
+    is wider, plus room either side. Measured with the fonts on screen, so it holds at any display scaling,
+    table text size or language: fixed pixel widths cut "Your Artists" to "Your /" on a screen scaled up.
+    """
+    return max([head(title)] + [cell(str(v)) for v in values]) + PAD
 
 
 class Shared:
@@ -131,10 +142,30 @@ class ArtistsView(tk.Frame):
         self.tree.configure(columns=[c for c, _h, _w, _n in cols])
         size = getattr(engine, "TABLE_FONT_SIZE", 9)
         self._cell_font = ("Segoe UI", size)
+        self._head_measure = tkfont.Font(self, family="Segoe UI", size=size, weight="bold").measure
+        self._cell_measure = tkfont.Font(self, family="Segoe UI", size=size).measure
         self.tree.tag_configure("cell", font=self._cell_font)
         for c, heading, width, numbers in cols:
-            self.tree.heading(c, text=t(heading), command=lambda cc=c: self._sort_by(cc))
-            self.tree.column(c, width=width, anchor="e" if numbers else "w", stretch=not numbers)
+            title = t(heading)
+            self.tree.heading(c, text=title, command=lambda cc=c: self._sort_by(cc))
+            fits = self._head_measure(title) + PAD
+            if numbers:   # as wide as the title needs, the number centred under it (Ben, 11 Nov 2026)
+                self.tree.column(c, width=fits, minwidth=fits, anchor="center", stretch=False)
+            else:         # the text columns share the rest, never narrower than their title
+                self.tree.column(c, width=max(width, fits), minwidth=fits, anchor="w", stretch=True)
+
+    def _fit_numbers(self, rows):
+        """Widens a number column if one of its numbers is wider than its title."""
+        for n, (c, heading, _w, numbers) in enumerate(COLUMNS[self.kind]):
+            if numbers:
+                fits = number_width(t(heading), [r[n] for r in rows], self._head_measure, self._cell_measure)
+                self.tree.column(c, width=fits, minwidth=fits)
+
+    def restyle(self):
+        """A new table text size (Sessions' A- and A+): measured again and the rows put back."""
+        self._set_columns()
+        if self._items:
+            self._populate()
 
     # --- choices -----------------------------------------------------------
 
@@ -370,8 +401,10 @@ class ArtistsView(tk.Frame):
 
     def _populate(self):
         self.tree.delete(*self.tree.get_children())
-        for i, item in enumerate(self._items):
-            self.tree.insert("", "end", iid=str(i), values=self._cells(item), tags=("cell",))
+        rows = [self._cells(item) for item in self._items]
+        for i, row in enumerate(rows):
+            self.tree.insert("", "end", iid=str(i), values=row, tags=("cell",))
+        self._fit_numbers(rows)
         self._open_row()
 
     def _sort_value(self, item, col):
