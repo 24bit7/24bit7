@@ -23,7 +23,7 @@ sys.path.insert(0, HERE)
 import fakes  # noqa: E402
 
 APP_MODULES = ["i18n", "engine", "library", "deepcuts", "voice", "saved_playlists", "nonstop", "playmix", "overrides", "mode", "tour", "filters", "buttons", "devices", "buildlog", "blend", "embellish", "radio",
-               "console_query", "ai_usage", "support_gui", "window_chrome", "hotkeys", "tray", "tabs", "mix_gui", "review_gui", "profiles", "ai_dialog", "discover_stats", "discover_gui", "settings_gui", "gui", "source_test"]
+               "console_query", "ai_usage", "support_gui", "window_chrome", "hotkeys", "tray", "tabs", "mix_gui", "review_gui", "profiles", "ai_dialog", "discover_stats", "statistics_gui", "discover_gui", "settings_gui", "gui", "source_test"]
 
 BASE_ENV = {
     "JRIVER_HOST": fakes.JRIVER_HOST, "JRIVER_USER": "", "JRIVER_PASS": "",

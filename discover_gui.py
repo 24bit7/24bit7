@@ -23,7 +23,8 @@ from datetime import datetime
 
 import engine
 from i18n import t, tn
-from tabs import PALETTE, FlatButton, RoundedEntry
+from tabs import PALETTE, FlatButton, RoundedEntry, TabbedPane
+from statistics_gui import StatisticsView
 
 # Search URL builders per store. Each takes an "artist track" query string.
 STORE_SEARCH = {
@@ -79,6 +80,16 @@ class DiscoverTab(tk.Frame):
         super().__init__(master)
         self.sessions = []
         self._loaded = False
+        # Two tabs (Ben, 10 Nov 2026): Sessions, the history build by build as it always was, and
+        # Statistics, what the history says across builds (statistics_gui.py)
+        self.pane = TabbedPane(self, font=("Segoe UI", 10, "bold"), pad=(16, 6))
+        self.pane.pack(fill="both", expand=True, padx=8, pady=8)
+        self.sessions_page = tk.Frame(self.pane)
+        self.stats_page = StatisticsView(self.pane, sites=self._site_list)
+        self.pane.add(self.sessions_page, text=t("Sessions"))
+        self.pane.add(self.stats_page, text=t("Statistics"))
+        self.pane.bind("<<NotebookTabChanged>>", lambda e: self._tab_changed())
+        self._stats_loaded = False
         self._build_controls()
         self._build_table()
         # Rows are loaded the first time the tab is shown (see ensure_loaded),
@@ -137,6 +148,17 @@ class DiscoverTab(tk.Frame):
         else:
             engine.refresh_settings_if_changed()   # a site ticked in Settings shows up straight away
             self._rebuild_site_buttons()
+            if self.pane.select() == str(self.stats_page):
+                self.stats_page.refresh()
+
+    def _tab_changed(self):
+        """Statistics works its numbers out the first time it's shown, and again on each visit."""
+        if self.pane.select() == str(self.stats_page):
+            self._stats_loaded = True
+            self.stats_page.refresh()
+
+    def show_statistics(self):
+        self.pane.select(self.stats_page)
 
     def _first_load(self):
         started = time.time()
@@ -146,7 +168,7 @@ class DiscoverTab(tk.Frame):
     # --- layout ------------------------------------------------------------
 
     def _build_controls(self):
-        bar = tk.Frame(self, padx=22, pady=8)
+        bar = tk.Frame(self.sessions_page, padx=22, pady=8)
         bar.pack(fill="x", pady=(14, 0))   # clear of the tabs above
 
         # Show: which discoveries the table lists (the value the rest of the tab reads)
@@ -170,7 +192,7 @@ class DiscoverTab(tk.Frame):
         self.session_menu.pack(side="left", padx=(4, 12), fill="x", expand=True)
         self.session_menu.bind("<<ComboboxSelected>>", self._on_session_picked)
 
-        search_bar = tk.Frame(self, padx=22)
+        search_bar = tk.Frame(self.sessions_page, padx=22)
         search_bar.pack(fill="x", pady=(8, 4))
         tk.Label(search_bar, text=t("Search:")).pack(side="left")
         self.search_var = tk.StringVar()
@@ -219,7 +241,7 @@ class DiscoverTab(tk.Frame):
         self.refresh()
 
     def _build_table(self):
-        wrap = tk.Frame(self, padx=22, pady=8)
+        wrap = tk.Frame(self.sessions_page, padx=22, pady=8)
         wrap.pack(fill="both", expand=True)
 
         cols = ("tick", "seed", "artist", "track", "sources", "found", "date")
@@ -245,7 +267,7 @@ class DiscoverTab(tk.Frame):
         self.tree.bind("<Button-1>", self._on_tree_click)
         self.tree.bind("<space>", lambda e: self._toggle_selected())
 
-        btnbar = tk.Frame(self, padx=22, pady=8)
+        btnbar = tk.Frame(self.sessions_page, padx=22, pady=8)
         btnbar.pack(fill="x")
 
         # One row: the site buttons on the left, Refresh and CSV pinned right.

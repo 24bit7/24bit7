@@ -22,6 +22,7 @@ Windows only (uses Pillow's ImageGrab). Leave the mouse and keyboard alone while
 """
 
 import argparse
+import json
 import importlib.machinery
 import importlib.util
 import os
@@ -51,7 +52,8 @@ SHOTS = [
     ("ai_playlist_steer", ["Play", "Now Playing"], ["ai_dialog.py"], "ai_steer"),
     ("console_tabs", ["Play", "Now Playing"], ["gui.pyw", "buildlog.py"], "tabs_kitchen"),
     ("console_log", ["Play", "Now Playing"], ["gui.pyw", "buildlog.py"], "tabs_log"),
-    ("discover", ["Discover"], ["discover_gui.py", "tabs.py"], None),
+    ("discover", ["Discover"], ["discover_gui.py", "tabs.py"], "sessions"),
+    ("discover_statistics", ["Discover"], ["statistics_gui.py", "discover_stats.py", "tabs.py"], "statistics"),
     # Settings > Buttons: a button of your own with a filter and a shortcut, the standard Similar Artists'
     # Playlist page with its columns, an AI Playlist's page, the Edit Filters window, and the Kitchen zone
     ("settings_buttons", ["Settings", "Playlist Settings"], ["settings_gui.py", "buttons.py"], "button:Artist + Guests:Sources"),
@@ -156,6 +158,50 @@ DEMO_DISCOVERIES = [
     ("Electric Light Orchestra", "Mr. Blue Sky", "Last.fm, YouTube", False),
     ("The Turtles", "Happy Together", "Last.fm, Deezer, YouTube", False),
 ]
+# Discover > Statistics (1.34.0): three more builds from artists you own, the artists you own, and Last.fm's tags
+# as Radio keeps them, so Missing Artists has rows, Your Artists counts above one, and Sound has chips
+DEMO_OWNED = ["The Beatles", "The Kinks", "The Hollies", "The Byrds", "Badfinger", "Simon & Garfunkel", "Nick Drake",
+              "The Rolling Stones", "Jimi Hendrix", "Cream"]
+DEMO_MORE_SESSIONS = [
+    ("2026-09-14 20:05", "The Kinks", "Speakers", "Main Window", [
+        ("The Zombies", "This Will Be Our Year", "Last.fm, Deezer", False), ("The Move", "Blackberry Way", "Last.fm", False),
+        ("Small Faces", "Itchycoo Park", "Last.fm, ListenBrainz", False),
+        ("The Left Banke", "Pretty Ballerina", "Last.fm", False), ("The Hollies", "Bus Stop", "Last.fm", True)]),
+    ("2026-09-21 18:40", "Simon & Garfunkel", "Kitchen", "Kitchen Echo", [
+        ("Harry Nilsson", "Without You", "Last.fm, YouTube", False),
+        ("Fairport Convention", "Who Knows Where the Time Goes?", "Last.fm", False),
+        ("The Zombies", "She's Not There", "Deezer", False), ("Nick Drake", "Pink Moon", "Last.fm", True),
+        ("Donovan", "Sunshine Superman", "Last.fm, Deezer", False)]),
+    ("2026-09-28 21:15", "The Byrds", "Speakers", "Main Window", [
+        ("Big Star", "September Gurls", "ListenBrainz", False), ("The Turtles", "Eleanor", "Last.fm", False),
+        ("The Left Banke", "Walk Away Renee", "Last.fm, ListenBrainz", False),
+        ("Buffalo Springfield", "For What It's Worth", "Last.fm, Deezer", False),
+        ("The Zombies", "Care of Cell 44", "Last.fm", False)]),
+]
+DEMO_TAGS = {
+    "the beatles": [["classic rock", 100], ["rock", 80], ["psychedelic", 50]],
+    "the kinks": [["classic rock", 100], ["rock", 70], ["british invasion", 60]],
+    "the byrds": [["folk rock", 100], ["classic rock", 80], ["psychedelic", 60]],
+    "simon & garfunkel": [["folk", 100], ["folk rock", 80], ["singer-songwriter", 60]],
+    "the zombies": [["psychedelic pop", 100], ["baroque pop", 70], ["60s", 60], ["british invasion", 50]],
+    "the move": [["psychedelic pop", 100], ["60s", 80], ["british invasion", 60]],
+    "small faces": [["mod", 100], ["british invasion", 80], ["60s", 70]],
+    "the left banke": [["baroque pop", 100], ["60s", 80], ["sunshine pop", 40]],
+    "harry nilsson": [["singer-songwriter", 100], ["70s", 70], ["baroque pop", 40]],
+    "fairport convention": [["folk rock", 100], ["british folk", 90]],
+    "donovan": [["folk", 100], ["psychedelic folk", 90], ["60s", 80]],
+    "big star": [["power pop", 100], ["70s", 80]],
+    "the turtles": [["sunshine pop", 100], ["60s", 90], ["baroque pop", 50]],
+    "buffalo springfield": [["folk rock", 100], ["60s", 90]],
+    "the searchers": [["merseybeat", 100], ["british invasion", 90], ["60s", 80]],
+    "gerry and the pacemakers": [["merseybeat", 100], ["60s", 90]],
+    "electric light orchestra": [["classic rock", 100], ["70s", 80]],
+    "the hollies": [["british invasion", 100], ["60s", 90]], "badfinger": [["power pop", 100], ["70s", 80]],
+}
+DEMO_CENTROIDS = {"1": {"classic rock": 0.7, "rock": 0.6, "psychedelic": 0.3},
+                  "2": {"folk": 0.7, "singer-songwriter": 0.6, "folk rock": 0.4},
+                  "3": {"electronic": 0.8, "ambient": 0.6}, "4": {"jazz": 0.8, "vocal jazz": 0.6},
+                  "5": {"soul": 0.8, "motown": 0.6}}
 # Fixed times, so Discover and the device list come out the same on every run
 DEMO_SESSION_TIME = "2026-10-04 10:30"
 DEMO_CONSOLE = [
@@ -400,12 +446,28 @@ def start_demo(gui, temp):
     engine.DB_FILE = os.path.join(temp, "24bit7.db")
     engine.CSV_FILE = os.path.join(temp, "none.csv")   # never import your old discoveries log
     con = engine.db()
+    for started, seed, zone, asked, seen in DEMO_MORE_SESSIONS:   # Discover > Statistics (1.34.0), before the session Sessions opens on
+        sid = con.execute("INSERT INTO sessions (started_at, mode, seed_artist, seed_track, seed_album, sources, queued, "
+                          "zone, asked_by) VALUES (?,?,?,?,?,?,?,?,?)",
+                          (started, "similar", seed, "", "", "Last.fm, ListenBrainz, Deezer", 30, zone, asked)).lastrowid
+        for artist, track, sources, found in seen:
+            con.execute("INSERT INTO discoveries (session_id, artist, track, sources, found) VALUES (?,?,?,?,?)",
+                        (sid, artist, track, sources, 1 if found else 0))
     cur = con.execute("INSERT INTO sessions (started_at, mode, seed_artist, seed_track, seed_album, sources, queued) "
                       "VALUES (?,?,?,?,?,?,?)", (DEMO_SESSION_TIME, "similar", "The Beatles", "Here Comes The Sun",
                                                  "Abbey Road", "Last.fm, ListenBrainz, Deezer, YouTube", 30))
     for artist, track, sources, found in DEMO_DISCOVERIES:
         con.execute("INSERT INTO discoveries (session_id, artist, track, sources, found) VALUES (?,?,?,?,?)",
                     (cur.lastrowid, artist, track, sources, 1 if found else 0))
+    con.execute("UPDATE sessions SET zone='Speakers', asked_by='Main Window' WHERE id=?", (cur.lastrowid,))
+    import library
+    owned = {library.norm(a) for a in DEMO_OWNED}
+    library.has_artist = lambda name: library.norm(name or "") in owned   # never the real library
+    try:
+        import discover_stats
+        discover_stats.fetch_tags = lambda names, cancelled=None: 0   # no Last.fm in demo mode
+    except ImportError:
+        pass
     voice._devices_table()
     for device_id, name, zone, own, heard in DEMO_DEVICES:
         con.execute("INSERT INTO voice_devices (device_id, name, zone, last_heard, own_settings) VALUES (?,?,?,?,?)",
@@ -438,7 +500,11 @@ def start_demo(gui, temp):
     try:   # Radio's lanes, its face on Classic Rock with the split open, and the recent JRiver playlists (1.31.0)
         import embellish
         import radio
-        radio._set_meta(radio.ANALYSIS_KEY, DEMO_RADIO)
+        analysis = json.loads(json.dumps(DEMO_RADIO))
+        for lane in analysis["lanes"]:   # where Discover > Statistics files an artist (1.34.0)
+            lane["centroid"] = DEMO_CENTROIDS.get(lane["id"], {})
+        radio._set_meta(radio.ANALYSIS_KEY, analysis)
+        radio._set_meta(radio.TAGS_KEY, {engine.artist_key(k): v for k, v in DEMO_TAGS.items()})   # keyed as Radio keys them
         radio.set_row(default="1", open=["1"], buttons=[])
         embellish._set_meta(embellish.RECENT_KEY, DEMO_RECENT)
     except ImportError:
@@ -871,6 +937,19 @@ def main():
                     settle(root, 0.3)
                 play._open_radio(play._radio_buttons()[0]._button)
                 popup = play._children_popup
+            if action in ("sessions", "statistics"):   # Discover's two tabs (1.34.0)
+                discover = page
+                if action == "sessions":
+                    discover.pane.select(discover.sessions_page)
+                else:
+                    discover.show_statistics()
+                    stats = discover.stats_page
+                    end = time.time() + 15
+                    while not stats.ready and time.time() < end:
+                        settle(root, 0.2)
+                    if stats.tree.get_children():
+                        stats.tree.selection_set(stats.tree.get_children()[0])
+                settle(root, 0.5)
             if action == "review":
                 show_review(play)
             elif action in ("ai_create", "ai_steer"):
