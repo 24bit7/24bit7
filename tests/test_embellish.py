@@ -59,14 +59,16 @@ def test_build_it_out_takes_every_agreeing_artists_top_tracks(app):
     assert new and max(per.values()) > app.engine.TRACKS_PER_ARTIST_PICK or len(new) > 5, (per, r.text())
 
 
-def test_a_one_artist_playlist_says_why_and_plays_nothing(app):
+def test_a_one_artist_playlist_grows_from_a_circle_of_three(app):
+    """It used to say there was nothing for the curation rules to agree on (Ben, 12 Nov 2026: two of the five
+    artists most like them, picked at random, make the circle)."""
     import embellish
     j = app.jriver
-    before = list(j.zone("Speakers").playlist)
     r = app.Lines()
     embellish.embellish({"ID": "203", "Name": "60s Smartlist"}, "shuffled", "half", r)
-    assert r.has("every track on 60s Smartlist is by The Beatles, so there's nothing for the curation rules to agree on"), r.text()
-    assert j.zone("Speakers").playlist == before
+    assert r.has("so the circle is The Beatles and two of the five artists most like them"), r.text()
+    z = j.zone("Speakers").playlist
+    assert any(artist_of(app, k) != "The Beatles" for k in z), r.text()
 
 
 def test_the_honest_lines(app):

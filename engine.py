@@ -4361,22 +4361,23 @@ def hit_titles(artist):
     Last.fm plays of their biggest (12 Nov 2026, measured on 157 of Ben's artists: 4 Non Blondes, Los Del Rio and
     Spin Doctors have one; Massive Attack ten; Radiohead thirty). Versions of a song (a remaster, a live take
     named in brackets) count once, at their best. None when Last.fm has no counts for the artist: then nothing
-    is cut. Kept with the other cached answers, so an artist costs one call a cache period.
+    is cut. Kept with the other cached answers, so an artist costs one call a cache period. Returns the titles
+    as Last.fm names them (the best-played version's name).
     """
     rows = cached_call("Last.fm", "hits", artist_key(artist),
                        lambda: [[name, plays] for name, plays in lastfm_top_tracks_with_counts(artist, HIT_DEPTH, quiet=True)])
     best = {}
     for name, plays in rows or []:
         k = clean_name(name)
-        if k and int(plays) > best.get(k, -1):
-            best[k] = int(plays)
+        if k and int(plays) > best.get(k, ("", -1))[1]:
+            best[k] = (name, int(plays))
     if not best:
         return None
-    ranked = sorted(best.items(), key=lambda kv: -kv[1])
+    ranked = sorted(best.values(), key=lambda x: -x[1])
     top = ranked[0][1]
     if top <= 0:
         return None
-    return [k for k, plays in ranked if plays >= top * HIT_SHARE]
+    return [name for name, plays in ranked if plays >= top * HIT_SHARE]
 
 
 def adaptive_cut(artist, names, pick, report, exclude_track=None, indent="    "):
@@ -4392,7 +4393,7 @@ def adaptive_cut(artist, names, pick, report, exclude_track=None, indent="    ")
     if not hits:
         return names, pick
     count = len(hits)
-    if exclude_track and clean_name(exclude_track) in hits:
+    if exclude_track and clean_name(exclude_track) in {clean_name(h) for h in hits}:
         count -= 1
     if count >= len(names):
         return names, pick

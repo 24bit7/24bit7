@@ -48,12 +48,13 @@ def test_embellish_on_a_playing_zone_queues_as_before(app):
     assert j.zone("Speakers").playlist[1] == yours[0]
 
 
-def test_a_one_artist_playlist_still_starts_nothing(app):
+def test_a_one_artist_playlist_starts_too_now_it_builds_a_circle(app):
+    """Before 12 Nov 2026 one artist had nothing to build, so nothing started."""
     import embellish
     r = app.Lines()
     embellish.embellish({"ID": "203", "Name": "60s Smartlist"}, None, "p50", r)
-    assert r.has("every track on 60s Smartlist is by The Beatles"), r.text()
-    assert first_play(app) is None and not app.jriver.zone("Speakers").playlist
+    assert r.has("Every track on 60s Smartlist is by The Beatles, so the circle is"), r.text()
+    assert first_play(app) is not None
 
 
 def test_embellish_in_review_starts_nothing(app):

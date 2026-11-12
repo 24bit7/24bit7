@@ -28,6 +28,14 @@ shares, and the Moderator checks the new tracks against the playlist; the More O
 switches beat both while that row is open, as they do for every playlist. Play's arrow
 (Play Shuffled, Play Ordered) is Play's alone. Anything asked for by voice runs the default
 amount with that amount's row.
+
+Albums too (Ben, 12 Nov 2026): the tab is Playlists & Albums, and Play & Embellish is Embellish. An album
+plays in order unless Play's arrow says otherwise (remembered apart from a playlist's), and Embellish offers
+the amounts, the album taken as a playlist of its tracks, plus With Their Hits (the album and the artist's
+widely played songs from their other albums, shuffled, its first track first) and And Their Hits (the album
+in order, then those songs, biggest first). A hit is as Use Adaptive Selections counts it, by Last.fm's plays.
+A playlist or album by one artist builds its circle from that artist and two picked at random from the five
+most like them. Play has no Non-stop of its own: More Options' switch turns it on.
 """
 
 import json
@@ -44,6 +52,12 @@ DEFAULT_AMOUNT = "p50"
 OLD_AMOUNTS = {"half": "p50"}   # 1.31.0's first days: Add Half and Double It
 AMOUNTS_KEY = "embellish_amounts"   # {"shown": [codes], "default": code}: Settings > JRiver Playlists
 ORDERS = ("shuffled", "ordered")
+HITS = ("with_hits", "and_hits")   # an album's own Embellish options (12 Nov 2026)
+HIT_NAMES = {"with_hits": N_("With Their Hits"), "and_hits": N_("And Their Hits")}
+HITS_MOST = 10      # the most hits an album is given
+ALBUMS_KEY = "embellish_albums"   # {"shown": [codes], "default": code, "rows": {code: {"nonstop"}}}
+PARTNERS = 2        # a one-artist circle: the artist and this many of...
+PARTNERS_FROM = 5   # ...the artists most like them, picked at random
 ORDER_NAMES = {"shuffled": N_("Play Shuffled"), "ordered": N_("Play Ordered")}
 STAGE = 10          # playlist artists added to the circle per stage
 AGREE = 2           # an artist on this many of the circle's lists is agreed on
@@ -73,8 +87,18 @@ def _set_meta(key, value):
     con.commit()
 
 
+def is_album(item):
+    """A pick from the box: an album ({"kind": "album", "Name", "Artist", "keys"}) rather than a JRiver playlist."""
+    return isinstance(item, dict) and item.get("kind") == "album"
+
+
+def album_id(name, artist):
+    return f"album:{artist}|{name}"
+
+
 def recent():
-    """[{"id", "name", "how", "when"}] most recent first: what 24bit7 played or embellished (JRiver keeps no dates)."""
+    """[{"id", "name", "how", "when"}] most recent first: what 24bit7 played or embellished (JRiver keeps no dates).
+    An album's carries "kind": "album" and its "artist"."""
     items = _meta(RECENT_KEY, [])
     return [x for x in items if isinstance(x, dict) and x.get("id")][:RECENT]
 
@@ -82,18 +106,25 @@ def recent():
 def note_recent(playlist, how):
     """Puts a playlist at the top of the recent five. how: "played" or "embellished"."""
     from datetime import datetime
-    pid = str(playlist.get("ID"))
+    album = is_album(playlist)
+    pid = album_id(playlist.get("Name"), playlist.get("Artist")) if album else str(playlist.get("ID"))
     items = [x for x in recent() if str(x.get("id")) != pid]
-    items.insert(0, {"id": pid, "name": playlist.get("Name") or "", "how": how,
-                     "when": datetime.now().strftime("%Y-%m-%d %H:%M")})
+    entry = {"id": pid, "name": playlist.get("Name") or "", "how": how,
+             "when": datetime.now().strftime("%Y-%m-%d %H:%M")}
+    if album:
+        entry.update(kind="album", artist=playlist.get("Artist") or "")
+    items.insert(0, entry)
     _set_meta(RECENT_KEY, items[:RECENT])
 
 
 def choices():
-    """{"order": "shuffled" or "ordered" (Play's arrow, remembered), "amount": the default amount (Settings)}."""
+    """{"order": "shuffled" or "ordered" (Play's arrow, remembered), "album_order" (the same for an album, In
+    Order to start), "amount": the default amount, "album_amount": an album's default (Settings)}."""
     saved = _meta(CHOICE_KEY, {})
     order = saved.get("order") if saved.get("order") in ORDERS else "shuffled"
-    return {"order": order, "amount": amounts()["default"]}
+    album_order = saved.get("album_order") if saved.get("album_order") in ORDERS else "ordered"
+    return {"order": order, "album_order": album_order, "amount": amounts()["default"],
+            "album_amount": albums()["default"]}
 
 
 def set_choice(key, value):
@@ -127,6 +158,40 @@ def set_amounts(shown=None, default=None):
         default = shown[0]
     _set_meta(AMOUNTS_KEY, {"shown": shown, "default": default})
     return {"shown": shown, "default": default}
+
+
+def albums():
+    """
+    An album's own Embellish options, Settings' Albums rows (12 Nov 2026): {"shown": the hits options the arrow
+    offers beside the amounts, "default": what the button runs for an album (a hits option or an amount),
+    "rows": {code: {"nonstop": no, artists or tracks}}}. Both shown, With Their Hits the default, Non-stop off.
+    """
+    saved = _meta(ALBUMS_KEY, None)
+    saved = saved if isinstance(saved, dict) else {}
+    shown = [h for h in HITS if h in saved.get("shown", list(HITS))]
+    choosable = shown + amounts()["shown"]
+    default = saved.get("default") if saved.get("default") in choosable else (shown or choosable)[0]
+    rows = {}
+    for h in HITS:
+        row = (saved.get("rows") or {}).get(h) or {}
+        rows[h] = {"nonstop": row.get("nonstop") if row.get("nonstop") in NONSTOP_USING else "no"}
+    return {"shown": shown, "default": default, "rows": rows}
+
+
+def set_albums(shown=None, default=None, **rows):
+    """Settings' Albums rows: which hits options are offered, an album's default, and each one's Non-stop
+    (set_albums(with_hits="artists"))."""
+    now = albums()
+    shown = [h for h in HITS if h in (now["shown"] if shown is None else shown)]
+    default = now["default"] if default is None else default
+    if default not in shown + amounts()["shown"]:
+        default = (shown + amounts()["shown"])[0]
+    for h, using in rows.items():
+        if h in HITS and using in NONSTOP_USING:
+            now["rows"][h] = {"nonstop": using}
+    data = {"shown": shown, "default": default, "rows": now["rows"]}
+    _set_meta(ALBUMS_KEY, data)
+    return albums()
 
 
 # --- how an amount builds: one row for every amount, or a row each ------------------------------------
@@ -328,11 +393,19 @@ def find(keys, name, amount, report, spare=0, session_id=None):
     import library
     library.ensure_loaded()
     on_list = _artists(keys)
+    partners = []
     if len(on_list) < 2:
+        # One artist (an album, or a playlist of one artist's songs): the circle is the artist and two of the
+        # five most like them, picked at random so each run differs (Ben, 12 Nov 2026)
         only = next(iter(on_list.values()), "")
-        report(t("Embellish: every track on {name} is by {artist}, so there's nothing for the curation rules to "
-                 "agree on. Similar Artists from one of its tracks would grow it.", name=name, artist=only))
-        return None
+        partners = _partners(only, report) if only else []
+        if not partners:
+            report(t("Embellish: every track on {name} is by {artist}, and your sources know too few artists like "
+                     "them to build a circle, so there's nothing to add.", name=name, artist=only or "?"))
+            return None
+        report("  " + t("Every track on {name} is by {artist}, so the circle is {artist} and two of the five artists "
+                        "most like them, picked at random: {picks}.", name=name, artist=only,
+                        picks=t("{one} and {two}", one=partners[0], two=partners[1])))
     asked = want = want_for(amount, len(keys))
     if want is not None and spare:
         want += max(1, int(want * spare))
@@ -345,6 +418,7 @@ def find(keys, name, amount, report, spare=0, session_id=None):
     cap = None if amount == "out" else engine.TRACKS_PER_ARTIST_PICK
     order = list(on_list.values())
     random.shuffle(order)   # a big playlist is sampled, ten artists a stage
+    order += partners
     lists, circle, new = {}, [], []
     agreed_all, already, tried = set(), set(), set()
     stage = 0
@@ -360,6 +434,9 @@ def find(keys, name, amount, report, spare=0, session_id=None):
             agreed, _same = engine.inner_circle(circle, lambda m: lists[engine.artist_key(m)], AGREE,
                                                 key=engine.artist_key)
             guests = agreed[len(circle):]
+            if partners and stage == 1:   # the two picked are the closest to the artist: their songs go in too
+                taken = {engine.artist_key(p) for p in partners}
+                guests = [(p, None) for p in partners] + [g for g in guests if engine.artist_key(g[0]) not in taken]
             report("  " + t("Consensus: {names} (circle of {size}, agree on {agree})", names=", ".join(members),
                             size=len(circle), agree=AGREE))
             report("  " + t("{agreed} artists on {agree} or more of their lists; {already} already on {name}.",
@@ -419,6 +496,16 @@ def find(keys, name, amount, report, spare=0, session_id=None):
     finally:
         played.done()
     return new, {"agreed": len(agreed_all), "already": len(already), "want": asked, "artists": len(on_list)}
+
+
+def _partners(artist, report):
+    """Two of the five artists most like this one, at random; [] when the sources know fewer than two."""
+    found, _label = engine.blended_similar_artists(artist, limit=30, report=report)
+    me = engine.artist_key(artist)
+    near = [a for a, _ in found if engine.artist_key(a) != me][:PARTNERS_FROM]
+    if len(near) < PARTNERS:
+        return []
+    return random.sample(near, PARTNERS)
 
 
 def _tracks(keys):
@@ -503,7 +590,21 @@ def say_result(name, new, stats, report, removed=0):
                         added=tn("{count} track", "{count} tracks", added), want=want, already=already, name=name))
 
 
+def shown_name(item):
+    """'OK Computer by Radiohead' for an album, the playlist's name for a playlist."""
+    if is_album(item):
+        return t("{album} by {artist}", album=item.get("Name") or "", artist=item.get("Artist") or "")
+    return item.get("Name") or t("playlist")
+
+
 def _read(playlist, report):
+    if is_album(playlist):   # an album: its tracks in disc and track order, read from the library when picked
+        name = shown_name(playlist)
+        keys = [str(k) for k in playlist.get("keys") or []]
+        if not keys:
+            report(t("Problem: {name} has no tracks in your library now, so there's nothing to play.", name=name))
+            return name, None
+        return name, keys
     import saved_playlists
     name = playlist.get("Name") or t("playlist")
     try:
@@ -517,8 +618,27 @@ def _read(playlist, report):
     return name, keys
 
 
+def _play_nonstop(item, report):
+    """
+    Play has no Non-stop of its own (Ben, 12 Nov 2026): More Options' switch, while its row is open, turns it
+    on (Wander from the last track, Keep It Tight from the playlist's or album's own), with similar artists.
+    Before this, Play carried on as the standard Artist Matching playlist's Non-stop said. A playlist's row
+    under Settings (Skip recent, Non-stop) is for voice alone.
+    """
+    import overrides
+    if not overrides.active():
+        return None
+    mode = overrides.switches()["nonstop"]
+    report("  " + (t("More Options: Non-stop {setting}, over this album's own settings.", setting=t(overrides.LABELS[mode]))
+                   if is_album(item) else
+                   t("More Options: Non-stop {setting}, over this playlist's own settings.",
+                     setting=t(overrides.LABELS[mode]))))
+    return nonstop_cfg({"nonstop": "no", "nonstop_mode": mode})
+
+
 def play(playlist, order, report):
-    """Play: the playlist as it is, shuffled or in order, through the usual output (Review, Top-Up, YouTube...)."""
+    """Play: the playlist or album as it is, shuffled or in order, through the usual output (Review, Top-Up,
+    YouTube...)."""
     name, keys = _read(playlist, report)
     if keys is None:
         return
@@ -528,7 +648,8 @@ def play(playlist, order, report):
     if not ordered:
         keys = list(keys)
         random.shuffle(keys)
-    session_id = engine.session_start("jriver_playlist", {"Artist": "", "Name": name})
+    session_id = engine.session_start("jriver_playlist", {"Artist": playlist.get("Artist") or "", "Name": name})
+    engine.NONSTOP_CONTEXT["own_nonstop"] = _play_nonstop(playlist, report)
     engine.send_to_jriver(keys, typed=True, report=report)
     note_recent(playlist, "played")
     engine.session_finish(session_id, len(keys), sources="JRiver", report=report)
@@ -546,21 +667,29 @@ def embellish(playlist, order, amount, report):
         return
     artists = len(_artists(keys))
     amount = OLD_AMOUNTS.get(amount, amount)
-    report(t("Embellish: {name}, {tracks} by {artists} artists, {amount}.", name=name,
-             tracks=tn("{count} track", "{count} tracks", len(keys)), artists=artists, amount=t(AMOUNT_NAMES[amount])))
+    if amount in HITS:
+        return hits(playlist, amount, report)
+    report(tn("Embellish: {name}, {tracks} by {count} artist, {amount}.",
+              "Embellish: {name}, {tracks} by {count} artists, {amount}.", artists, name=name,
+              tracks=tn("{count} track", "{count} tracks", len(keys)), amount=t(AMOUNT_NAMES[amount])))
     row = _plan(amount, report)
     ordered = (order == "ordered") if order else row["shuffle"] != "1"
     level = row["moderator"]
     can_moderate = level != "off" and engine.ai_configured() and engine.USE_AI
-    session_id = engine.session_start("embellish", {"Artist": "", "Name": name})
+    session_id = engine.session_start("embellish", {"Artist": playlist.get("Artist") or "", "Name": name})
     engine.NONSTOP_CONTEXT["own_nonstop"] = nonstop_cfg(row)   # the Non-stop column, not Artist Matching's
     # Fast start (10 Nov 2026): the playlist's own first track leads whatever is added, so on a stopped zone it
-    # plays now and the rest follows it in when the build is done. One artist: nothing to build, nothing started.
-    fast = engine.FastStart(None, report, enabled=artists > 1)
+    # plays now and the rest follows it in when the build is done. One artist builds a circle too (12 Nov 2026), so
+    # every playlist and album starts; if nothing can be added, the rest of it follows as it is.
+    fast = engine.FastStart(None, report, enabled=True)
     fast.play(keys[0])
     result = find(keys, name, amount, report, spare=engine.MODERATOR_EXTRA[level] if can_moderate else 0,
                   session_id=session_id)
     if result is None:
+        if fast.started:   # already playing: the rest of it follows, as it is
+            engine.send_to_jriver(fast.rest(list(keys)), typed=True, report=report, append=True)
+            engine.session_finish(session_id, len(keys), sources="none", report=report)
+            return
         engine.session_finish(session_id, 0, sources="none", report=report)
         return
     new, stats = result
@@ -578,3 +707,85 @@ def embellish(playlist, order, amount, report):
     note_recent(playlist, "embellished")
     engine.session_finish(session_id, len(out), report=report)
     engine.SAVE_NAME = t("{name} (Embellished)", name=name)
+
+
+# --- an album with the artist's hits (Ben, 12 Nov 2026) -------------------------------------------------
+
+def _hits_plan(how, report):
+    """The hits option's row (its Non-stop), the More Options switch over it while that row is open."""
+    row = dict(albums()["rows"][how])
+    import overrides
+    if overrides.active():
+        report(t("More Options: {switches}, over this album's own settings.", switches=overrides.summary()))
+        row["nonstop_mode"] = overrides.switches()["nonstop"]
+    return row
+
+
+def their_hits(artist, keys, report, session_id=None):
+    """
+    The artist's widely played songs you own that aren't on the album, biggest first, at most HITS_MOST, as
+    keys; [] (having said why) when there are none, and None when Last.fm has no counts for the artist. A song
+    on the album is left out by its title, so a best-of's copy of one of the album's songs doesn't come back.
+    """
+    import library
+    titles = engine.hit_titles(artist)
+    if not titles:
+        return None
+    on_album = {engine.clean_name((library.track_row(k) or {}).get("Name") or "") for k in keys}
+    have = {str(k) for k in keys}
+    out, on, missing = [], 0, 0
+    for title in titles:
+        if len(out) >= HITS_MOST:
+            break
+        if engine.clean_name(title) in on_album:
+            on += 1
+            continue
+        key = library.find_track_key(artist, title)
+        report("    " + t("{found_label}: {track_name}", track_name=title,
+                          found_label=t("In library") if key else t("Not in library")))
+        if session_id is not None:
+            engine.session_log(session_id, artist, title, ["Embellish"], found=bool(key))
+        if not key:
+            missing += 1
+        elif str(key) not in have and str(key) not in out:
+            out.append(str(key))
+    report("  " + tn("{artist} has {count} widely played song on Last.fm: {on} on this album, {added} you own from "
+                     "other albums.",
+                     "{artist} has {count} widely played songs on Last.fm: {on} on this album, {added} you own from "
+                     "other albums.", len(titles), artist=artist, on=on, added=len(out)))
+    return out
+
+
+def hits(album, how, report):
+    """With Their Hits or And Their Hits: the album and the artist's hits from their other albums."""
+    name, keys = _read(album, report)
+    if keys is None:
+        return
+    artist = album.get("Artist") or ""
+    report(t("Embellish: {name}, {tracks}, {how}.", name=name, tracks=tn("{count} track", "{count} tracks", len(keys)),
+             how=t(HIT_NAMES[how])))
+    row = _hits_plan(how, report)
+    session_id = engine.session_start("embellish", {"Artist": artist, "Name": name})
+    engine.NONSTOP_CONTEXT["own_nonstop"] = nonstop_cfg(row)
+    fast = engine.FastStart(None, report, enabled=True)
+    fast.play(keys[0])
+    new = their_hits(artist, keys, report, session_id=session_id)
+    if new is None:
+        report("  " + t("Last.fm has no play counts for {artist}, so their hits can't be told from the rest: "
+                        "{name} plays as it is.", artist=artist, name=name))
+        new = []
+    elif not new:
+        report("  " + t("Nothing to add: none of {artist}'s widely played songs that you own are on other albums, "
+                        "so {name} plays as it is.", artist=artist, name=name))
+    elif how == "with_hits":
+        report("  " + tn("Added {count} of their hits, shuffled through the album.",
+                         "Added {count} of their hits, shuffled through the album.", len(new)))
+    else:
+        report("  " + tn("Added {count} of their hits after the album, biggest first.",
+                         "Added {count} of their hits after the album, biggest first.", len(new)))
+    out = weave(keys, new, False) if how == "with_hits" and new else list(keys) + new
+    engine.send_to_jriver(fast.rest(out), typed=True, report=report, append=fast.started)
+    note_recent(album, "embellished")
+    engine.session_finish(session_id, len(out), report=report)
+    engine.SAVE_NAME = t("{name} (Embellished)", name=name)
+
