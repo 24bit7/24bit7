@@ -65,7 +65,7 @@ def test_one_line_serves_every_amount_to_start_and_the_rest_are_greyed(app, ui):
     every["shuffle_box"].invoke()
     pick(ui, every, "moderator", "Strict")
     assert embellish.row_for("triple") == {"shuffle": "0", "deep_cuts": "spaced", "deep_share": "20",
-                                           "moderator": "strict"}
+                                           "moderator": "strict", "nonstop": "no"}
     for amount in embellish.AMOUNTS:   # greyed, and showing the line they run
         line = lines[amount]
         assert greyed(line), amount
@@ -91,7 +91,7 @@ def test_unticked_each_amount_has_its_own_line_a_copy_until_its_changed(app, ui)
     pick(ui, lines["triple"], "moderator", "Relaxed")
     pick(ui, lines["p10"], "deep_cuts", "Off")
     assert embellish.row_for("triple") == {"shuffle": "0", "deep_cuts": "shuffled", "deep_share": "10",
-                                           "moderator": "relaxed"}
+                                           "moderator": "relaxed", "nonstop": "no"}
     assert embellish.row_for("p10")["deep_cuts"] == "off" and off(lines["p10"]["share_box"])
     assert embellish.row_for("double") == embellish.settings()["all_row"], "the others still as the one line"
     assert lines["double"]["shuffle"].get() and lines["double"]["moderator"].get() == "Off"
