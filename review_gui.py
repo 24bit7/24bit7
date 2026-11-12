@@ -831,6 +831,7 @@ class ReviewPanel:
         if arrow.winfo_manager() == "pack":
             arrow.pack_forget()
         arrow.place_forget()
+        self.play._arrow_band(False)   # in the switch's row it needs no band of its own
         arrow.config(bg=CONSOLE["bg"])
         arrow.place(in_=self.switch_row, relx=0.5, rely=0.5, anchor="center")
         arrow.lift()

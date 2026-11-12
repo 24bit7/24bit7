@@ -1040,6 +1040,22 @@ def test_review_text_size_buttons(app, ui):
     assert panel.size == 14, "no bigger than 14"
 
 
+def test_closed_tabs_arrow_covers_no_console_text(ui):
+    """12 Nov 2026: closed, the arrow floated over the middle of the first console line. It has a band now."""
+    play = ui.play
+    play._set_tabs_open(False, save=False)
+    play.report("x" * 400)
+    ui.pump(0.2)
+    arrow, text = play.head_arrow, play.log.frame
+    assert arrow.place_info().get("in") == play.console_box
+    bottom = arrow.winfo_rooty() + arrow.winfo_height()
+    assert bottom <= text.winfo_rooty(), (bottom, text.winfo_rooty())
+    play._set_tabs_open(True, save=False)
+    ui.pump(0.1)
+    assert int(str(text.pack_info().get("pady", 0)).split()[0]) == 0, "open, the tab row is above and no band"
+    play._set_tabs_open(False, save=False)
+
+
 def test_console_arrow_sits_beside_the_switch(app, ui):
     keys = _review_with_zone(app, ui, _album(app))
     panel, play = ui.play.review_panel, ui.play

@@ -2538,7 +2538,8 @@ class PlayTab(tk.Frame):
     def _build_console_head(self):
         black, green = "#000000", tabs.MATRIX_FG
         self.console_head = tk.Frame(self.console_box, bg=black)   # packed only while the tabs are open
-        # Closed, the arrow floats over the top middle of the text, so the text starts on the first line
+        # Closed, the arrow sits in a thin band of its own above the text (12 Nov 2026: floating over the text,
+        # it covered the middle of the first console line)
         self.head_arrow = tk.Label(self.console_box, text="\u25bc", font=("Consolas", 10), bg=black, fg=green,
                                    cursor="hand2", padx=10)
         self.head_arrow.bind("<Button-1>", lambda e: self._set_tabs_open(not self.tabs_open))
@@ -2568,6 +2569,7 @@ class PlayTab(tk.Frame):
         self.head_arrow.config(text="\u25b2" if open_ else "\u25bc")
         if open_:
             self.head_arrow.place_forget()
+            self._arrow_band(False)
             if not self.console_head.winfo_manager():
                 self.console_head.pack(fill="x", before=self.log.frame)
             self.head_arrow.pack(in_=self.console_head, anchor="n")
@@ -2583,7 +2585,9 @@ class PlayTab(tk.Frame):
             self.console_head.pack_forget()
             if self.view != "all":
                 self._select_view("all")
-            self.head_arrow.place(in_=self.log, relx=0.5, y=0, anchor="n")
+            self._arrow_band(True)
+            self.head_arrow.config(bg="#000000")
+            self.head_arrow.place(in_=self.console_box, relx=0.5, y=0, anchor="n")
             self.head_arrow.lift()
         panel = getattr(self, "review_panel", None)
         if panel is not None:
@@ -2593,6 +2597,15 @@ class PlayTab(tk.Frame):
                 write_env({"CONSOLE_TABS": "1" if open_ else "0"})
             except Exception:
                 pass
+
+    def _arrow_band(self, on):
+        """With the tabs closed, the text starts below a band as tall as the arrow, so the arrow covers nothing."""
+        band = self.head_arrow.winfo_reqheight() if on else 0
+        try:
+            if self.log.frame.winfo_manager() == "pack":   # ScrolledText: its frame is the packed widget
+                self.log.pack_configure(pady=(band, 0))
+        except tk.TclError:
+            pass
 
     # --- the Log tab: the last 50 builds from each source, newest first ---
 
