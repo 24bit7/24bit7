@@ -750,6 +750,7 @@
   "Problem: Deezer didn't answer for similar artists ({e}).": "Problem: Deezer hat bei ähnlichen Künstlern nicht geantwortet ({e}).",
   "Problem: Deezer didn't answer for {artist_name}'s top tracks ({e}).": "Problem: Deezer hat bei den Top-Titeln von {artist_name} nicht geantwortet ({e}).",
   "Problem: Deezer didn't answer when searching for {artist_name} ({e}).": "Problem: Deezer hat bei der Suche nach {artist_name} nicht geantwortet ({e}).",
+  "Problem: {source} had trouble answering in each of your last three builds. Test My Sources under Settings > Sources checks how it's doing.": "Problem: {source} hatte bei jeder deiner letzten drei Playlists Mühe zu antworten. Quellen testen unter Einstellungen > Quellen prüft, wie es um die Quelle steht.",
   "Problem: Discogs answered {status_code}.": "Problem: Discogs hat mit {status_code} geantwortet.",
   "Problem: Discogs didn't answer ({e}).": "Problem: Discogs hat nicht geantwortet ({e}).",
   "Problem: JRiver isn't answering at {host}. Is it running, with Media Network on (Tools > Options > Media Network)? If JRiver is on another PC, put its address under Settings > Other > JRiver host.": "Problem: JRiver antwortet nicht unter {host}. Läuft es mit eingeschaltetem Mediennetzwerk (Extras > Optionen > Mediennetzwerk)? Läuft JRiver auf einem anderen PC, trage dessen Adresse unter Einstellungen > Sonstiges > JRiver host ein.",

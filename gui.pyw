@@ -2120,6 +2120,7 @@ class PlayTab(tk.Frame):
         self._held = []   # console lines that arrive while the greeting types: shown once it clears
         self._type_greeting(t("Follow the white rabbit."), 0)
         threading.Thread(target=lambda: engine.say_if_newer(self.report), daemon=True, name="update-check").start()
+        engine.say_failing_sources(self.report)
 
     def _window_visible(self):
         try:

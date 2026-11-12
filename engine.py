@@ -1067,6 +1067,8 @@ def db():
                     con.execute("ALTER TABLE sessions ADD COLUMN zone TEXT")       # 1.34.0: where it played
                     con.execute("ALTER TABLE sessions ADD COLUMN asked_by TEXT")   # ...and who asked for it
                     _backfill_session_zones(con)
+                if "no_answer" not in [c[1] for c in con.execute("PRAGMA table_info(sessions)")]:
+                    con.execute("ALTER TABLE sessions ADD COLUMN no_answer TEXT")   # 1.35.0: sources that didn't answer
                 con.commit()
                 _db = con
                 import_legacy_csv()
@@ -1336,6 +1338,46 @@ def session_start(mode, seed_info, sources=""):
     return sid
 
 
+SOURCE_TROUBLE = set()   # the sources that didn't answer at least once in this build (no_answer)
+SOURCE_MODES = ("similar", "similar_tracks", "top_tracks", "headliner", "radio", "embellish", "blend")
+TROUBLE_BUILDS = 3       # in a row, before the start-up line says a source keeps failing
+
+
+def no_answer(source, line):
+    """A source's "Problem: ... didn't answer" line: shown as ever, and the source noted against this build."""
+    SOURCE_TROUBLE.add(str(source))
+    print(line)
+
+
+def _keep_trouble(session_id):
+    db().execute("UPDATE sessions SET no_answer=? WHERE id=?", (", ".join(sorted(SOURCE_TROUBLE)), session_id))
+
+
+def failing_sources(builds=TROUBLE_BUILDS):
+    """
+    The sources that didn't answer in each of the last few builds that ask the sources (12 Nov 2026), most
+    recent builds first. Builds from before 1.35.0 kept no record, so they never count.
+    """
+    marks = ",".join("?" * len(SOURCE_MODES))
+    rows = db().execute(f"SELECT no_answer FROM sessions WHERE mode IN ({marks}) ORDER BY id DESC LIMIT ?",
+                        (*SOURCE_MODES, builds)).fetchall()
+    if len(rows) < builds or any(r[0] is None for r in rows):
+        return []
+    sets = [{x.strip() for x in r[0].split(",") if x.strip()} for r in rows]
+    return sorted(set.intersection(*sets))
+
+
+def say_failing_sources(report=print):
+    """The start-up line when a source keeps failing. No setting: it says nothing while the sources answer."""
+    try:
+        failing = failing_sources()
+    except Exception:
+        return
+    for source in failing:
+        report(t("Problem: {source} had trouble answering in each of your last three builds. Test My Sources under Settings > Sources checks how it's doing.",
+                 source=source))
+
+
 def session_open(mode, seed_info, sources=""):
     """
     A Discover session row and nothing else, for work done beside a build that's already playing (Blend, 12 Nov
@@ -1348,6 +1390,7 @@ def session_open(mode, seed_info, sources=""):
          seed_info.get("Artist"), seed_info.get("Name"), seed_info.get("Album"), sources))
     db().commit()
     JOB_SESSIONS.append(cur.lastrowid)
+    SOURCE_TROUBLE.clear()
     return cur.lastrowid
 
 
@@ -1356,6 +1399,7 @@ def session_close(session_id, queued, sources=None):
     if sources is not None:
         db().execute("UPDATE sessions SET sources=? WHERE id=?", (sources, session_id))
     db().execute("UPDATE sessions SET queued=? WHERE id=?", (queued, session_id))
+    _keep_trouble(session_id)
     db().commit()
 
 
@@ -1389,6 +1433,7 @@ def session_finish(session_id, queued, sources=None, report=print):
     if sources is not None:
         db().execute("UPDATE sessions SET sources=? WHERE id=?", (sources, session_id))
     db().execute("UPDATE sessions SET queued=? WHERE id=?", (queued, session_id))
+    _keep_trouble(session_id)
     db().commit()
     misses = db().execute("SELECT COUNT(*) FROM discoveries WHERE session_id=? AND found=0",
                           (session_id,)).fetchone()[0]
@@ -2060,7 +2105,7 @@ def lastfm_similar(artist_name, limit=20):
         names = [a['name'] for a in r.json().get('similarartists', {}).get('artist', [])]
         return [canonicalise_conjunction(n) for n in names]
     except Exception as e:
-        print("  " + t("Problem: Last.fm didn't answer for similar artists ({e}).", e=e))
+        no_answer("Last.fm", "  " + t("Problem: Last.fm didn't answer for similar artists ({e}).", e=e))
         return []
 
 
@@ -2074,7 +2119,7 @@ def lastfm_top_tracks_with_counts(artist_name, limit=10):
         return [(tval['name'], int(tval.get('playcount', 0)))
                 for tval in r.json().get('toptracks', {}).get('track', [])]
     except Exception as e:
-        print("  " + t("Problem: Last.fm didn't answer for {artist_name}'s top tracks ({e}).", artist_name=artist_name, e=e))
+        no_answer("Last.fm", "  " + t("Problem: Last.fm didn't answer for {artist_name}'s top tracks ({e}).", artist_name=artist_name, e=e))
         return []
 
 
@@ -2110,7 +2155,7 @@ def deezer_artist_id(artist_name, verbose=False):
                 debug(f"Deezer: using '{best.get('name')}' (id {artist_id}, "
                       f"{best.get('nb_fan', 0)} fans) from {len(data)} search hits")
     except Exception as e:
-        print("  " + t("Problem: Deezer didn't answer when searching for {artist_name} ({e}).", artist_name=artist_name, e=e))
+        no_answer("Deezer", "  " + t("Problem: Deezer didn't answer when searching for {artist_name} ({e}).", artist_name=artist_name, e=e))
     _deezer_id_cache[artist_name] = artist_id
     return artist_id
 
@@ -2126,7 +2171,7 @@ def deezer_similar(artist_name, limit=20):
         names = [a["name"] for a in r.json().get("data", [])]
         return [canonicalise_conjunction(n) for n in names]
     except Exception as e:
-        print("  " + t("Problem: Deezer didn't answer for similar artists ({e}).", e=e))
+        no_answer("Deezer", "  " + t("Problem: Deezer didn't answer for similar artists ({e}).", e=e))
         return []
 
 
@@ -2139,7 +2184,7 @@ def deezer_top_tracks(artist_name, limit=10):
                          params={"limit": limit})
         return [tval["title"] for tval in r.json().get("data", [])]
     except Exception as e:
-        print("  " + t("Problem: Deezer didn't answer for {artist_name}'s top tracks ({e}).", artist_name=artist_name, e=e))
+        no_answer("Deezer", "  " + t("Problem: Deezer didn't answer for {artist_name}'s top tracks ({e}).", artist_name=artist_name, e=e))
         return []
 
 
@@ -2233,7 +2278,7 @@ def _musicbrainz_query(name):
                 _mbid_confirmed_misses.add(name)   # MusicBrainz answered, and has nobody by this name
             return artists[0]["id"] if artists else None
         except Exception as e:
-            print("  " + t("Problem: MusicBrainz didn't answer for {name} ({e}).", name=name, e=e))
+            no_answer("MusicBrainz", "  " + t("Problem: MusicBrainz didn't answer for {name} ({e}).", name=name, e=e))
             return None
     return None
 
@@ -2328,7 +2373,7 @@ def listenbrainz_similar(artist_name, limit=20, algorithm=None):
             debug(f"ListenBrainz: unrecognised reply, first item: {data[0]}")
         return [canonicalise_conjunction(n) for n in names[:limit]]
     except Exception as e:
-        print("  " + t("Problem: ListenBrainz didn't answer for similar artists ({e}).", e=e))
+        no_answer("ListenBrainz", "  " + t("Problem: ListenBrainz didn't answer for similar artists ({e}).", e=e))
         return []
 
 
@@ -2361,7 +2406,7 @@ def listenbrainz_top_tracks(artist_name, limit=10):
             debug(f"ListenBrainz: unrecognised top tracks reply, first item: {data[0]}")
         return names[:limit]
     except Exception as e:
-        print("  " + t("Problem: ListenBrainz didn't answer for {artist_name}'s top tracks ({e}).", artist_name=artist_name, e=e))
+        no_answer("ListenBrainz", "  " + t("Problem: ListenBrainz didn't answer for {artist_name}'s top tracks ({e}).", artist_name=artist_name, e=e))
         return []
 
 
@@ -3788,7 +3833,7 @@ def tidal_similar_tracks(artist, track, limit=None):
             out.append([names[0], f"{title} ({version})" if version else title])
         return out[:limit]
     except Exception as e:
-        print("  " + t("Problem: Tidal didn't answer for similar tracks ({e}).", e=e))
+        no_answer("Tidal", "  " + t("Problem: Tidal didn't answer for similar tracks ({e}).", e=e))
         return []
 
 
@@ -3802,7 +3847,7 @@ def tidal_similar(artist_name, limit=20):
         ids = tidal_ids(f"/artists/{aid}/relationships/similarArtists", limit)
         return [canonicalise_conjunction(n) for n in tidal_artist_names(ids)]
     except Exception as e:
-        print("  " + t("Problem: Tidal didn't answer for similar artists ({e}).", e=e))
+        no_answer("Tidal", "  " + t("Problem: Tidal didn't answer for similar artists ({e}).", e=e))
         return []
 
 
@@ -3831,7 +3876,7 @@ def tidal_top_tracks(artist_name, limit=10):
                 titles.append(title)
         return titles[:limit]
     except Exception as e:
-        print("  " + t("Problem: Tidal didn't answer for {artist_name}'s top tracks ({e}).", artist_name=artist_name, e=e))
+        no_answer("Tidal", "  " + t("Problem: Tidal didn't answer for {artist_name}'s top tracks ({e}).", artist_name=artist_name, e=e))
         return []
 
 
@@ -4170,7 +4215,7 @@ def prefetch_top_tracks(artists, limit, report=None):
         try:
             names = outer.result().result()
         except Exception as e:
-            print("  " + t("Problem: {service_name} didn't answer for top tracks ({e}).", service_name=service_name, e=e))
+            no_answer(service_name, "  " + t("Problem: {service_name} didn't answer for top tracks ({e}).", service_name=service_name, e=e))
             names = []
         store(service_name, key, names)
     for pool in pools:
@@ -7260,7 +7305,7 @@ def lastfm_similar_tracks(artist, track, limit=SIMILAR_TRACK_FETCH):
             "api_key": LASTFM_KEY, "format": "json", "limit": limit})
         return [[tval["artist"]["name"], tval["name"]] for tval in r.json().get("similartracks", {}).get("track", [])]
     except Exception as e:
-        print("  " + t("Problem: Last.fm didn't answer for similar tracks ({e}).", e=e))
+        no_answer("Last.fm", "  " + t("Problem: Last.fm didn't answer for similar tracks ({e}).", e=e))
         return []
 
 
@@ -7309,7 +7354,7 @@ def listenbrainz_similar_tracks(artist, track, limit=SIMILAR_TRACK_FETCH):
                  for row in (_labs_rows(r.json()) if r.status_code == 200 else [])}
         return [names[m] for m in mbids if m in names and names[m][1]]
     except Exception as e:
-        print("  " + t("Problem: ListenBrainz didn't answer for similar tracks ({e}).", e=e))
+        no_answer("ListenBrainz", "  " + t("Problem: ListenBrainz didn't answer for similar tracks ({e}).", e=e))
         return []
 
 
@@ -8520,7 +8565,7 @@ def discogs_get(path, params=None):
             return None
         return r.json()
     except Exception as e:
-        print("  " + t("Problem: Discogs didn't answer ({e}).", e=e))
+        no_answer("Discogs", "  " + t("Problem: Discogs didn't answer ({e}).", e=e))
         return None
 
 
