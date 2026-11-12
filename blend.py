@@ -76,15 +76,18 @@ def _candidates(mode, artist, title, say):
     return [(pair, len(sources)) for pair, sources in candidates]
 
 
-def find(keys, report, quiet=None, mode="tracks"):
-    """New tracks like the playlist: [key], up to one per playlist track and CAP."""
+def find(keys, report, quiet=None, mode="tracks", session_id=None):
+    """
+    New tracks like the playlist: [key], up to one per playlist track and CAP. Each suggestion checked against
+    the library goes to Discover under session_id, with Sources "Blend", once.
+    """
     import library
     target = min(len(keys), CAP)
     exclude = {str(k) for k in keys}
     group = "artists" if mode == "artists" else "tracks"
     per_artist = engine.TRACKS_PER_ARTIST_PICK if mode == "artists" else engine.SIMILAR_TRACK_PER_ARTIST
     played = engine.PlayedFilter(group, report=report, filters=True)
-    per, found, used, rounds = {}, [], set(), 0
+    per, found, used, rounds, logged = {}, [], set(), 0, set()
     seeds = [(r.get("Artist") or "", r.get("Name") or "", str(r.get("Key"))) for r in _seed_rows(keys)]
     say = quiet or (lambda line: None)
     while seeds and len(found) < target:
@@ -101,6 +104,9 @@ def find(keys, report, quiet=None, mode="tracks"):
             if len(found) >= target:
                 break
             key = library.find_track_key(a, tval)
+            if session_id is not None and ident not in logged:
+                logged.add(ident)
+                engine.session_log(session_id, a, tval, ["Blend"], found=bool(key))
             if not key or str(key) in exclude or str(key) in found:
                 continue
             owner = engine.owner_key(a, key)
@@ -139,6 +145,8 @@ def job(zone, keys, name, device_id=None, mode="tracks"):
         button = (devices.playlist_for(device_id, "music_like" if mode == "artists" else "tracks_like") if device_id
                   else buttons.standard(kind))
         started = time.time()
+        session_id = engine.session_open("blend", {"Artist": "", "Name": name}, sources="Blend")
+        new = []
         try:
             engine.refresh_settings_if_changed()
             engine.LAST_OUTPUT, engine.LAST_OUTPUT_ID = zone_name, zone
@@ -150,7 +158,8 @@ def job(zone, keys, name, device_id=None, mode="tracks"):
                                 kind=t(buttons.KIND_NAMES["artists" if mode == "artists" else "tracks"])))
                 return
             new = buttons.run(button, report=report,
-                              build=lambda report, **kw: find(keys, report, quiet=report, mode=mode))
+                              build=lambda report, **kw: find(keys, report, quiet=report, mode=mode,
+                                                              session_id=session_id))
             if not new:
                 report(t("Problem: nothing new was found to blend in, so the playlist plays as saved."))
                 return
@@ -158,6 +167,7 @@ def job(zone, keys, name, device_id=None, mode="tracks"):
             current = str(info.get("FileKey") or "")
             if current not in {str(k) for k in keys}:
                 report(t("Note: the music on this zone changed while the blend was found, so it was left alone."))
+                new = []
                 return
             pos, count = int(info.get("PlayingNowPosition", -1)), int(info.get("PlayingNowTracks", 0))
             rest = [r["Key"] for r in engine.playing_now_rows(zone)[pos + 1:] if r.get("Key")]
@@ -171,5 +181,5 @@ def job(zone, keys, name, device_id=None, mode="tracks"):
                       "Done: {count} new tracks blended into {name} in {zone}, {seconds} s.", len(new), name=name,
                       zone=zone_name, seconds=max(0, round(time.time() - started))))
         finally:
-            pass
+            engine.session_close(session_id, len(new or []))
     return run

@@ -1325,21 +1325,38 @@ def session_start(mode, seed_info, sources=""):
     globals().update(STREAM_MISSES=0, TIDAL_SENT=None, TIDAL_PLAYLIST_ID=None, TIDAL_OPENED=None)
     TIDAL_MISSED.clear()
     MODERATOR_RUN.update(level=None, removed=0, ran=0, failed=0)
+    sid = session_open(mode, seed_info, sources)
+    _SESSION_STARTED[sid] = time.time()
+    globals()["CURRENT_SESSION"] = sid
+    try:   # a finished source test the user hasn't opened yet: say so again
+        import source_test
+        source_test.remind_if_ready()
+    except Exception:
+        pass
+    return sid
+
+
+def session_open(mode, seed_info, sources=""):
+    """
+    A Discover session row and nothing else, for work done beside a build that's already playing (Blend, 12 Nov
+    2026): Discover and the Log's zone see it, but Non-stop, the Moderator and the build in progress are left alone.
+    """
     cur = db().execute(
         "INSERT INTO sessions (started_at, mode, seed_artist, seed_track, seed_album, sources, queued) "
         "VALUES (?,?,?,?,?,?,0)",
         (datetime.now().strftime("%Y-%m-%d %H:%M"), mode,
          seed_info.get("Artist"), seed_info.get("Name"), seed_info.get("Album"), sources))
     db().commit()
-    _SESSION_STARTED[cur.lastrowid] = time.time()
-    globals()["CURRENT_SESSION"] = cur.lastrowid
     JOB_SESSIONS.append(cur.lastrowid)
-    try:   # a finished source test the user hasn't opened yet: say so again
-        import source_test
-        source_test.remind_if_ready()
-    except Exception:
-        pass
     return cur.lastrowid
+
+
+def session_close(session_id, queued, sources=None):
+    """The end of a session_open: how many went in, and the sources if they changed. No Done line, no Run After."""
+    if sources is not None:
+        db().execute("UPDATE sessions SET sources=? WHERE id=?", (sources, session_id))
+    db().execute("UPDATE sessions SET queued=? WHERE id=?", (queued, session_id))
+    db().commit()
 
 
 def session_log(session_id, artist, track, sources, found, seed=None):

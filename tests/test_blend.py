@@ -102,3 +102,25 @@ def test_blend_similar_artists(app, alexa):
 def test_blend_tick_from_first_build_reads_as_similar_tracks(app):
     out = app.saved_playlists.tidy({"rows": {"201": {"blend": "1"}, "202": {"blend": "0"}}})
     assert out["rows"]["201"]["blend"] == "tracks" and out["rows"]["202"]["blend"] == "no"
+
+
+def test_blend_logs_to_discover(app, alexa):
+    """12 Nov 2026: Blend by voice logged nothing to Discover. Now it has a session, every suggestion it checked
+    with Sources "Blend", and how many it blended in, without starting a build over the one playing."""
+    blend_on(app)
+    alexa.say("PlaylistIntent", "sunday morning")
+    nonstop_before = dict(app.engine.NONSTOP_CONTEXT or {})
+    log = alexa.run_jobs()[0]
+    con = app.engine.db()
+    row = con.execute("SELECT id, mode, seed_track, sources, queued FROM sessions WHERE mode='blend'").fetchone()
+    assert row, log.text()
+    sid, mode, name, sources, queued = row
+    assert name == "Sunday Morning" and sources == "Blend"
+    blended = [k for k in app.jriver.zone("Kitchen").playlist if k not in app.jriver.playlists[0]["keys"]]
+    assert queued == len(blended) > 0
+    looked = con.execute("SELECT artist, track, sources, found FROM discoveries WHERE session_id=?", (sid,)).fetchall()
+    assert looked and all(r[2] == "Blend" for r in looked)
+    assert sum(r[3] for r in looked) >= len(blended)
+    assert len({(r[0].lower(), r[1].lower()) for r in looked}) == len(looked), "each suggestion once"
+    assert (app.engine.NONSTOP_CONTEXT or {}) == nonstop_before, "the playing build's Non-stop is left alone"
+    assert log.text().count("Done:") == 1, log.text()
