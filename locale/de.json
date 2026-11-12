@@ -596,6 +596,7 @@
   "Note: \"{title}\" isn't on this Discogs release, so there are no track credits.": "Hinweis: \"{title}\" ist nicht auf dieser Discogs-Veröffentlichung, daher gibt es keine Mitwirkenden für den Titel.",
   "Note: \"{value}\" has no credits of its own beyond the artist.": "Hinweis: \"{value}\" hat außer dem Künstler keine eigenen Mitwirkenden.",
   "Note: 24bit7 {latest} is out (you have {version}). Download: {link}": "Hinweis: 24bit7 {latest} ist da (du hast {version}). Download: {link}",
+  "Note: 24bit7 {latest} is out (you have {version}): {headline} Download: {link}": "Hinweis: 24bit7 {latest} ist da (du hast {version}): {headline} Download: {link}",
   "Note: Consensus found no artists the circle agrees on. A bigger circle or fewer agreeing would find more; Drift fills in if it's on.": "Hinweis: Consensus hat keine Künstler gefunden, auf die sich der Kreis einigt. Ein größerer Kreis oder weniger Einigkeit würde mehr finden; Drift füllt auf, wenn es an ist.",
   "Note: Consensus found no tracks the circle agrees on. A bigger circle or fewer agreeing would find more; Drift fills in if it's on.": "Hinweis: Consensus hat keine Titel gefunden, auf die sich der Kreis einigt. Ein größerer Kreis oder weniger Einigkeit würde mehr finden; Drift füllt auf, wenn es an ist.",
   "Note: Drift finished short, {keys_count} of {target}.": "Hinweis: Drift endete zu kurz, {keys_count} von {target}.",

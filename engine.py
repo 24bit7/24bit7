@@ -86,11 +86,24 @@ def _version_numbers(text):
     return tuple(int(n) for n in re.findall(r"\d+", text)[:3])
 
 
+def release_headline(body):
+    """
+    The release notes' bold first sentence, as plain text (12 Nov 2026): every release's notes open with one.
+    '' when the notes don't, so the line falls back to version and link.
+    """
+    m = re.match(r"\s*\*\*(.+?)\*\*", str(body or ""), re.S)
+    if not m:
+        return ""
+    text = " ".join(m.group(1).replace("*", "").split())
+    return text if 0 < len(text) <= 300 else ""
+
+
 def newer_release():
     """
-    (version, link) when GitHub has a newer 24bit7 than this one, else None. Asked once at
+    (version, link, headline) when GitHub has a newer 24bit7 than this one, else None. Asked once at
     start-up (30 Oct 2026, in place of an updater: an unsigned program that downloads and
     replaces programs is what antivirus distrusts). Offline or no answer: None, nothing said.
+    The headline is the notes' bold first sentence, or ''.
     """
     try:
         r = requests.get(RELEASES_API, timeout=10, headers={"Accept": "application/vnd.github+json"})
@@ -102,7 +115,7 @@ def newer_release():
         link = str(data.get("html_url") or "")
         if not link.startswith(RELEASES_PAGE):   # only ever our own release page
             link = f"{RELEASES_PAGE}tag/v{latest}"
-        return latest, link
+        return latest, link, release_headline(data.get("body"))
     except Exception:
         return None
 
@@ -110,7 +123,10 @@ def newer_release():
 def say_if_newer(report=print):
     """The console line when a newer 24bit7 is out. Runs off the main thread."""
     found = newer_release()
-    if found:
+    if found and found[2]:
+        report(t("Note: 24bit7 {latest} is out (you have {version}): {headline} Download: {link}",
+                 latest=found[0], version=VERSION, headline=found[2], link=found[1]))
+    elif found:
         report(t("Note: 24bit7 {latest} is out (you have {version}). Download: {link}",
                  latest=found[0], version=VERSION, link=found[1]))
 
