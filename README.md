@@ -310,7 +310,18 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.34.0
+## What's new in 1.35.0
+
+- **Review says why each track is there.** A **Found By** column names the sources that suggested it, or Seed, Deep Cuts or AI; rest the pointer on it for the whole story, such as "Last.fm named Staind as like 3 Doors Down - When I'm Gone."
+- **The Moderator works again with Anthropic**, now on Claude Haiku 5.5, at about a tenth of the cost. Since October every check had stopped before it was sent, while the Log said "0 removed"; it now says "didn't run" for those builds.
+- **A source that keeps failing says so** when 24bit7 opens: one that had trouble answering in each of your last three builds gets a line in the console. No setting.
+- **The new-version line gives the release's headline**, so you can see what it does before you download it.
+- **Play & Embellish has a Non-stop column**, beside Shuffle, Deep Cuts and the Moderator. It starts as Artist Matching's Non-stop was, so nothing changes at the upgrade.
+- **"Multiroom" by voice works from either room**: with only the main system playing, the music moves to the Sonos and the main system follows it.
+- **Blend shows up in Discover** like any other build, every suggestion it checked listed.
+- Smaller: the console names each build Artist Matching or Track Matching, Discover's tables fit their columns and shade every other row, and the arrow over the console no longer covers its first line.
+
+### Earlier: 1.34.0
 
 - **Discover > Missing Artists**: the artists the sources keep naming that you don't own, ranked by how many of your artists point to them, with the songs named and your store buttons. **Discover > Gaps in Your Artists** shows the songs you don't have by artists you do.
 - Narrow them by **Genre** (Radio's stations), **Period**, **Zone** (with who asked), all three shared by the two tabs, and **Sound**, the artists' own Last.fm tags shared by three or more, spellings merged and decades kept. Your library's Genre tags aren't needed.

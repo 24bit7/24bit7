@@ -106,6 +106,8 @@ DEMO_REVIEW = [
     ("The Move", "Flowers In The Rain", "Move", 146, "134"),
     ("Big Star", "Thirteen", "#1 Record", 154, "88"),
 ]
+DEMO_FOUND_BY = ["Last.fm, Deezer", "Last.fm", "Last.fm, ListenBrainz", "Deezer", "Last.fm, Deezer", "Last.fm",
+                 "ListenBrainz", "Last.fm, Deezer"]   # Review's Found By, one per DEMO_REVIEW row
 DEMO_IDEAS = ["Late-night jazz, slow and smoky", "Sunday morning, acoustic", "Driving at night"]
 DEMO_TONE = "Warm late-60s British pop, mid-tempo, melodic and upbeat"
 DEMO_PLAYLISTS = [
@@ -651,7 +653,11 @@ def go_to(root, path, TabbedPane):
 def show_review(play):
     """The Review list with the demo shortlist: three ticked in order, a preview zone chosen, one previewing."""
     panel = play.review_panel
-    rows = [{"key": str(2000 + n), "artist": a, "title": t, "album": al, "seconds": s, "bpm": b}
+    seed = "The Beatles - Here Comes The Sun"
+    rows = [{"key": str(2000 + n), "artist": a, "title": t, "album": al, "seconds": s, "bpm": b,
+             "why": DEMO_FOUND_BY[n],
+             "why_more": i18n.t("{sources} named {artist} as like {seed}.", sources=DEMO_FOUND_BY[n], artist=a,
+                                seed=seed)}
             for n, (a, t, al, s, b) in enumerate(DEMO_REVIEW)]
     panel.load(rows, i18n.t("Artist Matching: {seed_label}", seed_label="The Beatles - Here Comes The Sun"),   # as the console heads it
                DEMO_ZONES[0][0])
