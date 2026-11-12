@@ -242,7 +242,7 @@ def test_simple_mode_hides_debug(app, ui):
 # --- JRiver Playlists page: the global rows (the 1.11.1 fix) ---------------------------
 
 def find_saved_global_combos(widget):
-    """The global rows' dropdowns on a JRiver Playlists page (in its All playlists box)."""
+    """The global rows' dropdowns on a Playlists & Albums page (in its All playlists box)."""
     out = []
     for child in widget.winfo_children():
         if isinstance(child, ttk.Combobox):
@@ -254,7 +254,7 @@ def find_saved_global_combos(widget):
 def test_saved_playlists_global_rows_stick_after_rescan(app, ui):
     s = ui.settings
     pane = next(c for c in s.winfo_children() if hasattr(c, "select"))
-    page = pane._pages[[tab.cget("text") for tab in pane._tabs].index("JRiver Playlists")]
+    page = pane._pages[[tab.cget("text") for tab in pane._tabs].index("Playlists & Albums")]
     ui.nb.select(s)
     pane.select(page)
     holder = page
@@ -262,7 +262,7 @@ def test_saved_playlists_global_rows_stick_after_rescan(app, ui):
     ui.pump(0.6)   # the rescan runs 200 ms after the page opens
     combos = [c for c in find_saved_global_combos(holder) if c.winfo_ismapped() or True]
     skip_global = combos[-1]   # the last of the global rows' four dropdowns... found below more precisely
-    box_combos = [c for c in combos if "1 day" in c.cget("values")]   # not Off: Play & Embellish's table has those too
+    box_combos = [c for c in combos if "1 day" in c.cget("values")]   # not Off: Embellish's table has those too
     assert box_combos, "Skip recent dropdowns not found"
     target = box_combos[0]   # the All playlists row's Skip recent
     target.set("7 days")
@@ -450,7 +450,7 @@ def test_set_as_default_copies_to_smartlists_shown(app, ui, monkeypatch):
     monkeypatch.setattr(messagebox, "askyesno", lambda title, text, **k: asked.append(text) or True)
     s = ui.settings
     pane = next(c for c in s.winfo_children() if hasattr(c, "select"))
-    holder = pane._pages[[tab.cget("text") for tab in pane._tabs].index("JRiver Playlists")]
+    holder = pane._pages[[tab.cget("text") for tab in pane._tabs].index("Playlists & Albums")]
     ui.nb.select(s)
     pane.select(holder)
     ui.pump(1.6)   # the page fills, then the rescan 200 ms later

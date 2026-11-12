@@ -66,7 +66,7 @@ SHOTS = [
     ("settings_discover_sites", ["Settings", "Discover"], ["settings_gui.py"], None),
     ("settings_keys", ["Settings", "Keys"], ["settings_gui.py"], None),
     ("settings_voice_commands", ["Settings", "Voice Commands"], ["settings_gui.py", "voice.py"], None),
-    ("settings_jriver_playlists", ["Settings", "JRiver Playlists"], ["settings_gui.py", "saved_playlists.py"], None),
+    ("settings_jriver_playlists", ["Settings", "Playlists & Albums"], ["settings_gui.py", "saved_playlists.py"], None),
     ("settings_other", ["Settings", "Other"], ["settings_gui.py", "hotkeys.py", "tray.py"], None),
     ("settings_multiroom", ["Settings", "Other"], ["settings_gui.py", "multiroom/profiles.py", "multiroom/clockcheck.py"],
      "multiroom"),

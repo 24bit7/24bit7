@@ -1569,7 +1569,7 @@ class SettingsTab(tk.Frame):
 
     def _build_saved(self, nb):
         """JRiver Playlists: one set of rows, shared by every Alexa device."""
-        tab = self._scroll_tab(nb, N_("JRiver Playlists"))
+        tab = self._scroll_tab(nb, N_("Playlists & Albums"))
         self._main_saved = ProfilePage("saved", None, saved_playlists.main_settings(), {}, self._save_saved_main)
         self._fill_saved(tab, self._main_saved)
 
@@ -3156,7 +3156,7 @@ class SettingsTab(tk.Frame):
                       t("Every playlist this filter applies to only uses tracks on this JRiver playlist or "
                       "smartlist. Set up any filtering you like in JRiver's smartlist editor, and 24bit7 "
                       "respects it. With At least, a track on it counts towards the share instead. The list "
-                      "comes from Settings > JRiver Playlists."))
+                      "comes from Settings > Playlists & Albums."))
         options = self._filter_playlists()
         labels = dict(options)
         pick = tk.StringVar(value=labels.get(item.get("pick_from", ""), "None"))
@@ -3542,21 +3542,23 @@ class SettingsTab(tk.Frame):
         self._filter_save()
         self._filter_fill_editor()
 
-    # --- the JRiver Playlists page ---
+    # --- the Playlists & Albums page ---
 
     def _embellish_section(self, tab):
         """
-        Play & Embellish. Per amount, a tick for the arrow's menu and a round button for the default, which the
+        Embellish (Play & Embellish before 12 Nov 2026). Per amount, a tick for the arrow's menu and a round button for the default, which the
         button itself runs (Ben, 7 Nov 2026): at least one stays ticked, and unticking the default moves it to
         the first still ticked. And how an amount builds (10 Nov 2026): Shuffle, Deep Cuts (how, and by what
         share) and the Moderator, on the All amounts line while "Use the same settings for every amount" is
         ticked, the amounts' own lines greyed and showing it, or a line each when it isn't, each a copy of the
         one line until it's changed. The model is embellish.settings; kept in the database with the rest of
-        Play & Embellish.
+        Embellish. An album's own options, With Their Hits and And Their Hits, have rows of their own under
+        Albums (12 Nov 2026): In the Menu, Default (an album's, apart from the amounts') and Non-stop; the amounts
+        serve albums as they serve playlists. The model is embellish.albums.
         """
         import embellish
-        box = section(tab, t("Play & Embellish"),
-                      t("Which amounts the arrow beside Play & Embellish offers, which the button itself runs, and "
+        box = section(tab, t("Embellish"),
+                      t("Which amounts the arrow beside Embellish offers, which the button itself runs, and "
                         "how each one builds. +10%, +20% and +50% add one new track for every ten, five or two on "
                         "the playlist; Double adds as many as it has, Triple twice as many; Build It Out adds every "
                         "agreeing artist's top tracks you own, ten artists at a time, and Cancel keeps what's in. "
@@ -3568,7 +3570,13 @@ class SettingsTab(tk.Frame):
                         "removes any that clash, which uses AI credits. Non-stop adds more when the playlist "
                         "reaches its last track, from artists or tracks like the one playing.\n"
                         "Ticked, Use the same settings for every amount runs every amount from the All amounts "
-                        "row. Unticked, each amount has a row of its own, a copy of that one until you change it."))
+                        "row. Unticked, each amount has a row of its own, a copy of that one until you change it.\n"
+                        "For an album the arrow also offers With Their Hits, the album with the artist's widely "
+                        "played songs from their other albums shuffled through it, and And Their Hits, the album in "
+                        "order and then those songs, biggest first. Their rows under Albums say which the arrow "
+                        "offers, which the button runs for an album, and Non-stop; with neither ticked, an album "
+                        "runs the amounts' default. A hit is a song with at least a fifth of the Last.fm plays of "
+                        "the artist's biggest, up to ten you own."))
         one = tk.BooleanVar(value=embellish.settings()["all"] == "1")
         lines, loading = {}, [False]   # lines: None (All amounts) or an amount -> its controls and their values
 
@@ -3671,6 +3679,7 @@ class SettingsTab(tk.Frame):
             for code, var in ticks.items():
                 var.set(code in state["shown"])
                 radios[code].state(["!disabled"] if code in state["shown"] else ["disabled"])
+            album_sync()   # an album's default may have been an amount just unticked
             try:
                 self.winfo_toplevel().event_generate("<<EmbellishAmounts>>")
             except tk.TclError:
@@ -3695,6 +3704,49 @@ class SettingsTab(tk.Frame):
             radio_.grid(row=r, column=2, sticky="w", padx=(30, 0))
             radios[code] = radio_
             controls(r, code)
+
+        # Albums (12 Nov 2026): With Their Hits and And Their Hits, an album's own; the amounts above serve both
+        first = 3 + len(embellish.AMOUNTS)
+        tk.Label(box, text=t("Albums"), font=LABEL_FONT).grid(row=first, column=0, sticky="w", pady=(10, 2))
+        album_default = tk.StringVar(value=embellish.albums()["default"])
+        album_ticks, album_radios, album_ns = {}, {}, {}
+        self._album_rows = album_ticks, album_radios, album_ns   # for the tests
+
+        def album_sync():
+            state = embellish.albums()
+            album_default.set(state["default"])
+            for code, var in album_ticks.items():
+                var.set(code in state["shown"])
+                album_radios[code].state(["!disabled"] if code in state["shown"] else ["disabled"])
+                album_ns[code].set(option_label(SAVED_NONSTOP_OPTIONS, state["rows"][code]["nonstop"]))
+            try:
+                self.winfo_toplevel().event_generate("<<EmbellishAmounts>>")
+            except tk.TclError:
+                pass
+
+        def album_ticked():
+            embellish.set_albums(shown=[c for c, v in album_ticks.items() if v.get()])
+            album_sync()
+
+        def album_nonstop(code, box_):
+            box_.selection_clear()
+            embellish.set_albums(**{code: option_code(SAVED_NONSTOP_OPTIONS, album_ns[code].get())})
+            album_sync()
+
+        ns_values = [t(shown) for _, shown in SAVED_NONSTOP_OPTIONS]
+        for r, code in enumerate(embellish.HITS, start=first + 1):
+            tk.Label(box, text=t(embellish.HIT_NAMES[code])).grid(row=r, column=0, sticky="w")
+            album_ticks[code] = tk.BooleanVar()
+            ttk.Checkbutton(box, variable=album_ticks[code], command=album_ticked).grid(row=r, column=1, sticky="w",
+                                                                                       padx=(30, 0), pady=1)
+            album_radios[code] = ttk.Radiobutton(box, variable=album_default, value=code,
+                                                 command=lambda c=code: (embellish.set_albums(default=c), album_sync()))
+            album_radios[code].grid(row=r, column=2, sticky="w", padx=(30, 0))
+            album_ns[code] = tk.StringVar()
+            ns = TCombobox(box, textvariable=album_ns[code], values=ns_values, state="readonly",
+                           width=max(len(v) for v in ns_values) + 2)
+            ns.grid(row=r, column=6, sticky="w", padx=(22, 0))
+            ns.bind("<<ComboboxSelected>>", lambda e, c=code, w=ns: album_nonstop(c, w))
         sync()
         refresh()
         box.bind("<Map>", refresh, add="+")   # back from Settings > Keys: the Moderator's boxes follow the AI's set-up
@@ -5830,8 +5882,8 @@ class SettingsTab(tk.Frame):
         import profiles
         box = section(tab, t("Profiles"),
                       t("Save your settings as a profile, such as DJ, Explore or No AI, and switch between them. "
-                      "A profile holds your buttons and their settings, the zones' choices, Filters, JRiver "
-                      "Playlists, the Play tab options and Add Playlist rows, the Preview zone, the Default zone "
+                      "A profile holds your buttons and their settings, the zones' choices, Filters, Playlists & "
+                      "Albums, the Play tab options and Add Playlist rows, the Preview zone, the Default zone "
                       "and the shortcut zone, cache and console settings. Keys, the JRiver connection, which "
                       "zones are shown, Alexa devices, keyboard shortcuts and appearance stay as they are. "
                       "Loading restarts 24bit7; JRiver keeps playing. Each profile can have a shortcut of its "

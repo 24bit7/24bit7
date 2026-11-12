@@ -1217,8 +1217,8 @@ def upgrade():
     for device_id, name, zone, profile, saved_own in _old_devices():
         shown_name = name or t("Device")
         if saved_own:
-            engine.print(t("Note: {name}'s own JRiver Playlists settings are no longer used; every device follows "
-                           "Settings > JRiver Playlists.", name=shown_name))
+            engine.print(t("Note: {name}'s own Playlists & Albums settings are no longer used; every device follows "
+                           "Settings > Playlists & Albums.", name=shown_name))
         for f in all_filters:
             if device_id in f.get("devices", []) and f["id"] not in shared:
                 engine.print(t("Note: the filter {filter} applied to {name} only. Filters belong to playlists now: "

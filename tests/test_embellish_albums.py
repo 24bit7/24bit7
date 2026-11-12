@@ -195,3 +195,11 @@ def test_an_album_goes_on_the_recent_list_as_an_album(app):
     embellish.play(album, "ordered", app.Lines())
     top = embellish.recent()[0]
     assert top["kind"] == "album" and top["artist"] == "The Beatles" and top["name"] == "Abbey Road"
+
+
+
+def test_with_neither_hits_option_offered_an_album_runs_the_amounts_default(app):
+    import embellish
+    embellish.set_amounts(shown=["p20", "double"], default="double")
+    a = embellish.set_albums(shown=[])
+    assert a["shown"] == [] and a["default"] == "double", "not the first amount offered"

@@ -1,5 +1,5 @@
 """
-Settings > JRiver Playlists > Play & Embellish as a table (Ben, 10 Nov 2026): a tick, "Use the same settings for
+Settings > Playlists & Albums > Embellish (JRiver Playlists > Play & Embellish until 12 Nov 2026) as a table (Ben, 10 Nov 2026): a tick, "Use the same settings for
 every amount", on to start; an All amounts line; and a line per amount with In the Menu, Default, Shuffle, Deep
 Cuts (how, and by what share) and the Moderator. While the tick is on the amounts' own settings are greyed and
 show the All amounts line; off, each is live and a copy of that line until it's changed. Before this the section
@@ -13,7 +13,7 @@ from test_settings_buttons import labels, page_named, walk
 
 
 def table(ui):
-    page_named(ui, "JRiver Playlists")
+    page_named(ui, "Playlists & Albums")
     ui.pump(0.8)
     s = ui.settings
     return s, s._embellish_lines
@@ -151,3 +151,31 @@ def test_non_stop_is_a_column_of_its_own(app, ui):
     ui.pump(0.2)
     assert embellish.row_for("triple")["nonstop"] == "tracks"
     assert embellish.row_for("double")["nonstop"] == embellish.settings()["all_row"]["nonstop"]
+
+
+
+def test_the_albums_rows_offer_their_hits_and_take_an_albums_default(app, ui):
+    """Ben, 12 Nov 2026: With Their Hits and And Their Hits get rows of their own under Albums, with In the Menu,
+    Default (an album's) and Non-stop; the amounts above serve albums too."""
+    import embellish
+    s, lines = table(ui)
+    box = lines[None]["shuffle_box"].master
+    for text in ("Embellish", "Albums", "With Their Hits", "And Their Hits"):
+        assert text in labels(box) or text in labels(box.master.master), text
+    ticks, radios, nonstop = s._album_rows
+    assert ticks["with_hits"].get() and ticks["and_hits"].get()
+    assert radios["with_hits"].instate(["selected"]), "With Their Hits is an album's default to start"
+    radios["and_hits"].invoke()
+    ui.pump(0.2)
+    assert embellish.albums()["default"] == "and_hits" and embellish.amounts()["default"] == "p50", \
+        "an album's default is its own"
+    next(w for w in walk(box) if isinstance(w, ttk.Checkbutton) and str(w.cget("variable")) == str(ticks["and_hits"])).invoke()
+    ui.pump(0.2)
+    assert embellish.albums()["shown"] == ["with_hits"] and embellish.albums()["default"] == "with_hits"
+    assert radios["and_hits"].instate(["disabled"])
+    nonstop["with_hits"].set("Similar artists")
+    next(w for w in walk(box) if isinstance(w, ttk.Combobox) and str(w.cget("textvariable")) == str(nonstop["with_hits"])
+         ).event_generate("<<ComboboxSelected>>")
+    ui.pump(0.2)
+    assert embellish.albums()["rows"]["with_hits"]["nonstop"] == "artists"
+    assert not ui.errors, ui.errors[0]

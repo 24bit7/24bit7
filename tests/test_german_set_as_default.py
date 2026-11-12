@@ -27,7 +27,7 @@ def test_set_as_default_ends_inside_its_box_in_german(app, german, ui):
     from i18n import t
     ui.root.geometry("1180x820")   # the screenshots' size
     ui.pump(0.4)
-    page = page_named(ui, t("JRiver Playlists"))
+    page = page_named(ui, t("Playlists & Albums"))
     ui.pump(0.8)
     shown = [w for w in walk(page) if isinstance(w, tk.Button) and str(w.cget("text")) == "Als Vorgabe setzen"]
     assert shown, "the All playlists rows each have the button"

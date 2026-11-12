@@ -145,7 +145,7 @@ def test_device_whose_settings_match_main_gets_no_playlist(app):
     kitchen(app, page=dict(app.engine.profile_values("playlist")), saved=app.saved_playlists.blank())
     assert len(buttons.load()) == 6
     assert all(v is None for v in devices.load().get(KITCHEN, devices.blank())["buttons"].values())
-    assert app.printed.has("Kitchen Echo's own JRiver Playlists settings are no longer used"), app.printed.text()
+    assert app.printed.has("Kitchen Echo's own Playlists & Albums settings are no longer used"), app.printed.text()
     assert not app.printed.has("had settings of its own")
 
 

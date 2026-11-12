@@ -170,7 +170,8 @@ def albums():
     saved = saved if isinstance(saved, dict) else {}
     shown = [h for h in HITS if h in saved.get("shown", list(HITS))]
     choosable = shown + amounts()["shown"]
-    default = saved.get("default") if saved.get("default") in choosable else (shown or choosable)[0]
+    default = saved.get("default") if saved.get("default") in choosable else \
+        (shown[0] if shown else amounts()["default"])
     rows = {}
     for h in HITS:
         row = (saved.get("rows") or {}).get(h) or {}
@@ -185,7 +186,7 @@ def set_albums(shown=None, default=None, **rows):
     shown = [h for h in HITS if h in (now["shown"] if shown is None else shown)]
     default = now["default"] if default is None else default
     if default not in shown + amounts()["shown"]:
-        default = (shown + amounts()["shown"])[0]
+        default = shown[0] if shown else amounts()["default"]
     for h, using in rows.items():
         if h in HITS and using in NONSTOP_USING:
             now["rows"][h] = {"nonstop": using}
