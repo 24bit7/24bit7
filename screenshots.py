@@ -692,21 +692,31 @@ def open_ai_window(gui, root, play, mode):
     return dialog
 
 
-def grab_box(window, bbox):
+def window_image(window):
+    """The window's client area as Windows itself draws it, whatever covers it or whether a screen is on."""
+    import ctypes
+    from PIL import ImageGrab
+    return ImageGrab.grab(window=ctypes.windll.user32.GetAncestor(window.winfo_id(), 2))
+
+
+def grab_box(window, bbox, above=None):
     """
     A screen grab of bbox, or, when there's no screen to grab (the TV off, so Windows reports no monitor
     and a screen grab fails; 2 Nov 2026), the window as Windows itself draws it, cropped to the same box.
+    That draws one window alone, so an open drop-down list (above) is drawn too and pasted in where it sits
+    (12 Nov 2026: the Playlists & Albums shot came out without its list).
     """
     from PIL import ImageGrab
     try:
         return ImageGrab.grab(bbox=bbox)
     except OSError:
-        import ctypes
-        hwnd = ctypes.windll.user32.GetAncestor(window.winfo_id(), 2)
-        image = ImageGrab.grab(window=hwnd)   # the window's client area, whose origin Tk reports
+        image = window_image(window)   # the window's client area, whose origin Tk reports
         left, top = window.winfo_toplevel().winfo_rootx(), window.winfo_toplevel().winfo_rooty()
         x0, y0, x1, y1 = bbox
-        return image.crop((max(0, x0 - left), max(0, y0 - top), min(image.width, x1 - left), min(image.height, y1 - top)))
+        image = image.crop((max(0, x0 - left), max(0, y0 - top), min(image.width, x1 - left), min(image.height, y1 - top)))
+        if above is not None:
+            image.paste(window_image(above), (above.winfo_rootx() - x0, above.winfo_rooty() - y0))
+        return image
 
 
 def grab_window(window):
@@ -723,7 +733,7 @@ def grab(root, above=None):
         above.lift(root)
     settle(root, 0.2)
     x, y = root.winfo_rootx(), root.winfo_rooty()
-    return grab_box(root, (x, y, x + root.winfo_width(), y + root.winfo_height()))   # the window sits on the main screen
+    return grab_box(root, (x, y, x + root.winfo_width(), y + root.winfo_height()), above)   # the main screen
 
 
 def scroll_canvas(page):

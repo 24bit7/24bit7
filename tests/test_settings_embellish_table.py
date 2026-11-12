@@ -114,7 +114,7 @@ def test_the_menu_ticks_and_the_default_stay_live_whatever_the_tick_says(app, ui
     radios = [w for w in walk(box) if isinstance(w, ttk.Radiobutton)]
     shuffles = [line["shuffle_box"] for line in lines.values()]
     menu = [w for w in walk(box) if isinstance(w, ttk.Checkbutton) and not str(w.cget("text")) and w not in shuffles]
-    assert len(radios) == 6 and len(menu) == 6
+    assert len(radios) == 8 and len(menu) == 8, "six amounts, then the Albums rows' two (12 Nov 2026)"
     assert not any(off(w) for w in radios + menu), "greyed is for how an amount builds, not whether it's offered"
     menu[0].invoke()   # +10% out of the menu, through the tick itself
     assert "p10" not in embellish.amounts()["shown"]
@@ -174,8 +174,9 @@ def test_the_albums_rows_offer_their_hits_and_take_an_albums_default(app, ui):
     assert embellish.albums()["shown"] == ["with_hits"] and embellish.albums()["default"] == "with_hits"
     assert radios["and_hits"].instate(["disabled"])
     nonstop["with_hits"].set("Similar artists")
-    next(w for w in walk(box) if isinstance(w, ttk.Combobox) and str(w.cget("textvariable")) == str(nonstop["with_hits"])
-         ).event_generate("<<ComboboxSelected>>")
+    row = radios["with_hits"].grid_info()["row"]
+    next(w for w in walk(box) if isinstance(w, ttk.Combobox) and w.grid_info().get("row") == row
+         and w.grid_info().get("column") == 6).event_generate("<<ComboboxSelected>>")
     ui.pump(0.2)
     assert embellish.albums()["rows"]["with_hits"]["nonstop"] == "artists"
     assert not ui.errors, ui.errors[0]

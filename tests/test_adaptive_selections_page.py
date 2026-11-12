@@ -42,7 +42,7 @@ def test_ticked_by_default_above_skip_played_and_saved(app, ui):
 def test_radio_has_it_too(app, ui):
     import buttons
     s = ui.settings
-    radio = next(b for b in buttons.load() if b.get("kind") == buttons.RADIO)
+    radio, _page = buttons.add_from_choice(("template", "radio"))
     pick_button(ui, radio["name"])
     ui.pump(0.4)
     assert s._button_page.adaptive_tick.instate(["selected"])
