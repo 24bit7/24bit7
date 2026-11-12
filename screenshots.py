@@ -45,7 +45,7 @@ SHOTS = [
     ("play", ["Play", "Now Playing"], ["gui.pyw", "mix_gui.py", "tabs.py"], "more_closed"),
     ("play_more_options", ["Play", "Now Playing"], ["gui.pyw", "mix_gui.py", "tabs.py"], "more_open"),
     ("play_search", ["Play", "Search"], ["gui.pyw", "tabs.py"], "more_closed"),
-    ("play_jriver_playlists", ["Play", "JRiver Playlists"], ["gui.pyw", "embellish.py", "tabs.py"], "playlists_list"),
+    ("play_jriver_playlists", ["Play", "Playlists & Albums"], ["gui.pyw", "embellish.py", "tabs.py"], "playlists_list"),
     ("play_radio", ["Play", "Now Playing"], ["gui.pyw", "radio.py", "tabs.py"], "radio_list"),
     ("play_review", ["Play", "Now Playing"], ["gui.pyw", "review_gui.py"], "review"),
     ("ai_playlist_create", ["Play", "Now Playing"], ["ai_dialog.py"], "ai_create"),
@@ -117,6 +117,10 @@ DEMO_PLAYLISTS = [
     {"ID": "204", "Name": "Random Album", "Folder": "Smartlists", "Type": "Smartlist"},
     {"ID": "205", "Name": "Kitchen Disco", "Folder": "Mixes", "Type": "Playlist"},
 ]
+# Playlists & Albums (1.36.0): albums for the box to find, The Beatles typed in the shot
+DEMO_ALBUMS = [("Abbey Road", "The Beatles"), ("Help!", "The Beatles"), ("Revolver", "The Beatles"),
+               ("Rubber Soul", "The Beatles"), ("Something Else", "The Kinks"), ("Mr. Tambourine Man", "The Byrds"),
+               ("Bridge Over Troubled Water", "Simon & Garfunkel"), ("Meddle", "Pink Floyd")]
 # Radio (1.31.0): lanes as an analysis of a sixties-and-folk library would make them, Classic Rock split open
 DEMO_RADIO = {"when": "2026-11-06 20:18", "resting": None, "known": [], "lanes": [
     {"id": "1", "name": "Classic Rock / Rock", "genres": ["classic rock", "rock"], "artists": 60, "plays": 4200,
@@ -139,7 +143,9 @@ DEMO_RADIO = {"when": "2026-11-06 20:18", "resting": None, "known": [], "lanes":
      "pillars": ["Marvin Gaye", "The Supremes"]},
 ]}
 # JRiver Playlists: what 24bit7 played or embellished lately, for the list's Recent part
-DEMO_RECENT = [{"id": "202", "name": "Road Trip", "how": "embellished", "when": "2026-11-06 19:40"},
+DEMO_RECENT = [{"id": "album:The Beatles|Abbey Road", "name": "Abbey Road", "kind": "album", "artist": "The Beatles",
+                "how": "embellished", "when": "2026-11-12 18:05"},
+               {"id": "202", "name": "Road Trip", "how": "embellished", "when": "2026-11-06 19:40"},
                {"id": "201", "name": "Sunday Morning", "how": "played", "when": "2026-11-05 10:12"}]
 # Discover: one Similar Artists session from Here Comes The Sun. (artist, track, sources, found)
 DEMO_DISCOVERIES = [
@@ -466,6 +472,7 @@ def start_demo(gui, temp):
     import library
     owned = {library.norm(a) for a in DEMO_OWNED}
     library.has_artist = lambda name: library.norm(name or "") in owned   # never the real library
+    library.album_list = lambda: list(DEMO_ALBUMS)
     try:
         import discover_stats
         discover_stats.fetch_tags = lambda names, cancelled=None: 0   # no Last.fm in demo mode
@@ -927,11 +934,11 @@ def main():
             elif action == "calibrate":   # the Calibrate Multiroom window with a result shown (1.32.0)
                 show_multiroom(play.settings, root)
                 dialog = show_calibrate(play.settings, root)
-            elif action == "playlists_list":   # Road Trip chosen, the list open under the box (1.31.0)
+            elif action == "playlists_list":   # an artist typed, their albums listed under the box (1.36.0)
                 play._show_more(False, save=False)
                 play._close_playlists_if_away = lambda: None   # the shot takes the keyboard from the box
-                road_trip = next(x for x in DEMO_PLAYLISTS if x["Name"] == "Road Trip")
-                play._pick_playlist(dict(road_trip))
+                play.playlist_entry.delete(0, "end")
+                play.playlist_entry.insert(0, "Beatles")
                 settle(root, 0.3)
                 play._open_playlists()
                 popup = play._playlists_pop

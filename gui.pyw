@@ -132,12 +132,14 @@ PLAY_NOTES = {
                "Now, in red, and one click empties the zone's list."),
     "Skip Track": N_("The next track in this zone's list. Greyed while the zone is stopped or nothing follows."),
     "Help": N_("Hover notes for the Play tab: on, hovering over anything here explains it; off, no pop-ups."),
-    "Playlist": N_("One of your JRiver playlists or smartlists. Click into the box for the list, the five you played "
-                   "here most recently at the top; type to narrow it."),
-    "Play": N_("Plays the playlist as it is. The arrow chooses Play Shuffled or Play Ordered."),
-    "Play & Embellish": N_("Plays the playlist with new tracks woven in: the top tracks you own by artists that the "
-                           "playlist's own artists agree on. The arrow chooses how many; Shuffle, Deep Cuts "
-                           "and the Moderator are under Settings > JRiver Playlists."),
+    "Album or Playlist": N_("One of your albums, or a JRiver playlist or smartlist. Click into the box for the five "
+                            "you played here most recently, then your playlists; type part of a name to find an "
+                            "album or playlist, or an artist's name for their albums."),
+    "Play": N_("Plays the album or playlist as it is. The arrow chooses Play Shuffled or Play Ordered, remembered "
+               "apart for albums, which start in order."),
+    "Embellish": N_("Plays the album or playlist with new tracks woven in: the top tracks you own by artists that "
+                    "its own artists agree on. The arrow chooses how many, and for an album also With Their Hits or "
+                    "And Their Hits. Shuffle, Deep Cuts and the Moderator are under Settings > Playlists & Albums."),
     "Radio": N_("Plays a station of what you listen to, with no seed: your stations come from your plays and "
                 "the sources' genres. Click Radio for the last station you played; the arrow lists them all. "
                 "Right-click a station to split it or add it as a button."),
@@ -145,6 +147,7 @@ PLAY_NOTES = {
                         "a chain of Top-Ups or an embellished playlist can be kept."),
 }
 PLAYLISTS_SHOWN = 15   # rows of the All Playlists part of the list before "type to narrow"
+ALBUMS_SHOWN = 10      # and of the Albums part, once something is typed
 MONTHS = (N_("Jan"), N_("Feb"), N_("Mar"), N_("Apr"), N_("May"), N_("Jun"), N_("Jul"), N_("Aug"), N_("Sep"),
           N_("Oct"), N_("Nov"), N_("Dec"))
 BUTTON_GAP = 8   # between the Play tab's buttons, and between its rows of them
@@ -342,20 +345,21 @@ class PlayTab(tk.Frame):
         self.seed_nb.bind("<<NotebookTabChanged>>", lambda e: (self._sync_seed_buttons(), self._place_output(),
                                                               self.after_idle(self._line_up_lists)))
 
-    # --- JRiver Playlists (Ben, 6 Nov 2026): play or embellish one of your own playlists ----------------
+    # --- Playlists & Albums (Ben, 6 Nov 2026; albums 12 Nov): play or embellish an album or playlist you own ---
 
     def _build_playlists_tab(self):
-        """The third seed tab: Playlist, Play \u25be and Play & Embellish \u25be on one row, Output at the right."""
+        """The third seed tab: Album or Playlist, Play \u25be and Embellish \u25be on one row, Output at the right."""
         tab = self.playlists_tab = tk.Frame(self.seed_nb, padx=26, pady=8)
-        self.seed_nb.add(tab, text=t("JRiver Playlists"))
+        self.seed_nb.add(tab, text=t("Playlists & Albums"))
         tab.grid_anchor("w")   # the row centred in the panel, level with Output
         row = tk.Frame(tab)
         row.grid(row=0, column=0, sticky="w")
-        label = tk.Label(row, text=t("Playlist"), font=("Segoe UI", 10))
+        label = tk.Label(row, text=t("Album or Playlist"), font=("Segoe UI", 10))
         label.pack(side="left")
         self.playlist_entry = RoundedEntry(row, width=30, font=("Segoe UI", 9))
         self.playlist_entry.pack(side="left", padx=(4, LIST_BOX_GAP))
         self._playlist_chosen = None
+        self._chosen_text = None   # what the box read when it was picked: an album shows "OK Computer · Radiohead"
         self._playlists_pop = None
         self._playlists_found = None
         entry = self.playlist_entry.entry
@@ -365,18 +369,22 @@ class PlayTab(tk.Frame):
         entry.bind("<Return>", lambda e: self._pick_first_playlist(), add="+")
         entry.bind("<Escape>", lambda e: self._close_playlists(), add="+")
         entry.bind("<FocusOut>", lambda e: self.after(200, self._close_playlists_if_away), add="+")
-        self.play_list_button = FlatButton(row, text=t("Play"), width=18, height=2,
+        # outlined like Clear Playing Now, in the accent with no orange bar (Ben, 12 Nov 2026): they act on what's
+        # in the box, not on a seed, so they read apart from the playlist buttons under them
+        self.play_list_button = FlatButton(row, text=t("Play"), width=18, height=2, quiet=True,
                                            command=lambda: self.on_play_playlist(False), arrow=True,
                                            arrow_command=lambda: self._choice_menu("order"))
         self.play_list_button.pack(side="left", padx=(0, BUTTON_GAP))
-        self.embellish_button = FlatButton(row, text=t("Play & Embellish"), width=18, height=2,
+        self.embellish_button = FlatButton(row, text=t("Embellish"), width=18, height=2, quiet=True,
                                            command=lambda: self.on_play_playlist(True), arrow=True,
                                            arrow_command=lambda: self._choice_menu("amount"))
         self.embellish_button.pack(side="left")
+        for b in (self.play_list_button, self.embellish_button):
+            b.config(armed=PALETTE["button_fg"])
         self._sync_amounts()
         on, wrap = self.help_on, self.note_wrap
-        for widget, name in ((label, "Playlist"), (self.playlist_entry, "Playlist"), (self.play_list_button, "Play"),
-                             (self.embellish_button, "Play & Embellish")):
+        for widget, name in ((label, "Album or Playlist"), (self.playlist_entry, "Album or Playlist"),
+                             (self.play_list_button, "Play"), (self.embellish_button, "Embellish")):
             Tooltip(widget, t(PLAY_NOTES[name]), when=on, wrap=wrap)
         self.extra_list_buttons = [self.play_list_button, self.embellish_button]
         # the box stands a little taller than a text box usually does, nearer the buttons beside it (10 Nov 2026)
@@ -386,9 +394,9 @@ class PlayTab(tk.Frame):
 
     def _line_up_lists(self):
         """
-        The Playlist box, Play and Play & Embellish at three equal widths (Ben, 10 Nov 2026), from the box's left
+        The Album or Playlist box, Play and Embellish at three equal widths (Ben, 10 Nov 2026), from the box's left
         edge to the right edge of the row's last playlist button that ends clear of Output, on the row's first
-        line should it wrap. Before that Play and Play & Embellish each matched the button under them and the box
+        line should it wrap. Before that Play and Embellish each matched the button under them and the box
         took the rest (7 Nov), which left the box twice the width of either. With no such button, or no room,
         the three keep their own widths.
         """
@@ -420,7 +428,7 @@ class PlayTab(tk.Frame):
         return tab is not None and self.seed_nb.select() == str(tab)
 
     def _seed_has_row(self):
-        """Search and JRiver Playlists: a row of boxes, with Output level with it."""
+        """Search and Playlists & Albums: a row of boxes, with Output level with it."""
         return self._seed_is_search() or self._seed_is_playlists()
 
     def _playlist_list(self):
@@ -429,9 +437,37 @@ class PlayTab(tk.Frame):
         try:
             found = saved_playlists.scan()
         except Exception as e:
-            engine.debug(f"JRiver Playlists: couldn't read the playlists ({e})")
+            engine.debug(f"Playlists & Albums: couldn't read the playlists ({e})")
             return None
         return sorted(found, key=lambda p: (p["Name"].lower(), p.get("Folder") or ""))
+
+    @staticmethod
+    def _albums_matching(typed):
+        """
+        The albums whose title or album artist has what's typed in it, so an artist's name lists their albums:
+        title matches first, then by artist and title. None while nothing's typed (Ben, 12 Nov 2026: the empty
+        box lists the recent five and the playlists, albums only once something is typed).
+        """
+        if not typed:
+            return []
+        found = [(a, ar or "") for a, ar in library.album_list()
+                 if typed in a.lower() or typed in (ar or "").lower()]
+        found.sort(key=lambda x: (typed not in x[0].lower(), x[1].lower(), x[0].lower()))
+        return [{"kind": "album", "Name": a, "Artist": ar} for a, ar in found]
+
+    @staticmethod
+    def _box_text(item):
+        """What the box reads once picked: the playlist's name, or 'OK Computer · Radiohead'."""
+        if embellish.is_album(item):
+            return f"{item['Name']} \u00b7 {item['Artist']}" if item.get("Artist") else item["Name"]
+        return item["Name"]
+
+    @staticmethod
+    def _row_text(item):
+        """A row in the list says which it is: 'OK Computer · Radiohead (album)', 'Indie-Chill (playlist)'."""
+        if embellish.is_album(item):
+            return t("{album} \u00b7 {artist} (album)", album=item["Name"], artist=item.get("Artist") or "")
+        return t("{name} (playlist)", name=item["Name"])
 
     def _open_playlists(self):
         if self._playlists_pop is not None:
@@ -443,6 +479,7 @@ class PlayTab(tk.Frame):
         if event.keysym in ("Return", "Escape", "Tab"):
             return
         self._playlist_chosen = None
+        self._sync_amounts()   # nothing picked now: Embellish's arrow as a playlist's
         if self._playlists_found is None:
             self._playlists_found = self._playlist_list()
         self._fill_playlists()
@@ -461,7 +498,10 @@ class PlayTab(tk.Frame):
         return f"{when.day} {t(MONTHS[when.month - 1])}"
 
     def _fill_playlists(self):
-        """The list under the box: the recent five, then every playlist A to Z, both narrowed by what's typed."""
+        """
+        The list under the box: the recent five, then every playlist A to Z, both narrowed by what's typed; once
+        something is typed, the albums whose title or artist has it too, each row saying which it is.
+        """
         self._close_playlists()
         entry = self.playlist_entry
         bg, fg, muted, line = PALETTE["field_bg"], PALETTE["text"], PALETTE["help_fg"], PALETTE["line"]
@@ -481,7 +521,7 @@ class PlayTab(tk.Frame):
                                                                                          pady=(6, 1))
 
         def add_row(playlist, tag):
-            r = tabs.PickRow(inner, playlist["Name"], fg=fg, bg=bg, fit=True, tag=tag)
+            r = tabs.PickRow(inner, self._row_text(playlist), fg=fg, bg=bg, fit=True, tag=tag)
             r.configure(cursor="hand2")
             r.pack(fill="x", padx=3, pady=1)
             r.bind("<Enter>", lambda e, w=r: w.set_chosen(True))
@@ -489,31 +529,46 @@ class PlayTab(tk.Frame):
             r.bind("<ButtonPress-1>", lambda e, p=playlist: self._pick_playlist(p))
             pop._rows.append((playlist, r))
 
+        def note(text, pady=(0, 6)):
+            tk.Label(inner, text=text, fg=muted, bg=bg, font=("Segoe UI", 9)).pack(anchor="w", padx=10, pady=pady)
+
         if found is None:
-            tk.Label(inner, text=t("JRiver isn't answering, so the playlists can't be listed."), fg=muted, bg=bg,
-                     font=("Segoe UI", 9)).pack(anchor="w", padx=10, pady=6)
-        else:
-            by_id = {p["ID"]: p for p in found}
-            recent = [(by_id[x["id"]], x) for x in embellish.recent() if x["id"] in by_id
-                      and typed in by_id[x["id"]]["Name"].lower()]
-            if recent:
-                heading(t("Recent"))
-                for p, x in recent:
-                    how = t("embellished") if x.get("how") == "embellished" else t("played")
-                    add_row(p, f"{how}, {self._when(x.get('when'))}".strip(", "))
-                tk.Frame(inner, bg=line, height=1).pack(fill="x", pady=4)
-            matches = [p for p in found if typed in p["Name"].lower()]
-            heading(t("All Playlists"))
+            note(t("JRiver isn't answering, so the playlists can't be listed."), pady=6)
+        by_id = {p["ID"]: p for p in found or []}
+        recent = []
+        for x in embellish.recent():
+            if x.get("kind") == "album":
+                item = {"kind": "album", "Name": x.get("name") or "", "Artist": x.get("artist") or ""}
+                if typed in item["Name"].lower() or typed in item["Artist"].lower():
+                    recent.append((item, x))
+            elif x["id"] in by_id and typed in by_id[x["id"]]["Name"].lower():
+                recent.append((by_id[x["id"]], x))
+        if recent:
+            heading(t("Recent"))
+            for p, x in recent:
+                how = t("embellished") if x.get("how") == "embellished" else t("played")
+                add_row(p, f"{how}, {self._when(x.get('when'))}".strip(", "))
+            tk.Frame(inner, bg=line, height=1).pack(fill="x", pady=4)
+        matches = [p for p in found or [] if typed in p["Name"].lower()]
+        albums = self._albums_matching(typed)
+        if found is not None and (matches or not typed):
+            heading(t("All Playlists") if not typed else t("Playlists"))
             for p in matches[:PLAYLISTS_SHOWN]:
                 where = "" if p.get("Folder") in (None, "", saved_playlists.ROOT) else p["Folder"]
                 kind = t("Smartlist") if p.get("Type") == "Smartlist" else ""
                 add_row(p, ", ".join(x for x in (where, kind) if x))
-            if not matches:
-                tk.Label(inner, text=t("No playlist has that in its name."), fg=muted, bg=bg,
-                         font=("Segoe UI", 9)).pack(anchor="w", padx=10, pady=(0, 6))
-            elif len(matches) > PLAYLISTS_SHOWN:
-                tk.Label(inner, text=t("and {count} more: type to narrow the list", count=len(matches) - PLAYLISTS_SHOWN),
-                         fg=muted, bg=bg, font=("Segoe UI", 9)).pack(anchor="w", padx=10, pady=(0, 6))
+            if len(matches) > PLAYLISTS_SHOWN:
+                note(t("and {count} more: type to narrow the list", count=len(matches) - PLAYLISTS_SHOWN))
+        if albums:
+            heading(t("Albums"))
+            for a in albums[:ALBUMS_SHOWN]:
+                add_row(a, "")
+            if len(albums) > ALBUMS_SHOWN:
+                note(t("and {count} more: type to narrow the list", count=len(albums) - ALBUMS_SHOWN))
+        elif typed and not library.album_list():
+            note(t("Your albums show here once the library has been read."), pady=6)
+        if typed and not matches and not albums and found is not None:
+            note(t("No album or playlist has that in its name."), pady=6)
         pop.update_idletasks()
         w = max(pop.winfo_reqwidth(), entry.winfo_width(), 300)
         pop.geometry(f"{w}x{pop.winfo_reqheight()}+{entry.winfo_rootx()}+{entry.winfo_rooty() + entry.winfo_height() + 2}")
@@ -540,10 +595,12 @@ class PlayTab(tk.Frame):
 
     def _pick_playlist(self, playlist):
         self._playlist_chosen = playlist
+        self._chosen_text = self._box_text(playlist)
         self.playlist_entry.delete(0, "end")
-        self.playlist_entry.insert(0, playlist["Name"])
+        self.playlist_entry.insert(0, self._chosen_text)
         self._close_playlists()
         self._playlists_found = None
+        self._sync_amounts()   # an album's arrow offers its hits too
         self.focus_set()   # out of the box, so the list doesn't open again at once
 
     def _pick_first_playlist(self):
@@ -552,41 +609,61 @@ class PlayTab(tk.Frame):
             self._pick_playlist(pop._rows[0][0])
 
     def _chosen_playlist(self):
-        """The playlist in the box: the one picked, or the one whose name was typed in full. None after saying why."""
+        """
+        The album or playlist in the box: the one picked, or the one whose name was typed in full (an album's
+        title, or 'title · artist'). None after saying why.
+        """
         typed = self.playlist_entry.get().strip()
         chosen = self._playlist_chosen
-        if chosen and chosen["Name"] == typed:
+        if chosen and self._chosen_text == typed:
             return chosen
+        title = t("Playlists & Albums")
         if not typed:
-            messagebox.showinfo(t("JRiver Playlists"), t("Pick a playlist first."), parent=self)
+            messagebox.showinfo(title, t("Pick an album or playlist first."), parent=self)
             return None
-        found = self._playlist_list() or []
-        same = [p for p in found if p["Name"].lower() == typed.lower()]
+        low = typed.lower()
+        same = [p for p in self._playlist_list() or [] if p["Name"].lower() == low]
+        same += [{"kind": "album", "Name": a, "Artist": ar or ""} for a, ar in library.album_list()
+                 if a.lower() == low or f"{a} \u00b7 {ar}".lower() == low]
         if len(same) == 1:
             return same[0]
-        messagebox.showinfo(t("JRiver Playlists"),
-                            t("More than one playlist is called {name}. Pick the one you mean from the list.", name=typed)
-                            if same else t("There's no JRiver playlist called {name}. Pick one from the list.", name=typed),
+        messagebox.showinfo(title,
+                            t("More than one album or playlist is called {name}. Pick the one you mean from the list.",
+                              name=typed)
+                            if same else t("There's no album or playlist called {name}. Pick one from the list.",
+                                           name=typed),
                             parent=self)
         return None
 
+    def _embellish_options(self):
+        """(codes, default) for Embellish's arrow: an album's hits options and the amounts, or the amounts."""
+        if embellish.is_album(self._playlist_chosen):
+            a = embellish.albums()
+            return a["shown"] + embellish.amounts()["shown"], a["default"]
+        a = embellish.amounts()
+        return a["shown"], a["default"]
+
     def _sync_amounts(self):
-        """Play & Embellish's arrow only while Settings leaves more than one amount to choose from."""
+        """Embellish's arrow only while there's more than one thing to choose from, for what's in the box."""
         try:
-            self.embellish_button.set_arrow(len(embellish.amounts()["shown"]) > 1)
+            self.embellish_button.set_arrow(len(self._embellish_options()[0]) > 1)
         except (AttributeError, tk.TclError):
             pass
 
     def _choice_menu(self, which):
         """
-        The arrows: Play Shuffled or Play Ordered (remembered); the amounts Settings > JRiver Playlists offers,
-        names only, the default ticked, a pick running Play & Embellish with it once (Ben, 7 Nov 2026).
+        The arrows: Play Shuffled or Play Ordered (remembered, an album's apart); the amounts Settings > Playlists
+        & Albums offers, names only, the default ticked, a pick running Embellish with it once (Ben, 7 Nov 2026).
+        For an album, With Their Hits and And Their Hits above the amounts (12 Nov 2026).
         """
         self._close_children()
         button = self.play_list_button if which == "order" else self.embellish_button
-        options = embellish.ORDERS if which == "order" else embellish.amounts()["shown"]
-        names = embellish.ORDER_NAMES if which == "order" else embellish.AMOUNT_NAMES
-        current = embellish.choices()[which]
+        album = embellish.is_album(self._playlist_chosen)
+        if which == "order":
+            options, names = embellish.ORDERS, embellish.ORDER_NAMES
+            current = embellish.choices()["album_order" if album else "order"]
+        else:
+            (options, current), names = self._embellish_options(), dict(embellish.AMOUNT_NAMES, **embellish.HIT_NAMES)
         bg, fg, muted, line = PALETTE["field_bg"], PALETTE["text"], PALETTE["help_fg"], PALETTE["line"]
         pop = self._children_popup = tk.Toplevel(self)
         pop.withdraw()
@@ -595,7 +672,9 @@ class PlayTab(tk.Frame):
         inner = tk.Frame(pop, bg=bg)
         inner.pack(fill="both", expand=True)
         pop._rows = []
-        for code in options:
+        for i, code in enumerate(options):
+            if i and options[i - 1] in embellish.HITS and code not in embellish.HITS:
+                tk.Frame(inner, bg=line, height=1).pack(fill="x", pady=4)   # the album's own, then the amounts
             mark = "\u2713" if code == current else ""
             r = tabs.PickRow(inner, t(names[code]), fg=fg, bg=bg, fit=True,
                              left=lambda parent, m=mark: tk.Label(parent, text=m, width=2, fg=PALETTE["button_fg"],
@@ -618,26 +697,32 @@ class PlayTab(tk.Frame):
     def _choose(self, which, code):
         self._close_children()
         if which == "order":
-            embellish.set_choice(which, code)
+            embellish.set_choice("album_order" if embellish.is_album(self._playlist_chosen) else "order", code)
         else:   # an amount from the arrow: this once, the default stays as Settings has it
             self.on_play_playlist(True, amount=code)
 
     def on_play_playlist(self, embellish_it, amount=None):
-        """Play or Play & Embellish: a build like any other (Play or Review Mode, Output, Top-Up)."""
+        """Play or Embellish: a build like any other (Play or Review Mode, Output, Top-Up)."""
         if self.running:
             return
         playlist = self._chosen_playlist()
         if playlist is None:
             return
+        album = embellish.is_album(playlist)
         chosen = embellish.choices()
-        if amount:
-            chosen["amount"] = amount
+        code = amount or (chosen["album_amount"] if album else chosen["amount"])
+        order = chosen["album_order"] if album else chosen["order"]
         top_up = bool(getattr(self, "top_up_armed", False))
+
+        def item():   # an album's tracks are read when it runs, from the library as it is then
+            if not album:
+                return playlist
+            return dict(playlist, keys=library.album_keys(playlist["Name"], playlist.get("Artist") or ""))
         if embellish_it:
-            # the order is the amount's own (Settings > JRiver Playlists): Play's arrow is Play's alone (10 Nov 2026)
-            target = lambda: embellish.embellish(playlist, None, chosen["amount"], self.report)
+            # the order is the amount's own (Settings > Playlists & Albums): Play's arrow is Play's alone (10 Nov 2026)
+            target = lambda: embellish.embellish(item(), None, code, self.report)
         else:
-            target = lambda: embellish.play(playlist, chosen["order"], self.report)
+            target = lambda: embellish.play(item(), order, self.report)
         self._run_job(target, needs_playing=False, mix=False, review=True, top_up=top_up)
 
     # --- Save Playlist: after a build, the output zone's Playing Now kept as a JRiver playlist ------------
@@ -1206,8 +1291,8 @@ class PlayTab(tk.Frame):
                 w.bind("<B1-Motion>", lambda e, fb=b: self._drag_move(e, fb), add="+")
                 w.bind("<ButtonRelease-1>", lambda e, fb=b: self._drag_end(e, fb), add="+")
             if not is_radio:   # first, so the button's own note is its _tooltip
-                Tooltip(b, t("Playlists start from a track or an artist, so they rest while JRiver Playlists is showing. "
-                             "Use Play or Play & Embellish there."), when=self._seed_is_playlists, wrap=wrap)
+                Tooltip(b, t("Playlists start from a track or an artist, so they rest while Playlists & Albums is "
+                             "showing. Use Play or Embellish there."), when=self._seed_is_playlists, wrap=wrap)
             if is_radio:   # resting: why, whatever ? says; awake: its note while ? is on
                 b._radio_note = Tooltip(b, "", when=lambda: bool(radio.resting()), wrap=wrap)
                 Tooltip(b, self._button_note(button), when=lambda: on() and not radio.resting(), wrap=wrap)

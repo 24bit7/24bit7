@@ -476,6 +476,21 @@ def find_album(heard):
     return True, [(best[1], best[2], keys)]
 
 
+def album_list():
+    """Every album as (album, album artist), for the Play tab's Album or Playlist box (12 Nov 2026). Empty until
+    the library's first read, so the box never waits on it."""
+    with _lock:
+        return list(_albums)
+
+
+def album_keys(album, artist):
+    """An album's tracks in disc and track order, or [] if it isn't in the library now."""
+    ensure_loaded()
+    with _lock:
+        rows = _albums.get((album, artist)) or []
+    return [str(row["Key"]) for row in sorted(rows, key=track_order)]
+
+
 def _artist_score(heard, artist):
     return max((score(heard, part) for part in (artist or "").split(";")), default=0.0)
 

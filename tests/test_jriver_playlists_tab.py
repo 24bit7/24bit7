@@ -1,6 +1,7 @@
 """
-The Play tab's JRiver Playlists tab (Ben, 6 Nov 2026): a third seed tab between Now Playing and Search. The
-Playlist box opens a list (the recent five, then A to Z, narrowed as you type); Play and Play & Embellish run
+The Play tab's Playlists & Albums tab (Ben, 6 Nov 2026, as JRiver Playlists; albums 12 Nov): a third seed tab
+between Now Playing and Search. The Album or Playlist box opens a list (the recent five, then the playlists A to
+Z, narrowed as you type; albums once something is typed, an artist's name listing theirs); Play and Embellish run
 like any build. The row's playlist buttons grey out while it shows (they start from a track or an artist).
 After a build that went to a JRiver zone, Save Playlist appears at the row's top right.
 """
@@ -21,7 +22,7 @@ def lists_tab(ui):
 def test_the_tab_sits_between_now_playing_and_search_and_greys_the_playlists(app, ui):
     p = ui.play
     names = [tab.cget("text") for tab in p.seed_nb._tabs]
-    assert names == ["Now Playing", "JRiver Playlists", "Search"], names
+    assert names == ["Now Playing", "Playlists & Albums", "Search"], names
     lists_tab(ui)
     assert all(b._state == "disabled" for b in p.play_buttons), "they start from a track or an artist"
     assert p.credits_button._state == "disabled"
@@ -126,7 +127,7 @@ def lined_up_pair(p):
 
 
 def test_the_box_play_and_embellish_share_the_row_in_equal_thirds(app, ui):
-    """Ben, 10 Nov 2026: the Playlist box, Play and Play & Embellish are three equal widths, from the box's left
+    """Ben, 10 Nov 2026: the Playlist box, Play and Embellish are three equal widths, from the box's left
     edge to the end of the row's last playlist clear of Output, and the box stands nearer the buttons' height.
     Before (7 Nov) each button matched the one under it and the box was twice as wide as either."""
     p = lists_tab(ui)
@@ -145,4 +146,117 @@ def test_the_box_play_and_embellish_share_the_row_in_equal_thirds(app, ui):
         assert emb.winfo_rootx() + widths[2] <= p.output_box.winfo_rootx(), "Output stays clear"
         assert 0.75 * play.winfo_height() <= box.winfo_height() < play.winfo_height(), \
             (box.winfo_height(), play.winfo_height())
+    assert not ui.errors, ui.errors[0]
+
+
+def row_texts(pop):
+    return [row.itemcget(row._text_id, "text") for _, row in pop._rows]
+
+
+def headings(pop):
+    return [w.cget("text") for w in pop.winfo_children()[0].winfo_children() if isinstance(w, tk.Label)]
+
+
+def type_in(ui, p, text):
+    p.playlist_entry.delete(0, "end")
+    p.playlist_entry.insert(0, text)
+    p._playlists_typed(type("E", (), {"keysym": "a"})())
+    ui.pump(0.2)
+
+
+def test_play_and_embellish_are_outlined_in_the_accent_with_no_bar(app, ui):
+    """Ben, 12 Nov 2026: like Clear Playing Now, the accent's edge and text, and Embellish, not Play & Embellish."""
+    import tabs
+    p = lists_tab(ui)
+    for b in (p.play_list_button, p.embellish_button):
+        assert b._quiet and b._armed == tabs.PALETTE["button_fg"], b
+    assert p.embellish_button._label.cget("text") == "Embellish"
+    assert not ui.errors, ui.errors[0]
+
+
+def test_albums_only_once_something_is_typed_and_an_artist_lists_theirs(app, ui):
+    import library
+    library.load()
+    p = lists_tab(ui)
+    p._open_playlists()
+    ui.pump(0.2)
+    assert not any(it.get("kind") == "album" for it, _ in p._playlists_pop._rows), "the empty box: no albums"
+    assert "Sunday Morning (playlist)" in row_texts(p._playlists_pop)
+    type_in(ui, p, "beatles")
+    pop = p._playlists_pop
+    assert row_texts(pop) == ["Abbey Road \u00b7 The Beatles (album)", "Help! \u00b7 The Beatles (album)",
+                              "Revolver \u00b7 The Beatles (album)"], row_texts(pop)
+    assert "ALBUMS" in headings(pop) and "PLAYLISTS" not in headings(pop) and "ALL PLAYLISTS" not in headings(pop)
+    type_in(ui, p, "greatest")
+    assert row_texts(p._playlists_pop) == ["Greatest Hits \u00b7 Queen (album)",
+                                           "Greatest Hits \u00b7 The Hollies (album)"]
+    type_in(ui, p, "zzz")
+    assert "No album or playlist has that in its name." in headings(p._playlists_pop)
+    p._close_playlists()
+    assert not ui.errors, ui.errors[0]
+
+
+def test_an_album_picked_changes_the_menus_and_plays_in_order(app, ui):
+    import embellish
+    import library
+    library.load()
+    p = lists_tab(ui)
+    type_in(ui, p, "abbey")
+    p._pick_first_playlist()
+    ui.pump(0.2)
+    assert p.playlist_entry.get() == "Abbey Road \u00b7 The Beatles"
+    p._choice_menu("amount")
+    ui.pump(0.2)
+    rows = p._children_popup._rows
+    assert [c for c, _, _ in rows] == ["with_hits", "and_hits", "p10", "p20", "p50", "double", "triple", "out"]
+    assert [c for c, _, m in rows if m] == ["with_hits"], "With Their Hits is an album's default to start"
+    p._close_children()
+    p._choice_menu("order")
+    ui.pump(0.2)
+    assert [c for c, _, m in p._children_popup._rows if m] == ["ordered"], "an album starts in order"
+    p._choose("order", "shuffled")
+    assert embellish.choices()["album_order"] == "shuffled" and embellish.choices()["order"] == "shuffled"
+    embellish.set_choice("album_order", "ordered")
+    p.play_list_button._command()
+    ui.wait_idle()
+    keys = library.album_keys("Abbey Road", "The Beatles")
+    assert app.jriver.zone("Speakers").playlist == keys, console(ui)
+    assert "Play: Abbey Road by The Beatles, 7 tracks, in order." in console(ui)
+    p.playlist_entry.delete(0, "end")
+    p._open_playlists()
+    ui.pump(0.2)
+    assert row_texts(p._playlists_pop)[0] == "Abbey Road \u00b7 The Beatles (album)", "on the recent list"
+    p._close_playlists()
+    assert not ui.errors, ui.errors[0]
+
+
+def test_embellish_an_album_with_their_hits(app, ui):
+    import library
+    library.load()
+    app.web.plays["The Beatles"] = [{"Come Together": 10000, "Yesterday": 9000}.get(n, 100)
+                                    for n in app.web.top_tracks("The Beatles")]
+    p = lists_tab(ui)
+    type_in(ui, p, "abbey")
+    p._pick_first_playlist()
+    p.embellish_button._command()
+    ui.wait_idle()
+    z = app.jriver.zone("Speakers").playlist
+    assert "Embellish: Abbey Road by The Beatles, 7 tracks, With Their Hits." in console(ui), console(ui)
+    assert len(z) == 8 and z[0] == library.album_keys("Abbey Road", "The Beatles")[0]
+    assert not ui.errors, ui.errors[0]
+
+
+def test_typed_in_full_without_picking(app, ui):
+    import library
+    library.load()
+    p = lists_tab(ui)
+    p.playlist_entry.insert(0, "Revolver")
+    assert p._chosen_playlist() == {"kind": "album", "Name": "Revolver", "Artist": "The Beatles"}
+    p.playlist_entry.delete(0, "end")
+    p.playlist_entry.insert(0, "Greatest Hits")
+    assert p._chosen_playlist() is None
+    assert "More than one album or playlist is called Greatest Hits" in ui.answers[-1][1][1]
+    p.playlist_entry.delete(0, "end")
+    p.playlist_entry.insert(0, "Greatest Hits \u00b7 Queen")
+    assert p._chosen_playlist()["Artist"] == "Queen"
     assert not ui.errors, ui.errors[0]
