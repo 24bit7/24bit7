@@ -108,10 +108,12 @@ def test_play_ordered_and_shuffled(app):
 
 def test_recent_and_the_arrows_choices_are_remembered(app):
     import embellish
-    assert embellish.choices() == {"order": "shuffled", "amount": "p50"}
+    assert embellish.choices() == {"order": "shuffled", "amount": "p50", "album_order": "ordered",
+                                   "album_amount": "with_hits"}, "an album's apart (12 Nov 2026)"
     embellish.set_amounts(default="double")
     embellish.set_choice("order", "ordered")
-    assert embellish.choices() == {"order": "ordered", "amount": "double"}
+    assert embellish.choices() == {"order": "ordered", "amount": "double", "album_order": "ordered",
+                                   "album_amount": "with_hits"}
     for pid in ("201", "202", "203", "204", "205", "201"):
         embellish.note_recent({"ID": pid, "Name": pid}, "played")
     ids = [x["id"] for x in embellish.recent()]
