@@ -1187,6 +1187,24 @@ def test_review_has_no_status_line(app, ui):
     assert not ui.play.review_panel.status_label.winfo_manager()
 
 
+def test_review_found_by_column_and_its_note(app, ui):
+    """12 Nov 2026: Why is this here? The Found By column, and resting on it gives the sentence, Play help on or off."""
+    panel = ui.play.review_panel
+    keys = [str(r["Key"]) for r in app.jriver.by_key.values()][:2]
+    rows = [{"key": keys[0], "artist": "Air", "title": "La Femme d'Argent", "album": "", "seconds": 300, "bpm": "",
+             "why": "Last.fm", "why_more": "Last.fm named Air as like Moby - Porcelain."},
+            {"key": keys[1], "artist": "Moby", "title": "Porcelain", "album": "", "seconds": 240, "bpm": "",
+             "why": "", "why_more": ""}]
+    panel.load(rows, "Similar Artists: Moby - Porcelain")
+    ui.pump(0.3)
+    heads = [w.cget("text") for w in panel.grid.grid_slaves(row=0)]
+    assert "Found By" in heads
+    first, second = panel._cells[keys[0]][1][-1], panel._cells[keys[1]][1][-1]
+    assert first.cget("text") == "Last.fm" and second.cget("text") == ""
+    assert first._tooltip.text == "Last.fm named Air as like Moby - Porcelain." and first._tooltip.when()
+    assert not getattr(second, "_tooltip", None), "no note where there's nothing to say"
+
+
 def test_review_rows_alternate_shading(app, ui):
     keys = _review_with_zone(app, ui, _album(app))
     panel = ui.play.review_panel

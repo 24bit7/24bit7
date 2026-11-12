@@ -4718,6 +4718,7 @@ REVIEW_KEYS = []         # the tracks a Review build found, in order, for the Re
 REVIEW_ZONE = None       # the zone they'd go to (the Output zone)
 TOP_UP = False           # True while an app build runs as a Top-Up (the More Options row, Ben, 5 Nov 2026)
 REVIEW_HAVE = None       # a Top-Up in Review: what the zone's Playing Now already holds, read once per build
+REVIEW_SINCE = 0         # the last session before this Review build: its own come after (Review's Found By)
 
 
 def review_reset():
@@ -4725,6 +4726,10 @@ def review_reset():
     globals()["REVIEW_KEYS"] = []
     globals()["REVIEW_ZONE"] = None
     globals()["REVIEW_HAVE"] = None
+    try:
+        globals()["REVIEW_SINCE"] = db().execute("SELECT COALESCE(MAX(id), 0) FROM sessions").fetchone()[0]
+    except Exception:
+        globals()["REVIEW_SINCE"] = 0
 
 
 def top_up_merge(keys, zone, more=False):
@@ -4801,7 +4806,69 @@ def review_rows(keys):
             bpm = ""
         rows.append({"key": str(k), "artist": row.get("Artist", ""), "title": row.get("Name", "") or f"Track {k}",
                      "album": row.get("Album", ""), "seconds": seconds, "bpm": bpm})
+    try:
+        why = review_why(rows)
+    except Exception:
+        why = {}
+    for r in rows:
+        r["why"], r["why_more"] = why.get(r["key"], ("", ""))
     return rows
+
+
+FEATURE_SOURCES = ("Embellish", "Radio", "Blend")   # what those features log as Sources, in place of a source
+
+
+def _why(sources, seed, artist, session, mode, track=""):
+    """(short, sentence) for one found track: the Found By column and its note. session: (seed artist, track)."""
+    s_artist, s_track = session
+    seed = seed or (f"{s_artist} - {s_track}" if s_artist and s_track else (s_artist or s_track or ""))
+    if sources == "seed" and track and s_track and clean_name(track) == clean_name(s_track):
+        return "Seed", t("The track you started from.")
+    if sources == "seed":
+        return t("Seed artist"), t("One of {artist}'s own top tracks: the seed's artist.", artist=artist)
+    if sources == "Deep Cuts":
+        return "Deep Cuts", t("Deep Cuts: one you've played least, from the genre most of the playlist shares.")
+    if sources == "AI":
+        if mode == "vibe" and s_track:
+            return t("AI"), t("The AI's pick for {vibe}.", vibe=s_track)
+        return t("AI"), t("The AI's pick.")
+    if sources in FEATURE_SOURCES:
+        return sources, t("Added by {feature}, from artists like the ones in {name}.", feature=sources,
+                          name=s_track or seed)
+    if mode == "top_tracks":
+        return sources, t("One of {artist}'s top tracks on {sources}.", artist=artist, sources=sources)
+    if mode in ("similar_tracks",) and seed:
+        return sources, t("{sources} named it as like {seed}.", sources=sources, seed=seed)
+    if seed:
+        return sources, t("{sources} named {artist} as like {seed}.", sources=sources, artist=artist, seed=seed)
+    return sources, t("Found by {sources}.", sources=sources)
+
+
+def review_why(rows, since=None):
+    """
+    Review's Found By (12 Nov 2026): {key: (short, sentence)}, which sources named each track in this build and
+    from what seed, read back from what Discover recorded for the build's own sessions. A track matched by key,
+    or by its artist and title when Skip Recent picked another copy you own; the first record wins.
+    """
+    import library
+    since = REVIEW_SINCE if since is None else since
+    found = db().execute(
+        "SELECT d.artist, d.track, d.sources, d.seed, s.seed_artist, s.seed_track, s.mode FROM discoveries d "
+        "JOIN sessions s ON s.id = d.session_id WHERE d.session_id > ? AND d.found = 1 ORDER BY d.id",
+        (since,)).fetchall()
+    by_key, by_name = {}, {}
+    for artist, track, sources, seed, s_artist, s_track, mode in found:
+        why = _why(sources or "", seed, artist, (s_artist or "", s_track or ""), mode, track)
+        by_name.setdefault((library.norm(artist), library.norm(track)), why)
+        key = library.find_track_key(artist, track)
+        if key:
+            by_key.setdefault(str(key), why)
+    out = {}
+    for r in rows:
+        why = by_key.get(r["key"]) or by_name.get((library.norm(r.get("artist", "")), library.norm(r.get("title", ""))))
+        if why:
+            out[r["key"]] = why
+    return out
 
 
 REVIEW_ACTIONS = {

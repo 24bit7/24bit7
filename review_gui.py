@@ -91,7 +91,9 @@ CLOSE_TIP = N_("Closes Review: the list goes, and the console comes back cleared
 
 # (title, width in characters, stretch): Artist, Title and Album share the spare room
 COLUMNS = [(N_("Add"), 4, 0), (N_("Artist"), 18, 2), (N_("Title"), 24, 3), (N_("Album"), 18, 2), (N_("Time"), 6, 0),
-           ("BPM", 5, 0)]
+           ("BPM", 5, 0), (N_("Found By"), 14, 1)]
+FOUND_BY_TIP = N_("Which sources named each track for this build, and from what seed. Rest on a track's entry "
+                  "for the whole story.")
 
 
 def clock(seconds):
@@ -597,6 +599,8 @@ class ReviewPanel:
             head.grid(row=0, column=c, sticky="ew", pady=(7, 5))
             if title == "BPM":   # where the figures come from, and how to get them
                 Tooltip(head, t(BPM_TIP), click=False, when=self._notes_on, wrap=self._note_wrap)
+            if title == "Found By":
+                Tooltip(head, t(FOUND_BY_TIP), click=False, when=self._notes_on, wrap=self._note_wrap)
         tk.Frame(self.grid, bg=p["line"], height=1).grid(row=1, column=0, columnspan=len(columns), sticky="ew")
         r = 2
         for row in self.rows:
@@ -605,14 +609,17 @@ class ReviewPanel:
                             cursor="hand2")
             tick.grid(row=r, column=0, sticky="nsew", padx=0, pady=0, ipady=3)
             values = (row.get("artist", ""), row.get("title", ""), row.get("album", ""),
-                      clock(row.get("seconds")), row.get("bpm", ""))
+                      clock(row.get("seconds")), row.get("bpm", ""), row.get("why", ""))
             texts = []
             for c, value in enumerate(values, start=1):
                 cell = tk.Label(self.grid, text=value, font=self._font(), bg=p["bg"],
                                 fg=p["text"] if c <= 2 else p["muted"],
-                                cursor="hand2", padx=4, pady=3, width=COLUMNS[c][1], anchor="e" if c >= 4 else "w")
+                                cursor="hand2", padx=4, pady=3, width=COLUMNS[c][1],
+                                anchor="e" if c in (4, 5) else "w")
                 cell.grid(row=r, column=c, sticky="nsew")   # no gaps, so a ticked row shades as one band
                 texts.append(cell)
+            if row.get("why_more"):   # Why is this here? Always shown: it's the answer, not help
+                Tooltip(texts[-1], row["why_more"], click=False, wrap=self._note_wrap)
             for w in [tick] + texts:   # the whole row is the target: tick or untick
                 w.bind("<Button-1>", lambda e, k=key: self.toggle(k))
             self._cells[key] = (tick, texts)

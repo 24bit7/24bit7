@@ -1837,5 +1837,19 @@
   "Zone:": "Zone:",
   "Asking Last.fm for the artists' tags...": "Last.fm wird nach den Tags der Künstler gefragt...",
   "No sound is shared by three or more of these artists.": "Kein Sound wird von drei oder mehr dieser Künstler geteilt.",
-  "Fewer": "Weniger"
+  "Fewer": "Weniger",
+  "Found By": "Gefunden von",
+  "Which sources named each track for this build, and from what seed. Rest on a track's entry for the whole story.": "Welche Quellen jeden Titel für diese Playlist genannt haben und von welchem Seed aus. Bleib mit der Maus auf dem Eintrag eines Titels, um alles zu sehen.",
+  "Seed artist": "Seed-Künstler",
+  "One of {artist}'s own top tracks: the seed's artist.": "Einer der eigenen Top-Titel von {artist}: der Künstler des Seeds.",
+  "Deep Cuts: one you've played least, from the genre most of the playlist shares.": "Deep Cuts: einer, den du am wenigsten gespielt hast, aus dem Genre, das der größte Teil der Playlist teilt.",
+  "AI": "KI",
+  "The AI's pick for {vibe}.": "Die Wahl der KI für {vibe}.",
+  "The AI's pick.": "Die Wahl der KI.",
+  "Added by {feature}, from artists like the ones in {name}.": "Von {feature} hinzugefügt, von Künstlern wie denen in {name}.",
+  "One of {artist}'s top tracks on {sources}.": "Einer der Top-Titel von {artist} bei {sources}.",
+  "{sources} named it as like {seed}.": "{sources} hat ihn als ähnlich zu {seed} genannt.",
+  "{sources} named {artist} as like {seed}.": "{sources} hat {artist} als ähnlich zu {seed} genannt.",
+  "Found by {sources}.": "Gefunden von {sources}.",
+  "The track you started from.": "Der Titel, mit dem du angefangen hast."
 }
