@@ -24,7 +24,7 @@ def off(widget):
 
 
 def greyed(line):
-    return off(line["shuffle_box"]) and off(line["deep_box"]) and off(line["mod_box"]) and off(line["share_box"])
+    return off(line["shuffle_box"]) and off(line["deep_box"]) and off(line["mod_box"]) and off(line["share_box"]) and off(line["nonstop_box"])
 
 
 def pick(ui, line, name, value):
@@ -134,3 +134,20 @@ def test_the_moderator_rests_until_the_ai_is_set_up(app, ui):
     s._embellish_refresh()
     assert not off(lines[None]["mod_box"])
     assert not ui.errors, ui.errors[0]
+
+
+def test_non_stop_is_a_column_of_its_own(app, ui):
+    """12 Nov 2026: Non-stop beside Shuffle, Deep Cuts and the Moderator, greyed with the rest while the tick is on."""
+    import embellish
+    s, lines = table(ui)
+    assert "Non-stop" in labels(s)
+    assert greyed(lines["triple"]) and not off(lines[None]["nonstop_box"])
+    the_tick(lines[None]).invoke()
+    ui.pump(0.2)
+    line = lines["triple"]
+    assert not off(line["nonstop_box"])
+    line["nonstop"].set("Similar tracks")
+    line["nonstop_box"].event_generate("<<ComboboxSelected>>")
+    ui.pump(0.2)
+    assert embellish.row_for("triple")["nonstop"] == "tracks"
+    assert embellish.row_for("double")["nonstop"] == embellish.settings()["all_row"]["nonstop"]

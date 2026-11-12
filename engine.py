@@ -1208,6 +1208,8 @@ def nonstop_record(zone, keys, append=False, **fields):
                      "stage": "first", "fired": None, "original": set(), "seeded": set()}
             entry.update(fields)
             entry["origin"] = entry.get("kind")   # its Non-stop settings come from the button it started as
+            if "own_nonstop" in ctx and not fields:   # Play & Embellish's Non-stop column (12 Nov 2026)
+                entry.update(kind="saved", origin="saved", stage="after", saved_cfg=ctx["own_nonstop"])
             NONSTOP_ZONES[zone] = entry
         elif NONSTOP_APPEND and ctx.get("kind") and entry.get("build") != ctx.get("build"):
             # a top-up build: from here on the zone carries on as that kind of playlist

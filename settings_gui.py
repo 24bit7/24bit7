@@ -3562,7 +3562,8 @@ class SettingsTab(tk.Frame):
                         "tracks woven in. Deep Cuts adds tracks you've played least, from the genre most of the "
                         "playlist shares, spaced through it or shuffled in; the percentage is how many, as a share "
                         "of what Embellish added. The Moderator checks the new tracks against the playlist and "
-                        "removes any that clash, which uses AI credits.\n"
+                        "removes any that clash, which uses AI credits. Non-stop adds more when the playlist "
+                        "reaches its last track, from artists or tracks like the one playing.\n"
                         "Ticked, Use the same settings for every amount runs every amount from the All amounts "
                         "row. Unticked, each amount has a row of its own, a copy of that one until you change it."))
         one = tk.BooleanVar(value=embellish.settings()["all"] == "1")
@@ -3583,7 +3584,8 @@ class SettingsTab(tk.Frame):
                     line["deep_cuts"].set(option_label(DEVICE_DEEP_CUTS, row["deep_cuts"]))
                     line["deep_share"].set(row["deep_share"])
                     line["moderator"].set(row["moderator"].title())
-                    for name in ("shuffle_box", "deep_box"):
+                    line["nonstop"].set(option_label(SAVED_NONSTOP_OPTIONS, row["nonstop"]))
+                    for name in ("shuffle_box", "deep_box", "nonstop_box"):
                         line[name].state(["!disabled"] if live else ["disabled"])
                     line["mod_box"].state(["!disabled"] if live and ai else ["disabled"])
                     line["share_box"].config(state="readonly" if live and row["deep_cuts"] != "off" else "disabled")
@@ -3603,7 +3605,8 @@ class SettingsTab(tk.Frame):
                 warn_moderator_once(self)
             embellish.set_row(amount, shuffle="1" if line["shuffle"].get() else "0",
                               deep_cuts=option_code(DEVICE_DEEP_CUTS, line["deep_cuts"].get()),
-                              deep_share=line["deep_share"].get(), moderator=level)
+                              deep_share=line["deep_share"].get(), moderator=level,
+                              nonstop=option_code(SAVED_NONSTOP_OPTIONS, line["nonstop"].get()))
             refresh()
 
         def one_toggled():
@@ -3611,10 +3614,10 @@ class SettingsTab(tk.Frame):
             refresh()
 
         ttk.Checkbutton(box, text=t("Use the same settings for every amount"), variable=one,
-                        command=one_toggled).grid(row=0, column=0, columnspan=6, sticky="w", pady=(0, 8))
+                        command=one_toggled).grid(row=0, column=0, columnspan=7, sticky="w", pady=(0, 8))
         heads = {}
-        for c, text in enumerate((N_("In the Menu"), N_("Default"), N_("Shuffle"), "Deep Cuts", N_("Moderator")),
-                                 start=1):
+        for c, text in enumerate((N_("In the Menu"), N_("Default"), N_("Shuffle"), "Deep Cuts", N_("Moderator"),
+                                  N_("Non-stop")), start=1):
             heads[text] = tk.Label(box, text=t(text), font=HELP_FONT,
                                    fg=PALETTE["ai_purple"] if text == "Moderator" else PALETTE["help_fg"])
             heads[text].grid(row=1, column=c, sticky="w", padx=(22, 0))
@@ -3623,7 +3626,7 @@ class SettingsTab(tk.Frame):
         def controls(r, amount):
             """Shuffle, Deep Cuts with its share, and the Moderator for one line of the table."""
             line = {"shuffle": tk.BooleanVar(), "deep_cuts": tk.StringVar(), "deep_share": tk.StringVar(),
-                    "moderator": tk.StringVar(), "live": True}
+                    "moderator": tk.StringVar(), "nonstop": tk.StringVar(), "live": True}
             line["shuffle_box"] = ttk.Checkbutton(box, variable=line["shuffle"], command=lambda: store(amount))
             line["shuffle_box"].grid(row=r, column=3, sticky="w", padx=(30, 0))
             cell = tk.Frame(box)
@@ -3642,7 +3645,12 @@ class SettingsTab(tk.Frame):
             mod.grid(row=r, column=5, sticky="w", padx=(22, 0))
             mod.bind("<<ComboboxSelected>>", lambda e: (mod.selection_clear(), store(amount)))
             Tooltip(mod, t(NO_KEY_TEXT), when=lambda: line["live"] and not self._ai_set_up())
-            line["deep_box"], line["mod_box"] = deep, mod
+            ns_values = [t(shown) for _, shown in SAVED_NONSTOP_OPTIONS]
+            ns = TCombobox(box, textvariable=line["nonstop"], values=ns_values, state="readonly",
+                           width=max(len(v) for v in ns_values) + 2)
+            ns.grid(row=r, column=6, sticky="w", padx=(22, 0))
+            ns.bind("<<ComboboxSelected>>", lambda e: (ns.selection_clear(), store(amount)))
+            line["deep_box"], line["mod_box"], line["nonstop_box"] = deep, mod, ns
             lines[amount] = line
             return line
 

@@ -47,7 +47,8 @@ def test_one_row_serves_every_amount_to_start_and_it_shuffles(app):
     import embellish
     s = embellish.settings()
     assert s["all"] == "1" and s["rows"] == {}
-    assert s["all_row"] == {"shuffle": "1", "deep_cuts": "off", "deep_share": "10", "moderator": "off"}
+    assert s["all_row"] == {"shuffle": "1", "deep_cuts": "off", "deep_share": "10", "moderator": "off",
+                            "nonstop": embellish._nonstop_was()}
     for amount in embellish.AMOUNTS:
         assert embellish.row_for(amount) == s["all_row"]
 
@@ -69,8 +70,8 @@ def test_an_amount_has_its_own_row_once_the_tick_is_off(app):
     s = embellish.settings()
     assert set(s["rows"]) == {"triple"}
     triple = embellish.row_for("triple")
-    assert triple == {"shuffle": "0", "deep_cuts": "spaced", "deep_share": "30", "moderator": "relaxed"}, \
-        "what a row doesn't say comes from the All amounts row, and the share is in tens"
+    assert triple == {"shuffle": "0", "deep_cuts": "spaced", "deep_share": "30", "moderator": "relaxed",
+                      "nonstop": "no"}, "what a row doesn't say comes from the All amounts row, and the share is in tens"
     assert embellish.row_for("double") == s["all_row"], "an amount with no row starts as a copy of All amounts"
     embellish.set_settings(dict(s, all="1"))
     assert embellish.row_for("triple") == s["all_row"], "ticked again, every amount runs the one row"
@@ -82,7 +83,7 @@ def test_the_tables_tick_and_a_changed_line(app):
     own from then on."""
     import embellish
     embellish.set_row(None, moderator="relaxed", deep_cuts="spaced", deep_share="30")
-    one = {"shuffle": "1", "deep_cuts": "spaced", "deep_share": "30", "moderator": "relaxed"}
+    one = {"shuffle": "1", "deep_cuts": "spaced", "deep_share": "30", "moderator": "relaxed", "nonstop": "no"}
     assert embellish.row_for("triple") == one
     embellish.use_one_row(False)
     s = embellish.settings()
@@ -240,3 +241,67 @@ def test_the_voice_path_shuffles_with_nothing_saved(app, monkeypatch):
     ok, what = sp.play(j.playlists[0], j.zone("Kitchen").id)
     assert ok and what.endswith(", shuffled"), what
     assert j.zone("Kitchen").playlist == list(reversed(j.playlists[0]["keys"]))
+
+
+# --- Non-stop: the fourth column (12 Nov 2026) ----------------------------------------------------------------
+
+def nonstop_entry(app, z):
+    entries = [e for e in app.engine.NONSTOP_ZONES.values() if set(z) & e["keys"]]
+    assert len(entries) == 1
+    return entries[0]
+
+
+def standard_nonstop(app, on, using="artists"):
+    import buttons
+    std = buttons.standard("artists")
+    std.setdefault("settings", {}).update(NONSTOP_ARTISTS="1" if on else "0", NONSTOP_ARTISTS_USING=using)
+    buttons.save([std if b.get("id") == std.get("id") else b for b in buttons.load()])
+
+
+def test_the_column_starts_as_artist_matchings_non_stop_did(app):
+    """Before the column, an Embellish carried on as the standard Artist Matching playlist's Non-stop said."""
+    import embellish
+    standard_nonstop(app, True, "tracks")
+    assert embellish._nonstop_was() == "tracks"
+    embellish._set_meta(embellish.SETTINGS_KEY, {"all": "1", "all_row": {"shuffle": "0"}, "rows": {}})   # 1.34's
+    assert embellish.settings()["all_row"]["nonstop"] == "tracks", "nobody's Embellish changes at the upgrade"
+    standard_nonstop(app, False)
+    assert embellish.settings()["all_row"]["nonstop"] == "tracks", "once: from then on it's the column's"
+    assert embellish._nonstop_was() == "no"
+
+
+def test_non_stop_follows_the_column_not_artist_matching(app):
+    import embellish
+    import nonstop
+    standard_nonstop(app, True)
+    embellish.set_settings({"all": "1", "all_row": {"nonstop": "no"}})
+    r, z, yours = run(app)
+    assert not nonstop.config_for("Speakers", nonstop_entry(app, z)).get("on"), r.text()
+    embellish.set_settings({"all": "1", "all_row": {"nonstop": "tracks"}})
+    r, z, yours = run(app)
+    entry = nonstop_entry(app, z)
+    assert entry["origin"] == "saved" and entry["saved_cfg"] == {"using": "tracks", "reseed": "last"}
+    assert nonstop.config_for("Speakers", entry).get("on")
+
+
+def test_each_amount_has_its_own_non_stop(app):
+    import embellish
+    embellish.set_settings({"all": "0", "all_row": {"nonstop": "no"}, "rows": {"double": {"nonstop": "artists"}}})
+    r, z, yours = run(app, "p50")
+    assert nonstop_entry(app, z)["saved_cfg"] is None
+    r, z, yours = run(app, "double")
+    assert nonstop_entry(app, z)["saved_cfg"] == {"using": "artists", "reseed": "last"}
+
+
+def test_the_more_options_switch_beats_the_column(app):
+    import embellish
+    import overrides
+    import playmix
+    embellish.set_settings({"all": "1", "all_row": {"nonstop": "tracks"}})
+    playmix.set_open(True)
+    overrides.set_switch("nonstop", "off")
+    r, z, yours = run(app)
+    assert nonstop_entry(app, z)["saved_cfg"] is None, r.text()
+    overrides.set_switch("nonstop", "tight")
+    r, z, yours = run(app)
+    assert nonstop_entry(app, z)["saved_cfg"] == {"using": "tracks", "reseed": "whole"}, "Keep It Tight: the playlist"

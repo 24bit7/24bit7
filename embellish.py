@@ -52,7 +52,8 @@ RECENT = 5          # the most recent shown at the top of the list
 RECENT_KEY = "jriver_playlists_recent"
 CHOICE_KEY = "jriver_playlists_choices"
 SETTINGS_KEY = "embellish_settings"   # {"all": "1" or "0", "all_row": row, "rows": {amount: row}}
-DEFAULT_ROW = {"shuffle": "1", "deep_cuts": "off", "deep_share": "10", "moderator": "off"}
+DEFAULT_ROW = {"shuffle": "1", "deep_cuts": "off", "deep_share": "10", "moderator": "off", "nonstop": "no"}
+NONSTOP_USING = ("no", "artists", "tracks")   # the Non-stop column (12 Nov 2026), as a JRiver playlist's row has it
 REFERENCE = 15      # the playlist's own tracks shown to the Moderator as what fits
 
 
@@ -141,7 +142,25 @@ def _tidy_row(row, base):
     out["deep_share"] = str(min(100, max(10, share - share % 10)))
     if out.get("moderator") not in engine.MODERATOR_LEVELS:
         out["moderator"] = "off"
+    if out.get("nonstop") not in NONSTOP_USING:
+        out["nonstop"] = "no"
     return out
+
+
+def _nonstop_was():
+    """
+    What Non-stop did after an Embellish before the column (12 Nov 2026): the standard Artist Matching playlist's
+    Non-stop. The column starts from it, once, so nobody's Embellish changes at the upgrade.
+    """
+    try:
+        import buttons
+        std = buttons.standard("artists")
+        cfg = buttons.nonstop_own(std) if std is not None else {"on": False}
+    except Exception:
+        return "no"
+    if not cfg.get("on"):
+        return "no"
+    return cfg.get("using") if cfg.get("using") in ("artists", "tracks") else "artists"
 
 
 def _tidy(data):
@@ -156,18 +175,26 @@ def settings():
     """
     {"all": "1" while one row serves every amount (the default), "all_row": that row, "rows": {amount: its own}}.
     A row is {"shuffle", "deep_cuts" (off, spaced or shuffled), "deep_share" (what Deep Cuts top up by, ten to a
-    hundred per cent of what Embellish adds), "moderator" (a level)}. Before this table Embellish followed Play's
+    hundred per cent of what Embellish adds), "moderator" (a level), "nonstop" (no, artists or tracks: what's
+    added when the playlist reaches its last track)}. Before this table Embellish followed Play's
     arrow, so the first read keeps that order as the All amounts row's Shuffle, once: nobody's Embellish changes
     at the upgrade, and from then on the arrow is Play's alone.
     """
     saved = _meta(SETTINGS_KEY, None)
     if not isinstance(saved, dict):
         was = _meta(CHOICE_KEY, {}).get("order")
-        saved = {"all": "1", "all_row": dict(DEFAULT_ROW, shuffle="0" if was == "ordered" else "1"), "rows": {}}
+        saved = {"all": "1", "all_row": dict(DEFAULT_ROW, shuffle="0" if was == "ordered" else "1",
+                                             nonstop=_nonstop_was()), "rows": {}}
         try:
             _set_meta(SETTINGS_KEY, saved)
         except Exception:
             pass   # the database can't be written just now: the same answer is worked out next time
+    elif "nonstop" not in (saved.get("all_row") or {}):   # saved before the Non-stop column: it starts as it was
+        saved = dict(saved, all_row=dict(saved.get("all_row") or {}, nonstop=_nonstop_was()))
+        try:
+            _set_meta(SETTINGS_KEY, saved)
+        except Exception:
+            pass
     return _tidy(saved)
 
 
@@ -218,7 +245,26 @@ def _plan(amount, report):
         on = overrides.switches()
         report(t("More Options: {switches}, over this playlist's own settings.", switches=overrides.summary()))
         row["moderator"], row["deep_cuts"] = on["moderator"], on["deep_cuts"]
+        row["nonstop_mode"] = on["nonstop"]
     return row
+
+
+def nonstop_cfg(row):
+    """
+    Non-stop after this Embellish, as Non-stop reads a JRiver playlist's ({"using", "reseed"}), or None for none.
+    The row's column plays on from the last track; the More Options switch, while its row is open, turns it off,
+    or on with Wander (from the last track) or Keep It Tight (from the playlist), using the row's kind or artists.
+    """
+    using = row.get("nonstop", "no")
+    mode = row.get("nonstop_mode")
+    if mode == "off":
+        return None
+    if mode in ("tight", "journey"):
+        return {"using": using if using in ("artists", "tracks") else "artists",
+                "reseed": "whole" if mode == "tight" else "last"}
+    if using not in ("artists", "tracks"):
+        return None
+    return {"using": using, "reseed": "last"}
 
 
 # --- the build ------------------------------------------------------------------------------------
@@ -501,6 +547,7 @@ def embellish(playlist, order, amount, report):
     level = row["moderator"]
     can_moderate = level != "off" and engine.ai_configured() and engine.USE_AI
     session_id = engine.session_start("embellish", {"Artist": "", "Name": name})
+    engine.NONSTOP_CONTEXT["own_nonstop"] = nonstop_cfg(row)   # the Non-stop column, not Artist Matching's
     # Fast start (10 Nov 2026): the playlist's own first track leads whatever is added, so on a stopped zone it
     # plays now and the rest follows it in when the build is done. One artist: nothing to build, nothing started.
     fast = engine.FastStart(None, report, enabled=artists > 1)
