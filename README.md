@@ -310,7 +310,15 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.35.0
+## What's new in 1.36.0
+
+- **Albums on the Play tab.** The JRiver Playlists tab is now **Playlists & Albums**: type part of a name to find an album or a playlist, or an artist's name for their albums. Play plays an album in order to start.
+- **Embellish an album** (Play & Embellish is now **Embellish**): **With Their Hits** shuffles the artist's widely played songs from their other albums through it, **And Their Hits** plays them after it, biggest first, and the amounts work on albums too.
+- **One artist is no longer a dead end.** An album, or a playlist of one artist, is embellished from the artist and two of the five artists most like them, picked at random each time.
+- **Use Adaptive Selections**, on to start: a one-hit wonder gives you its hit, not the rest, by Last.fm's play counts. It only ever takes fewer.
+- Play and Embellish are outlined like Clear Playing Now, and Play has no Non-stop of its own: More Options' switch turns it on.
+
+### Earlier: 1.35.0
 
 - **Review says why each track is there.** A **Found By** column names the sources that suggested it, or Seed, Deep Cuts or AI; rest the pointer on it for the whole story, such as "Last.fm named Staind as like 3 Doors Down - When I'm Gone."
 - **The Moderator works again with Anthropic**, now on Claude Haiku 5.5, at about a tenth of the cost. Since October every check had stopped before it was sent, while the Log said "0 removed"; it now says "didn't run" for those builds.
