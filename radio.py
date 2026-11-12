@@ -969,17 +969,35 @@ def join_new_artists(report, limit=10):
 
 # --- a build ----------------------------------------------------------------------------------------
 
-def _owned_top(artist, have, played, limit, pool=None, seen=None):
+def _owned_top(artist, have, played, limit, pool=None, seen=None, report=None):
     """
     An artist's top tracks you own, then your most played of theirs, up to limit. pool: pick limit at
     random from the owned ones among the artist's top pool (Radio's page: "pick 3 of each artist's top 5"),
     as Artist Matching does; None takes them in the sources' order (a pillar's own songs: its best known).
     seen(title, found): told about each of the pool's tracks as it's looked up, hit or miss (the console and
     Discover, 10 Nov 2026); what's taken beyond the pool, or from your own most played, isn't a suggestion.
+    report: Use Adaptive Selections (12 Nov 2026) for the agreeing artists: the pool and the pick shrink to the
+    artist's widely played songs, and nothing is taken beyond them.
     """
     import library
     out = []
     top, _label = engine.blended_top_tracks(artist, limit=max(limit, pool or 0, engine.TRACKS_PER_ARTIST_POOL))
+    if pool and report is not None:
+        titles, cut = engine.adaptive_cut(artist, [title for title, _ in top[:pool]], limit, report)
+        if len(titles) < len(top[:pool]):
+            top, pool, limit = top[:len(titles)], len(titles), cut
+            if not top:
+                return []
+            owned = []
+            for title, _sources in top:
+                key = library.find_track_key(artist, title)
+                if seen is not None:
+                    seen(title, bool(key))
+                key = played.pick(key) if key and str(key) not in have else None
+                if key and str(key) not in have and str(key) not in owned:
+                    owned.append(str(key))
+            random.shuffle(owned)
+            return owned[:limit]
     if pool:
         owned = []
         for title, _sources in top[:pool]:
@@ -1084,7 +1102,7 @@ def find(lane_, report, minutes=TARGET_MINUTES, avoid=(), own=None, first=None, 
                 report("  " + t("{artist}...", artist=artist))
                 for key in _owned_top(artist, have, played, engine.TRACKS_PER_ARTIST_PICK,
                                       pool=max(engine.TRACKS_PER_ARTIST_POOL, engine.TRACKS_PER_ARTIST_PICK),
-                                      seen=seen_for(artist)):
+                                      seen=seen_for(artist), report=report):
                     have.add(key)
                     picks.append(key)
         if off:

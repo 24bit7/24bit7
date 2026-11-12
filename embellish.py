@@ -380,6 +380,12 @@ def find(keys, name, amount, report, spare=0, session_id=None):
                 report("  " + t("{artist}...", artist=artist))
                 if not top:
                     report("    " + t("No top tracks returned for {artist}.", artist=artist))
+                # Use Adaptive Selections (12 Nov 2026): a one-hit wonder gives its hit, not the rest
+                titles, each = engine.adaptive_cut(artist, [title for title, _ in top], cap or len(top), report)
+                most = cap
+                if len(titles) < len(top):
+                    top = top[:len(titles)]
+                    most = each if cap else None
                 owned = []
                 for title, _sources in top:
                     key = library.find_track_key(artist, title)
@@ -390,7 +396,7 @@ def find(keys, name, amount, report, spare=0, session_id=None):
                     key = played.pick(key) if key and str(key) not in have else None
                     if key and str(key) not in have and str(key) not in owned:
                         owned.append(str(key))
-                picks[artist] = owned[:cap] if cap else owned
+                picks[artist] = owned[:most] if most else owned
             before = len(new)
             while any(picks.values()) and (want is None or len(new) < want):
                 for artist in list(picks):   # one each in turn, so the new tracks spread across the artists

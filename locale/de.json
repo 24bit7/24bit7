@@ -1851,5 +1851,10 @@
   "{sources} named it as like {seed}.": "{sources} hat ihn als ähnlich zu {seed} genannt.",
   "{sources} named {artist} as like {seed}.": "{sources} hat {artist} als ähnlich zu {seed} genannt.",
   "Found by {sources}.": "Gefunden von {sources}.",
-  "The track you started from.": "Der Titel, mit dem du angefangen hast."
+  "The track you started from.": "Der Titel, mit dem du angefangen hast.",
+  "Adaptive Selections: {artist} has {count} widely played song, so the pick comes from that.": "Adaptive Selections: {artist} hat {count} viel gehörten Titel, also wird aus diesem gewählt.",
+  "Adaptive Selections: {artist} has {count} widely played songs, so the pick comes from those.": "Adaptive Selections: {artist} hat {count} viel gehörte Titel, also wird aus diesen gewählt.",
+  "Adaptive Selections: {artist}'s one widely played song is the one playing, so nothing more from them.": "Adaptive Selections: Der eine viel gehörte Titel von {artist} läuft gerade, also nichts weiter von ihnen.",
+  "Use Adaptive Selections": "Adaptive Selections verwenden",
+  "Takes fewer of an artist's top tracks when only one or two of their songs are widely played, so a one-hit wonder gives you the hit, not the rest. A song counts when it has at least a fifth of the plays of the artist's biggest, by Last.fm's counts.": "Nimmt weniger Top-Titel eines Künstlers, wenn nur ein oder zwei seiner Titel viel gehört werden, so bekommst du von einem One-Hit-Wonder den Hit und nicht den Rest. Ein Titel zählt, wenn er mindestens ein Fünftel der Wiedergaben des meistgehörten Titels des Künstlers hat, nach den Zahlen von Last.fm."
 }

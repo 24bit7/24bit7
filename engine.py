@@ -162,7 +162,7 @@ PROFILE_KEYS = {
                    for part in ("", "_SIZE", "_AGREE", "_FALLBACK", "_FALLBACK_MIN")],
                  "SKIP_LONG_CLOSERS", "LONG_CLOSER_MINUTES",
                  "SKIP_PLAYED_ARTISTS", "SKIP_PLAYED_ARTISTS_DAYS", "SKIP_PLAYED_TRACKS", "SKIP_PLAYED_TRACKS_DAYS",
-                 "MATCH_TEMPO_ARTISTS", "MATCH_TEMPO_TRACKS",
+                 "MATCH_TEMPO_ARTISTS", "MATCH_TEMPO_TRACKS", "ADAPTIVE_ARTISTS",
                  "SKIP_PLAYED_TOP", "SKIP_PLAYED_TOP_DAYS", "SKIP_PLAYED_VIBE", "SKIP_PLAYED_VIBE_DAYS",
                  "NONSTOP", "NONSTOP_USING", "NONSTOP_RESEED", "NONSTOP_TOP_REST", "NONSTOP_TOP_REST_COUNT",
                  "NONSTOP_VIBE",
@@ -179,6 +179,9 @@ BPM_CEILING = 400    # a BPM tag above this is a mistake (Ben's library has abou
 TEMPO_BAND = 0.10    # Match Tempo's Strict: within ten per cent of the seed's BPM, as If All Else Fails uses
 TEMPO_GROUPS = ("artists", "tracks")
 MATCH_TEMPO = {g: "off" for g in TEMPO_GROUPS}
+ADAPTIVE_PICK = True   # Use Adaptive Selections (12 Nov 2026): an artist's pick shrinks to their widely played songs
+HIT_SHARE = 0.2        # a hit: a song with at least this share of the plays of the artist's biggest, on Last.fm
+HIT_DEPTH = 50         # how many of an artist's Last.fm top songs are read to count them
 PLAYED_GROUPS = ("artists", "tracks", "top", "vibe")
 DEEP_CUT_GROUPS = ("artists", "tracks", "vibe")   # Top Tracks has no Deep Cuts: it's one artist's list
 DEEP_CUT_MODES = ("off", "spaced", "shuffled")   # Similar Artists, Similar Tracks, Artist's Top Tracks, Vibe
@@ -415,7 +418,7 @@ def load_settings():
     global LISTEN_SITES, CUSTOM_SITES, PLAYLIST_SITES, EXTRA_OUTPUTS, TIDAL_OPEN
     global SKIP_LONG_CLOSERS, LONG_CLOSER_MINUTES
     global SIMILAR_ARTIST_TRACK_COUNT, SIMILAR_ARTIST_TRACK_LIMIT, DRIFT, DEEP_CUTS
-    global AI_MODERATOR, MODERATOR_WARNED, SKIP_PLAYED, MATCH_TEMPO
+    global AI_MODERATOR, MODERATOR_WARNED, SKIP_PLAYED, MATCH_TEMPO, ADAPTIVE_PICK
     global NONSTOP, NONSTOP_USING, NONSTOP_RESEED, NONSTOP_TOP_REST, NONSTOP_TOP_REST_COUNT, NONSTOP_VIBE
     global NONSTOP_BY, LONG_CLOSERS, AI_MODERATOR_BY, RUN_AFTER, INNER_CIRCLE
     global CONSOLE_QUERY, USE_AI, CREDITS_SCOPE, CREDITS_FIRST
@@ -585,6 +588,8 @@ def load_settings():
     for group in TEMPO_GROUPS:
         value = os.getenv(f"MATCH_TEMPO_{group.upper()}", "off").strip().lower()
         MATCH_TEMPO[group] = value if value in ("prefer", "strict") else "off"
+    # Use Adaptive Selections, per artists config: on unless a config says otherwise (12 Nov 2026)
+    ADAPTIVE_PICK = os.getenv("ADAPTIVE_ARTISTS", "1").strip().lower() in ("1", "true", "yes")
     # Non-stop (Settings > Playlist): top up a 24bit7 playlist when its last track starts
     NONSTOP = os.getenv("NONSTOP", "0").strip().lower() in ("1", "true", "yes")
     NONSTOP_USING = "artists" if os.getenv("NONSTOP_USING", "tracks").strip().lower() == "artists" else "tracks"
@@ -804,6 +809,9 @@ SKIP_PLAYED_VIBE_DAYS=1
 # Match Tempo for Similar Artists and Similar Tracks: off, prefer or strict
 MATCH_TEMPO_ARTISTS=off
 MATCH_TEMPO_TRACKS=off
+# Use Adaptive Selections for Similar Artists and Radio: fewer of an artist's top
+# tracks when only one or two of their songs are widely played (Last.fm's counts)
+ADAPTIVE_ARTISTS=1
 # Every playlist: skip an album's last track when it's longer than this many
 # minutes, as those files often carry a hidden track after a long silence
 SKIP_LONG_CLOSERS=1
@@ -2127,8 +2135,9 @@ def lastfm_similar(artist_name, limit=20):
         return []
 
 
-def lastfm_top_tracks_with_counts(artist_name, limit=10):
-    """Returns [(track name, playcount)] most popular first."""
+def lastfm_top_tracks_with_counts(artist_name, limit=10, quiet=False):
+    """Returns [(track name, playcount)] most popular first. quiet: a failure goes to the debug log only (Use
+    Adaptive Selections asks for every artist, as a second opinion beside the playlist's own sources)."""
     url = "http://ws.audioscrobbler.com/2.0/"
     params = {"method": "artist.gettoptracks", "artist": artist_name,
               "api_key": LASTFM_KEY, "format": "json", "limit": limit}
@@ -2137,6 +2146,9 @@ def lastfm_top_tracks_with_counts(artist_name, limit=10):
         return [(tval['name'], int(tval.get('playcount', 0)))
                 for tval in r.json().get('toptracks', {}).get('track', [])]
     except Exception as e:
+        if quiet:
+            debug(f"Last.fm counts for {artist_name}: no answer ({e})")
+            return []
         no_answer("Last.fm", "  " + t("Problem: Last.fm didn't answer for {artist_name}'s top tracks ({e}).", artist_name=artist_name, e=e))
         return []
 
@@ -4343,6 +4355,57 @@ def find_jriver_key_by_track(artist_name, track_name):
     return None
 
 
+def hit_titles(artist):
+    """
+    The artist's widely played songs, biggest first, as clean names: those with at least HIT_SHARE of the
+    Last.fm plays of their biggest (12 Nov 2026, measured on 157 of Ben's artists: 4 Non Blondes, Los Del Rio and
+    Spin Doctors have one; Massive Attack ten; Radiohead thirty). Versions of a song (a remaster, a live take
+    named in brackets) count once, at their best. None when Last.fm has no counts for the artist: then nothing
+    is cut. Kept with the other cached answers, so an artist costs one call a cache period.
+    """
+    rows = cached_call("Last.fm", "hits", artist_key(artist),
+                       lambda: [[name, plays] for name, plays in lastfm_top_tracks_with_counts(artist, HIT_DEPTH, quiet=True)])
+    best = {}
+    for name, plays in rows or []:
+        k = clean_name(name)
+        if k and int(plays) > best.get(k, -1):
+            best[k] = int(plays)
+    if not best:
+        return None
+    ranked = sorted(best.items(), key=lambda kv: -kv[1])
+    top = ranked[0][1]
+    if top <= 0:
+        return None
+    return [k for k, plays in ranked if plays >= top * HIT_SHARE]
+
+
+def adaptive_cut(artist, names, pick, report, exclude_track=None, indent="    "):
+    """
+    Use Adaptive Selections: the pool (names, in the sources' order) and the pick shrunk to the artist's number
+    of hits, so a one-hit wonder gives its hit and not the rest. A hit that's being left out (the track that's
+    playing) takes one off the count. Says so when it cuts; with the tick off, or no counts, nothing changes.
+    Returns (names, pick).
+    """
+    if not ADAPTIVE_PICK or not names:
+        return names, pick
+    hits = hit_titles(artist)
+    if not hits:
+        return names, pick
+    count = len(hits)
+    if exclude_track and clean_name(exclude_track) in hits:
+        count -= 1
+    if count >= len(names):
+        return names, pick
+    if count <= 0:
+        report(indent + t("Adaptive Selections: {artist}'s one widely played song is the one playing, so nothing "
+                          "more from them.", artist=artist))
+        return [], 0
+    report(indent + tn("Adaptive Selections: {artist} has {count} widely played song, so the pick comes from that.",
+                       "Adaptive Selections: {artist} has {count} widely played songs, so the pick comes from those.",
+                       count, artist=artist))
+    return names[:count], min(pick, count)
+
+
 def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
                                exclude_track=None, consider=None, pick=None, defer=None, found=None,
                                skip_keys=None, seed=None):
@@ -4375,6 +4438,9 @@ def pick_top_tracks_for_artist(artist, session_id, suggested_by, report=print,
             debug(f"YouTube pick in the pool: {', '.join(added)}")
     if not names:
         report("    " + t("No top tracks returned for {artist}.", artist=artist))
+        return [], 0
+    names, pick = adaptive_cut(artist, names, pick, report, exclude_track=exclude_track)
+    if not names:
         return [], 0
     tempo = current_tempo() if defer is None else None
     if tempo is not None:

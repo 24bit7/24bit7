@@ -723,6 +723,8 @@ class ProfilePage:
                 out[f"INNER_CIRCLE_{g}_FALLBACK_MIN"] = v[f"INNER_CIRCLE_{g}_FALLBACK_MIN"].get().strip() or "10"
         if "FALLBACK_SPOKEN" in v:
             out["FALLBACK_SPOKEN"] = "1" if v["FALLBACK_SPOKEN"].get() else "0"
+        if "ADAPTIVE_ARTISTS" in v:   # Use Adaptive Selections
+            out["ADAPTIVE_ARTISTS"] = "1" if v["ADAPTIVE_ARTISTS"].get() else "0"
         for group in engine.TEMPO_GROUPS:   # Match Tempo: off, prefer or strict
             if f"MATCH_TEMPO_{group.upper()}" in v:
                 out[f"MATCH_TEMPO_{group.upper()}"] = v[f"MATCH_TEMPO_{group.upper()}"].get()
@@ -910,6 +912,7 @@ def table_colours():
 # The ? beside each Number of tracks
 LIMIT_HELP = N_("Ticked, the playlist stops at this many tracks, picked at random from everything found. Unticked, every track found goes in: Number of artists times Tracks per artist selection, plus the seed artist's, so the playlist can run long, and Drift doesn't run as there's no target to fall short of. When Non-stop adds more, it keeps to this number.\nTo switch the random pick off altogether, set Tracks per artist selection to the same as Number of artist's top tracks (say 5 of 5) and untick this.")
 TEMPO_CHOICES = [("off", N_("Off")), ("prefer", N_("Prefer")), ("strict", N_("Strict"))]   # Match Tempo (5 Nov 2026)
+ADAPTIVE_HELP = N_("Takes fewer of an artist's top tracks when only one or two of their songs are widely played, so a one-hit wonder gives you the hit, not the rest. A song counts when it has at least a fifth of the plays of the artist's biggest, by Last.fm's counts.")   # Use Adaptive Selections (12 Nov 2026)
 TEMPO_HELP = N_("Uses your files' BPM tags to keep the playlist near the seed track's tempo. Half and double time "
                 "count as a match.\nPrefer: where there's a choice, such as which of an artist's top tracks to "
                 "pick, the closest tempos go first. Nothing is left out.\nStrict: only tracks within ten per cent "
@@ -4738,6 +4741,19 @@ class SettingsTab(tk.Frame):
             review["frames"][group] = (var, frame)
             self._review_vars = review   # {"same": {group: tick}, "frames": {group: (tick, box)}}
 
+        def adaptive():
+            """Use Adaptive Selections (Ben, 12 Nov 2026): Similar Artists' and Radio's pick shrinks to an artist's
+            widely played songs. On by default; above Skip tracks played."""
+            key = "ADAPTIVE_ARTISTS"
+            p.vars[key] = tk.BooleanVar(value=p.env.get(key, "1" if engine.ADAPTIVE_PICK else "0")
+                                        in ("1", "true", "yes"))
+            row = tk.Frame(where["box"])
+            tick = ttk.Checkbutton(row, text=t("Use Adaptive Selections"), variable=p.vars[key], command=p.save)
+            tick.pack(side="left")
+            help_mark(row, t(ADAPTIVE_HELP), on=tick).pack(side="left", padx=(8, 0))
+            p.adaptive_tick = tick
+            place(row, pady=(8, 0))
+
         def recent(group):
             """Skip tracks played in the last [n] days (1 by default), with its ?."""
             name = f"SKIP_PLAYED_{group.upper()}"
@@ -5234,6 +5250,7 @@ class SettingsTab(tk.Frame):
                                                       "random from the whole list, and each in turn brings its own share of "
                                                       "similar artists, so the results are usually broader than Current "
                                                       "Track. Tracks already in Playing Now are left out. Standard playlist only."))
+            adaptive()
             recent("artists")
             tempo("artists")
             review_block("artists", [("review_current", t("When Seed is Current Track"), current),
@@ -5259,6 +5276,7 @@ class SettingsTab(tk.Frame):
                                                        "two of their best-known songs."))
             p.pick_sb = p.seed_boxes["current"]["TRACKS_PER_ARTIST_PICK"]
             p.vars["TRACKS_PER_ARTIST_POOL"].trace_add("write", lambda *a: sync_pick_limit(p))
+            adaptive()
             recent("artists")
             deep_cuts("artists")
             nonstop("artists")

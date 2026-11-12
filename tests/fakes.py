@@ -401,6 +401,7 @@ class FakeWeb:
         self.empty = set()              # services answering with nothing
         self.latest_release = None      # GitHub's latest release, e.g. {"tag_name": "v9.9.9", "html_url": ...}
         self.unknown = set()            # artist names every service treats as unknown (joint credits)
+        self.plays = {}                 # artist -> Last.fm play counts for its top tracks, in order (else even)
         self.acr_miss = set()           # (artist, title) ListenBrainz's own lookup can't find
         self.tidal_login = {"challenge": None, "code": "good-code", "refresh": "fake-refresh",
                             "refresh_ok": True}   # the fake Tidal account sign-in
@@ -458,7 +459,8 @@ class FakeWeb:
                 return Resp(data={"similarartists": {"artist": [{"name": n} for n in names]}})
             if m == "artist.gettoptracks":
                 names = [] if empty else self.top_tracks(artist)
-                return Resp(data={"toptracks": {"track": [{"name": n, "playcount": 1000 - i}
+                plays = self.plays.get(artist) or [1000 - i for i in range(len(names))]
+                return Resp(data={"toptracks": {"track": [{"name": n, "playcount": plays[i] if i < len(plays) else 1}
                                                           for i, n in enumerate(names)]}})
             if m == "artist.gettoptags":
                 tags = [] if empty else TAGS.get(artist.lower(), [])
