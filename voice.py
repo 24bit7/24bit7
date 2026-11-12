@@ -526,8 +526,9 @@ def _own_room(zone, say=print):
 
 def _room_command(intent, device, body):
     """
-    multiroom: the Speakers join what the leader zone is playing. single room: collapses to the room of the smart
-    speaker that heard it. Said in the follower's room, the music moves to the Speakers (the Switch To handover)
+    multiroom: the Speakers join what the leader zone is playing; with only the Speakers playing, the music moves
+    to the leader first (the Switch To handover) and they follow it, so it works from either room (Ben, 12 Nov
+    2026). single room: collapses to the room of the smart speaker that heard it. Said in the follower's room, the music moves to the Speakers (the Switch To handover)
     and the leader stops; said in the leader's room, the Speakers just drop out.
     """
     engine.refresh_settings_if_changed()
@@ -541,7 +542,13 @@ def _room_command(intent, device, body):
         return "problem", f"I can't find the {leader} zone in JRiver.", {}
     if intent == "multiroom":
         if not _playing(lid):
-            return "problem", f"Nothing's playing on {leader}.", {}
+            fid = engine.zone_id(follower)
+            if fid is None or not _playing(fid):
+                return "problem", f"Nothing's playing on {leader} or the {follower}.", {}
+            if not _move(follower, leader):
+                return "problem", "JRiver didn't move the music. Is it running on the media PC?", {}
+            print(t("[Voice] {name}: multiroom, the music moves from the {follower} to {leader}", name=name,
+                    follower=follower, leader=leader))
         _multiroom["start"]()
         print(t("[Voice] {name}: multiroom, the {follower} follow {leader}", name=name, follower=follower, leader=leader))
         return "started", "Multiroom.", {}

@@ -34,7 +34,7 @@ def test_multiroom_needs_the_section_on_and_the_leader_playing(app, alexa):
     assert "isn't set up" in r.ssml and "Settings, Other, Multiroom" in r.ssml, r
     link = multiroom_on(app)
     r = alexa.say("MultiroomIntent")
-    assert "Nothing's playing on Kitchen" in r.ssml and link.calls == [], r
+    assert "Nothing's playing on Kitchen or the Speakers" in r.ssml and link.calls == [], r
     app.jriver.play("Kitchen", app.jriver.playlists[0]["keys"])
     r = alexa.say("MultiroomIntent", device=LOUNGE)   # from either room
     assert r.started and link.calls == ["start"], r   # started: the skill answers with its chime, as for stop and skip
@@ -79,3 +79,19 @@ def test_the_help_text_and_the_model_name_the_room_commands(app, alexa):
     assert alexa.skill.ZONE_INTENTS["MultiroomIntent"] == "multiroom"
     assert alexa.skill.ZONE_INTENTS["SingleRoomIntent"] == "single_room"
     assert "multiroom" in app.voice.SAID and "single_room" in app.voice.SAID
+
+
+def test_multiroom_with_only_the_speakers_playing_moves_the_music_to_the_leader(app, alexa):
+    """12 Nov 2026: said with only the Speakers playing, it answered "Nothing's playing on Sonos". Now the music
+    moves to the leader with the Switch To handover, same track and point, and the Speakers follow it."""
+    link = multiroom_on(app)
+    j = app.jriver
+    keys = j.playlists[0]["keys"]
+    j.play("Speakers", keys, pos=3)
+    j.zone("Speakers").position_ms = 30000
+    for device in (LOUNGE, KITCHEN):   # either room
+        r = alexa.say("MultiroomIntent", device=device)
+        assert r.started and link.calls[-1] == "start", r
+        z = j.zone("Kitchen")
+        assert z.state == 2 and z.playlist == list(keys) and z.pos == 3 and z.position_ms == 30000
+        assert j.zone("Speakers").state == 0, "JRiver's Speakers zone stops: the follower plays them now"
