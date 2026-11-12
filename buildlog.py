@@ -61,11 +61,18 @@ def _kind_from_text(text):
 
 
 def _moderator(text):
-    """'Balanced, 3 removed' from the Moderator's lines, Drift rounds included; '' if it didn't run."""
+    """
+    'Balanced, 3 removed' from the Moderator's lines, Drift rounds included; 'Balanced, didn't run' when
+    every check it started failed; '' if it wasn't on.
+    """
     level = re.search(r"(?:AI )?Moderator \((\w+)\): checking", text)   # "AI Moderator" before 1.20.0
     if not level:
         return ""
     removed = sum(int(n) for n in re.findall(r"(?:AI )?Moderator: (\d+) removed", text))
+    checks = len(re.findall(r"(?:AI )?Moderator \(\w+\): checking", text))
+    failed = len(re.findall(r"Problem: (?:AI )?Moderator didn't run", text))
+    if not removed and failed >= checks:
+        return f"{level.group(1)}, didn't run"
     return f"{level.group(1)}, {removed} removed"
 
 
@@ -176,7 +183,13 @@ def recent(tab=None, limit=None):
             args.append(limit)
         cols = ["id", "at", "tab", "from_label", "zone", "zone_id", "kind", "sources", "queued", "misses",
                 "moderator", "problems", "notes", "chain_id", "chain_pos", "text"]
-        return [dict(zip(cols, r)) for r in con.execute(sql, args).fetchall()]
+        rows = [dict(zip(cols, r)) for r in con.execute(sql, args).fetchall()]
+    for row in rows:   # kept before 12 Nov 2026 as "0 removed" when the check never came back
+        if str(row["moderator"] or "").endswith(", 0 removed"):
+            again = _moderator(row["text"] or "")
+            if again.endswith("didn't run"):
+                row["moderator"] = again
+    return rows
 
 
 def tabs():
@@ -214,4 +227,7 @@ def playlist_type(row):
 def moderator_shown(text):
     """The Log's Moderator column: 'Balanced, 3 removed' is kept in English and shown translated."""
     m = re.fullmatch(r"(\w+), (\d+) removed", text or "")
-    return t("{level}, {count} removed", level=t(m.group(1)), count=m.group(2)) if m else (text or "")
+    if m:
+        return t("{level}, {count} removed", level=t(m.group(1)), count=m.group(2))
+    m = re.fullmatch(r"(\w+), didn't run", text or "")
+    return t("{level}, didn't run", level=t(m.group(1))) if m else (text or "")

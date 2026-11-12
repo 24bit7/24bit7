@@ -327,7 +327,7 @@ AI_PROVIDERS = [("anthropic", "Anthropic"), ("openai", "OpenAI"), ("gemini", "Go
                 ("ollama", "Ollama (Local)")]
 AI_PROVIDER_NAMES = dict(AI_PROVIDERS)
 AI_MODELS = {   # provider: (main, quick)
-    "anthropic": ("claude-sonnet-5", "claude-haiku-4-5-20251001"),
+    "anthropic": ("claude-sonnet-5", "claude-haiku-5-5"),   # quick: Haiku 5.5 from 12 Nov 2026
     "openai": ("gpt-6.1-sol", "gpt-6-luna"),
     "gemini": ("gemini-3.8-flash", "gemini-3.5-flash-lite"),
 }
@@ -1268,7 +1268,7 @@ LAST_OUTPUT = None     # where the build's tracks went: a zone name, "YouTube" o
 STREAM_MISSES = 0      # tracks the streaming service (YouTube, Tidal) didn't have, for the Done line
 LAST_OUTPUT_ID = None  # ...and that zone's JRiver ID, for Non-stop's chain in the console's Log
 LAST_BUILD = None      # the finished build's mode, sources, tracks queued and misses, for buildlog
-MODERATOR_RUN = {"level": None, "removed": 0}   # this build's Moderator (Drift rounds too), for buildlog
+MODERATOR_RUN = {"level": None, "removed": 0, "ran": 0, "failed": 0}   # this build's Moderator (Drift rounds too)
 CLOSERS_DROPPED = 0    # tracks the hidden-track check left out when sending, so the Done line counts what went
 _SESSION_STARTED = {}
 
@@ -1324,7 +1324,7 @@ def session_start(mode, seed_info, sources=""):
         globals()["LAST_OUTPUT"] = output_streaming()
     globals().update(STREAM_MISSES=0, TIDAL_SENT=None, TIDAL_PLAYLIST_ID=None, TIDAL_OPENED=None)
     TIDAL_MISSED.clear()
-    MODERATOR_RUN.update(level=None, removed=0)
+    MODERATOR_RUN.update(level=None, removed=0, ran=0, failed=0)
     cur = db().execute(
         "INSERT INTO sessions (started_at, mode, seed_artist, seed_track, seed_album, sources, queued) "
         "VALUES (?,?,?,?,?,?,0)",
@@ -1352,6 +1352,18 @@ def session_log(session_id, artist, track, sources, found, seed=None):
                   1 if found else 0, seed))
 
 
+def moderator_column():
+    """
+    The Log's Moderator column for this build, kept in English: 'Balanced, 3 removed', or 'Balanced, didn't
+    run' when no check came back (12 Nov 2026: a month of failed checks had read '0 removed'). '' when off.
+    """
+    if not MODERATOR_RUN["level"]:
+        return ""
+    if MODERATOR_RUN["failed"] and not MODERATOR_RUN["ran"]:
+        return f"{MODERATOR_RUN['level']}, didn't run"
+    return f"{MODERATOR_RUN['level']}, {MODERATOR_RUN['removed']} removed"
+
+
 def session_finish(session_id, queued, sources=None, report=print):
     save_new_mbids()   # MusicBrainz IDs learnt during this run
     queued = max(0, queued - CLOSERS_DROPPED)   # anything the final hidden-track check left out
@@ -1364,7 +1376,7 @@ def session_finish(session_id, queued, sources=None, report=print):
     misses = db().execute("SELECT COUNT(*) FROM discoveries WHERE session_id=? AND found=0",
                           (session_id,)).fetchone()[0]
     row = db().execute("SELECT mode, sources FROM sessions WHERE id=?", (session_id,)).fetchone() or ("", "")
-    mod = (f"{MODERATOR_RUN['level']}, {MODERATOR_RUN['removed']} removed" if MODERATOR_RUN["level"] else "")
+    mod = moderator_column()
     globals()["LAST_BUILD"] = {"mode": row[0], "sources": row[1], "queued": queued, "misses": misses, "moderator": mod}
     report(done_line(queued, misses, _SESSION_STARTED.pop(session_id, None)))
     try:   # a source test that finished during this build says so now, after its Done line
@@ -2630,7 +2642,11 @@ def _ai_request(prompt, max_tokens, feature="AI", tier="main", system=None, anno
     setting gets the request again without it, once, and isn't sent it again this session.
     """
     model = ai_model(tier)
-    use = temperature is not None and (AI_PROVIDER, model) not in _TEMPERATURE_REFUSED
+    # Anthropic is never sent one: the anthropic package from 1.0 has no temperature setting at all (passing it
+    # is an error before anything is sent; the Moderator failed that way from October to 12 Nov 2026), and
+    # Haiku 5.5 refuses anything but the default anyway
+    use = (temperature is not None and AI_PROVIDER != "anthropic"
+           and (AI_PROVIDER, model) not in _TEMPERATURE_REFUSED)
     try:
         return _ai_request_once(prompt, max_tokens, feature, tier, system, announce, temperature if use else None)
     except Exception as e:
@@ -2655,9 +2671,7 @@ def _ai_request_once(prompt, max_tokens, feature="AI", tier="main", system=None,
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         kwargs = {"model": model, "max_tokens": max_tokens, "messages": [{"role": "user", "content": prompt}]}
         if system:
-            kwargs["system"] = system
-        if temperature is not None:
-            kwargs["temperature"] = temperature
+            kwargs["system"] = system   # no temperature: see _ai_request
         message = _ai_create(client, feature, announce=announce, **kwargs)
         text = "".join(b.text for b in message.content if getattr(b, "type", "") == "text")
         reply = AIReply(text, getattr(message, "stop_reason", ""))
@@ -5395,16 +5409,23 @@ def moderate(tracks, seed, report=print, level=None, reference=None):
                            announce=False, temperature=0)
         while TEMPERATURE_NOTES:
             report("  " + t("Note: Moderator: {pop}.", pop=TEMPERATURE_NOTES.pop(0)))
+        if getattr(reply, "stop_reason", "") == "refusal":   # Haiku 5.5's safety check: no answer, not "all fine"
+            MODERATOR_RUN["failed"] += 1
+            report("  " + t("Problem: Moderator didn't run, as the AI declined to check these tracks."))
+            return set()
         flagged = moderator_reply(reply.text)
     except ImportError:
+        MODERATOR_RUN["failed"] += 1
         report("  " + t("Problem: Moderator didn't run, as the anthropic package (needed for Anthropic) isn't installed."))
         return set()
     except Exception as e:
+        MODERATOR_RUN["failed"] += 1
         if ai_out_of_credit(e):
             report("  " + t("Problem: Moderator didn't run, as {ai_credit_text}.", ai_credit_text=ai_credit_text()))
         else:
             report("  " + t("Problem: Moderator didn't run, as the check didn't come back ({value}).", value=str(e)[:120]))
         return set()
+    MODERATOR_RUN["ran"] += 1
     removed = set()
     for item in flagged:
         if len(removed) >= cap:

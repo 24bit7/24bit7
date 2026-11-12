@@ -677,8 +677,25 @@ class FakeWeb:
 
 # --- the AI ----------------------------------------------------------------------
 
+def _sdk_settings():
+    """What the installed anthropic package's messages.create() takes, or None if it can't be read."""
+    try:
+        import inspect
+        from anthropic.resources.messages import Messages
+        return set(inspect.signature(Messages.create).parameters) - {"self"}
+    except Exception:
+        return None
+
+
+SDK_SETTINGS = _sdk_settings()
+
+
 class FakeAI:
-    """Replaces anthropic.Anthropic. Replies to each 24bit7 prompt by what it asks for."""
+    """
+    Replaces anthropic.Anthropic. Replies to each 24bit7 prompt by what it asks for. Like the real package,
+    refuses a setting its messages.create() doesn't take (anthropic 1.x dropped temperature, and the Moderator
+    failed on it in every real build for a month while the fake took anything).
+    """
     def __init__(self, web):
         self.web = web
         self.calls = []                 # (model, prompt/system first line)
@@ -694,6 +711,9 @@ class FakeAI:
         self.Client = Client
 
     def create(self, model=None, max_tokens=None, messages=None, system=None, **kw):
+        unknown = sorted(set(kw) - SDK_SETTINGS) if SDK_SETTINGS is not None else []
+        if unknown:
+            raise TypeError(f"Messages.create() got an unexpected keyword argument '{unknown[0]}'")
         prompt = messages[0]["content"] if messages else ""
         self.calls.append((model, (system if isinstance(system, str) else "")[:80] or prompt[:80], kw))
         self.sent = getattr(self, "sent", []) + [str(prompt)]

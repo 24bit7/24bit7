@@ -26,20 +26,21 @@ from i18n import N_, t, tn
 # Ollama runs on the user's own PC, so its models have no price and cost nothing here.
 PRICES = {
     "claude-sonnet-5": (2.00, 10.00),
-    "claude-haiku-4-5": (1.00, 5.00),
+    "claude-haiku-5-5": (0.10, 0.50),        # prompts over 100K tokens: 0.50 / 2.50 (none of 24bit7's come near)
+    "claude-haiku-4-5": (1.00, 5.00),        # the quick model until 12 Nov 2026: kept for usage recorded on it
     "gpt-6.1-sol": (2.00, 10.00),
     "gpt-6-luna": (0.10, 0.50),
     "gemini-3.8-flash": (0.75, 3.75),        # rises to 1.50 / 7.50 on 1 January 2027
     "gemini-3.5-flash-lite": (0.30, 2.50),
 }
-PRICES_CHECKED = "8 Nov 2026"
+PRICES_CHECKED = "12 Nov 2026"
 PRICING_PAGES = {
     "anthropic": "https://claude.com/pricing",
     "openai": "https://developers.openai.com/api/docs/pricing",
     "gemini": "https://ai.google.dev/gemini-api/docs/pricing",
 }
 PRICES_URL = PRICING_PAGES["anthropic"]
-MODEL_NAMES = {"claude-sonnet-5": "Sonnet 5", "claude-haiku-4-5": "Haiku 4.5", "gpt-6.1-sol": "GPT-6.1 Sol",
+MODEL_NAMES = {"claude-sonnet-5": "Sonnet 5", "claude-haiku-5-5": "Haiku 5.5", "claude-haiku-4-5": "Haiku 4.5", "gpt-6.1-sol": "GPT-6.1 Sol",
                "gpt-6-luna": "GPT-6 Luna", "gemini-3.8-flash": "Gemini 3.8 Flash",
                "gemini-3.5-flash-lite": "Gemini 3.5 Flash-Lite"}
 CACHE_WRITE, CACHE_READ = 1.25, 0.10   # prompt caching, as multiples of the input rate
@@ -54,16 +55,16 @@ GUIDE = [
      N_("per artist: a Similar Artists build asks for around 20")),
     (N_("AI Playlist"), MAIN, 300, 0, 0, 1000, ""),
     (N_("AI Playlist ideas"), MAIN, 100, 0, 0, 50, ""),
-    (N_("Moderator"), QUICK, 1000, 0, 0, 300, ""),
+    (N_("Moderator"), QUICK, 1800, 0, 0, 600, ""),   # Haiku 5.5 on five of Ben's builds, 12 Nov 2026
     (N_("Console Query"), MAIN, 17000, 36000, 0, 600,   # the first real question on Sonnet 5, 8 Nov 2026
      N_("first question; follow-ups within 5 minutes cost about a third")),
-    (N_("Usage Query"), QUICK, 1500, 0, 0, 400, ""),
+    (N_("Usage Query"), QUICK, 2000, 0, 0, 400, ""),   # Haiku 4.5's 1,500, scaled for Haiku 5.5's token counts
 ]
 # Features since renamed: usage saved under the old name counts under the new one
 RENAMED = {"AI Moderator": "Moderator"}
 OWN_AFTER = 3   # runs of a feature before the guide shows your own average
 
-QUERY_MODEL = "claude-haiku-4-5-20251001"   # Anthropic's quick model, as the Moderator uses
+QUERY_MODEL = engine.AI_MODELS["anthropic"][1]   # Anthropic's quick model, as the Moderator uses
 SINCE_KEY = "ai_usage_since"
 QUESTION = "Where are my AI tokens going, and how could I use fewer?"
 
