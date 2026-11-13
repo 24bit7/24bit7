@@ -15,11 +15,15 @@ import pytest
 
 
 def _wav(path, parts, rate=8000, width=2):
-    """parts: (seconds, loud) pairs, a 440 Hz tone or digital silence, mono."""
+    """parts: (seconds, loud) pairs, a 440 Hz tone, digital silence (False) or a hiss near -70 dB ("hiss": quiet
+    but never true silence, like a room or tape between songs), mono."""
     frames = bytearray()
     for seconds, loud in parts:
         for i in range(int(seconds * rate)):
-            v = 0.5 * math.sin(2 * math.pi * 440 * i / rate) if loud else 0.0
+            if loud == "hiss":
+                v = 0.0004 * (1 if (i * 7919) % 13 < 6 else -1)
+            else:
+                v = 0.5 * math.sin(2 * math.pi * 440 * i / rate) if loud else 0.0
             if width == 2:
                 frames += struct.pack("<h", int(v * 32767))
             else:
@@ -64,6 +68,28 @@ def test_silence_at_the_very_end_or_a_short_pause_is_no_hidden_track(app, hidden
     assert hidden.find_cut(_wav(tmp_path / "end.wav", [(3, True), (15, False)])) is None
     assert hidden.find_cut(_wav(tmp_path / "pause.wav", [(3, True), (6, False), (3, True)])) is None
     assert hidden.find_cut(_wav(tmp_path / "intro.wav", [(12, False), (3, True)])) is None, "silence before any sound"
+
+
+def test_a_short_true_silence_in_the_second_half_is_a_hidden_track_as_aerials_has(app, hidden, tmp_path):
+    """Ben's Aerials: the song ends at 3:53, two and a half seconds of digital silence, then the hidden track.
+    Scaled down: twenty seconds of song, 2.6 of silence, ten of hidden track."""
+    path = _wav(tmp_path / "a.wav", [(20, True), (2.6, False), (10, True)])
+    assert hidden.find_cut(path) == pytest.approx(20.0, abs=0.2)
+
+
+def test_the_same_short_silence_in_the_first_half_is_a_movement_not_a_hidden_track(app, hidden, tmp_path):
+    """Orbital's The Box (a short silence at 42% of 28 minutes) and a two-part track at 27% played in full."""
+    assert hidden.find_cut(_wav(tmp_path / "a.wav", [(8, True), (2.6, False), (20, True)])) is None
+
+
+def test_a_short_quiet_spell_that_isnt_true_silence_is_part_of_the_song(app, hidden, tmp_path):
+    """A build-up or a room tone near -70 dB, however late, is not a gap before a hidden track."""
+    assert hidden.find_cut(_wav(tmp_path / "a.wav", [(20, True), (4, "hiss"), (10, True)])) is None
+    assert hidden.find_cut(_wav(tmp_path / "b.wav", [(3, True), (12, "hiss"), (2, True)])) == pytest.approx(3.0, abs=0.2),         "ten seconds of quiet is still a hidden track, silent or not"
+
+
+def test_a_short_true_silence_shorter_than_two_and_a_half_seconds_is_a_pause(app, hidden, tmp_path):
+    assert hidden.find_cut(_wav(tmp_path / "a.wav", [(20, True), (1.5, False), (10, True)])) is None
 
 
 def test_a_scan_keeps_its_answer_says_where_it_plays_to_and_deletes_only_the_decoded_copy(app, hidden, tmp_path,
@@ -203,6 +229,26 @@ def test_a_build_leaves_out_a_closer_that_cant_be_checked_and_says_why(app, hidd
     kept = app.engine.drop_long_closers([key], report=r, group="top")
     assert kept == []
     assert "Skipped Echoes by Pink Floyd: last on its album, and its file couldn't be reached." in r.text()
+
+
+def test_the_old_tick_reads_as_listen_for_them_or_off_and_minutes_is_its_own(app, hidden):
+    get = {"SKIP_LONG_CLOSERS_TOP": "1", "SKIP_LONG_CLOSERS_ARTISTS": "0", "SKIP_LONG_CLOSERS_TRACKS": "minutes",
+           "LONG_CLOSER_MINUTES_TRACKS": "8"}.get
+    cfg = app.engine.closer_settings(lambda k, d="": get(k, d))
+    assert cfg["top"][0] == "listen" and cfg["artists"][0] == "off" and cfg["tracks"] == ("minutes", 8)
+    assert cfg["vibe"][0] == "listen", "a new install, and anyone with the old tick on, listens for them"
+    assert [app.engine.closer_stored(m) for m in ("listen", "off", "minutes")] == ["1", "0", "minutes"]
+
+
+def test_over_minutes_leaves_out_every_long_closer_unscanned_as_before(app, hidden):
+    app.set_env(SKIP_LONG_CLOSERS_TOP="minutes", LONG_CLOSER_MINUTES_TOP="6")
+    key = _echoes(app)
+    r = app.Lines()
+    assert app.engine.drop_long_closers([key], report=r, group="top") == []
+    assert "Skipped Echoes by Pink Floyd: last on its album, and over 6 minutes long." in r.text()
+    assert not app.engine.listening("top")
+    app.engine.send_to_jriver([app.jriver.key_of("Pink Floyd", "Fearless")], report=r, zone_name="Kitchen")
+    assert not hidden.watched(app.engine.zone_id("Kitchen")) and not hidden._queue, "nothing scanned or watched"
 
 
 def test_hidden_tracks_off_leaves_closers_alone(app, hidden):

@@ -312,7 +312,7 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ## What's new in 1.37.0
 
-- **Hidden Tracks are found, not guessed.** An album's last track over five minutes is checked for a long silence with a bonus track after it. If there is one, the song plays and 24bit7 moves on where the silence starts; if not, it plays in full. Before, every long closer was left out, real songs included. Your files are only read, never changed.
+- **Hidden Tracks are found, not guessed.** With **Listen for Them**, the new default, an album's last track over five minutes is checked for a silence with a bonus track after it. If there is one, the song plays and 24bit7 moves on where the silence starts; if not, it plays in full. Before, every long closer was left out, real songs included; **Over Minutes** keeps that rule if you prefer it. Your files are only read, never changed.
 - **Long Tracks**, a ready-made filter, off to start: turn it on to keep tracks over fifteen minutes out of your playlists.
 - **Multiroom joins in step.** When your main system joins something the Sonos is already playing, both rooms start the track together (or the next one, past halfway), so there's no echo.
 - **Discover: Refresh** on Missing Artists and Gaps in Your Artists reads your library again, and a song you've bought since a build missed it now counts as matched. The chosen row is easier to see.

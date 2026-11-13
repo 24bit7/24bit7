@@ -61,7 +61,7 @@ def test_simple_builds_the_first_config_with_the_advanced_sections_off_and_the_s
     monkeypatch.setattr(e, buttons.BUILDERS["artists"], fake)
     buttons.run(artists, report=app.Lines(), seed_info=e.typed_seed_info("The Beatles", ""))
     assert seen["moderator"] == "off" and seen["deep"] == "off" and seen["run_after"] is False
-    assert not seen["drift"]["on"] and seen["closers"][0] is False, (seen["drift"], seen["closers"])
+    assert not seen["drift"]["on"] and seen["closers"][0] == "off", (seen["drift"], seen["closers"])
     assert buttons.nonstop_config(artists)["on"] is False, "Non-stop rests in Simple"
     assert buttons.with_shortcuts() == [], "so do shortcuts"
     playmix.set_open(True)

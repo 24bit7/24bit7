@@ -345,7 +345,7 @@ def _play_now(intent, value, zone, device=None, top_up=False):
         if device:
             _own_room(zone)
         ok, what = _play_keys(keys[:SHUFFLE_CAP], zid), f"{min(len(keys), SHUFFLE_CAP)} songs by {library.spoken(artist)}, shuffled"
-        if ok and engine.closers_on("top"):   # a shuffle is 24bit7's own pick: its closers are scanned and watched
+        if ok and engine.listening("top"):   # a shuffle is 24bit7's own pick: its closers are scanned and watched
             engine.hidden.sent(zid, keys[:SHUFFLE_CAP], report=print)
         if ok:   # non-stop: when the shuffle ends, the opening track seeds a new playlist
             engine.nonstop_record(zid, keys[:SHUFFLE_CAP], kind="top", stage="rest", vibe=None,

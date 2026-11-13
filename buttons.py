@@ -1013,8 +1013,8 @@ def settings_from(get_value, kind):
         out["NONSTOP_VIBE_WITH"] = ns["with"]
     else:
         out[f"NONSTOP_{g}_USING"] = ns["using"]
-    on, minutes = engine.closer_settings(getter)[kind]
-    out[f"SKIP_LONG_CLOSERS_{g}"] = "1" if on else "0"
+    mode, minutes = engine.closer_settings(getter)[kind]
+    out[f"SKIP_LONG_CLOSERS_{g}"] = engine.closer_stored(mode)
     out[f"LONG_CLOSER_MINUTES_{g}"] = str(minutes)
     if kind in engine.MODERATOR_GROUPS:
         out[f"AI_MODERATOR_{g}"] = engine.moderator_settings(getter)[kind]

@@ -7,9 +7,13 @@ Down's "Aerials" is 3:55 with its hidden track making 6:11) and every long prog 
 
   - Scanned: the last track on its album, over MINUTES long (library details only, no setting).
   - The scan: Windows decodes the file read-only through Media Foundation (multiroom.calibrate.decode, no ffmpeg),
-    read in chunks, loudness per half-second slice; SILENCE seconds or more below QUIET_DB with sound after it is
-    a hidden track, and the cut point is where the silence starts. It runs in the background straight after a
-    playlist is sent: the silence always comes after the song, and the scan takes seconds.
+    read in chunks, a tenth of a second at a time. A hidden track is either of two gaps with sound after it:
+    SILENCE seconds or more below QUIET_DB, anywhere (the usual hidden track: in two hundred of Ben's 1990s album
+    closers, all fourteen had twenty seconds to eight minutes of it), or ZERO_GAP seconds or more of true digital
+    silence in the second half of the track (Aerials has two and a half, at 63%; the same short gaps earlier on
+    were a long piece's movements, Orbital's The Box at 42%, or a two-part track). The cut point is where the
+    silence starts. It runs in the background straight after a playlist is sent: the silence always comes after
+    the song, and the scan takes seconds. This is Listen for Them; Over Minutes (the old rule) needs no scan.
   - Remembered in the database by file key and length, once ever; a file that changes length is scanned again.
   - Playing: a watcher, only while a marked track plays in a zone 24bit7 sent it to, sends Next at the cut point
     (straight to JRiver, so it never counts as a skip). With Multiroom it acts on the leader, which the Speakers
@@ -37,7 +41,9 @@ from i18n import t
 MINUTES = 5          # an album closer longer than this is scanned
 SILENCE = 10.0       # seconds of near silence, with sound after it, that make a hidden track
 QUIET_DB = -60.0     # louder than this is sound
-SLICE = 0.5          # seconds per loudness reading
+ZERO_GAP = 2.5       # seconds of true digital silence that make one in the second half of a track (Aerials)
+ZERO = 1e-4          # a slice whose every sample is below this (about -80 dB) is true silence
+SLICE = 0.1          # seconds per loudness reading
 UNREADABLE = {"dsf", "dff", "dsd", "ape", "wv"}   # Media Foundation can't decode these
 NEAR = 5.0           # seconds before the cut point when the watcher starts asking four times a second
 CLOSE_POLL, TRACK_POLL, IDLE_POLL = 0.25, 1.0, 2.0
@@ -130,9 +136,10 @@ def length(seconds):
 
 def find_cut(path):
     """
-    Where a WAV's hidden track's silence starts, in seconds, or None: the first run of SILENCE seconds or more
-    below QUIET_DB, with sound before it and after it. Read in chunks, a slice at a time, so a long 24/192 file
-    never sits in memory whole.
+    Where a WAV's hidden track's silence starts, in seconds, or None: the first gap, with sound before it and
+    after it, that is SILENCE seconds or more below QUIET_DB, or ZERO_GAP seconds or more of true digital silence
+    starting in the second half of the track. Read in chunks, a slice at a time, so a long 24/192 file never sits
+    in memory whole.
     """
     import numpy as np
     with wave.open(path, "rb") as w:
@@ -140,8 +147,10 @@ def find_cut(path):
         if w.getcomptype() != "NONE" or width not in (1, 2, 3, 4):
             raise ValueError(f"a {width * 8}-bit {w.getcomptype()} WAV can't be read")
         per = max(1, int(rate * SLICE))
-        need = int(math.ceil(SILENCE / SLICE))
-        heard, quiet_from, n = False, None, 0
+        half = w.getnframes() / rate / 2 if w.getnframes() else None   # no length known: the long gap only
+        need = int(round(SILENCE / SLICE))
+        need_zero = int(round(ZERO_GAP / SLICE))
+        heard, quiet_from, zero_from, zeros, n = False, None, None, 0, 0
         while True:
             raw = w.readframes(per)
             if not raw:
@@ -152,10 +161,18 @@ def find_cut(path):
             if db < QUIET_DB:
                 if heard and quiet_from is None:
                     quiet_from = n
+                if heard and x.size and float(np.max(np.abs(x))) < ZERO:
+                    zero_from = n if zero_from is None else zero_from
+                    zeros = max(zeros, n + 1 - zero_from)
+                else:
+                    zero_from = None
             else:
-                if quiet_from is not None and n - quiet_from >= need:
-                    return quiet_from * SLICE
-                heard, quiet_from = True, None
+                if quiet_from is not None:
+                    if n - quiet_from >= need:
+                        return quiet_from * SLICE
+                    if zeros >= need_zero and half is not None and quiet_from * SLICE >= half:
+                        return quiet_from * SLICE
+                heard, quiet_from, zero_from, zeros = True, None, None, 0
             n += 1
 
 

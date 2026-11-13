@@ -297,17 +297,36 @@ def nonstop_settings(get):
     return out
 
 
+CLOSER_MODES = ("off", "listen", "minutes")   # Hidden Tracks: Off, Listen for Them, Over Minutes (Ben, 13 Nov 2026)
+
+
+def closer_mode_value(raw, fallback="listen"):
+    """A stored Hidden Tracks setting as a mode. The old tick: on is Listen for Them (the scan), off is Off."""
+    raw = (raw or "").strip().lower()
+    if raw in YES or raw == "listen":
+        return "listen"
+    if raw in NO or raw == "off":
+        return "off"
+    return "minutes" if raw == "minutes" else fallback
+
+
 def closer_settings(get):
-    """The hidden-track check per Play option: {group: (on, minutes)}. The old single setting is the starting value."""
-    base_on = (get("SKIP_LONG_CLOSERS", "1") or "1").strip().lower() in YES
+    """The hidden-track check per Play option: {group: (mode, minutes)}, mode one of CLOSER_MODES. The old single
+    setting is the starting value. Stored as 1 (Listen for Them, as the old tick was), 0 (Off) or minutes."""
+    base_mode = closer_mode_value(get("SKIP_LONG_CLOSERS", "1") or "1")
     base_minutes = (get("LONG_CLOSER_MINUTES", "6") or "6").strip()
     out = {}
     for group in PLAYED_GROUPS:
-        raw = (get(f"SKIP_LONG_CLOSERS_{group.upper()}", "") or "").strip().lower()
+        raw = get(f"SKIP_LONG_CLOSERS_{group.upper()}", "") or ""
         minutes = (get(f"LONG_CLOSER_MINUTES_{group.upper()}", "") or base_minutes).strip()
         minutes = min(30, max(3, int(minutes))) if minutes.isdigit() else 6
-        out[group] = (raw in YES if raw in YES + NO else base_on, minutes)
+        out[group] = (closer_mode_value(raw, base_mode), minutes)
     return out
+
+
+def closer_stored(mode):
+    """How a mode is kept in .env: 1 and 0 as the old tick was, so an older copy reads Listen for Them as on."""
+    return {"listen": "1", "off": "0"}.get(mode, "minutes")
 
 
 MODERATOR_GROUPS = ("artists", "tracks")   # not Top Tracks (one artist) or Vibe (the AI picks every track)
@@ -600,7 +619,7 @@ def load_settings():
     NONSTOP_VIBE = os.getenv("NONSTOP_VIBE", "vibe").strip().lower()
     if NONSTOP_VIBE not in ("vibe", "artists", "tracks"):
         NONSTOP_VIBE = "vibe"
-    SKIP_LONG_CLOSERS = os.getenv("SKIP_LONG_CLOSERS", "1").strip().lower() in ("1", "true", "yes")
+    SKIP_LONG_CLOSERS = closer_mode_value(os.getenv("SKIP_LONG_CLOSERS", "1"))
     LONG_CLOSER_MINUTES = _int_setting("LONG_CLOSER_MINUTES", 6, 3, 30)
     # Per Play option (the tabs under Settings > Sources and Playlist)
     NONSTOP_BY = nonstop_settings(os.getenv)
@@ -5143,21 +5162,49 @@ def output_zone(seed_info=None, zone_name=None, report=print):
     return zone_id() if zid == ACTIVE_ZONE else zid
 
 
+def closer_setting(group=None):
+    """(mode, minutes) of Hidden Tracks for a Play option: group, else the build in progress, else Artist's Top
+    Tracks."""
+    return LONG_CLOSERS.get(group or NONSTOP_CONTEXT.get("kind") or "top", (SKIP_LONG_CLOSERS, LONG_CLOSER_MINUTES))
+
+
 def closers_on(group=None):
-    """Hidden Tracks' tick for a Play option: group, else the build in progress, else Artist's Top Tracks. Its
-    minutes went on 13 Nov 2026 (hidden.MINUTES): a closer is scanned rather than left out for its length."""
-    return LONG_CLOSERS.get(group or NONSTOP_CONTEXT.get("kind") or "top",
-                            (SKIP_LONG_CLOSERS, LONG_CLOSER_MINUTES))[0]
+    """Hidden Tracks is on (Listen for Them or Over Minutes) for a Play option."""
+    return closer_setting(group)[0] != "off"
+
+
+def listening(group=None):
+    """Hidden Tracks is Listen for Them: long closers are scanned and cut where their silence starts (hidden.py)."""
+    return closer_setting(group)[0] == "listen"
+
+
+def closer_out(key, group=None):
+    """
+    (closer, why) for a track Hidden Tracks leaves out, else (closer or None, None). Listen for Them leaves out
+    only a closer whose file can't be checked (DSD, APE, WavPack, or out of reach); Over Minutes leaves out every
+    album closer longer than its minutes, as 24bit7 did before 1.37.0.
+    """
+    mode, minutes = closer_setting(group)
+    if mode == "off":
+        return None, None
+    if mode == "minutes":
+        import library   # here rather than at the top: library imports engine
+        closer = library.closer_info(key)
+        if closer and closer[0] > minutes * 60:
+            return closer, t("over {n} minutes long", n=minutes)
+        return closer, None
+    closer = hidden.is_candidate(key)
+    return closer, (hidden.leave_out(key) if closer else None)
 
 
 def drop_long_closers(keys, keep=(), report=print, group=None):
     """
-    The hidden-track check (a playlist's Hidden Tracks). An album closer over five
-    minutes is scanned for a hidden track and plays, cut off where its silence starts
-    (hidden.py, 13 Nov 2026); only one whose file can't be checked (DSD, APE, WavPack,
-    or out of reach) is left out, as every long closer was before (System Of A Down's
-    "Aerials" is 6:11 with one, 3:55 without). keep: keys never dropped, i.e. the seed
-    track. Each skip is logged.
+    The hidden-track check (a playlist's Hidden Tracks). Listen for Them: an album closer
+    over five minutes is scanned for a hidden track and plays, cut off where its silence
+    starts (hidden.py, 13 Nov 2026); only one whose file can't be checked (DSD, APE,
+    WavPack, or out of reach) is left out (System Of A Down's "Aerials" is 6:11 with one,
+    3:55 without). Over Minutes: every closer longer than the minutes is left out, as
+    before. keep: keys never dropped, i.e. the seed track. Each skip is logged.
     """
     if not closers_on(group) or not keys:
         return keys
@@ -5170,8 +5217,7 @@ def drop_long_closers(keys, keep=(), report=print, group=None):
     keep = {str(k) for k in keep if k}
     kept = []
     for key in keys:
-        closer = hidden.is_candidate(key)
-        why = hidden.leave_out(key) if closer and str(key) not in keep else None
+        closer, why = closer_out(key, group) if str(key) not in keep else (None, None)
         if why:
             seconds, name, artist = closer
             report("  " + t("Skipped {name} by {artist}: last on its album, and {why}.", name=name, artist=artist, why=why))
@@ -5244,7 +5290,7 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
     keys = [str(k) for k in keys]
     seed_key = str((seed_info or {}).get("FileKey") or "")
     keys = drop_long_closers(keys, keep=[seed_key, *MIX_KEEP], report=report, group=closer_group)
-    if closers_on(closer_group):   # its long closers watched in this zone, their hidden tracks cut off
+    if listening(closer_group):   # its long closers watched in this zone, their hidden tracks cut off
         hidden.sent(zone, [k for k in keys if k not in MIX_KEEP], append=append or COMBINE_TRACE is not None,
                     report=report)
     if COMBINE_TRACE is not None:   # a mix: each config's tracks noted, none sent twice, later configs add to the first's
@@ -5677,14 +5723,14 @@ class PlayedFilter:
         self.keep = {str(k) for k in keep if k}
         self.report, self.skipped = report, 0
         self.filters = None
-        self.closer_limit, self.closers_seen = None, set()
+        self.closer_limit, self.closers_seen, self.closer_group = None, set(), group
         if filters:   # the playlists 24bit7 builds: the hidden-track check as tracks are found, so
             # a skipped closer never takes a place in the playlist and the next track fills it
             if closers_on(group):
                 try:
                     import library   # here rather than at the top: library imports engine
                     library.ensure_loaded()
-                    self.closer_library, self.closer_limit = library, hidden.MINUTES * 60
+                    self.closer_library, self.closer_limit = library, closer_setting(group)[1] * 60
                 except Exception as e:
                     report("  " + t("Note: the hidden track check didn't run, as the library couldn't be read ({e}).", e=e))
         if filters:   # the filters ticked on the button and its zone, for the playlists 24bit7 builds
@@ -5713,8 +5759,7 @@ class PlayedFilter:
         if str(key) in self.keep:
             return True
         if self.closer_limit is not None:
-            closer = hidden.is_candidate(key)
-            why = hidden.leave_out(key) if closer else None
+            closer, why = closer_out(key, self.closer_group)
             if why:
                 if str(key) not in self.closers_seen:
                     self.closers_seen.add(str(key))
@@ -5755,7 +5800,7 @@ class PlayedFilter:
 
     def _passes_quietly(self, key):
         """The hidden-track check and the filters for one copy, without counting or reporting."""
-        if self.closer_limit is not None and hidden.is_candidate(key) and hidden.leave_out(key):
+        if self.closer_limit is not None and closer_out(key, self.closer_group)[1]:
             return False
         return self.filters is None or self.filters.passes(key)
 
@@ -5824,7 +5869,7 @@ class FastStart:
             self.report("  " + t("Note: fast start didn't go through ({e}), so the playlist starts when it's built.", e=e))
             self.zone = None
             return
-        if closers_on():   # the first track is scanned like any other (13 Nov 2026)
+        if listening():   # the first track is scanned like any other (13 Nov 2026)
             hidden.sent(self.zone, [str(key)], report=self.report)
         if COMBINE_TRACE is not None:   # a mix: the track that started counts as its config's first
             COMBINE_TRACE.append((COMBINE_INDEX, [str(key)]))

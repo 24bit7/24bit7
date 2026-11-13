@@ -733,7 +733,11 @@ class ProfilePage:
             if f"SKIP_PLAYED_{g}" not in v:   # another kind's section: not on this page
                 continue
             out[f"SKIP_PLAYED_{g}"] = "1" if v[f"SKIP_PLAYED_{g}"].get() else "0"
-            out[f"SKIP_LONG_CLOSERS_{g}"] = "1" if v[f"SKIP_LONG_CLOSERS_{g}"].get() else "0"
+            out[f"SKIP_LONG_CLOSERS_{g}"] = engine.closer_stored(
+                option_code(CLOSER_MODE_OPTIONS, v[f"SKIP_LONG_CLOSERS_{g}"].get()))
+            minutes = str(v[f"LONG_CLOSER_MINUTES_{g}"].get()).strip() if f"LONG_CLOSER_MINUTES_{g}" in v else ""
+            if minutes.isdigit():
+                out[f"LONG_CLOSER_MINUTES_{g}"] = str(min(30, max(3, int(minutes))))
             if f"IF_ALL_ELSE_FAILS_{g}" in v:
                 out[f"IF_ALL_ELSE_FAILS_{g}"] = "1" if v[f"IF_ALL_ELSE_FAILS_{g}"].get() else "0"
                 out[f"IF_ALL_ELSE_FAILS_{g}_MODE"] = option_code(FALLBACK_MODE_OPTIONS,
@@ -880,6 +884,8 @@ DEVICE_DEEP_CUTS = [("off", N_("Off")), ("spaced", N_("Spaced")), ("shuffled", N
 # Non-stop dropdowns: (saved value, label shown)
 NONSTOP_USING_OPTIONS = [("artists", N_("Similar artists")), ("tracks", N_("Similar tracks"))]
 NONSTOP_RESEED_OPTIONS = [("last", N_("Last track")), ("second", N_("2nd track"))]
+# Hidden Tracks (Ben, 13 Nov 2026): scanned (Listen for Them, the default) or the old rule by length (Over Minutes)
+CLOSER_MODE_OPTIONS = [("listen", N_("Listen for Them")), ("off", N_("Off")), ("minutes", N_("Over Minutes"))]
 SAVED_RESEED_OPTIONS = NONSTOP_RESEED_OPTIONS + [("whole", "Whole playlist")]   # JRiver Playlists rows only
 NONSTOP_MODE_OPTIONS = [("off", N_("Off")), ("tight", N_("Keep It Tight")), ("journey", N_("Wander"))]
 NONSTOP_MODE_HELP = (N_("When the last track of a playlist 24bit7 built starts, more are added so the music keeps going.\n"
@@ -1032,9 +1038,15 @@ def sync_played(p):
 
 
 def sync_long_closers(p):
-    """Each option's minutes box greys out while its Hidden Tracks tick is off."""
-    for g, sb in p.closer_sbs.items():
-        sb.config(state="normal" if p.vars[f"SKIP_LONG_CLOSERS_{g}"].get() else "disabled")
+    """Each option's minutes box shows only while its Hidden Tracks is Over Minutes (the mock-up, 13 Nov 2026)."""
+    for g, cell in p.closer_sbs.items():
+        if not cell.winfo_exists():
+            continue
+        if option_code(CLOSER_MODE_OPTIONS, p.vars[f"SKIP_LONG_CLOSERS_{g}"].get()) == "minutes":
+            if not cell.winfo_ismapped():
+                cell.pack(side="left", padx=(8, 0))
+        else:
+            cell.pack_forget()
 
 
 def sync_nonstop(p):
@@ -4604,7 +4616,7 @@ class SettingsTab(tk.Frame):
         p.drift_warn = {}      # group -> the Same as Settings > Sources note
         p.drift_src = {}       # group -> (mode, its row, the Custom Sources panel, {kind: frame})
         p.played_boxes = {}    # group -> its days box
-        p.closer_sbs = {}      # GROUP -> its minutes box
+        p.closer_sbs = {}      # GROUP -> its minutes box with its words, shown for Over Minutes
         p.nonstop_parts = {}   # GROUP -> (its choices, the song-count dropdown or None)
         pages = {kind: tab}
         nonstop_cfg = engine.nonstop_settings(p.env.get)
@@ -5170,15 +5182,32 @@ class SettingsTab(tk.Frame):
         def hidden(group):
             """The Hidden Tracks section for one Play option."""
             g = group.upper()
-            on, minutes = closer_cfg[group]
+            mode, minutes = closer_cfg[group]
             begin(group, t("Hidden Tracks"), tour.note_for("Hidden Tracks"))
             row = tk.Frame(where["box"])
-            p.vars[f"SKIP_LONG_CLOSERS_{g}"] = tk.BooleanVar(value=on)
-            # the minutes box went on 13 Nov 2026: a long closer is scanned for its hidden track and cut off where
-            # the silence starts, rather than left out for its length (hidden.py)
-            ttk.Checkbutton(row, text=t("Leave out the hidden track at the end of an album"),
-                            variable=p.vars[f"SKIP_LONG_CLOSERS_{g}"], command=p.save).pack(side="left")
-            help_mark(row, t(tour.SECTION_NOTES["Hidden Tracks"])).pack(side="left", padx=(8, 0))
+            # one drop-down (Ben, 13 Nov 2026): Listen for Them scans a long closer and cuts it where its hidden
+            # track's silence starts (hidden.py); Over Minutes is the old rule, every closer over the minutes left out
+            tk.Label(row, text=t("Hidden Tracks"), anchor="w").pack(side="left")
+            p.vars[f"SKIP_LONG_CLOSERS_{g}"] = tk.StringVar(value=option_label(CLOSER_MODE_OPTIONS, mode))
+            cb = TCombobox(row, textvariable=p.vars[f"SKIP_LONG_CLOSERS_{g}"],
+                           values=[shown for _, shown in CLOSER_MODE_OPTIONS], state="readonly", width=16)
+            cb.pack(side="left", padx=(12, 0))
+            cell = tk.Frame(row)
+            p.vars[f"LONG_CLOSER_MINUTES_{g}"] = tk.StringVar(value=str(minutes))
+            sb = tk.Spinbox(cell, from_=3, to=30, textvariable=p.vars[f"LONG_CLOSER_MINUTES_{g}"], width=3,
+                            command=p.save)
+            sb.pack(side="left")
+            tk.Label(cell, text=t("minutes: leave out an album's last track longer than this")).pack(
+                side="left", padx=(6, 0))
+            p.vars[f"LONG_CLOSER_MINUTES_{g}"].trace_add("write", p.save)
+            p.closer_sbs[g] = cell
+            help_mark(row, t(tour.SECTION_NOTES["Hidden Tracks"])).pack(side="right", padx=(8, 0))
+
+            def picked(_e=None):
+                sync_long_closers(p)
+                p.save()
+            cb.bind("<<ComboboxSelected>>", picked)
+            sync_long_closers(p)
             place(row)
 
         def fallback(group):

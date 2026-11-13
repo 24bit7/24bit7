@@ -147,8 +147,8 @@ def _usable(row, group, exclude_keys, allowed):
     seconds = _number(row.get("Duration"))
     if seconds and seconds < SHORTEST:
         return False
-    if engine.closers_on(group or "tracks") and engine.hidden.is_candidate(key) and engine.hidden.leave_out(key):
-        return False   # a closer that can't be checked for a hidden track (the rest are cut off as they play)
+    if engine.closer_out(key, group or "tracks")[1]:
+        return False   # a closer Hidden Tracks leaves out (with Listen for Them, the rest are cut off as they play)
     return allowed is None or allowed(key)
 
 
