@@ -77,10 +77,13 @@ def test_what_it_does_and_an_other_field_rule(app, ui):
     s._filters = filters.load()
     s._filter_i = [x["name"] for x in s._filters].index("Calm")
     s._filter_fill_editor()
-    ui.pump(1.5)
+    mood = "Mood: 4 tracks by 1 artist have a value. The list holds the values in your library."
+    for _ in range(25):   # read on a thread: 1.5 s wasn't enough in the 1.37.0 standard build (13 Nov 2026)
+        ui.pump(0.2)
+        if library.has_fields(["Mood"]) and mood in labels(win):
+            break
     assert library.has_fields(["Mood"])
-    assert "Mood: 4 tracks by 1 artist have a value. The list holds the values in your library." in labels(win), \
-        labels(win)
+    assert mood in labels(win), labels(win)
     s._filter_i = [x["name"] for x in s._filters].index("Kiwi Music")
     # a name JRiver doesn't have
     s._filters[s._filter_i]["rules"][0].update(name="Countyr", value="")
