@@ -37,7 +37,9 @@ def test_artist_matching_names_the_artist_and_the_seeds_own(app, monkeypatch):
     whys = {x["why"] for x in rows}
     assert "Seed artist" in whys or any(x["artist"] != "The Beatles" for x in rows), r.text()
     other = next(x for x in rows if x["artist"] != "The Beatles" and x["why"])
-    assert other["why_more"] == (f"{other['why']} named {other['artist']} as like The Beatles - Here Comes The Sun.")
+    import fakes   # the sources may name an artist as they know it (The Jimi Hendrix Experience), which Found By quotes
+    said = {other["artist"], fakes.SOURCE_NAME.get(other["artist"], other["artist"])}
+    assert other["why_more"] in {f"{other['why']} named {name} as like The Beatles - Here Comes The Sun." for name in said},         other["why_more"]
     own = [x for x in rows if x["why"] == "Seed artist"]
     assert all(x["why_more"] == "One of The Beatles's own top tracks: the seed's artist." for x in own)
 
