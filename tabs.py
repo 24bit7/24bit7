@@ -246,6 +246,13 @@ def seed_colour(theme, accent=None):
     return SEED_GREEN["dark"] if near_teal else SEED_TEAL["dark"]
 
 
+def chosen_row_colours(theme=None):
+    """(fill, text) for the chosen row in Discover's tables: the dark theme's accent with black text, the light
+    theme's logo blue with white (Ben, 13 Nov 2026). theme: "dark" or "light", else the one in use."""
+    dark = (theme or THEME) == "dark"
+    return (DARK if dark else LIGHT)["button_fg"], ("#000000" if dark else "#ffffff")
+
+
 def set_accent(colour):
     """Sets the accent everywhere it's used. Call before apply_theme."""
     global ACCENT, MATRIX_FG, MATRIX_HI
@@ -1081,7 +1088,10 @@ def themed_ttk(root):
     # the Discover table: rows like the page, the heading like a Settings header bar
     style.configure("Treeview", background=bg, fieldbackground=bg, foreground=text,
                     bordercolor=edge, lightcolor=bg, darkcolor=bg)
-    style.map("Treeview", background=[("selected", hi)], foreground=[("selected", text)])
+    # the chosen row filled with the accent (dark, text black) or the logo blue (light, text white), so it's
+    # plain which row you clicked (Ben, 13 Nov 2026); both are button_fg in their theme
+    chosen_bg, chosen_fg = chosen_row_colours()
+    style.map("Treeview", background=[("selected", chosen_bg)], foreground=[("selected", chosen_fg)])
     style.configure("Treeview.Heading", background=PALETTE["head_bg"], foreground=PALETTE["head_fg"],
                     bordercolor=edge, lightcolor=PALETTE["head_bg"], darkcolor=PALETTE["head_bg"], relief="flat")
     style.map("Treeview.Heading", background=[("active", PALETTE["head_bg"])],
@@ -1374,14 +1384,18 @@ class TCombobox(ttk.Combobox):
         self._en.set(value)
 
 
-def equal_thirds(span, first_gap, gap):
+FIRST_SHARE = 0.4   # the Album or Playlist box's share of its row; Play and Embellish split the rest
+
+
+def row_shares(span, first_gap, gap, first=FIRST_SHARE):
     """
-    Three widths that share a span of pixels equally: (first, second, third), with first_gap after the first and
-    gap after the second. What doesn't divide by three goes to the first, so the three end exactly where the span
-    does. The JRiver Playlists row: the Playlist box, Play and Play & Embellish (Ben, 10 Nov 2026).
+    Three widths across a span of pixels: (first, second, third), with first_gap after the first and gap after the
+    second; the first takes its share (two fifths) and the other two split the rest equally, any odd pixel going to
+    the first, so the three end exactly where the span does. The Playlists & Albums row: the Album or Playlist box,
+    Play and Embellish. Equal thirds from 10 Nov 2026; the box a little wider from 13 Nov (Ben).
     """
     room = max(0, int(span) - first_gap - gap)
-    each = room // 3
+    each = (room - int(round(room * first))) // 2
     return room - 2 * each, each, each
 
 

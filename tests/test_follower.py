@@ -148,14 +148,30 @@ class StubJRiver:
     """Each zone's state, key, next key and playlist, set by the tests."""
 
     def __init__(self):
-        self.zones = {"Sonos": {"state": 0, "key": None, "next": None, "list": []},
-                      "Speakers": {"state": 0, "key": None, "next": None, "list": []}}
+        self.zones = {"Sonos": {"state": 0, "key": None, "next": None, "list": [], "pos_ms": 0, "dur_ms": 0},
+                      "Speakers": {"state": 0, "key": None, "next": None, "list": [], "pos_ms": 0, "dur_ms": 0}}
         self.stopped = []
+        self.started = []         # ("play", zone) or ("index", zone, index): both rooms started together
+        self.on_start = None      # the world's hook: the Sonos starts that track from the top
 
     def info(self, zone):
         z = self.zones[zone]
-        return {"state": z["state"], "key": z["key"], "next_key": z["next"], "position_ms": 0,
-                "name": f"Track {z['key']}", "status": ""}
+        index = z["list"].index(z["key"]) if z["key"] in z["list"] else -1
+        return {"state": z["state"], "key": z["key"], "next_key": z["next"], "position_ms": z["pos_ms"],
+                "duration_ms": z["dur_ms"], "index": index, "name": f"Track {z['key']}", "status": ""}
+
+    def play(self, zone):
+        self.started.append(("play", zone))
+        self.zones[zone]["state"] = 2
+        if self.on_start:
+            self.on_start(self.zones[zone]["key"])
+
+    def play_index(self, zone, index):
+        self.started.append(("index", zone, index))
+        z = self.zones[zone]
+        z.update(state=2, key=z["list"][index], next=z["list"][index + 1] if index + 1 < len(z["list"]) else None)
+        if self.on_start:
+            self.on_start(z["key"])
 
     def playlist(self, zone):
         return [(k, f"Track {k}") for k in self.zones[zone]["list"]]
@@ -334,14 +350,54 @@ def test_a_big_error_is_moved_at_once():
 
 # --- joining, jumping, stopping, changing track -----------------------------------------------------
 
-def test_joining_a_track_already_playing():
+def joining(at_ms, dur_ms=300000, keys=(3, 4, 5)):
+    """The Sonos already playing track 3 at at_ms when the follower starts; JRiver's start of both rooms restarts
+    the Sonos's counter from the top of whichever track it names."""
     w = World()
-    c0 = w.play(key=3, at_ms=40000)
+    w.jr.zones["Sonos"].update(list=list(keys), pos_ms=at_ms, dur_ms=dur_ms)
+    fresh = []
+
+    def start(key):
+        w.sonos.stop()
+        w.sim.t += 0.4
+        fresh.append(w.sonos.play())
+    w.jr.on_start = start
+    w.play(key=3, at_ms=at_ms, next=4)
     w.sonos.reads.clear()   # the clock starts with the follower: no read before the run, so it was already going
     w.sim.t += 1.5          # the Sonos has been playing a while before the follower starts
-    w.run(5.0)
-    off = w.offsets(c0 + START, since=w.sim.t - 3)
+    return w, fresh
+
+
+def test_joining_under_halfway_starts_the_track_again_in_both_rooms():
+    # Ben, 13 Nov 2026: a join partway through a track the Sonos ran straight on into was about 100 ms out (a
+    # slight echo), since how the track began wasn't seen. Both rooms start together instead, the case always in step.
+    w, fresh = joining(at_ms=40000)
+    w.run(6.0)
+    assert w.jr.stopped == ["Sonos"] and w.jr.started == [("play", "Sonos")]
+    assert w.said("Note: the Speakers joined partway through Track 3, so both rooms start it again from the top "
+                  "together, the way they stay in step.")
+    assert len(w.outs) == 1, "joined the old run as well"
+    off = w.offsets(fresh[0] + START, since=fresh[0] + 2.5)
     assert len(off) > 50 and np.abs(off).max() < TOL
+
+
+def test_joining_halfway_or_more_goes_on_to_the_next_track_in_both_rooms():
+    w, fresh = joining(at_ms=200000)
+    w.run(6.0)
+    assert w.jr.started == [("index", "Sonos", 1)], "Track 4, the next in Playing Now"
+    assert w.said("Note: the Speakers joined partway through Track 3, so both rooms go on to the next track "
+                  "together, the way they stay in step.")
+    assert w.f.track["key"] == 4
+    off = w.offsets(fresh[0] + START, since=fresh[0] + 2.5)
+    assert len(off) > 50 and np.abs(off).max() < TOL
+
+
+def test_a_fresh_start_seen_from_the_top_is_joined_with_no_restart():
+    w = World()
+    w.run(0.5)
+    w.play()
+    w.run(5.0)
+    assert w.jr.started == [] and w.jr.stopped == []
 
 
 def test_a_jump_is_placed_with_the_resume_lateness():
@@ -362,7 +418,9 @@ def test_a_jump_is_placed_with_the_resume_lateness():
 def test_a_jump_back_seeks_rather_than_waiting():
     w = World()
     w.run(0.5)
-    w.play(at_ms=100000)
+    w.play()
+    w.run(5.0)
+    w.sonos.play(at_ms=100000)   # forward first, while following (a start partway would start both rooms afresh)
     w.run(5.0)
     c1 = w.sonos.play(at_ms=20000)
     w.run(4.0)

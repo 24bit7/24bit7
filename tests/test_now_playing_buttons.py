@@ -107,3 +107,22 @@ def test_zone_gains_multiroom_which_reads_the_leader_and_is_picked_when_the_spea
 
 def console_lines(ui):
     return ui.play.log.get("1.0", "end-1c").splitlines()
+
+
+def test_stop_turns_into_clear_playing_now_while_jriver_is_still_fading_out(app, ui):
+    """Ben, 13 Nov 2026: Stop stayed Stop after one click, since JRiver still said playing when 24bit7 asked straight
+    away and the next read was ten seconds off, so he clicked Stop again. Now the zone is asked until it's stopped."""
+    j = app.jriver
+    j.play("Speakers", [j.key_of("The Beatles", "Something"), j.key_of("Queen", "Bohemian Rhapsody")])
+    play = ui.play
+    settled(ui)
+    play.zone_var.set("Speakers")
+    play._on_zone_changed()
+    now_playing(ui)
+    assert play.stop_button._label.cget("text") == "Stop"
+    j.stop_reads = 3   # three more reads say playing, as JRiver does while it fades out
+    play._stop_clicked()
+    ui.pump(until=lambda: play.stop_button._label.cget("text") == "Clear Playing Now", timeout=6)
+    assert play.stop_button._label.cget("text") == "Clear Playing Now", "Stop needed a second click"
+    assert play.stop_button._armed == ui.gui.PALETTE["red"]
+    assert not ui.errors, ui.errors[0]

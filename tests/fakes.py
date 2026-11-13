@@ -164,6 +164,7 @@ class FakeJRiver:
         self.up = True
         self.refused = set()   # calls answered 401 Access denied, as Helmut's JRiver did AddFiles
         self.fields_made = []  # Library/CreateField calls: (name, type)
+        self.stop_reads = 0    # Playback/Info reads that still say playing after a Stop (JRiver fading out, 13 Nov 2026)
         self.playlists = []
         keys = [r["Key"] for r in self.tracks]
         beatles = [r["Key"] for r in self.tracks if r["Artist"] == "The Beatles"]
@@ -230,6 +231,10 @@ class FakeJRiver:
             z = self._zone_for(params)
             if z is None:
                 return Resp(text=_response({}, "Failure"))
+            if getattr(z, "fading", 0):
+                z.fading -= 1
+                if not z.fading:
+                    z.state = 0
             items = {"ZoneID": z.id, "ZoneName": z.name, "State": z.state, "PositionMS": z.position_ms,
                      "PlayingNowPosition": z.pos, "PlayingNowTracks": len(z.playlist)}
             if 0 <= z.pos < len(z.playlist):
@@ -259,7 +264,11 @@ class FakeJRiver:
                 z.playlist, z.pos, z.state, z.position_ms = keys, 0, 2, 0
             return Resp(text=_response({}))
         if path == "Playback/Stop":
-            self._zone_for(params).state = 0
+            z = self._zone_for(params)
+            if self.stop_reads and z.state:
+                z.fading = self.stop_reads + 1   # the next stop_reads reads still say playing
+            else:
+                z.state = 0
             return Resp(text=_response({}))
         if path == "Playback/ClearPlaylist":   # the Now Playing row's Clear Playing Now (9 Nov 2026)
             z = self._zone_for(params)

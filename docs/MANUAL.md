@@ -208,7 +208,7 @@ The small green arrow at the top middle of the console opens a row of tabs:
 - **One per Alexa device**: that device's latest build, including commands that came to nothing. A device gets its tab after its first build.
 - **Log**: every build kept, below.
 
-A build only clears the screen when its own tab, or All, is showing, so a voice command in the kitchen won't wipe a build you're reading at the PC. With the tabs open, the strip sits at the top right. New lines don't pull you down while you're scrolled up. Open or closed is remembered.
+A build only clears the screen when its own tab, or All, is showing, so a voice command in the kitchen won't wipe a build you're reading at the PC. Lines that aren't part of a build, such as Stop, Skip Track, Multiroom notes and start-up notes, clear themselves after ninety seconds. The clock only runs while the window is showing and the mouse isn't over the console, so nothing goes before you've had the chance to read it. A build's lines and a Console Query answer stay. With the tabs open, the strip sits at the top right. New lines don't pull you down while you're scrolled up. Open or closed is remembered.
 
 #### The Log
 
@@ -260,9 +260,11 @@ Radio, Embellish and Blend are builds like any other here, with Radio, Embellish
 
 Artists the sources named that aren't in your library, across every build. It's checked against the library itself, so an artist you own with a missing song is a gap, not a missing artist. The ones most of your artists point to come first. **Your Artists** says how many of the artists you own led to it, and **Builds** how many builds it came up in. Select a row to see which of your artists have it on their lists and the songs the sources named, with Label and your store and reference buttons underneath.
 
+**Refresh**, at the right of the line above the table, reads your library from JRiver again, so artists and songs you've added since drop off. 24bit7 does this every thirty minutes anyway; hover over the button to see when it last did.
+
 ### Gaps in Your Artists
 
-Artists you own that the sources named, with how many songs matched and the songs you don't have, the most missed first. Select a row for the same buttons.
+Artists you own that the sources named, with how many songs matched and the songs you don't have, the most missed first. Each song is checked against your library, so one you've bought since a build missed it counts as matched. Select a row for the same buttons, and **Refresh** works as on Missing Artists.
 
 ### Narrowing them down
 
@@ -321,7 +323,7 @@ The sections for the whole playlist follow the configs, each open when it's on:
 - **Deep Cuts**: Off, **Spaced** or **Shuffled**, and **Add Deep Cuts by**, 10% to 100%, for every kind but Artist's Top Tracks. See [Deep Cuts](#deep-cuts).
 - **Non-stop** (Off, Keep It Tight or Wander) keeps a playlist going when it reaches its last track. See [Non-stop](#non-stop).
 - **Shortcut**: keys that build this playlist from anywhere in Windows, even with 24bit7 in the tray. Click the box and press the keys; Esc cancels. The zone they play to is under Settings > Other > Keyboard Shortcuts. See [Keyboard shortcuts](#keyboard-shortcuts).
-- **Hidden Tracks** skips the last track on an album when it's longer than a set number of minutes (6 by default). Those are often a long silence and a hidden bonus track, which feel out of place in a playlist. Albums, songs and playlists you ask for by name always play in full.
+- **Hidden Tracks**, ticked to start: some albums hide a bonus track after a long silence at the end of their last track, which feels out of place in a playlist. When a playlist has an album's last track over five minutes long, 24bit7 checks the file in the background for ten seconds or more of silence with sound after it. If it finds one, the song plays and 24bit7 moves on where the silence starts, and the console says so: "Aerials by System Of A Down: plays to 3:55, its hidden track left out." Each file is checked once and remembered, and checked again if it changes. The file itself is only read, never changed. A file Windows can't read (DSD, APE or WavPack) or can't reach is left out, as all long closers were before 1.37.0, with a line saying why. Albums, songs and playlists you ask for by name always play in full, and while 24bit7 is closed the hidden track plays. To leave out long tracks altogether, turn on the [Long Tracks](#edit-filters) filter.
 - **If All Else Fails**, off to start: tick **If nothing is found** and choose what happens when a build finds nothing, or nothing beyond the seed track itself. **Shuffle Genre** shuffles songs from your library in the seed's genre: the seed track's Genre tag, or the artist's most common genre in your library, at a similar tempo when the seed has a BPM tag and enough tracks are within 10% of it. It plays that kind's usual number of tracks, with Skip Recently Played, Filters and the per-artist limit applied and the seed artist left out. **Run File** starts a file of your own, such as a .bat, and Run After Building is skipped for that build. **Play JRiver Playlist** plays one of your JRiver playlists or smartlists, picked with **Choose...**, as JRiver gives it. Tick **Say why in the room first** (off to start, one setting for every kind) and a voice command or keyboard shortcut hears why before the music: Windows' own voice, saved as a short WAV file and played on that zone, so it shows in Playing Now. It needs JRiver on the same PC. With If All Else Fails unticked, the console says "I couldn't find a match. Please try another seed." and a build from the app shows the same in a message. It doesn't run when an added JRiver playlist has already played.
 - **Run After Building** runs a file of your choice once a playlist is in JRiver: a .bat, an .exe, or a PowerShell or Python script. It's told nothing about the playlist, so it can do whatever you like. It doesn't run when Non-stop adds more.
 
@@ -344,6 +346,8 @@ A window of named filters that narrow what 24bit7 picks, Drift rounds and what N
 Tick **Every playlist** on a filter and it applies to every playlist 24bit7 builds, whether it's ticked on the playlist's page or not.
 
 **Skipped Tracks** comes ready-made, off to start, with Every playlist ticked. It leaves out any track you've skipped by voice twice or more, and every track by an artist with three such tracks. Both numbers are yours under **What It Leaves Out**, from one to nine: "Leave out a track skipped by voice [2] times or more" and "Leave out every track by an artist with [3] tracks left out". Only tracks left out count towards an artist, so a band you skipped once or twice on an off day stays. Each skip you ask the skill for is counted in a field of 24bit7's own in JRiver, **24bit7 Voice Skips**, which you can see there too. Its page lists what it's leaving out now, under **Left Out Now**, each with **Let Back In**, which clears the count.
+
+**Long Tracks** comes ready-made too, off to start, with Every playlist ticked for when you turn it on. It keeps tracks shorter than fifteen minutes, so a twenty-minute live jam doesn't take over a playlist. Change the minutes, or delete it; once deleted it doesn't come back.
 
 A track with no value for a field passes that rule. The seed track is never filtered out. Each build's console says which filters applied and how many tracks they left out. Where several apply, a track must pass them all. Albums, songs, shuffles and JRiver playlists asked for by voice play as asked.
 
@@ -525,7 +529,7 @@ Multiroom plays what your Sonos plays on your main system too, in step, so the k
 
 JRiver plays to the Sonos exactly as it does today. 24bit7 starts a small program of its own, the follower, which reads the Sonos's own clock about a hundred times a second, fetches each track from a second JRiver DLNA server with your DSP applied, at the file's own sample rate and 24-bit, and plays it to your DAC placed on that clock. Nothing is resampled; drift is held to a millisecond by dropping or repeating single samples now and then, and the samples are bit-perfect in between. JRiver's own zone for that DAC is stopped while it follows, so the DAC is free.
 
-What you hear: the two rooms start within a few milliseconds of each other and stay there through a whole album. Gapless albums stay gapless. A jump within a track is followed. A pause anywhere, in JRiver, from the Sonos app or the button on the Sonos, stops both rooms, and play starts the track from the top in both, since a resumed track can't be placed as surely. A build sent to the Sonos alone while Multiroom plays lets the main system finish its track and drop out; a new build with Output on Multiroom starts it following again, joining part way through a track if one is playing.
+What you hear: the two rooms start within a few milliseconds of each other and stay there through a whole album. Gapless albums stay gapless. A jump within a track is followed. A pause anywhere, in JRiver, from the Sonos app or the button on the Sonos, stops both rooms, and play starts the track from the top in both, since a resumed track can't be placed as surely. A build sent to the Sonos alone while Multiroom plays lets the main system finish its track and drop out; a new build with Output on Multiroom starts it following again. When the main system joins something already playing, both rooms start together, since a join part way through a track can come out a little apart: under halfway through the track, both start it again from the top; halfway or more, both go on to the next track. The console says which, and neither counts as a skip.
 
 ### Setting up
 

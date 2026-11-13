@@ -126,10 +126,11 @@ def lined_up_pair(p):
     return next(pair for pair in pairs if pair[1].winfo_rootx() + pair[1].winfo_width() <= limit)
 
 
-def test_the_box_play_and_embellish_share_the_row_in_equal_thirds(app, ui):
-    """Ben, 10 Nov 2026: the Playlist box, Play and Embellish are three equal widths, from the box's left
-    edge to the end of the row's last playlist clear of Output, and the box stands nearer the buttons' height.
-    Before (7 Nov) each button matched the one under it and the box was twice as wide as either."""
+def test_the_box_takes_two_fifths_of_the_row_and_play_and_embellish_are_one_line_tall(app, ui):
+    """Ben, 13 Nov 2026: the Album or Playlist box a little wider (two fifths, Play and Embellish three tenths each),
+    from the box's left edge to the end of the row's last playlist clear of Output, and Play and Embellish one line
+    tall, the box just taller. Equal thirds from 10 Nov, two lines tall before; before 7 Nov each button matched the
+    one under it and the box was twice as wide as either."""
     p = lists_tab(ui)
     root = p.winfo_toplevel()
     for width in (1180, 1600):
@@ -138,13 +139,16 @@ def test_the_box_play_and_embellish_share_the_row_in_equal_thirds(app, ui):
         _under_play, under_emb = lined_up_pair(p)
         box, play, emb = p.playlist_entry, p.play_list_button, p.embellish_button
         widths = (box.winfo_width(), play.winfo_width(), emb.winfo_width())
-        assert widths[1] == widths[2] and 0 <= widths[0] - widths[1] <= 2, (width, widths)
+        assert widths[1] == widths[2], (width, widths)
+        assert abs(widths[0] - 0.4 * (widths[0] + widths[1] + widths[2])) <= 2, (width, widths, "two fifths")
         assert abs(box.winfo_rootx() + widths[0] + 24 - play.winfo_rootx()) <= 1, "the usual gap after the box"
         assert abs(play.winfo_rootx() + widths[1] + 8 - emb.winfo_rootx()) <= 1, "and between the buttons"
         right = under_emb.winfo_rootx() + under_emb.winfo_width()
         assert abs(emb.winfo_rootx() + widths[2] - right) <= 1, (width, "the row ends where it did")
         assert emb.winfo_rootx() + widths[2] <= p.output_box.winfo_rootx(), "Output stays clear"
-        assert 0.75 * play.winfo_height() <= box.winfo_height() < play.winfo_height(), \
+        assert play.winfo_height() < 0.75 * _under_play.winfo_height(), \
+            (play.winfo_height(), _under_play.winfo_height(), "one line, not two")
+        assert play.winfo_height() <= box.winfo_height() <= 1.25 * play.winfo_height(), \
             (box.winfo_height(), play.winfo_height())
     assert not ui.errors, ui.errors[0]
 

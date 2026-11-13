@@ -740,7 +740,6 @@ class ProfilePage:
                                                                  v[f"IF_ALL_ELSE_FAILS_{g}_MODE"].get())
                 for part in ("PATH", "PLAYLIST", "PLAYLIST_NAME"):
                     out[f"IF_ALL_ELSE_FAILS_{g}_{part}"] = v[f"IF_ALL_ELSE_FAILS_{g}_{part}"].get().strip()
-            out[f"LONG_CLOSER_MINUTES_{g}"] = v[f"LONG_CLOSER_MINUTES_{g}"].get().strip()
             out[f"NONSTOP_{g}"] = "1" if v[f"NONSTOP_{g}"].get() else "0"
             out[f"NONSTOP_{g}_RESEED"] = option_code(NONSTOP_RESEED_OPTIONS, v[f"NONSTOP_{g}_RESEED"].get())
             if f"NONSTOP_{g}_MODE" in v:
@@ -3033,8 +3032,6 @@ class SettingsTab(tk.Frame):
         win = self._filter_win = tk.Toplevel(self)
         win.title(t("Edit Filters"))
         win.transient(self.winfo_toplevel())
-        win.geometry(f"{scaled(self, 980)}x{scaled(self, 700)}")
-        win.minsize(scaled(self, 700), scaled(self, 400))
         win.bind("<Destroy>", lambda e: self._filter_ticks_refresh() if e.widget is win else None)
         tab = self._scroll_page(win)
         self._filters = filters.load()
@@ -3060,7 +3057,22 @@ class SettingsTab(tk.Frame):
                               (t("Duplicate"), self._filter_duplicate), (t("Delete"), self._filter_delete)):
             tk.Button(row, text=text, width=9, command=command).pack(side="left", padx=(0, 3))
         self._filter_refresh()
+        self._fit_filters(win, tab)
         return win
+
+    def _fit_filters(self, win, tab):
+        """
+        Edit Filters opens at the size the filter on show needs, never taller or wider than the screen allows with
+        room around it; a filter with many rules scrolls. It opened at a fixed 980 by 700 before, about two hundred
+        pixels of it empty (Ben, 13 Nov 2026: "far too big").
+        """
+        win.update_idletasks()
+        bar = scaled(self, 20)   # the scrollbar beside the page
+        w = min(max(tab.winfo_reqwidth() + bar, scaled(self, 700)), win.winfo_screenwidth() - scaled(self, 80))
+        h = min(max(tab.winfo_reqheight(), scaled(self, 300)), win.winfo_screenheight() - scaled(self, 160))
+        win.geometry(f"{w}x{h}")
+        win.minsize(min(w, scaled(self, 700)), min(h, scaled(self, 300)))
+        self._filter_fit = (w, h)   # for the tests
 
     def _filter_playlists(self):
         """[(id, label)] for Only pick from, from the JRiver Playlists table (read from JRiver if it's empty)."""
@@ -5162,21 +5174,11 @@ class SettingsTab(tk.Frame):
             begin(group, t("Hidden Tracks"), tour.note_for("Hidden Tracks"))
             row = tk.Frame(where["box"])
             p.vars[f"SKIP_LONG_CLOSERS_{g}"] = tk.BooleanVar(value=on)
-            p.vars[f"LONG_CLOSER_MINUTES_{g}"] = tk.StringVar(value=str(minutes))
-            sb = tk.Spinbox(row, from_=3, to=30, textvariable=p.vars[f"LONG_CLOSER_MINUTES_{g}"],
-                            width=4, command=p.save)
-
-            def toggled():
-                sync_long_closers(p)
-                p.save()
-            ttk.Checkbutton(row, text=t("Skip the last track on an album if it's longer than"),
-                            variable=p.vars[f"SKIP_LONG_CLOSERS_{g}"], command=toggled).pack(side="left")
-            sb.pack(side="left", padx=(6, 6))
-            tk.Label(row, text=t("minutes")).pack(side="left")
-            help_mark(row, t("Long album closers often hide a bonus track after a long silence. Albums, songs "
-                           "and playlists you ask for by name always play in full.")).pack(side="left", padx=(8, 0))
-            p.vars[f"LONG_CLOSER_MINUTES_{g}"].trace_add("write", p.save)
-            p.closer_sbs[g] = sb
+            # the minutes box went on 13 Nov 2026: a long closer is scanned for its hidden track and cut off where
+            # the silence starts, rather than left out for its length (hidden.py)
+            ttk.Checkbutton(row, text=t("Leave out the hidden track at the end of an album"),
+                            variable=p.vars[f"SKIP_LONG_CLOSERS_{g}"], command=p.save).pack(side="left")
+            help_mark(row, t(tour.SECTION_NOTES["Hidden Tracks"])).pack(side="left", padx=(8, 0))
             place(row)
 
         def fallback(group):

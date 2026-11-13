@@ -251,6 +251,7 @@ def _build(intent, value, button, zone, report):
 
 
 def _play_keys(keys, zone_id):
+    engine.hidden.forget_zone(zone_id)   # asked for by name: plays in full, hidden tracks and all
     r = requests.get(f"{engine.JRIVER_BASE}/Playback/PlayByKey",
                      params={"Key": ",".join(str(k) for k in keys), "Zone": zone_id},
                      auth=engine.AUTH, timeout=10)
@@ -344,6 +345,8 @@ def _play_now(intent, value, zone, device=None, top_up=False):
         if device:
             _own_room(zone)
         ok, what = _play_keys(keys[:SHUFFLE_CAP], zid), f"{min(len(keys), SHUFFLE_CAP)} songs by {library.spoken(artist)}, shuffled"
+        if ok and engine.closers_on("top"):   # a shuffle is 24bit7's own pick: its closers are scanned and watched
+            engine.hidden.sent(zid, keys[:SHUFFLE_CAP], report=print)
         if ok:   # non-stop: when the shuffle ends, the opening track seeds a new playlist
             engine.nonstop_record(zid, keys[:SHUFFLE_CAP], kind="top", stage="rest", vibe=None,
                                   top_artist=artist, top_first=str(lead) if lead else None)

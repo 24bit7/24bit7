@@ -187,3 +187,24 @@ def test_rows_are_striped_and_the_artist_column_fits_its_names(app, ui):
     assert ["stripe" in d.tree.item(i, "tags") for i in kids[:2]] == [False, True]
     assert str(d.tree.tag_configure("stripe", "background")) == tabs.stripe_colour()
     assert not ui.errors, ui.errors[0]
+
+
+def test_refresh_reads_the_library_again_and_an_artist_bought_since_drops_off(app, ui):
+    """Ben, 13 Nov 2026: Refresh at the right of the count line reads the library from JRiver now, so an artist
+    added since leaves Missing Artists; the time it was last read is in the hover note, not on the line."""
+    history(app)
+    s = artist_tab(ui)
+    assert any(r[0] == "Nonpoint" for r in rows(s))
+    line = s.count_label.master
+    assert s.refresh_button.master is line and \
+        s.refresh_button.winfo_rootx() > s.count_label.winfo_rootx(), "Refresh sits at the right of the count line"
+    j = app.jriver
+    row = dict(j.tracks[0], Key="99001", Artist="Nonpoint", Name="Bullet With a Name", Album="Vengeance")
+    j.tracks.append(row)
+    j.by_key[row["Key"]] = row
+    s.reload()
+    ui.pump(until=lambda: s.ready and not s._reloading, timeout=20)
+    assert not any(r[0] == "Nonpoint" for r in rows(s)), "Nonpoint is in the library now"
+    assert "Last read at" in s._refresh_note()
+    assert "Last read" not in s.count_label.cget("text"), "the time goes in the hover note"
+    assert not ui.errors, ui.errors[0]

@@ -112,3 +112,22 @@ def test_skipped_tracks_numbers_are_set_on_its_page_and_left_out_now_follows(app
     assert texts.count("Left Out Now") == 1, "the old section went"
     win.destroy()
     assert not ui.errors, ui.errors[0]
+
+
+def test_edit_filters_opens_at_the_size_its_filter_needs(app, ui):
+    """Ben, 13 Nov 2026: Edit Filters opened at a fixed 980 by 700, far too big for what it held. It now opens at
+    what the filter on show needs: nothing clipped, little left empty, never past the screen."""
+    import filters
+    f = filters.blank("Stereo")
+    filters.save([f] + filters.load())
+    pick_button(ui, "Artist + Guests")
+    s = ui.settings
+    win = s._open_filters()
+    ui.pump(0.5)
+    win.update_idletasks()
+    content = s._filter_right.master   # the scrolling page inside the window
+    need = content.winfo_reqheight()
+    assert win.winfo_height() >= need - 2, f"clipped: {win.winfo_height()} for {need}"
+    assert win.winfo_height() <= need + 40, f"empty space: {win.winfo_height()} for {need}"
+    assert win.winfo_height() <= win.winfo_screenheight() - 100
+    assert not ui.errors, ui.errors[0]

@@ -428,7 +428,15 @@ def test_shuffle_misheard_artist(app, alexa):
     assert r.started, r
 
 
-def test_shuffle_skips_long_closer(app, alexa):
+def test_shuffle_keeps_a_long_closer_and_watches_it_for_a_hidden_track(app, alexa):
+    """Hidden Tracks, scanned rather than guessed (13 Nov 2026): a shuffle is 24bit7's own pick, so Echoes plays
+    and is watched, its hidden track (if the scan finds one) cut off; one whose file can't be checked is left out."""
+    import hidden
+    alexa.say("ShuffleIntent", "pink floyd")
+    echoes = app.jriver.key_of("Pink Floyd", "Echoes")
+    assert "Pink Floyd - Echoes" in app.jriver.titles("Kitchen")
+    assert str(echoes) in hidden.watched(app.engine.zone_id("Kitchen"))
+    hidden._keep(echoes, float(app.jriver.by_key[echoes]["Duration"]), "unreadable", why="its file couldn't be reached")
     alexa.say("ShuffleIntent", "pink floyd")
     assert "Pink Floyd - Echoes" not in app.jriver.titles("Kitchen")
 

@@ -117,8 +117,17 @@ class ArtistsView(tk.Frame):
         self.chips.pack(side="left", fill="x", expand=True, padx=(6, 0))
         tabs.flow(self.chips, gap=6, within=self._sound_row)
 
-        self.count_label = tk.Label(self, text=t("Loading..."), fg=PALETTE["text_muted"], anchor="w", padx=22)
-        self.count_label.pack(fill="x", pady=(8, 0))
+        # the count, with Refresh at its right above the table's corner (Ben, 13 Nov 2026)
+        line = tk.Frame(self, padx=22)
+        line.pack(fill="x", pady=(8, 0))
+        self.count_label = tk.Label(line, text=t("Loading..."), fg=PALETTE["text_muted"], anchor="w")
+        self.count_label.pack(side="left", fill="x", expand=True)
+        self.refresh_button = FlatButton(line, text=t("Refresh"), width=10, height=1, command=self.reload)
+        self.refresh_button.pack(side="right")
+        from settings_gui import Tooltip
+        note = Tooltip(self.refresh_button, "")
+        note.when = lambda: bool(setattr(note, "text", self._refresh_note()) or True)
+        self._reloading = False
 
         wrap = tk.Frame(self, padx=22, pady=8)
         wrap.pack(fill="both", expand=True)
@@ -206,6 +215,49 @@ class ArtistsView(tk.Frame):
 
     # --- data --------------------------------------------------------------
 
+    @staticmethod
+    def _refresh_note():
+        """Refresh's hover note, with the time the library was last read (Ben: in the note, not on the line)."""
+        import time
+        import library
+        note = t("Reads your library from JRiver again, so artists and songs you've added since drop off the list. "
+                 "24bit7 also does this every thirty minutes.")
+        if library._loaded_at:
+            note += " " + t("Last read at {time}.", time=time.strftime("%H:%M", time.localtime(library._loaded_at)))
+        return note
+
+    def reload(self):
+        """Refresh: reads the library from JRiver now, on a thread, then works the list out again."""
+        if self._reloading:
+            return
+        self._reloading = True
+        self.refresh_button.config(state="disabled")
+        self.count_label.config(text=t("Reading your library from JRiver..."))
+
+        def work():
+            import library
+            try:
+                library.load()
+                error = None
+            except Exception as e:
+                error = e
+            self._inbox.put(lambda: self._reloaded(error))
+        threading.Thread(target=work, daemon=True).start()
+        self.ready = False
+        if self._polling is None:
+            self._poll()
+
+    def _reloaded(self, error):
+        self._reloading = False
+        if not self.winfo_exists():
+            return
+        self.refresh_button.config(state="normal")
+        if error is not None:
+            self.ready = True
+            self.count_label.config(text=t("Couldn't read your library from JRiver ({error}).", error=error))
+            return
+        self.refresh()
+
     def refresh(self):
         """Works the numbers out on a thread, then shows them; the first time, also asks Last.fm for tags."""
         self._busy += 1
@@ -241,7 +293,7 @@ class ArtistsView(tk.Frame):
             pass
         if not self.winfo_exists():
             return
-        if (not self.ready or self._fetching or self._label_busy) and self._polling is None:
+        if (not self.ready or self._fetching or self._label_busy or self._reloading) and self._polling is None:
             self._polling = self.after(50, self._poll)   # (a refresh run above may have started one already)
 
     @staticmethod

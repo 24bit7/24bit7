@@ -252,3 +252,14 @@ def test_the_stripe_is_a_shade_off_the_page_either_way(app):
     dark, light = "#1b1b1b", "#f3f4f6"
     assert 0 < brightness(tabs.stripe_colour(dark)) - brightness(dark) < 90
     assert 0 < brightness(light) - brightness(tabs.stripe_colour(light)) < 90
+
+
+def test_a_missed_song_you_own_now_counts_as_matched(app):
+    """Ben, 13 Nov 2026: Gaps listed a song as missed while no build had found it, even once it was in the library.
+    Each missed song is looked up with the usual matching rules now."""
+    import discover_stats as ds
+    session(app, artist="The Kinks", started="2026-11-05 21:00", seen=[
+        ("Pink Floyd", "Echoes", "Last.fm", 0), ("Pink Floyd", "Wish You Were Here", "Deezer", 0)])
+    got = {g["artist"]: g for g in ds.gaps(ds.rows())}["Pink Floyd"]
+    assert got["missed"] == ["Wish You Were Here"], got
+    assert got["matched"] == 1, "Echoes is in the library, though the build missed it"

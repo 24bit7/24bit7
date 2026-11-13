@@ -44,8 +44,10 @@ SECTION_NOTES = {
                    "It Tight stays close to the original playlist; Wander follows the music as the evening goes on."),
     "Shortcut": N_("Keys that build this playlist from anywhere in Windows, even with 24bit7 in the tray. Useful for the "
                    "one you reach for most."),
-    "Hidden Tracks": N_("Skips an album's last track when it's longer than a set time, since long closers often hide a "
-                        "bonus track after silence. Albums you ask for by name always play in full."),
+    "Hidden Tracks": N_("Some albums hide a bonus track after a long silence at the end of their last track. 24bit7 "
+                        "plays the song and moves on when the silence starts. Albums you ask for by name always play "
+                        "in full, and while 24bit7 is closed the hidden track plays. To leave out long tracks "
+                        "altogether, turn on Long Tracks under Settings > Filters."),
     "If All Else Fails": N_("What happens when a build finds nothing: shuffle the seed's genre, run a file or play a JRiver "
                             "playlist. Have it on so a quiet seed never leaves the room silent."),
     "Run After Building": N_("Runs a file of yours once the playlist is in JRiver, such as a script that dims the lights. "

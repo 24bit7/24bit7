@@ -99,6 +99,27 @@ def owned(name):
     return library.has_artist(name)
 
 
+_song_owned = {}   # (artist, song) -> owned, for the library as last read; emptied when it's read again
+_song_owned_at = None
+
+
+def song_owned(artist, song):
+    """
+    Is a song a build missed in the library now, by the usual matching rules (library.find_track_key)? Gaps asks
+    so a song bought since drops off (Ben, 13 Nov 2026). Kept until the library is read again, since Discover works
+    the list out afresh with every filter changed.
+    """
+    import library
+    global _song_owned_at
+    if _song_owned_at != library._loaded_at:
+        _song_owned.clear()
+        _song_owned_at = library._loaded_at
+    k = (artist, song)
+    if k not in _song_owned:
+        _song_owned[k] = library.find_track_key(artist, song) is not None
+    return _song_owned[k]
+
+
 # --- the three views ----------------------------------------------------------------------------
 
 def missing_artists(view):
@@ -134,7 +155,8 @@ def missing_artists(view):
 def gaps(view):
     """
     Artists you own that the sources named, as dicts: artist, key, matched (songs found in the library),
-    missed (songs named that you don't have, as named), builds. Most songs missed first.
+    missed (songs named that you don't have, as named), builds. Most songs missed first. A song no build found
+    that's in the library now counts as matched (Ben, 13 Nov 2026: it stayed missed after he'd bought it).
     """
     found = {}
     for r in view:
@@ -154,6 +176,9 @@ def gaps(view):
     out = []
     for g in found.values():
         if g:
+            for low, name in list(g["miss"].items()):
+                if low not in g["hit"] and song_owned(g["artist"], name):
+                    g["hit"].add(low)
             missed = [name for low, name in g["miss"].items() if low not in g["hit"]]
             out.append({"artist": g["artist"], "key": g["key"], "matched": len(g["hit"]), "missed": missed,
                         "builds": g["builds"]})

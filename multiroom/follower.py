@@ -57,6 +57,7 @@ SKIP_WAIT = 1.5         # seconds a fresh run mid-track waits for JRiver to name
 PREFETCH = 20.0         # seconds before a track's end that the next one is opened
 LOST_AFTER = 5.0        # seconds without a read before the Speakers carry on on their own
 GIVE_UP = 60.0          # and before they stop
+TOGETHER_GAP = 15.0     # seconds after both rooms were started together before that's tried again
 
 
 class Player:
@@ -300,6 +301,7 @@ class Follower:
         #                                      time its sound ended, if it ran out) and next (the key after it)
         self._paused = None                  # the key of a track the Sonos paused on: not joined until the next
         self._paused_other = None            # our time JRiver first named another track meanwhile, with no fresh run
+        self._together_at = None             # our time both rooms were last started together (_together)
         self._said_wait = False
         self.leaving = False                 # finish the track the Speakers are on, then stop following
         self._left = False                   # done: run() returns
@@ -403,7 +405,47 @@ class Follower:
                 if now - self._paused_other < 5:
                     return
                 run = None
+        if self._together_at is not None and now - self._together_at < TOGETHER_GAP and                 not (run is not None and run.fresh and run.t > self._together_at):
+            return   # both rooms are being started together: wait for the Sonos's fresh start
+        if self._together_at is not None and run is not None and run.t > self._together_at and                 self.info_at is not None and self.info_at < run.t:
+            self.info_at = None   # it has started: JRiver's word on which track, from after it did
+            return
+        if run is not None and not (run.fresh and run.seen) and self._together(info, now):
+            return
         self._start(info["key"], run, now, end=end)
+
+    def _together(self, info, now):
+        """
+        The Speakers would join a track the Sonos was already playing when they came, or one it took up partway
+        through (a jump, or voice moving the music to the Sonos). Where its counter sits against its sound then
+        depends on how the track began, which they didn't see: a track the Sonos ran straight on into runs about
+        100 ms behind, so a join there was a slight echo (Ben, 12 Nov 2026, joining Our Lady Peace mid-track).
+        So both rooms start together, the case that's always in step: under halfway, the track again from the
+        top; halfway or more, the next track (none: from the top). The Sonos zone is stopped first, so it forgets
+        its place, and the Speakers join the fresh start that follows. Never counted as a skip. Returns True
+        when it did; not again within TOGETHER_GAP, so a start that doesn't take ends in a plain join.
+        """
+        if self._together_at is not None and now - self._together_at < TOGETHER_GAP:
+            return False
+        self._together_at = now
+        name = self.name(info["key"])
+        half = info.get("duration_ms") and info.get("position_ms", 0) >= info["duration_ms"] / 2
+        nxt = info.get("index", -1) + 1 if half and info.get("next_key") is not None and info.get("index", -1) >= 0             else None
+        try:
+            self.jriver.stop(self.leader)
+            if nxt is not None:
+                self.jriver.play_index(self.leader, nxt)
+                self.say(f"Note: the Speakers joined partway through {name}, so both rooms go on to the next "
+                         f"track together, the way they stay in step.")
+            else:
+                self.jriver.play(self.leader)
+                self.say(f"Note: the Speakers joined partway through {name}, so both rooms start it again from the "
+                         f"top together, the way they stay in step.")
+        except Exception as e:
+            self.say(f"Problem: couldn't start both rooms together ({e}), so the Speakers join where the "
+                     f"{self.leader} is.")
+            return False
+        return True
 
     def _follow(self, now):
         info = self.info

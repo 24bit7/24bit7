@@ -19,6 +19,11 @@ tracks skipped by voice twice or more, and every track by an artist with three s
 tracks (the Alexa skip counts them in 24bit7's own JRiver field); both numbers are set
 on its page (8 Nov 2026).
 
+Long Tracks ships too (Ben, 13 Nov 2026), off: one rule, Duration shorter than fifteen
+minutes, for every playlist once it's on. An ordinary filter, there to show what a filter
+can do; deleted, it doesn't come back. It was asked for as a setting beside Hidden Tracks,
+which a Duration rule already does.
+
 At least (Ben, 7 Nov 2026): a filter can ask for a share instead of leaving tracks out.
 "At least 20% of each playlist matches" keeps the playlist as usual and makes sure that
 share of it matches; engine.apply_shares does the work after a build. A track with no
@@ -48,6 +53,10 @@ SKIPS_MAX = 9      # the number boxes go from one to nine
 SKIPPED_TEXT = N_("Each skip you ask the skill for counts in a field of 24bit7's own in JRiver, "
                   "24bit7 Voice Skips, which you can see and clear in JRiver.")
 SHIPPED_FLAG = "filters_skipped_shipped"
+LONG_ID = "longtracks"
+LONG_NAME = N_("Long Tracks")
+LONG_MINUTES = 15
+LONG_FLAG = "filters_long_shipped"
 
 
 def blank(name="New filter"):
@@ -101,6 +110,14 @@ def skipped_filter():
     return out
 
 
+def long_filter():
+    """The shipped Long Tracks filter: off, a track must be shorter than fifteen minutes, for every playlist once it's on."""
+    out = blank(t(LONG_NAME))
+    out.update(id=LONG_ID, on=False, every=True,
+               rules=[{"field": "duration", "op": "shorter", "value": str(LONG_MINUTES), "value2": ""}])
+    return out
+
+
 def tidy(item):
     out = blank(item.get("name") or "New filter")
     out.update({k: v for k, v in item.items() if k in out})
@@ -119,7 +136,8 @@ def stored_raw():
 
 
 def load():
-    """Every filter, in the order shown. Skipped Tracks is added once, the first time the list is read."""
+    """Every filter, in the order shown. Skipped Tracks and Long Tracks are each added once, the first time the
+    list is read after they shipped."""
     try:
         con = engine.db()
         row = con.execute("SELECT value FROM meta WHERE key=?", (META_KEY,)).fetchone()
@@ -131,6 +149,12 @@ def load():
                 items.append(skipped_filter())
                 save(items)
             con.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (SHIPPED_FLAG, "1"))
+            con.commit()
+        if not con.execute("SELECT value FROM meta WHERE key=?", (LONG_FLAG,)).fetchone():
+            if not any(x.get("id") == LONG_ID for x in items):
+                items.append(long_filter())
+                save(items)
+            con.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (LONG_FLAG, "1"))
             con.commit()
         return items
     except Exception:

@@ -77,12 +77,13 @@ class JRiver:
     def info(self, zone):
         """
         What a zone is doing: state (0 stopped, 1 paused, 2 playing), key and next_key (None when there's none),
-        position_ms and name.
+        position_ms, duration_ms (0 when not known), index (its place in Playing Now, -1 for none) and name.
         """
         i = self.call("Playback/Info", Zone=self.zone_id(zone))
         key, nxt = _int(i.get("FileKey")), _int(i.get("NextFileKey"))
         return {"state": _int(i.get("State"), STOPPED), "key": key if key >= 0 else None,
                 "next_key": nxt if nxt >= 0 else None, "position_ms": _int(i.get("PositionMS"), 0),
+                "duration_ms": _int(i.get("DurationMS"), 0), "index": _int(i.get("PlayingNowPosition"), -1),
                 "name": i.get("Name") or "", "status": i.get("Status") or ""}
 
     def stop(self, zone):
@@ -96,6 +97,10 @@ class JRiver:
     def play(self, zone):
         """Play on a stopped zone: the current track from the top."""
         self.call("Playback/Play", Zone=self.zone_id(zone))
+
+    def play_index(self, zone, index):
+        """Plays the track at that place in a zone's Playing Now, from the top."""
+        self.call("Playback/PlayByIndex", Index=int(index), Zone=self.zone_id(zone))
 
     def position(self, zone, ms):
         self.call("Playback/Position", Position=int(ms), Zone=self.zone_id(zone))

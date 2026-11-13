@@ -75,6 +75,8 @@ def advanced_only(line):
 
 
 REFRESH_MS = 10000   # Now Playing panel; paused while minimised or in the tray
+CONSOLE_CLEAR_AFTER = 90   # seconds a console line that isn't part of a build stays, while the window shows
+STOP_SETTLE_READS, STOP_SETTLE_EVERY = 10, 0.5   # after Stop, ask until the zone reads stopped: up to five seconds
 POLL_MS = 100
 DONATE_URL = "https://paypal.me/24bit7"
 SAME_ZONE_LABEL = N_("Same zone")   # shown and compared as t(SAME_ZONE_LABEL)
@@ -152,7 +154,7 @@ MONTHS = (N_("Jan"), N_("Feb"), N_("Mar"), N_("Apr"), N_("May"), N_("Jun"), N_("
           N_("Oct"), N_("Nov"), N_("Dec"))
 BUTTON_GAP = 8   # between the Play tab's buttons, and between its rows of them
 LIST_BOX_GAP = 24   # JRiver Playlists: between the Playlist box and Play
-LIST_BOX_HEIGHT = 0.82   # and the box's height, as a share of the buttons'
+LIST_BOX_HEIGHT = 1.12   # and the box's height, as a share of Play's (one line tall since 13 Nov 2026)
 
 
 class DropPill(tk.Canvas):
@@ -371,11 +373,12 @@ class PlayTab(tk.Frame):
         entry.bind("<FocusOut>", lambda e: self.after(200, self._close_playlists_if_away), add="+")
         # outlined like Clear Playing Now, in the accent with no orange bar (Ben, 12 Nov 2026): they act on what's
         # in the box, not on a seed, so they read apart from the playlist buttons under them
-        self.play_list_button = FlatButton(row, text=t("Play"), width=18, height=2, quiet=True,
+        # one line tall, like Stop and Skip Track (Ben, 13 Nov 2026: two lines were "too fat")
+        self.play_list_button = FlatButton(row, text=t("Play"), width=18, height=1, quiet=True,
                                            command=lambda: self.on_play_playlist(False), arrow=True,
                                            arrow_command=lambda: self._choice_menu("order"))
         self.play_list_button.pack(side="left", padx=(0, BUTTON_GAP))
-        self.embellish_button = FlatButton(row, text=t("Embellish"), width=18, height=2, quiet=True,
+        self.embellish_button = FlatButton(row, text=t("Embellish"), width=18, height=1, quiet=True,
                                            command=lambda: self.on_play_playlist(True), arrow=True,
                                            arrow_command=lambda: self._choice_menu("amount"))
         self.embellish_button.pack(side="left")
@@ -394,7 +397,8 @@ class PlayTab(tk.Frame):
 
     def _line_up_lists(self):
         """
-        The Album or Playlist box, Play and Embellish at three equal widths (Ben, 10 Nov 2026), from the box's left
+        The Album or Playlist box at two fifths, Play and Embellish at three tenths each (Ben, 13 Nov 2026; equal
+        thirds from 10 Nov), from the box's left
         edge to the right edge of the row's last playlist button that ends clear of Output, on the row's first
         line should it wrap. Before that Play and Embellish each matched the button under them and the box
         took the rest (7 Nov), which left the box twice the width of either. With no such button, or no room,
@@ -415,7 +419,7 @@ class PlayTab(tk.Frame):
             right = last.winfo_rootx() + last.winfo_width()
             if right > limit:
                 continue
-            thirds = tabs.equal_thirds(right - entry.winfo_rootx(), LIST_BOX_GAP, BUTTON_GAP)
+            thirds = tabs.row_shares(right - entry.winfo_rootx(), LIST_BOX_GAP, BUTTON_GAP)
             if thirds[1] >= play_w // 2:
                 box_w, play_w, emb_w = thirds
             break
@@ -970,8 +974,13 @@ class PlayTab(tk.Frame):
             self.stop_button.config(text=t("Stop"), armed=PALETTE["amber"], command=self._stop_clicked, state="normal")
         self.skip_button.config(state="normal" if not stopped and has_next else "disabled")
 
-    def _zone_action(self, call, line):
-        """Runs a JRiver call for the row's zone on a thread, says one line, and reads Now Playing again."""
+    def _zone_action(self, call, line, settle=False):
+        """
+        Runs a JRiver call for the row's zone on a thread, says one line, and reads Now Playing again. settle: after
+        a Stop, JRiver can still say the zone is playing while it fades out (or the Sonos catches up), and the next
+        read was ten seconds away, so Stop stayed Stop and took a second click (Ben, 13 Nov 2026): the zone is
+        asked every half second, for up to five seconds, until it reads stopped.
+        """
         name = self._zone_name()
         zone = engine.zone_id(name) if name else engine.zone_id()
         if zone is None:
@@ -983,13 +992,18 @@ class PlayTab(tk.Frame):
             try:
                 call(zone)
                 self.log_queue.put(t(line, zone=label))
+                for _ in range(STOP_SETTLE_READS if settle else 0):
+                    info = engine.get_playing_info(zone)
+                    if not info or str(info.get("State", "0")) == "0":
+                        break
+                    time.sleep(STOP_SETTLE_EVERY)
             except Exception as e:
                 self.log_queue.put(t("Problem: JRiver didn't answer ({e}).", e=e))
             self.after(0, self._update_now_playing)
         threading.Thread(target=work, daemon=True, name="zone-action").start()
 
     def _stop_clicked(self):
-        self._zone_action(engine.stop_zone, N_("Stopped {zone}."))
+        self._zone_action(engine.stop_zone, N_("Stopped {zone}."), settle=True)
 
     def _clear_clicked(self):
         self._zone_action(engine.clear_playing_now, N_("Cleared Playing Now in {zone}."))
@@ -2457,6 +2471,8 @@ class PlayTab(tk.Frame):
         self._live.append(line)
         if notice:
             self._notices = getattr(self, "_notices", []) + [line]
+        if not self.running and line.strip():
+            self._mark_idle(line)
         if getattr(self, "review_panel", None) is not None:
             self.review_panel.console_activity()   # a dot on Console while Review is showing
         if self._greeting_active:
@@ -2473,6 +2489,9 @@ class PlayTab(tk.Frame):
         self.log.config(state="normal")
         kind = self._line_kind(line)
         tags = ((kind,) if kind else ()) + (("notice",) if notice else ())
+        idle = getattr(self, "_idle_tag_of", {}).get(line)
+        if idle:
+            tags += (idle,)
         link = re.search(re.escape(engine.RELEASES_PAGE) + r"\S+", line)   # the new-version line's download link
         if link:
             self.log.tag_configure("release_link", underline=True)
@@ -2530,6 +2549,58 @@ class PlayTab(tk.Frame):
         if engine.CANCEL_REQUESTED.is_set() and threading.current_thread() is getattr(self, "_worker", None):
             raise engine.BuildCancelled()   # Cancel: the build stops at its next console line
         self.log_queue.put(message)
+
+    # --- lines that aren't part of a build clear themselves --------------------------------------
+
+    def _mark_idle(self, line):
+        """
+        A line written while no build runs (Stop, Skip, a Multiroom note, a start-up note, a Problem) goes after
+        CONSOLE_CLEAR_AFTER seconds; a build's lines and Console Query's answers stay (Ben, 13 Nov 2026). The clock
+        only runs while the window shows and the mouse isn't over the console, so nothing goes unseen or mid-read.
+        """
+        self._idle_n = getattr(self, "_idle_n", 0) + 1
+        tag = f"idle{self._idle_n}"
+        self._idle_tag_of = getattr(self, "_idle_tag_of", {})
+        self._idle_tag_of[line] = tag
+        self._idle_lines = getattr(self, "_idle_lines", []) + [[line, tag, 0, getattr(self, "_idle_gen", 0)]]
+        if not getattr(self, "_idle_ticking", False):
+            self._idle_ticking = True
+            self.log.bind("<Enter>", lambda e: setattr(self, "_mouse_on_log", True), add="+")
+            self.log.bind("<Leave>", lambda e: setattr(self, "_mouse_on_log", False), add="+")
+            self.after(1000, self._idle_tick)
+
+    def _idle_tick(self):
+        try:
+            counting = self._window_visible() and not getattr(self, "_mouse_on_log", False)
+        except tk.TclError:
+            return
+        if counting:
+            for entry in self._idle_lines:
+                entry[2] += 1
+            for line, tag, _, gen in [e for e in self._idle_lines if e[2] >= CONSOLE_CLEAR_AFTER]:
+                self._drop_idle(line, tag, kept=gen == getattr(self, "_idle_gen", 0))
+        self.after(1000, self._idle_tick)
+
+    def _drop_idle(self, line, tag, kept=True):
+        """Takes a line off the screen; kept: and out of the lines kept for the console's tabs, unless a build has
+        started since, which began a list of its own."""
+        self._idle_lines = [e for e in self._idle_lines if e[1] != tag]
+        if getattr(self, "_idle_tag_of", {}).get(line) == tag:
+            del self._idle_tag_of[line]
+        for kept_lines in ((self._live, self._held, getattr(self, "_notices", [])) if kept else ()):
+            if line in kept_lines:
+                del kept_lines[len(kept_lines) - 1 - kept_lines[::-1].index(line)]
+        self.log.config(state="normal")
+        ranges = self.log.tag_ranges(tag)
+        for start, end in reversed(list(zip(ranges[0::2], ranges[1::2]))):
+            self.log.delete(start, end)
+        self.log.config(state="disabled")
+
+    def _forget_idle(self):
+        """A build is starting with a list of lines of its own: lines still waiting only come off the screen (a
+        build on another console tab leaves this one as it is), never out of the build's own list."""
+        self._idle_gen = getattr(self, "_idle_gen", 0) + 1
+        self._idle_tag_of = {}   # the build's own lines never take a waiting line's tag, even with the same words
 
     def _drain_log_queue(self):
         try:
@@ -3113,6 +3184,7 @@ class PlayTab(tk.Frame):
         self._sync_cancel_strip()
         self._job_origin = origin   # who asked, for the build's record: None is the Main Window
         self._end_greeting(keep=False)   # the build clears the screen anyway
+        self._forget_idle()
         for b in self.buttons:
             b.config(state="disabled")
         self._begin_live(origin)

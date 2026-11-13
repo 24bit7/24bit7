@@ -23,7 +23,7 @@ sys.path.insert(0, HERE)
 import fakes  # noqa: E402
 
 APP_MODULES = ["i18n", "engine", "library", "deepcuts", "voice", "saved_playlists", "nonstop", "playmix", "overrides", "mode", "tour", "filters", "buttons", "devices", "buildlog", "blend", "embellish", "radio",
-               "console_query", "ai_usage", "support_gui", "window_chrome", "hotkeys", "tray", "tabs", "mix_gui", "review_gui", "profiles", "ai_dialog", "discover_stats", "artists_gui", "discover_gui", "settings_gui", "gui", "source_test"]
+               "hidden", "console_query", "ai_usage", "support_gui", "window_chrome", "hotkeys", "tray", "tabs", "mix_gui", "review_gui", "profiles", "ai_dialog", "discover_stats", "artists_gui", "discover_gui", "settings_gui", "gui", "source_test"]
 
 BASE_ENV = {
     "JRIVER_HOST": fakes.JRIVER_HOST, "JRIVER_USER": "", "JRIVER_PASS": "",
@@ -110,6 +110,9 @@ def app(tmp_path, monkeypatch):
 
     engine = importlib.import_module("engine")
     monkeypatch.setattr(engine, "MUSICBRAINZ_INTERVAL", 0)
+    # Hidden Tracks' scans and watcher run on threads of their own; in the fake world they wait to be run by hand
+    # (hidden.run_queue, hidden.step), so no build's closers are scanned behind a test's back
+    monkeypatch.setattr(engine.hidden, "THREADS", False)
     tray = importlib.import_module("tray")   # Start with Windows: never the real registry
     startup = {"command": None}
     monkeypatch.setattr(tray, "startup_command", lambda: startup["command"])

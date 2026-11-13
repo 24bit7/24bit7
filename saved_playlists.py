@@ -211,7 +211,9 @@ def playlist_keys(playlist_id):
 
 
 def _send(keys, zone):
-    """Replaces Playing Now with keys, in chunks for a long playlist."""
+    """Replaces Playing Now with keys, in chunks for a long playlist. Asked for by name: it plays in full, so the
+    zone's watched hidden tracks are forgotten."""
+    engine.hidden.forget_zone(zone)
     first = requests.get(f"{engine.JRIVER_BASE}/Playback/PlayByKey",
                          params={"Key": ",".join(keys[:SEND_CHUNK]), "Zone": zone}, auth=engine.AUTH, timeout=15)
     if first.status_code != 200:

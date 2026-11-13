@@ -43,8 +43,14 @@ def test_similar_artists_done_line_matches_what_was_sent(app):
 
 
 def test_similar_artists_reaches_target_despite_long_closers(app):
-    """Long album closers are skipped as hidden tracks; the playlist should still reach its target."""
+    """A long album closer whose file can't be checked for a hidden track is left out (Hidden Tracks, scanned since
+    13 Nov 2026); the playlist should still reach its target."""
     app.set_env(SIMILAR_ARTIST_TRACK_COUNT="20")   # the fake library has enough for 20 every time
+    import hidden
+    import library
+    library.ensure_loaded()
+    echoes = app.jriver.key_of("Pink Floyd", "Echoes")
+    hidden._keep(echoes, float(app.jriver.by_key[echoes]["Duration"]), "unreadable", why="its file couldn't be reached")
     r = app.Lines()
     app.engine.create_similar_playlist(report=r, seed_info=seed(app, "The Beatles", "Here Comes The Sun"))
     assert len(app.jriver.zone("Speakers").playlist) == 20, r.text()

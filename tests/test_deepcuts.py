@@ -63,9 +63,13 @@ def test_by_track_leaves_out_short_tracks_and_what_is_already_in(app, dc):
             assert float(j.by_key[key]["Duration"]) >= dc.SHORTEST, title   # never "Her Majesty" (0:23)
 
 
-def test_hidden_closers_left_out_when_the_build_skips_them(app, dc):
-    app.set_env(SKIP_LONG_CLOSERS="1", LONG_CLOSER_MINUTES="6")
+def test_a_closer_that_cant_be_checked_is_left_out_when_the_build_skips_hidden_tracks(app, dc):
+    app.set_env(SKIP_LONG_CLOSERS="1")
     echoes = app.jriver.key_of("Pink Floyd", "Echoes")
+    import hidden
+    import library
+    library.ensure_loaded()
+    hidden._keep(echoes, float(app.jriver.by_key[echoes]["Duration"]), "unreadable", why="its file couldn't be reached")
     for seed in range(30):
         picks, _ = dc.pick_by_track(["Rock"], 8, rng=random.Random(seed))
         assert echoes not in [k for k, _, _ in picks]

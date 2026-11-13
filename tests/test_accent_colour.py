@@ -96,3 +96,13 @@ def test_no_green_left_hard_coded():
             text = f.read().lower()
         assert "#00ff41" not in text and "#0d4d1c" not in text, os.path.basename(path)
 
+
+
+def test_discovers_chosen_row_is_the_accent_with_black_text_or_the_logo_blue_with_white():
+    """Ben, 13 Nov 2026: the chosen row in Discover's tables was a faint grey, hard to tell from the rest."""
+    try:
+        tabs.set_accent("#3d98ff")
+        assert tabs.chosen_row_colours("dark") == ("#3d98ff", "#000000")
+        assert tabs.chosen_row_colours("light") == ("#1f4e9c", "#ffffff")
+    finally:
+        tabs.set_accent(tabs.DEFAULT_ACCENT)
