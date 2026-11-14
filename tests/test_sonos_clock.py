@@ -17,6 +17,9 @@ finally:
     sys.path.remove(REPO)
 from fake_sonos import FakeSonos, GROUP, HOUSEHOLD
 
+# Bounds of a few milliseconds on the real clock: run on their own, after the parallel pass (conftest, build.bat)
+pytestmark = pytest.mark.timing
+
 R = sonos.Read
 PLAY, PAUSED = "PLAYBACK_STATE_PLAYING", "PLAYBACK_STATE_PAUSED"
 

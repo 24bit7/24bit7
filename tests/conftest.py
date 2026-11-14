@@ -195,6 +195,10 @@ def _opens_windows(path):
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "windows: opens real windows (left out of build.bat quick)")
+    # build.bat runs the windowless tests side by side (pytest-xdist, six workers was fastest on the media PC,
+    # 14 Nov 2026); a test that times the real clock tightly could miss its mark beside them, so it's marked
+    # timing and runs on its own afterwards
+    config.addinivalue_line("markers", "timing: times the real clock tightly (run on its own, not side by side)")
 
 
 def pytest_collection_modifyitems(config, items):

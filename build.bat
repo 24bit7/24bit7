@@ -3,21 +3,30 @@ setlocal
 cd /d "%~dp0"
 
 rem --- 0. Tests: a failure stops the release before anything else happens ---
-rem     build.bat        the full suite (about fifteen minutes; its window tests need the mouse left alone)
-rem     build.bat quick  everything except the tests that open windows (a few minutes), for small releases
-if /i "%~1"=="quick" (
-    echo Quick build: running the tests that don't open windows (a few minutes^)...
-    python -m pytest -q -m "not windows"
-) else (
-    echo Running the full test suite, windows included (about fifteen minutes^)...
-    python -m pytest -q
-)
-if errorlevel 1 (
-    echo.
-    echo Tests FAILED, so nothing was built. Fix them and run build.bat again.
-    pause
-    exit /b 1
-)
+rem     build.bat        every test (about half an hour; the window tests need the mouse left alone)
+rem     build.bat quick  everything except the tests that open windows (about four minutes), for small releases
+rem     In passes (14 Nov 2026): the windowless tests six at a time (pytest-xdist; six was fastest on the media
+rem     PC, 3.5 minutes against 11.7 one at a time), then the timing tests on their own, since they time the real
+rem     clock to a few milliseconds, then (not quick) the window tests one at a time: they share one screen.
+python -m pip install -q -r tests\requirements.txt
+if errorlevel 1 goto tests_failed
+echo Running the tests that don't open windows, six at a time (about four minutes^)...
+python -m pytest -q -m "not windows and not timing" -n 6
+if errorlevel 1 goto tests_failed
+echo Running the timing tests on their own...
+python -m pytest -q -m "timing and not windows"
+if errorlevel 1 goto tests_failed
+if /i "%~1"=="quick" goto tests_passed
+echo Running the tests that open windows, one at a time (about twenty five minutes; leave the mouse alone^)...
+python -m pytest -q -m "windows"
+if errorlevel 1 goto tests_failed
+goto tests_passed
+:tests_failed
+echo.
+echo Tests FAILED, so nothing was built. Fix them and run build.bat again.
+pause
+exit /b 1
+:tests_passed
 echo.
 
 rem --- 0a. Close the packaged 24bit7, or its files can't be replaced (a copy run from gui.pyw is left alone) ---

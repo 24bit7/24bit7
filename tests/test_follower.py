@@ -20,6 +20,9 @@ try:
 finally:
     sys.path.remove(REPO)
 
+# Some checks time real threads to half a second: run on their own, after the parallel pass (conftest, build.bat)
+pytestmark = pytest.mark.timing
+
 PLAY = "PLAYBACK_STATE_PLAYING"
 START, RESUME, DAC = 0.093, 0.095, 1660
 FULL = 2 ** 23
