@@ -9,8 +9,12 @@ import pytest
 tk = pytest.importorskip("tkinter")
 
 
-def test_a_button_whose_command_opened_a_window_unlights_when_the_pointer_has_gone():
+def test_a_button_whose_command_opened_a_window_unlights_when_the_pointer_has_gone(monkeypatch):
     import tabs
+    # tabs keeps drawn shapes and fonts for the one Tk the app has; this test makes its own, so an earlier
+    # test's (its Tk gone) would be handed back: "image pyimage2979 doesn't exist" (16 Nov 2026, 1.37.1's build)
+    monkeypatch.setattr(tabs, "_SHAPES", {})
+    monkeypatch.setattr(tabs, "_FONTS", {})
     try:
         root = tk.Tk()
     except tk.TclError:
