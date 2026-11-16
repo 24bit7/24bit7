@@ -1694,6 +1694,123 @@ def _say_jriver_problem(e):
         print(jriver_problem(e))
 
 
+# --- Starting JRiver when it has stopped (16 Nov 2026) ---
+# JRiver crashed twice in a day on the media PC, and the kitchen's "happy go lucky" was told the Sonos zone couldn't
+# be found. A voice request or a build that finds JRiver gone starts it, if it's on this PC. There is no watchdog: a
+# JRiver closed on purpose stays closed until someone asks for music. A JRiver that's running but not answering
+# (hung) is left alone, since closing it by force is a step too far.
+
+JRIVER_START_WAIT = 60       # seconds to wait for a started JRiver to answer
+_jriver_started = [0.0]      # when 24bit7 last started it, so two requests in a row start it once
+
+
+def jriver_answers(timeout=2):
+    """Whether JRiver's web service answers at all. Alive needs no login, so a 401 still counts as answering."""
+    try:
+        requests.get(f"{JRIVER_BASE}/Alive", timeout=timeout)
+        return True
+    except requests.RequestException:
+        return False
+
+
+def jriver_is_local():
+    """Whether JRIVER_HOST is this PC: the only JRiver 24bit7 can start."""
+    host = JRIVER_HOST.strip().lower()
+    if host.startswith("["):                  # [::1]:52199
+        host = host[1:].split("]")[0]
+    elif host.count(":") == 1:                # 127.0.0.1:52199
+        host = host.split(":")[0]
+    return host in ("127.0.0.1", "localhost", "::1")
+
+
+def jriver_running():
+    """Whether a JRiver (Media Center NN.exe) process is running on this PC, answering or not."""
+    import subprocess
+    try:
+        out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq Media Center*", "/FO", "CSV", "/NH"], capture_output=True,
+                             text=True, timeout=10, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+    except Exception:
+        return True   # can't tell, so don't start a second one
+    return '"Media Center' in out
+
+
+def jriver_exe():
+    """The newest JRiver installed, from Windows' list of installed programs: its Media Center NN.exe, or None."""
+    try:
+        import winreg
+    except ImportError:
+        return None
+    found = []
+    for view in (winreg.KEY_WOW64_64KEY, winreg.KEY_WOW64_32KEY):
+        try:
+            root = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", 0,
+                                  winreg.KEY_READ | view)
+        except OSError:
+            continue
+        for i in range(winreg.QueryInfoKey(root)[0]):
+            try:
+                key = winreg.OpenKey(root, winreg.EnumKey(root, i))
+                name = winreg.QueryValueEx(key, "DisplayName")[0]
+                m = re.match(r"JRiver Media Center (\d+)", name or "")
+                if m:
+                    exe = os.path.join(winreg.QueryValueEx(key, "InstallLocation")[0], f"Media Center {m.group(1)}.exe")
+                    if os.path.isfile(exe):
+                        found.append((int(m.group(1)), exe))
+            except OSError:
+                pass
+    return max(found)[1] if found else None
+
+
+def _launch_jriver(exe):
+    """Starts JRiver on its own, so it neither holds 24bit7's output nor closes with it."""
+    import subprocess
+    flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    subprocess.Popen([exe], cwd=os.path.dirname(exe), creationflags=flags, close_fds=True,
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def start_jriver():
+    """
+    Starts JRiver if it's on this PC and not running at all. True if it was started, or is still starting from a
+    moment ago; False if it's elsewhere, running (perhaps hung), or can't be found. Call it once JRiver hasn't answered.
+    """
+    if time.time() - _jriver_started[0] < JRIVER_START_WAIT:
+        return True
+    if not jriver_is_local() or jriver_running():
+        return False
+    exe = jriver_exe()
+    if not exe:
+        return False
+    try:
+        _launch_jriver(exe)
+    except Exception as e:
+        print(t("Problem: JRiver wasn't running, and 24bit7 couldn't start it ({e}).", e=e))
+        return False
+    _jriver_started[0] = time.time()
+    print(t("JRiver wasn't running, so 24bit7 started it."))
+    return True
+
+
+def wait_for_jriver(seconds=None, step=1.0):
+    """Waits for a started JRiver to answer. True once it does; False if it hasn't within the time."""
+    end = time.time() + (JRIVER_START_WAIT if seconds is None else seconds)
+    while True:
+        if jriver_answers():
+            _jriver_unreachable.clear()   # its next problem is new, so it's said again
+            _zone_cache[0] = 0.0          # read the zones afresh
+            return True
+        if time.time() >= end:
+            return False
+        time.sleep(step)
+
+
+def ensure_jriver():
+    """For a build: if JRiver has stopped and is on this PC, start it and wait for it. True if it answers."""
+    if jriver_answers():
+        return True
+    return start_jriver() and wait_for_jriver()
+
+
 def _read_zones():
     """JRiver's zones as [(id, name)] in JRiver's order, plus the active zone's ID. ([], None) if unreachable."""
     try:

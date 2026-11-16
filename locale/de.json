@@ -1889,5 +1889,9 @@
   "its file couldn't be reached": "seine Datei war nicht erreichbar",
   "Windows couldn't decode its file": "Windows konnte seine Datei nicht dekodieren",
   "Note: {name} by {artist} will be left out from now on: {why}.": "Hinweis: {name} von {artist} wird ab jetzt weggelassen: {why}.",
-  "{name} by {artist}: plays to {length}, its hidden track left out.": "{name} von {artist}: läuft bis {length}, der versteckte Titel wird weggelassen."
+  "{name} by {artist}: plays to {length}, its hidden track left out.": "{name} von {artist}: läuft bis {length}, der versteckte Titel wird weggelassen.",
+  "JRiver wasn't running, so 24bit7 started it.": "JRiver lief nicht, also hat 24bit7 es gestartet.",
+  "Problem: JRiver wasn't running, and 24bit7 couldn't start it ({e}).": "Problem: JRiver lief nicht, und 24bit7 konnte es nicht starten ({e}).",
+  "Problem: JRiver didn't answer within a minute of starting, so the request was dropped.": "Problem: JRiver hat eine Minute nach dem Start nicht geantwortet, also wurde die Anfrage verworfen.",
+  "JRiver wasn't running, so 24bit7 started it. Start a track in JRiver, then try again.": "JRiver lief nicht, also hat 24bit7 es gestartet. Starte einen Titel in JRiver und versuch es dann nochmal."
 }

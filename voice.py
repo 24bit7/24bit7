@@ -407,6 +407,19 @@ def _speakable(info):
     return name or "this track", artist, album
 
 
+JRIVER_DOWN = "I couldn't reach JRiver. Is it running on the media PC?"
+
+
+def _no_zone(zone, words=None):
+    """
+    The reply when a zone can't be found. With JRiver not answering there are no zones at all, and that's what's
+    said (16 Nov 2026: JRiver had crashed, and the kitchen was told the Sonos zone wasn't in JRiver).
+    """
+    if not engine.jriver_answers():
+        return "problem", JRIVER_DOWN, {}
+    return "problem", words or f"I can't find the {zone} zone in JRiver.", {}
+
+
 def _zone_command(intent, device, body):
     """Skip, who is this and more like this, on the zone of the device that heard it."""
     name, zone = _hear_device(device or "unknown device")
@@ -415,7 +428,7 @@ def _zone_command(intent, device, body):
         return "problem", "This device isn't set up yet. Assign it to a zone in 24bit7, under Settings, Voice Commands.", {}
     zid = engine.zone_id(zone)
     if zid is None:
-        return "problem", f"I can't find the {zone} zone in JRiver.", {}
+        return _no_zone(zone)
     info = engine.get_playing_info(zid)
     if info is None:
         return "problem", "I couldn't reach JRiver. Is it running on the media PC?", {}
@@ -542,7 +555,7 @@ def _room_command(intent, device, body):
     leader, follower = engine.MULTIROOM_LEADER, engine.MULTIROOM_FOLLOWER
     lid = engine.zone_id(leader)
     if lid is None:
-        return "problem", f"I can't find the {leader} zone in JRiver.", {}
+        return _no_zone(leader)
     if intent == "multiroom":
         if not _playing(lid):
             fid = engine.zone_id(follower)
@@ -808,7 +821,7 @@ def _switch(device, value, body):
         best = max(others, key=lambda z: library.score(heard, z), default=None)
         if best is None or library.score(heard, best) < library.GOOD:
             if engine.zone_id(value) is None and heard not in [library.norm(z) for z in engine.zone_names(True)]:
-                return "problem", f"I can't find a zone called {value}.", {}
+                return _no_zone(value, f"I can't find a zone called {value}.")
             return "problem", (f"{value} isn't ticked to switch to. Tick it under Enable Switch To, "
                                f"in 24bit7's Voice Commands settings."), {}
         target = best
@@ -838,7 +851,7 @@ def keep_going(zone, device=None):
     import nonstop
     zid = engine.zone_id(zone)
     if zid is None:
-        return "problem", f"I can't find the {zone} zone in JRiver.", {}
+        return _no_zone(zone)
     if not _playing(zid):
         return "problem", f"Nothing's playing on {zone}.", {}
     with engine._nonstop_lock:
@@ -892,7 +905,7 @@ def _radio(device, value, body, busy, top_up):
     if not zone:
         return "problem", "This device isn't set up yet. Assign it to a zone in 24bit7, under Settings, Voice Commands.", {}
     if engine.zone_id(zone) is None:
-        return "problem", f"I can't find the {zone} zone in JRiver.", {}
+        return _no_zone(zone)
     result = radio.analysis()
     if result is None or not radio.lanes():   # resting or never analysed: one line for both (Ben, 8 Nov 2026)
         return "problem", NO_STATIONS, {}
@@ -996,7 +1009,7 @@ def handle_command(body, busy=False):
     if not zone:
         return "problem", "This device isn't set up yet. Assign it to a zone in 24bit7, under Settings, Voice Commands.", {}
     if engine.zone_id(zone) is None:
-        return "problem", f"I can't find the {zone} zone in JRiver.", {}
+        return _no_zone(zone)
     if intent in INSTANT:
         try:
             return _play_now(intent, value, zone, device, top_up=top_up)
@@ -1085,10 +1098,38 @@ class _Handler(BaseHTTPRequestHandler):
                 raise ValueError
         except ValueError:
             return self._reply(400, {"error": "body must be a JSON object"})
-        status, speech, extra = handle_command(body, busy=_is_busy())
+        status, speech, extra = respond(body)
         if status == "problem":
             _log_problem(body, speech)
         self._reply(200, {"status": status, "speech": speech, **extra})
+
+
+JRIVER_STARTING = "JRiver wasn't running, so I've started it, uno momento."
+NO_START = ("stop", "pause", "top_up")   # nothing to stop or pause, and Top-Up only asks what with
+
+
+def respond(body):
+    """
+    handle_command, unless JRiver is on this PC and has stopped. Then 24bit7 starts it, Alexa says so straight away
+    (the skill has about eight seconds to answer, and JRiver takes longer to start), and the request runs by itself
+    once JRiver answers (Ben, 16 Nov 2026).
+    """
+    intent = (body.get("intent") or "").strip().lower()
+    if intent in INTENTS and intent not in NO_START + COMING and not engine.jriver_answers() and engine.start_jriver():
+        threading.Thread(target=_once_jriver_answers, args=(body,), daemon=True, name="jriver-start").start()
+        return "said", JRIVER_STARTING, {}
+    return handle_command(body, busy=_is_busy())
+
+
+def _once_jriver_answers(body):
+    """The request Alexa was told would follow, run once the JRiver just started answers."""
+    if not engine.wait_for_jriver():
+        _log_problem(body, JRIVER_STARTING)
+        engine.print("  " + t("Problem: JRiver didn't answer within a minute of starting, so the request was dropped."))
+        return
+    status, speech, extra = handle_command(body, busy=_is_busy())
+    if status in ("problem", "ask"):   # nobody is listening for a question now, so it goes to the console
+        _log_problem(body, speech)
 
 
 # What the badge says was asked (badge.py): the console's heading, shorter

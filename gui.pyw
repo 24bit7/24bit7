@@ -3176,8 +3176,10 @@ class PlayTab(tk.Frame):
         if self.running:
             return
         if needs_playing and not self.last_playing:
+            started = not engine.jriver_answers() and engine.start_jriver()   # it had stopped (16 Nov 2026)
             messagebox.showinfo(t("Nothing playing"),
-                                t("Start a track in JRiver first, then try again."))
+                                t("JRiver wasn't running, so 24bit7 started it. Start a track in JRiver, then try again.")
+                                if started else t("Start a track in JRiver first, then try again."))
             return
         self.running = True
         engine.CANCEL_REQUESTED.clear()
@@ -3218,6 +3220,8 @@ class PlayTab(tk.Frame):
             engine.BUILD_STARTED, engine.LAST_OUTPUT = time.time(), None
             engine.LAST_OUTPUT_ID, engine.LAST_BUILD = None, None
             try:
+                if origin is None:   # a voice request has already started JRiver if it had stopped
+                    engine.ensure_jriver()
                 if review:
                     engine.review_reset()
                     overrides = engine.review_overrides()   # Settings > Playlist's Review column

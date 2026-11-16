@@ -672,7 +672,8 @@ def test_jriver_down(app, alexa):
     app.jriver.up = False
     app.engine._ZONE_CACHE = None if hasattr(app.engine, "_ZONE_CACHE") else None
     r = alexa.say("WhoIsThisIntent")
-    assert "JRiver" in r.ssml, r
+    # "I can't find the Kitchen zone in JRiver" passed the old check, which is how 16 Nov 2026's slipped by
+    assert "couldn't reach JRiver" in r.ssml, r
 
 
 # --- switch onto a DLNA zone: the handover ----------------------------------------------
