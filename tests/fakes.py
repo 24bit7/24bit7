@@ -409,6 +409,7 @@ class FakeWeb:
         self.down = set()               # services answering with an error
         self.empty = set()              # services answering with nothing
         self.latest_release = None      # GitHub's latest release, e.g. {"tag_name": "v9.9.9", "html_url": ...}
+        self.releases = None            # GitHub's whole list of releases; None: just latest_release, if any
         self.unknown = set()            # artist names every service treats as unknown (joint credits)
         self.plays = {}                 # artist -> Last.fm play counts for its top tracks, in order (else even)
         self.acr_miss = set()           # (artist, title) ListenBrainz's own lookup can't find
@@ -457,6 +458,12 @@ class FakeWeb:
             raise requests.ConnectionError(f"{service} is down (fake)")
         empty = service in self.empty
         if service == "github":   # the start-up check for a newer 24bit7
+            if path.endswith("/releases"):   # the whole list (17 Nov 2026), newest first as GitHub gives it
+                listed = self.releases if self.releases is not None else (
+                    [self.latest_release] if self.latest_release else None)
+                if listed is None or empty:
+                    return Resp(404, data={"message": "Not Found"})
+                return Resp(data=listed)
             if self.latest_release is None or empty:
                 return Resp(404, data={"message": "Not Found"})
             return Resp(data=self.latest_release)

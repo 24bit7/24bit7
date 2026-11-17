@@ -78,8 +78,9 @@ OUTPUT_DROPPED = None   # "multiroom", "youtube" or "tidal": what Output asks fo
 MULTIROOM_NAME = "Multiroom"   # the feature's entry in the Output and Zone lists; a feature name, never translated
 MODERATOR_OVERRIDE = None  # True/False beats the AI_MODERATOR setting for one run
 PROFILE = {}               # a button's settings (buttons.run), laid over .env for the build in progress
-RELEASES_API = "https://api.github.com/repos/24bit7/24bit7/releases/latest"
+RELEASES_API = "https://api.github.com/repos/24bit7/24bit7/releases?per_page=100"
 RELEASES_PAGE = "https://github.com/24bit7/24bit7/releases/"
+WHATS_NEW_MOST = 10   # releases listed by name in the new-version note; older ones are counted
 
 
 def _version_numbers(text):
@@ -98,37 +99,201 @@ def release_headline(body):
     return text if 0 < len(text) <= 300 else ""
 
 
-def newer_release():
+def whats_new():
     """
-    (version, link, headline) when GitHub has a newer 24bit7 than this one, else None. Asked once at
-    start-up (30 Oct 2026, in place of an updater: an unsigned program that downloads and
-    replaces programs is what antivirus distrusts). Offline or no answer: None, nothing said.
-    The headline is the notes' bold first sentence, or ''.
+    Every published 24bit7 newer than this one, asked once at start-up (30 Oct 2026, in place of an updater; the
+    whole list since 17 Nov 2026, Ben: so you can tell whether it's worth updating). A dict: "latest" and "link" (the
+    newest and its release page, only ever ours), "releases" [(version, headline)] newest first, and "zip" and
+    "sha256", the newest's download and its fingerprint ("" unless both are on our own release). None when up to
+    date, offline, or GitHub says anything odd.
     """
     try:
         r = requests.get(RELEASES_API, timeout=10, headers={"Accept": "application/vnd.github+json"})
         r.raise_for_status()
-        data = r.json()
-        latest = str(data["tag_name"]).lstrip("vV")
-        if _version_numbers(latest) <= _version_numbers(VERSION):
+        rows = []
+        for rel in r.json():
+            if not isinstance(rel, dict) or rel.get("draft") or rel.get("prerelease"):
+                continue
+            version = str(rel.get("tag_name") or "").lstrip("vV")
+            if re.fullmatch(r"\d+\.\d+\.\d+", version) and _version_numbers(version) > _version_numbers(VERSION):
+                rows.append((_version_numbers(version), version, rel))
+        if not rows:
             return None
-        link = str(data.get("html_url") or "")
+        rows.sort(key=lambda row: row[0], reverse=True)
+        _, latest, rel = rows[0]
+        link = str(rel.get("html_url") or "")
         if not link.startswith(RELEASES_PAGE):   # only ever our own release page
             link = f"{RELEASES_PAGE}tag/v{latest}"
-        return latest, link, release_headline(data.get("body"))
+        assets = {str(a.get("name")): str(a.get("browser_download_url") or "")
+                  for a in rel.get("assets") or [] if isinstance(a, dict)}
+        name = f"24bit7-v{latest}-windows.zip"
+        ours = f"{RELEASES_PAGE}download/v{latest}/"
+        zip_url, sha_url = assets.get(name, ""), assets.get(name + ".sha256", "")
+        if not (zip_url.startswith(ours) and sha_url.startswith(ours)):
+            zip_url = sha_url = ""
+        return {"latest": latest, "link": link, "zip": zip_url, "sha256": sha_url,
+                "releases": [(version, release_headline(rel.get("body"))) for _, version, rel in rows]}
     except Exception:
         return None
 
 
+def newer_release():
+    """(version, link, headline) of the newest 24bit7 when it's newer than this one, else None."""
+    info = whats_new()
+    return (info["latest"], info["link"], info["releases"][0][1]) if info else None
+
+
+def whats_new_lines(info):
+    """The new-version note: a heading, then each newer release's headline, newest first, the oldest counted."""
+    import library   # here rather than at the top: library imports engine
+    lines = [t("Note: 24bit7 {latest} is out (you have {version}). New since yours:",
+               latest=info["latest"], version=VERSION)]
+    shown = info["releases"][:WHATS_NEW_MOST]
+    lines += [f"  {version}  {headline}".rstrip() for version, headline in shown]
+    rest = len(info["releases"]) - len(shown)
+    if rest:
+        lines.append("  " + (t("and one older release") if rest == 1 else
+                             t("and {n} older releases", n=library.number_words(rest) if i18n.LANGUAGE == "en" else rest)))
+    return lines
+
+
 def say_if_newer(report=print):
-    """The console line when a newer 24bit7 is out. Runs off the main thread."""
-    found = newer_release()
-    if found and found[2]:
-        report(t("Note: 24bit7 {latest} is out (you have {version}): {headline} Download: {link}",
-                 latest=found[0], version=VERSION, headline=found[2], link=found[1]))
-    elif found:
-        report(t("Note: 24bit7 {latest} is out (you have {version}). Download: {link}",
-                 latest=found[0], version=VERSION, link=found[1]))
+    """The new-version note, as plain lines with the link, for a console with no buttons. Runs off the main thread."""
+    info = whats_new()
+    if info:
+        for line in whats_new_lines(info):
+            report(line)
+        report("  " + t("Download: {link}", link=info["link"]))
+
+
+# --- Update Now (17 Nov 2026) ---
+# Ben asked again for updating from inside the app, now the note says what's new. 24bit7 itself downloads the
+# release zip and its fingerprint, checks one against the other and unpacks the zip beside its own folder, so the
+# swap is a rename on the same drive. update.ps1 then waits for 24bit7 to close, keeps the old copy as
+# "<folder> <old version> backup", puts the new one in its place, copies across everything of yours the new one
+# doesn't ship (.env, 24bit7.db, profiles, logs) and starts it; anything going wrong puts the old copy back. It
+# leaves update_result.txt for the next start to say how it went. Only for the built program.
+
+UPDATE_SCRIPT = "update.ps1"
+UPDATE_RESULT = "update_result.txt"
+UPDATE_PENDING = None   # (unpacked folder, version) once Update Now has a release ready: run on closing
+
+
+def can_update(info):
+    """Whether Update Now can be offered: the built program, and a release with its zip and fingerprint."""
+    return bool(info and info.get("zip") and info.get("sha256") and getattr(sys, "frozen", False))
+
+
+def update_folder(latest):
+    """Where a new release is downloaded and unpacked: beside 24bit7's own folder, on the same drive."""
+    parent, leaf = os.path.split(os.path.normpath(APP_DIR))
+    return os.path.join(parent, f"{leaf} update {latest}")
+
+
+def _download(url, path):
+    with requests.get(url, stream=True, timeout=30) as r:
+        r.raise_for_status()
+        with open(path, "wb") as f:
+            for chunk in r.iter_content(1 << 16):
+                f.write(chunk)
+
+
+def _download_text(url):
+    r = requests.get(url, timeout=15)
+    r.raise_for_status()
+    return r.text
+
+
+def _sha256(path):
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def prepare_update(info, report=print):
+    """
+    Downloads the newest release beside this copy, checks it against its fingerprint and unpacks it. The unpacked
+    24bit7 folder, or None with the reason in the console and nothing left behind. Runs off the main thread.
+    """
+    import shutil
+    import zipfile
+    work = update_folder(info["latest"])
+    try:
+        shutil.rmtree(work, ignore_errors=True)
+        os.makedirs(work)
+        archive = os.path.join(work, f"24bit7-v{info['latest']}-windows.zip")
+        report(t("Downloading 24bit7 {latest}...", latest=info["latest"]))
+        _download(info["zip"], archive)
+        wanted = (_download_text(info["sha256"]).split() or [""])[0].strip().lower()
+        if not wanted or wanted != _sha256(archive):
+            raise ValueError(t("the download doesn't match the fingerprint published with it"))
+        report(t("Checked: it's the release GitHub published."))
+        unpacked = os.path.join(work, "new")
+        with zipfile.ZipFile(archive) as z:
+            root = os.path.realpath(unpacked)
+            for name in z.namelist():   # nothing may land outside the folder it's unpacked into
+                if not os.path.realpath(os.path.join(unpacked, name)).startswith(root + os.sep):
+                    raise ValueError(t("the download holds a file that would land outside its folder"))
+            z.extractall(unpacked)
+        found = [os.path.dirname(os.path.join(dirpath, "24bit7.exe")) for dirpath, _, files in os.walk(unpacked)
+                 if "24bit7.exe" in files]
+        if not found:
+            raise ValueError(t("the download has no 24bit7.exe in it"))
+        return min(found, key=len)
+    except Exception as e:
+        shutil.rmtree(work, ignore_errors=True)
+        report(t("Problem: the update couldn't be got ready ({e}). Nothing was changed.", e=e))
+        return None
+
+
+def launch_update(new_dir, latest):
+    """Starts update.ps1, from a copy in the update folder, in a window of its own; 24bit7 then closes."""
+    import shutil
+    import subprocess
+    script = os.path.join(update_folder(latest), UPDATE_SCRIPT)
+    shutil.copyfile(os.path.join(getattr(sys, "_MEIPASS", APP_DIR), UPDATE_SCRIPT), script)
+    subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script,
+                      "-AppDir", os.path.normpath(APP_DIR), "-NewDir", new_dir, "-WorkDir", update_folder(latest),
+                      "-Version", latest, "-OldVersion", VERSION, "-WaitPid", str(os.getpid())],
+                     cwd=os.path.dirname(os.path.normpath(APP_DIR)),
+                     creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+
+
+def update_outcome():
+    """
+    How the last update went, from the note update.ps1 leaves (read once, then removed): ("ok", old version, the
+    old copy's folder), ("failed", reason, ""), or None.
+    """
+    path = os.path.join(APP_DIR, UPDATE_RESULT)
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            parts = f.read().strip().split("\t")
+        os.remove(path)
+    except OSError:
+        return None
+    if parts[0] == "ok" and len(parts) >= 3:
+        return "ok", parts[1], parts[2]
+    if parts[0] == "failed":
+        return "failed", parts[1] if len(parts) > 1 else "", ""
+    return None
+
+
+def say_update_outcome(report=print):
+    """The console line after an update: done, and where the old copy is; or what stopped it."""
+    outcome = update_outcome()
+    if not outcome:
+        return
+    if outcome[0] == "ok":
+        report(t("Note: Updated to {version}. Your old copy is in {folder}: delete it once you're happy.",
+                 version=VERSION, folder=outcome[2]))
+    else:
+        report(t("Problem: The update didn't finish ({why}), and your antivirus may have stopped it. Your old copy "
+                 "is back. Download the new one from the release page instead: {link}",
+                 why=outcome[1] or t("no reason given"), link=RELEASES_PAGE + "latest"))
+
 
 # The settings a button carries its own copy of (Settings > Buttons), laid over .env by buttons.run
 # Consensus per matching kind: (on, circle size, lists that must agree, fall back when short, fewer than how many

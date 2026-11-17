@@ -5,7 +5,8 @@
 #   6. Checks before publishing: gh installed and signed in, release_notes\vX.Y.Z.md
 #      committed, no release with this tag yet, everything committed and pushed.
 #      Any problem stops it here: nothing goes online.
-#   7. Publishes with gh: the zip, the title and the notes file, then opens the page.
+#   7. Publishes with gh: the zip and its fingerprint (.sha256, for Update Now), the title and the notes file,
+#      then opens the page.
 #
 # build.bat runs it: powershell -NoProfile -ExecutionPolicy Bypass -File release.ps1 -Version 1.8.0 -Zip releases\...
 
@@ -53,7 +54,11 @@ if ($problems.Count) {
 }
 
 # --- 7. Publish ---
-gh release create $tag $Zip --title "24bit7 $Version" --notes-file $notes --target (git rev-parse HEAD)
+# The zip's fingerprint goes up beside it: Update Now checks the download against it (17 Nov 2026)
+$sha = "$Zip.sha256"
+$hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $Zip).Hash.ToLower()
+Set-Content -LiteralPath $sha -Value "$hash  $(Split-Path -Leaf $Zip)" -Encoding Ascii
+gh release create $tag $Zip $sha --title "24bit7 $Version" --notes-file $notes --target (git rev-parse HEAD)
 if ($LASTEXITCODE) {
     Write-Host "Publishing didn't go through (see above). Nothing else was changed."
     exit 1

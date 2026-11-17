@@ -2218,7 +2218,10 @@ class PlayTab(tk.Frame):
         self._greeting_active = True
         self._held = []   # console lines that arrive while the greeting types: shown once it clears
         self._type_greeting(t("Follow the white rabbit."), 0)
-        threading.Thread(target=lambda: engine.say_if_newer(self.report), daemon=True, name="update-check").start()
+        self.whats_new_found, self.update_ready = queue.Queue(), queue.Queue()   # results from threads, polled
+        threading.Thread(target=lambda: self.whats_new_found.put(engine.whats_new()), daemon=True,
+                         name="update-check").start()
+        engine.say_update_outcome(self.report)
         engine.say_failing_sources(self.report)
 
     def _window_visible(self):
@@ -2536,6 +2539,85 @@ class PlayTab(tk.Frame):
         self.log.see("end")
         self.log.config(state="disabled")
 
+    # --- the new-version note: what's new since yours, Update Now (17 Nov 2026) ---------------------------------
+
+    def _show_whats_new(self, info):
+        """
+        Every release since yours, newest first, then Update Now (the built program only), Release Notes and Hide.
+        It stays until Hide or a build clears the console, rather than going after ninety seconds like other notes.
+        """
+        self._whats_new = info
+        self._whats_new_lines = engine.whats_new_lines(info) + ["  " + t("Download: {link}", link=info["link"])]
+        self._live.extend(self._whats_new_lines)
+        if not self._live_visible():
+            return
+        self.log.config(state="normal")
+        self.log.mark_set("whats_new_start", "end-1c")
+        self.log.mark_gravity("whats_new_start", "left")
+        for line in self._whats_new_lines[:-1]:
+            kind = self._line_kind(line)
+            self.log.insert("end", line + "\n", ((kind,) if kind else ()))
+        row = tk.Frame(self.log, bg=self.log.cget("bg"))
+        if engine.can_update(info):
+            self._update_button = tk.Label(row, text=t("Update Now"), fg=tabs.MATRIX_FG, bg=self.log.cget("bg"),
+                                           highlightthickness=1, highlightbackground=tabs.MATRIX_FG, padx=8,
+                                           cursor="hand2", font=self.log.cget("font"))
+            self._update_button.pack(side="left", padx=(0, 12))
+            self._update_button.bind("<Button-1>", lambda e: self._update_now())
+        for text, act in ((t("Release Notes"), lambda e: webbrowser.open(info["link"])),
+                          (t("Hide"), lambda e: self._hide_whats_new())):
+            link = tk.Label(row, text=text, fg=tabs.MATRIX_FG, bg=self.log.cget("bg"), cursor="hand2",
+                            font=tkfont.Font(font=self.log.cget("font"), underline=True))
+            link.pack(side="left", padx=(0, 12))
+            link.bind("<Button-1>", act)
+        self._whats_new_row = row
+        self.log.insert("end", "  ")
+        self.log.window_create("end", window=row)
+        self.log.insert("end", "\n")
+        self.log.mark_set("whats_new_end", "end-1c")
+        self.log.see("end")
+        self.log.config(state="disabled")
+
+    def _hide_whats_new(self):
+        for line in getattr(self, "_whats_new_lines", []):
+            for kept in (self._live, self._held):
+                if line in kept:
+                    kept.remove(line)
+        self._whats_new_lines = []
+        try:
+            self.log.config(state="normal")
+            self.log.delete("whats_new_start", "whats_new_end")
+            self.log.config(state="disabled")
+        except tk.TclError:
+            pass   # cleared already
+
+    def _update_now(self):
+        """Update Now: asks first, then downloads and checks the release on a thread; _update_downloaded goes on."""
+        info = getattr(self, "_whats_new", None)
+        if not info or getattr(self, "_updating", False):
+            return
+        if self.running:
+            messagebox.showinfo(t("Update 24bit7"), t("Let the build finish first, then update."), parent=self)
+            return
+        leaf = os.path.basename(os.path.normpath(engine.APP_DIR))
+        if not messagebox.askyesno(t("Update 24bit7"), t(
+                "Update from {old} to {new}?\n\n24bit7 closes, updates and starts again, in about a minute. JRiver "
+                "keeps playing, but Alexa and Non-stop pause until 24bit7 is back.\n\nYour settings, history and "
+                "profiles come with you. The old copy is kept beside it as {backup}.",
+                old=engine.VERSION, new=info["latest"], backup=f"{leaf} {engine.VERSION} backup"), parent=self):
+            return
+        self._updating = True
+        threading.Thread(target=lambda: self.update_ready.put(engine.prepare_update(info, self.report)),
+                         daemon=True, name="update-download").start()
+
+    def _update_downloaded(self, new_dir):
+        """The release is downloaded, checked and unpacked: 24bit7 hands over to update.ps1 and closes."""
+        self._updating = False
+        if not new_dir:
+            return   # prepare_update has said why
+        engine.UPDATE_PENDING = (new_dir, self._whats_new["latest"])
+        self.root.event_generate("<<Update24bit7>>")
+
     def _open_tidal(self, url):
         try:
             if url.startswith("tidal:"):
@@ -2614,6 +2696,17 @@ class PlayTab(tk.Frame):
                 self.badge.problem(*self.badge_problems.get_nowait())
         except queue.Empty:
             pass
+        if not self._greeting_active and hasattr(self, "whats_new_found"):
+            try:
+                info = self.whats_new_found.get_nowait()
+                if info:
+                    self._show_whats_new(info)
+            except queue.Empty:
+                pass
+            try:
+                self._update_downloaded(self.update_ready.get_nowait())
+            except queue.Empty:
+                pass
         self._next_voice_job()
         self.after(POLL_MS, self._drain_log_queue)
 
@@ -3667,6 +3760,7 @@ def main():
         restart["on"] = True
         quit_app()
     root.bind("<<Restart24bit7>>", restart_app)
+    root.bind("<<Update24bit7>>", lambda _event=None: quit_app())   # Update Now: closes, then update.ps1 runs
 
     def on_close():
         engine.refresh_settings_if_changed()
@@ -3684,6 +3778,9 @@ def main():
         show_from_tray(root, tray_memo)   # maximised again if it was last time
 
     root.mainloop()
+    if engine.UPDATE_PENDING:
+        engine.launch_update(*engine.UPDATE_PENDING)
+        return
     if restart["on"]:
         import subprocess
         frozen = getattr(sys, "frozen", False)   # the built .exe is its own program

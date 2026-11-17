@@ -13,8 +13,9 @@ def _release(version, url=None):
 def test_newer_says_so_with_the_link(app):
     app.web.latest_release = _release("99.0.0")
     app.engine.say_if_newer(app.printed)
-    line = app.printed.text()
-    assert line == f"Note: 24bit7 99.0.0 is out (you have {app.engine.VERSION}). Download: {LINK}99.0.0", line
+    lines = app.printed.text().splitlines()
+    assert lines[0] == f"Note: 24bit7 99.0.0 is out (you have {app.engine.VERSION}). New since yours:", lines
+    assert lines[1].strip() == "99.0.0" and lines[-1].strip() == f"Download: {LINK}99.0.0", lines
 
 
 def test_compares_numbers_not_text(app):
@@ -49,9 +50,7 @@ def test_the_line_gives_the_release_headline(app):
     """12 Nov 2026: the line says what the release does, from the notes' bold first sentence."""
     app.web.latest_release = dict(_release("99.0.0"), body="**Radio gets a pause button.**\r\n\r\nMore words.\r\n")
     app.engine.say_if_newer(app.printed)
-    line = app.printed.text()
-    assert line == (f"Note: 24bit7 99.0.0 is out (you have {app.engine.VERSION}): Radio gets a pause button. "
-                    f"Download: {LINK}99.0.0"), line
+    assert "  99.0.0  Radio gets a pause button." in app.printed.text().splitlines(), app.printed.text()
 
 
 def test_notes_without_a_headline_keep_the_short_line(app):
@@ -61,3 +60,51 @@ def test_notes_without_a_headline_keep_the_short_line(app):
 
 def test_the_headline_is_plain_text_on_one_line(app):
     assert app.engine.release_headline("  **Two\nlines, *some* stars.** rest") == "Two lines, some stars."
+
+
+# 17 Nov 2026, Ben: the note lists every release since yours, so you can tell whether it's worth updating.
+
+def _listed(*versions, assets=True):
+    out = []
+    for v in versions:
+        rel = dict(_release(v), body=f"**What {v} does.**" + "\n\nMore.")
+        if assets:
+            name = f"24bit7-v{v}-windows.zip"
+            base = f"https://github.com/24bit7/24bit7/releases/download/v{v}/"
+            rel["assets"] = [{"name": name, "browser_download_url": base + name},
+                             {"name": name + ".sha256", "browser_download_url": base + name + ".sha256"}]
+        out.append(rel)
+    return out
+
+
+def test_every_release_since_yours_is_listed_newest_first(app):
+    app.web.releases = _listed("98.1.0", "99.0.0", "98.0.1", "1.0.0")   # GitHub's order isn't relied on
+    info = app.engine.whats_new()
+    assert info["latest"] == "99.0.0" and [v for v, _ in info["releases"]] == ["99.0.0", "98.1.0", "98.0.1"]
+    assert app.engine.whats_new_lines(info)[1:] == ["  99.0.0  What 99.0.0 does.", "  98.1.0  What 98.1.0 does.",
+                                                    "  98.0.1  What 98.0.1 does."]
+
+
+def test_a_long_gap_lists_ten_and_counts_the_rest(app):
+    app.web.releases = _listed(*[f"90.{n}.0" for n in range(22)])
+    lines = app.engine.whats_new_lines(app.engine.whats_new())
+    assert len(lines) == 1 + 10 + 1 and lines[1].startswith("  90.21.0") and lines[-1] == "  and twelve older releases"
+
+
+def test_drafts_and_prereleases_are_left_out(app):
+    rels = _listed("99.0.0", "98.0.0")
+    rels[0]["draft"] = True
+    app.web.releases = rels
+    assert app.engine.whats_new()["latest"] == "98.0.0"
+
+
+def test_the_download_is_only_ever_from_our_own_release(app):
+    app.web.releases = _listed("99.0.0")
+    info = app.engine.whats_new()
+    assert info["zip"].endswith("/download/v99.0.0/24bit7-v99.0.0-windows.zip") and info["sha256"].endswith(".sha256")
+    rels = _listed("99.0.0")
+    rels[0]["assets"][0]["browser_download_url"] = "https://example.com/24bit7-v99.0.0-windows.zip"
+    app.web.releases = rels
+    assert app.engine.whats_new()["zip"] == "" == app.engine.whats_new()["sha256"]
+    app.web.releases = _listed("99.0.0", assets=False)   # no fingerprint, no download
+    assert app.engine.whats_new()["zip"] == ""
