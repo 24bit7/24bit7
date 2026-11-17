@@ -3,6 +3,7 @@ build.bat closes the packaged 24bit7 before it rebuilds, and opens the new one a
 """
 
 import os
+import re
 
 BAT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build.bat")
 
@@ -48,26 +49,37 @@ def test_opens_the_new_24bit7_after_publishing():
     assert publish < reopen < done
 
 
-PARALLEL = 'python -m pytest -q -m "not windows and not timing" -n 6'
+WINDOWLESS = 'python -m pytest -q -m "not windows and not timing"'
 TIMING = 'python -m pytest -q -m "timing and not windows"'
 WINDOWS = 'python -m pytest -q -m "windows"'
 
 
 def test_tests_run_in_three_passes_and_quick_skips_only_the_windows():
-    """14 Nov 2026: the windowless tests six at a time, the timing ones on their own, then the window tests one at
-    a time; build.bat quick stops before the window pass. Each pass stops the build when it fails."""
+    """The windowless tests, then the timing ones, then the window tests; build.bat quick stops before the window
+    pass. Each pass stops the build when it fails."""
     run = lines()
-    for cmd in (PARALLEL, TIMING, WINDOWS):
+    for cmd in (WINDOWLESS, TIMING, WINDOWS):
         i = run.index(cmd)
         assert run[i + 1] == "if errorlevel 1 goto tests_failed", f"a failure in {cmd!r} must stop the build"
     quick = run.index('if /i "%~1"=="quick" goto tests_passed')
-    assert run.index(PARALLEL) < run.index(TIMING) < quick < run.index(WINDOWS), "quick leaves out only the windows"
-    assert run.index(r"python -m pip install -q -r tests\requirements.txt") < run.index(PARALLEL), "xdist installed"
+    assert run.index(WINDOWLESS) < run.index(TIMING) < quick < run.index(WINDOWS), "quick leaves out only the windows"
+    assert run.index(r"python -m pip install -q -r tests\requirements.txt") < run.index(WINDOWLESS)
     failed = run.index(":tests_failed")
     assert run[failed + 1:failed + 5] == ["echo.", "echo Tests FAILED, so nothing was built. Fix them and run "
                                           "build.bat again.", "pause", "exit /b 1"]
     assert run.index(":tests_passed") > failed
     assert first(lambda line: "pytest" in line) < first(lambda line: "PyInstaller" in line), "tests before the build"
+
+
+def test_no_test_pass_runs_side_by_side():
+    """17 Nov 2026, Ben: the media PC is fanless. Six test workers at once heated it until Core Temp's overheat
+    protection put it to sleep for nineteen minutes mid-build, taking Alexa and Non-stop down with it. Every pass
+    runs one test at a time: slower, but cool."""
+    for line in lines():
+        if "pytest" in line and not line.startswith(("rem", "echo")):
+            assert not re.search(r"\s(-n|--numprocesses|--dist)\b", line), f"side by side: {line}"
+    with open(os.path.join(os.path.dirname(BAT), "tests", "requirements.txt"), encoding="utf-8") as f:
+        assert "xdist" not in f.read(), "nothing installs the means to run tests side by side"
 
 
 def test_every_test_runs_in_exactly_one_pass():
@@ -81,7 +93,7 @@ def test_every_test_runs_in_exactly_one_pass():
                               "-p", "no:cacheprovider"], cwd=repo, capture_output=True, text=True).stdout
         return {line for line in out.splitlines() if "::" in line}
     every = collected("windows or not windows")
-    passes = [collected(p.split('-m "')[1].split('"')[0]) for p in (PARALLEL, TIMING, WINDOWS)]
+    passes = [collected(p.split('-m "')[1].split('"')[0]) for p in (WINDOWLESS, TIMING, WINDOWS)]
     assert sum(len(p) for p in passes) == len(every) and set().union(*passes) == every
     assert any("test_sonos_clock.py" in t for t in passes[1]) and any("test_follower.py" in t for t in passes[1])
 

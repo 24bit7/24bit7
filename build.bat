@@ -4,14 +4,14 @@ cd /d "%~dp0"
 
 rem --- 0. Tests: a failure stops the release before anything else happens ---
 rem     build.bat        every test (about half an hour; the window tests need the mouse left alone)
-rem     build.bat quick  everything except the tests that open windows (about four minutes), for small releases
-rem     In passes (14 Nov 2026): the windowless tests six at a time (pytest-xdist; six was fastest on the media
-rem     PC, 3.5 minutes against 11.7 one at a time), then the timing tests on their own, since they time the real
-rem     clock to a few milliseconds, then (not quick) the window tests one at a time: they share one screen.
+rem     build.bat quick  everything except the tests that open windows (about twelve minutes), for small releases
+rem     In passes, every test one at a time: the windowless tests, then the timing tests, which time the real clock
+rem     to a few milliseconds, then (not quick) the window tests, which share one screen. Never side by side (17 Nov
+rem     2026): the media PC is fanless, and six at a time heated it until Core Temp put it to sleep mid-build.
 python -m pip install -q -r tests\requirements.txt
 if errorlevel 1 goto tests_failed
-echo Running the tests that don't open windows, six at a time (about four minutes^)...
-python -m pytest -q -m "not windows and not timing" -n 6
+echo Running the tests that don't open windows (about twelve minutes^)...
+python -m pytest -q -m "not windows and not timing"
 if errorlevel 1 goto tests_failed
 echo Running the timing tests on their own...
 python -m pytest -q -m "timing and not windows"
