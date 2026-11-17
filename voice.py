@@ -408,6 +408,13 @@ def _speakable(info):
 
 
 JRIVER_DOWN = "I couldn't reach JRiver. Is it running on the media PC?"
+JRIVER_CLOSED = "JRiver isn't running on the media PC."
+JRIVER_HUNG = "JRiver's running but not answering. It may be stuck."
+
+
+def _down_words():
+    """What Alexa says when JRiver isn't answering and Restore JRiver won't bring it back: closed or stuck, if known."""
+    return {"closed": JRIVER_CLOSED, "hung": JRIVER_HUNG}.get(engine.jriver_state(), JRIVER_DOWN)
 
 
 def _no_zone(zone, words=None):
@@ -416,7 +423,7 @@ def _no_zone(zone, words=None):
     said (16 Nov 2026: JRiver had crashed, and the kitchen was told the Sonos zone wasn't in JRiver).
     """
     if not engine.jriver_answers():
-        return "problem", JRIVER_DOWN, {}
+        return "problem", _down_words(), {}
     return "problem", words or f"I can't find the {zone} zone in JRiver.", {}
 
 
@@ -1105,31 +1112,41 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 JRIVER_STARTING = "JRiver wasn't running, so I've started it, uno momento."
+JRIVER_RESTARTING = "JRiver isn't answering. If it's still stuck in ten seconds I'll restart it, uno momento."
 NO_START = ("stop", "pause", "top_up")   # nothing to stop or pause, and Top-Up only asks what with
 
 
 def respond(body):
     """
-    handle_command, unless JRiver is on this PC and has stopped. Then 24bit7 starts it, Alexa says so straight away
-    (the skill has about eight seconds to answer, and JRiver takes longer to start), and the request runs by itself
-    once JRiver answers (Ben, 16 Nov 2026).
+    handle_command, unless JRiver is on this PC and isn't answering. Then Restore JRiver decides: a stopped JRiver is
+    started (16 Nov 2026), a stuck one restarted if the setting says so (17 Nov 2026). Alexa says so straight away
+    (the skill has about eight seconds to answer, and JRiver takes longer), and the request runs by itself once
+    JRiver answers.
     """
     intent = (body.get("intent") or "").strip().lower()
-    if intent in INTENTS and intent not in NO_START + COMING and not engine.jriver_answers() and engine.start_jriver():
-        threading.Thread(target=_once_jriver_answers, args=(body,), daemon=True, name="jriver-start").start()
-        return "said", JRIVER_STARTING, {}
+    if intent in INTENTS and intent not in NO_START + COMING and not engine.jriver_answers():
+        plan = engine.restore_plan()
+        if plan == "restart" or (plan == "start" and engine.start_jriver()):
+            threading.Thread(target=_once_jriver_answers, args=(body, plan), daemon=True, name="jriver-start").start()
+            return "said", JRIVER_RESTARTING if plan == "restart" else JRIVER_STARTING, {}
+        return "problem", _down_words(), {}   # said now, not after a chime: zones may still be remembered
     return handle_command(body, busy=_is_busy())
 
 
 _after_start = threading.Lock()
 
 
-def _once_jriver_answers(body):
+def _once_jriver_answers(body, plan="start"):
     """
     The request Alexa was told would follow, run once the JRiver just started answers. Requests that waited together
     run one after another: released in the same instant, two once wrote the database at once and one was lost.
     """
-    if not engine.wait_for_jriver():
+    if plan == "restart":
+        if not engine.restart_jriver():
+            _log_problem(body, JRIVER_RESTARTING)
+            engine.print("  " + t("Problem: JRiver didn't come back, so the request was dropped."))
+            return
+    elif not engine.wait_for_jriver():
         _log_problem(body, JRIVER_STARTING)
         engine.print("  " + t("Problem: JRiver didn't answer within a minute of starting, so the request was dropped."))
         return

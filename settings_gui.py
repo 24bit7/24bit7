@@ -900,6 +900,16 @@ SAVED_NONSTOP_OPTIONS = [("no", N_("No")), ("artists", N_("Similar artists")), (
 SAVED_SKIP_OPTIONS = [("0", N_("Off")), ("1", N_("1 day")), ("2", N_("2 days")), ("3", N_("3 days")), ("7", N_("7 days")),
                       ("14", N_("14 days")), ("30", N_("30 days"))]
 CACHE_KEEP_OPTIONS = [("month", N_("1 Month")), ("year", N_("1 Year")), ("permanent", N_("Permanent"))]
+# Restore JRiver (17 Nov 2026): what a request that finds JRiver not answering does; engine.restore_plan
+RESTORE_OPTIONS = [("off", N_("Off")), ("start", N_("Start If Closed")),
+                   ("restart", N_("Start If Closed, Restart If Hung"))]
+RESTORE_NOTES = {
+    "off": N_("24bit7 tells you JRiver isn't answering and leaves it to you."),
+    "start": N_("If JRiver isn't running, 24bit7 starts its Media Server and carries on."),
+    "restart": N_("If JRiver is running but hasn't answered for ten seconds, 24bit7 closes it, by force if it won't "
+                  "close, and starts it again. A forced close while JRiver is writing to its library could damage the "
+                  "library, so make sure JRiver's automatic library backups are switched on."),
+}
 CREDITS_SCOPE_OPTIONS = [("current", N_("Album/Current Track")), ("all", N_("Album/All Tracks"))]
 CREDITS_FIRST_OPTIONS = [("track", N_("Tracks")), ("album", N_("Album"))]
 CLEAR_CACHE_OPTIONS = [("month", N_("Older Than 1 Month")), ("year", N_("Older Than 1 Year")), ("all", N_("Clear All"))]
@@ -1369,9 +1379,23 @@ class SettingsTab(tk.Frame):
 
     # --- persistence -------------------------------------------------------
 
+    def _restore_changed(self, save=True):
+        """Restore JRiver's line under its drop-down; Restart If Hung's spells out the risk to the library."""
+        code = option_code(RESTORE_OPTIONS, self.vars["JRIVER_RESTORE"].get())
+        if code == "restart":
+            self.restore_note.config(text=t(RESTORE_NOTES[code]), bg=PALETTE["button_hover"], fg=PALETTE["button_fg"],
+                                     padx=8, pady=5)
+        else:
+            self.restore_note.config(text=t(RESTORE_NOTES[code]), bg=self.restore_note.master.cget("bg"),
+                                     fg=PALETTE["help_fg"], padx=0, pady=0)
+        if save:
+            self._save()
+
     def _current_updates(self):
         # Each button's sources and playlist settings are saved by its own page (_save_button_page)
         updates = {}
+        if "JRIVER_RESTORE" in self.vars:
+            updates["JRIVER_RESTORE"] = option_code(RESTORE_OPTIONS, self.vars["JRIVER_RESTORE"].get())
         updates["CACHE_KEEP"] = option_code(CACHE_KEEP_OPTIONS, self.vars["CACHE_KEEP"].get())
         updates["CACHE_DAYS"] = None   # replaced by Keep Cache For
         updates["CREDITS_SCOPE"] = option_code(CREDITS_SCOPE_OPTIONS, self.vars["CREDITS_SCOPE"].get())
@@ -6070,6 +6094,28 @@ class SettingsTab(tk.Frame):
         e = tk.Entry(box, textvariable=self.vars["JRIVER_HOST"], width=22)
         e.grid(row=1, column=1, sticky="w", padx=(12, 0))
         e.bind("<FocusOut>", self._save)
+
+        # Restore JRiver (17 Nov 2026): Off, Start If Closed (the default), or Restart If Hung as well
+        tk.Label(box, text=t("Restore JRiver"), anchor="w").grid(row=2, column=0, sticky="nw", pady=4)
+        self.vars["JRIVER_RESTORE"] = tk.StringVar(value=option_label(RESTORE_OPTIONS, engine.JRIVER_RESTORE))
+        cell = tk.Frame(box)
+        cell.grid(row=2, column=1, columnspan=2, sticky="w", padx=(12, 0), pady=4)
+        line = tk.Frame(cell)
+        line.pack(anchor="w")
+        restore_cb = TCombobox(line, textvariable=self.vars["JRIVER_RESTORE"], state="readonly", width=30,
+                               values=[s for _, s in RESTORE_OPTIONS])
+        restore_cb.pack(side="left")
+        restore_cb.bind("<<ComboboxSelected>>", lambda e: (restore_cb.selection_clear(), self._restore_changed()))
+        help_mark(line, t("What 24bit7 does when a voice request or a build finds JRiver on this PC not answering. "
+                          "Off: it tells you, and nothing more. Start If Closed: it starts JRiver's Media Server, "
+                          "the part 24bit7, JRemote and other PCs use, and carries on with the request. Restart If "
+                          "Hung as well: a JRiver that's running but hasn't answered for ten seconds is closed and "
+                          "started again, never one started less than two minutes ago and never twice in ten "
+                          "minutes."), on=box.grid_slaves(row=2, column=0)[0]).pack(side="left")
+        self.restore_note = tk.Label(cell, text="", justify="left", anchor="w", font=HELP_FONT,
+                                     wraplength=scaled(self, 520))
+        self.restore_note.pack(anchor="w", pady=(4, 0))
+        self._restore_changed(save=False)
 
         # Language: the offered ones, plus where to ask for another. Applied when 24bit7 restarts.
         tk.Label(box, text=t("Language"), anchor="w").grid(row=3, column=0, sticky="w", pady=4)

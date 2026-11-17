@@ -437,6 +437,7 @@ def load_settings():
     global LISTEN_SITES, CUSTOM_SITES, PLAYLIST_SITES, EXTRA_OUTPUTS, TIDAL_OPEN
     global SKIP_LONG_CLOSERS, LONG_CLOSER_MINUTES
     global SIMILAR_ARTIST_TRACK_COUNT, SIMILAR_ARTIST_TRACK_LIMIT, DRIFT, DEEP_CUTS
+    global JRIVER_RESTORE
     global AI_MODERATOR, MODERATOR_WARNED, SKIP_PLAYED, MATCH_TEMPO, ADAPTIVE_PICK
     global NONSTOP, NONSTOP_USING, NONSTOP_RESEED, NONSTOP_TOP_REST, NONSTOP_TOP_REST_COUNT, NONSTOP_VIBE
     global NONSTOP_BY, LONG_CLOSERS, AI_MODERATOR_BY, RUN_AFTER, INNER_CIRCLE
@@ -450,6 +451,8 @@ def load_settings():
     AUTH = (os.getenv("JRIVER_USER"), os.getenv("JRIVER_PASS"))
     JRIVER_HOST = os.getenv("JRIVER_HOST", "127.0.0.1:52199")
     JRIVER_BASE = f"http://{JRIVER_HOST}/MCWS/v1"
+    restore = (os.getenv("JRIVER_RESTORE") or "start").strip().lower()
+    JRIVER_RESTORE = restore if restore in ("off", "start", "restart") else "start"
     LASTFM_KEY = (os.getenv("LASTFM_API_KEY") or "").strip() or BUILTIN_LASTFM_KEY   # the user's own key wins
     LISTENBRAINZ_TOKEN = os.getenv("LISTENBRAINZ_TOKEN")
     DISCOGS_TOKEN = os.getenv("DISCOGS_TOKEN")
@@ -1694,14 +1697,22 @@ def _say_jriver_problem(e):
         print(jriver_problem(e))
 
 
-# --- Starting JRiver when it has stopped (16 Nov 2026) ---
+# --- Restore JRiver: starting it when it has stopped (16 Nov 2026), restarting it when it's stuck (17 Nov 2026) ---
 # JRiver crashed twice in a day on the media PC, and the kitchen's "happy go lucky" was told the Sonos zone couldn't
-# be found. A voice request or a build that finds JRiver gone starts it, if it's on this PC. There is no watchdog: a
-# JRiver closed on purpose stays closed until someone asks for music. A JRiver that's running but not answering
-# (hung) is left alone, since closing it by force is a step too far.
+# be found. A voice request or a build that finds JRiver not answering does what Settings > Other > Restore JRiver
+# says (JRIVER_RESTORE): "off", say so and do nothing; "start" (the default), start its Media Server if it isn't
+# running; "restart", that and also close a JRiver that's running but stuck, by force if it won't close, then start
+# it again. Only a JRiver on this PC. There is no watchdog: nothing happens until someone asks for music.
 
 JRIVER_START_WAIT = 60       # seconds to wait for a started JRiver to answer
+JRIVER_HUNG_AFTER = 10       # seconds more without an answer before a running JRiver counts as stuck
+JRIVER_CLOSE_WAIT = 5        # seconds a gentle close is given before it's forced
+JRIVER_YOUNG = 120           # a JRiver started less than this long ago may still be loading: never closed
+JRIVER_FORCE_GAP = 600       # at most one restart this often, so a JRiver that keeps sticking isn't closed in a loop
+RESTORE_CHOICES = ("off", "start", "restart")
+JRIVER_RESTORE = "start"     # set by load_settings
 _jriver_started = [0.0]      # when 24bit7 last started it, so two requests in a row start it once
+_jriver_restarted = [0.0]    # when 24bit7 last closed a stuck one
 
 
 def jriver_answers(timeout=2):
@@ -1725,10 +1736,8 @@ def jriver_is_local():
 
 def jriver_running():
     """Whether a JRiver process (Media Center NN.exe, or its launcher MCNN.exe) is running on this PC, answering or not."""
-    import subprocess
     try:
-        out = subprocess.run(["tasklist", "/FO", "CSV", "/NH"], capture_output=True,
-                             text=True, timeout=10, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+        out = _tasklist()
     except Exception:
         return True   # can't tell, so don't start a second one
     return jriver_in_tasklist(out)
@@ -1736,7 +1745,63 @@ def jriver_running():
 
 def jriver_in_tasklist(out):
     """Whether tasklist's CSV lists JRiver: Media Center NN.exe, or MCNN.exe, the launcher its Media Server runs from."""
-    return re.search(r'^"(Media Center \d+|MC\d+)\.exe"', out, re.I | re.M) is not None
+    return bool(jriver_pids_in(out))
+
+
+def jriver_pids_in(out):
+    """The process IDs of JRiver's programs in tasklist's CSV."""
+    return [int(m.group(2)) for m in re.finditer(r'^"(Media Center \d+|MC\d+)\.exe","(\d+)"', out, re.I | re.M)]
+
+
+def _tasklist():
+    import subprocess
+    return subprocess.run(["tasklist", "/FO", "CSV", "/NH"], capture_output=True, text=True, timeout=10,
+                          creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+
+
+def jriver_pids():
+    """JRiver's running processes on this PC, or [] (also when tasklist can't be read)."""
+    try:
+        return jriver_pids_in(_tasklist())
+    except Exception:
+        return []
+
+
+def _process_age(pid):
+    """Seconds since a process started, or None if Windows won't say."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        k = ctypes.windll.kernel32
+        h = k.OpenProcess(0x1000, False, int(pid))   # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return None
+        try:
+            times = [wintypes.FILETIME() for _ in range(4)]
+            if not k.GetProcessTimes(h, *(ctypes.byref(x) for x in times)):
+                return None
+            created = ((times[0].dwHighDateTime << 32) | times[0].dwLowDateTime) / 1e7 - 11644473600
+            return max(0.0, time.time() - created)
+        finally:
+            k.CloseHandle(h)
+    except Exception:
+        return None
+
+
+def jriver_age():
+    """How long the youngest JRiver process has been running, in seconds, or None if it can't be told."""
+    ages = [a for a in (_process_age(p) for p in jriver_pids()) if a is not None]
+    return min(ages) if ages else None
+
+
+def jriver_state():
+    """
+    Why JRiver isn't answering, as far as 24bit7 can tell: "closed" (not running on this PC), "hung" (running here
+    but not answering), or None (it's on another PC, so 24bit7 can't tell). Ask it once JRiver hasn't answered.
+    """
+    if not jriver_is_local():
+        return None
+    return "hung" if jriver_running() else "closed"
 
 
 def jriver_exe():
@@ -1785,26 +1850,123 @@ def _launch_jriver(exe):
                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def restore_plan():
+    """
+    What Restore JRiver will do about a JRiver that hasn't answered: "start", "restart", or None (24bit7 says so
+    instead). Call it once JRiver hasn't answered.
+    """
+    refresh_settings_if_changed()   # the setting may have been changed a moment ago
+    if JRIVER_RESTORE == "off" or not jriver_is_local():
+        return None
+    if time.time() - _jriver_started[0] < JRIVER_START_WAIT:
+        return "start"            # still starting from a moment ago
+    if not jriver_running():
+        return "start" if jriver_exe() else None
+    if JRIVER_RESTORE != "restart" or time.time() - _jriver_restarted[0] < JRIVER_FORCE_GAP:
+        return None
+    age = jriver_age()
+    if age is None or age < JRIVER_YOUNG:   # may still be loading, or can't tell: left alone
+        return None
+    return "restart" if jriver_exe() else None
+
+
 def start_jriver():
     """
-    Starts JRiver if it's on this PC and not running at all. True if it was started, or is still starting from a
-    moment ago; False if it's elsewhere, running (perhaps hung), or can't be found. Call it once JRiver hasn't answered.
+    Starts JRiver's Media Server if Restore JRiver allows it, it's on this PC and it isn't running at all. True if it
+    was started, or is still starting from a moment ago; False otherwise. Call it once JRiver hasn't answered.
     """
+    if restore_plan() != "start":
+        return False
     if time.time() - _jriver_started[0] < JRIVER_START_WAIT:
         return True
-    if not jriver_is_local() or jriver_running():
-        return False
+    if _start_server(N_("Problem: JRiver wasn't running, and 24bit7 couldn't start it ({e}).")):
+        print(t("JRiver wasn't running, so 24bit7 started it."))
+        return True
+    return False
+
+
+def _start_server(problem):
+    """Starts JRiver's Media Server; on failure says the problem (a text with {e}). True if it was started."""
     exe = jriver_exe()
     if not exe:
         return False
     try:
         _launch_jriver(exe)
     except Exception as e:
-        print(t("Problem: JRiver wasn't running, and 24bit7 couldn't start it ({e}).", e=e))
+        print(t(problem, e=e))
         return False
     _jriver_started[0] = time.time()
-    print(t("JRiver wasn't running, so 24bit7 started it."))
     return True
+
+
+def _kill(pids, force):
+    import subprocess
+    for pid in pids:
+        try:
+            subprocess.run(["taskkill", *(["/F"] if force else []), "/PID", str(pid)], capture_output=True,
+                           timeout=10, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except Exception:
+            pass
+
+
+def _close_jriver(pids):
+    """Closes JRiver: gently first, by force if it's still there after JRIVER_CLOSE_WAIT. Returns (closed, forced)."""
+    def gone(seconds):
+        end = time.time() + seconds
+        while True:
+            if not set(pids) & set(jriver_pids()):
+                return True
+            if time.time() >= end:
+                return False
+            time.sleep(0.5)
+
+    _kill(pids, False)
+    if gone(JRIVER_CLOSE_WAIT):
+        return True, False
+    _kill(pids, True)
+    return gone(JRIVER_CLOSE_WAIT), True
+
+
+_restart_lock = _threading.Lock()
+
+
+def restart_jriver():
+    """
+    For a JRiver that's running but not answering, with Restore JRiver on Restart If Hung: waits JRIVER_HUNG_AFTER
+    seconds in case it was only busy, then closes it (by force if it won't close) and starts its Media Server. True
+    once JRiver answers, whether it came back by itself or was restarted. Two requests at once restart it once.
+    """
+    if wait_for_jriver(JRIVER_HUNG_AFTER, step=0.5):
+        return True
+    with _restart_lock:
+        if jriver_answers():
+            return True
+        plan = restore_plan()
+        if plan == "start":           # restarted a moment ago by another request, or it has gone meanwhile
+            return start_jriver() and wait_for_jriver()
+        if plan != "restart":
+            return False
+        _jriver_restarted[0] = time.time()
+        closed, forced = _close_jriver(jriver_pids())
+        if not closed:
+            print(t("Problem: JRiver had stopped answering, and 24bit7 couldn't close it. Restart it on the media PC."))
+            return False
+        if not _start_server(N_("Problem: JRiver had stopped answering, so 24bit7 closed it, but couldn't start it "
+                                "again ({e}).")):
+            return False
+        print(t("JRiver had stopped answering, so 24bit7 closed it by force and started it again.") if forced else
+              t("JRiver had stopped answering, so 24bit7 closed it and started it again."))
+    return wait_for_jriver()
+
+
+def say_jriver_down():
+    """The console line when JRiver isn't answering and Restore JRiver won't bring it back."""
+    state = jriver_state()
+    if state == "hung":
+        print(t("Problem: JRiver is running but not answering, so it may be stuck. Restart it, or set "
+                "Settings > Other > Restore JRiver to do it for you."))
+    elif state == "closed" and JRIVER_RESTORE == "off":
+        print(t("Problem: JRiver isn't running. Start it, or set Settings > Other > Restore JRiver to do it for you."))
 
 
 def wait_for_jriver(seconds=None, step=1.0):
@@ -1814,6 +1976,7 @@ def wait_for_jriver(seconds=None, step=1.0):
         if jriver_answers():
             _jriver_unreachable.clear()   # its next problem is new, so it's said again
             _zone_cache[0] = 0.0          # read the zones afresh
+            _jriver_started[0] = 0.0      # it's up: no longer "starting" if it sticks again
             return True
         if time.time() >= end:
             return False
@@ -1821,10 +1984,20 @@ def wait_for_jriver(seconds=None, step=1.0):
 
 
 def ensure_jriver():
-    """For a build: if JRiver has stopped and is on this PC, start it and wait for it. True if it answers."""
+    """
+    For a build: if JRiver isn't answering, does what Restore JRiver says and waits for it. True if it answers.
+    Restarting a stuck one is said first, since it takes a few seconds.
+    """
     if jriver_answers():
         return True
-    return start_jriver() and wait_for_jriver()
+    plan = restore_plan()
+    if plan == "start":
+        return start_jriver() and wait_for_jriver()
+    if plan == "restart":
+        print(t("JRiver isn't answering. If it's still stuck in ten seconds, 24bit7 will restart it."))
+        return restart_jriver()
+    say_jriver_down()
+    return False
 
 
 def _read_zones():

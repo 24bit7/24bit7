@@ -92,9 +92,10 @@ def test_jriver_on_another_pc_is_never_started(app, alexa, monkeypatch):
 
 
 def test_a_hung_jriver_is_left_alone(app, alexa, local, monkeypatch):
+    """Start If Closed, the default: a stuck JRiver is said as that, and left for you to restart."""
     launched, _ = local
     monkeypatch.setattr(app.engine, "jriver_running", lambda: True)   # running, not answering
-    assert "couldn't reach JRiver" in alexa.say("SongsByIntent", "the beatles").ssml
+    assert "running but not answering" in alexa.say("SongsByIntent", "the beatles").ssml
     assert not launched
 
 
