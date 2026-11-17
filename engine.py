@@ -31,7 +31,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.37.1"
+VERSION = "1.37.2"
 
 
 def git_branch(folder):
@@ -1724,14 +1724,19 @@ def jriver_is_local():
 
 
 def jriver_running():
-    """Whether a JRiver (Media Center NN.exe) process is running on this PC, answering or not."""
+    """Whether a JRiver process (Media Center NN.exe, or its launcher MCNN.exe) is running on this PC, answering or not."""
     import subprocess
     try:
-        out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq Media Center*", "/FO", "CSV", "/NH"], capture_output=True,
+        out = subprocess.run(["tasklist", "/FO", "CSV", "/NH"], capture_output=True,
                              text=True, timeout=10, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
     except Exception:
         return True   # can't tell, so don't start a second one
-    return '"Media Center' in out
+    return jriver_in_tasklist(out)
+
+
+def jriver_in_tasklist(out):
+    """Whether tasklist's CSV lists JRiver: Media Center NN.exe, or MCNN.exe, the launcher its Media Server runs from."""
+    return re.search(r'^"(Media Center \d+|MC\d+)\.exe"', out, re.I | re.M) is not None
 
 
 def jriver_exe():
@@ -1761,11 +1766,22 @@ def jriver_exe():
     return max(found)[1] if found else None
 
 
+def jriver_server_command(exe):
+    """
+    How to start JRiver as Media Server, the way its own Start menu shortcut does (MCNN.exe /MediaServer): no window,
+    and all 24bit7, JRemote and other PCs need (17 Nov 2026). Falls back to Media Center NN.exe /MediaServer.
+    """
+    folder, name = os.path.split(exe)
+    m = re.match(r"Media Center (\d+)\.exe$", name, re.I)
+    launcher = os.path.join(folder, f"MC{m.group(1)}.exe") if m else None
+    return [launcher if launcher and os.path.isfile(launcher) else exe, "/MediaServer"]
+
+
 def _launch_jriver(exe):
-    """Starts JRiver on its own, so it neither holds 24bit7's output nor closes with it."""
+    """Starts JRiver's Media Server on its own, so it neither holds 24bit7's output nor closes with it."""
     import subprocess
     flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-    subprocess.Popen([exe], cwd=os.path.dirname(exe), creationflags=flags, close_fds=True,
+    subprocess.Popen(jriver_server_command(exe), cwd=os.path.dirname(exe), creationflags=flags, close_fds=True,
                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 

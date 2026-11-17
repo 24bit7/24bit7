@@ -1121,13 +1121,20 @@ def respond(body):
     return handle_command(body, busy=_is_busy())
 
 
+_after_start = threading.Lock()
+
+
 def _once_jriver_answers(body):
-    """The request Alexa was told would follow, run once the JRiver just started answers."""
+    """
+    The request Alexa was told would follow, run once the JRiver just started answers. Requests that waited together
+    run one after another: released in the same instant, two once wrote the database at once and one was lost.
+    """
     if not engine.wait_for_jriver():
         _log_problem(body, JRIVER_STARTING)
         engine.print("  " + t("Problem: JRiver didn't answer within a minute of starting, so the request was dropped."))
         return
-    status, speech, extra = handle_command(body, busy=_is_busy())
+    with _after_start:
+        status, speech, extra = handle_command(body, busy=_is_busy())
     if status in ("problem", "ask"):   # nobody is listening for a question now, so it goes to the console
         _log_problem(body, speech)
 

@@ -64,6 +64,7 @@ def test_voice_starts_jriver_and_runs_the_request_once_it_answers(app, alexa, lo
 
 
 def test_two_requests_while_it_starts_start_it_once(app, alexa, local):
+    """Both run once JRiver answers, one after the other: released together they once wrote the database at once."""
     launched, bring_up = local
     bring_up[0] = False   # still starting when the second request comes
     for _ in range(2):
@@ -119,3 +120,33 @@ def test_a_build_from_the_window_starts_jriver_and_waits(app, local):
 def test_only_this_pc_counts_as_local(app, host, is_local):
     app.engine.JRIVER_HOST = host
     assert app.engine.jriver_is_local() is is_local
+
+
+# 17 Nov 2026: what's started is JRiver's Media Server, as its own Start menu shortcut does (MC36.exe /MediaServer),
+# not Media Center's window. Closing the window leaves JRiver serving, and that's all 24bit7, JRemote and other PCs need.
+
+def test_jriver_is_started_as_media_server(app, tmp_path, monkeypatch):
+    import subprocess
+    exe = tmp_path / "Media Center 36.exe"
+    exe.write_text("")
+    (tmp_path / "MC36.exe").write_text("")
+    started = []
+    monkeypatch.setattr(subprocess, "Popen", lambda cmd, **kw: started.append(cmd))
+    app.engine._launch_jriver(str(exe))
+    assert started == [[str(tmp_path / "MC36.exe"), "/MediaServer"]], started
+
+
+def test_without_the_launcher_media_center_itself_is_started_as_media_server(app, tmp_path):
+    exe = tmp_path / "Media Center 36.exe"
+    exe.write_text("")
+    assert app.engine.jriver_server_command(str(exe)) == [str(exe), "/MediaServer"]
+
+
+@pytest.mark.parametrize("line, running", [('"Media Center 36.exe","17660","Console","1","47,368 K"', True),
+                                           ('"MC36.exe","2210","Console","1","12,004 K"', True),
+                                           ('"MC37.exe","2210","Console","1","12,004 K"', True),
+                                           ('"JRService.exe","14640","Services","0","9,120 K"', False),
+                                           ('"MCSomething.exe","1","Console","1","1 K"', False)])
+def test_a_jriver_running_under_either_name_counts(app, line, running):
+    out = '"System Idle Process","0","Services","0","8 K"\n' + line + '\n"pythonw.exe","300","Console","1","80,000 K"\n'
+    assert app.engine.jriver_in_tasklist(out) is running
