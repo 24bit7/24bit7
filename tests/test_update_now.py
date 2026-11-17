@@ -132,6 +132,7 @@ def test_the_script_puts_the_old_copy_back_when_the_new_one_is_missing(tmp_path)
     assert (app_dir / "24bit7.exe").read_text() == "old" and (app_dir / ".env").read_text() == "LASTFM=mine"
     assert not (tmp_path / "Music" / "24bit7 1.37.2 backup").exists()
     assert (app_dir / "update_result.txt").read_text(encoding="utf-8-sig").startswith("failed\t")
+    assert not work.exists(), "a failed update clears its download away too"
 
 
 def test_an_older_backup_of_the_same_version_is_never_overwritten(tmp_path):

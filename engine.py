@@ -31,7 +31,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.37.2"
+VERSION = "1.38.0"
 
 
 def git_branch(folder):
@@ -1874,8 +1874,7 @@ JRIVER_HUNG_AFTER = 10       # seconds more without an answer before a running J
 JRIVER_CLOSE_WAIT = 5        # seconds a gentle close is given before it's forced
 JRIVER_YOUNG = 120           # a JRiver started less than this long ago may still be loading: never closed
 JRIVER_FORCE_GAP = 600       # at most one restart this often, so a JRiver that keeps sticking isn't closed in a loop
-RESTORE_CHOICES = ("off", "start", "restart")
-JRIVER_RESTORE = "start"     # set by load_settings
+RESTORE_CHOICES = ("off", "start", "restart")   # JRIVER_RESTORE itself is set by load_settings, further up
 _jriver_started = [0.0]      # when 24bit7 last started it, so two requests in a row start it once
 _jriver_restarted = [0.0]    # when 24bit7 last closed a stuck one
 

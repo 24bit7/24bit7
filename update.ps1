@@ -64,6 +64,7 @@ try {
 } catch {
     $why = "the old copy couldn't be moved aside: $($_.Exception.Message)"
     Say "The update didn't start: $why"
+    Remove-Item -LiteralPath $WorkDir -Recurse -Force -ErrorAction SilentlyContinue   # Update Now downloads afresh
     Finish "failed`t$why" $AppDir
     if (-not $NoPause) { Start-Sleep -Seconds 8 }
     exit 1
@@ -92,6 +93,7 @@ try {
         if (-not $NoPause) { Start-Sleep -Seconds 30 }
         exit 2
     }
+    Remove-Item -LiteralPath $WorkDir -Recurse -Force -ErrorAction SilentlyContinue   # Update Now downloads afresh
     Finish "failed`t$why" $AppDir
     if (-not $NoPause) { Start-Sleep -Seconds 8 }
     exit 1

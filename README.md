@@ -310,7 +310,13 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.37.0
+## What's new in 1.38.0
+
+- **24bit7 updates itself.** When a newer version is out, the console lists every release since yours with its headline, so you can see whether it's worth it, and **Update Now** downloads it, checks it against the fingerprint published with it, swaps it in and starts it again, keeping your settings, history and profiles and your old copy as a backup. It first appears when the version after 1.38.0 comes out.
+- **Restore JRiver**, under Settings > Other: if JRiver on this PC isn't answering, 24bit7 starts its Media Server (the default), or tells you and leaves it (Off), or also restarts a JRiver that's stuck.
+- Alexa says whether JRiver isn't running or isn't answering, rather than that she can't find the zone.
+
+### Earlier: 1.37.0
 
 - **Hidden Tracks are found, not guessed.** With **Listen for Them**, the new default, an album's last track over five minutes is checked for a silence with a bonus track after it. If there is one, the song plays and 24bit7 moves on where the silence starts; if not, it plays in full. Before, every long closer was left out, real songs included; **Over Minutes** keeps that rule if you prefer it. Your files are only read, never changed.
 - **Long Tracks**, a ready-made filter, off to start: turn it on to keep tracks over fifteen minutes out of your playlists.
