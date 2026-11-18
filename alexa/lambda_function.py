@@ -19,14 +19,15 @@ needle drop - the Alexa skill for 24bit7.
                             and you answer with a name or "the second one")
     "top up"                asks what with; the next command goes into what's left of Playing Now
 Or in one go: "Alexa, ask needle drop for music like Agnes Obel".
-If several albums or songs share a title, Alexa asks which, and you answer "by <artist>".
+If several albums or songs share a title, Alexa asks which, and you answer with the artist ("Godsmack", or
+"by Godsmack"): 24bit7 sends the names it's asking about, and the skill tells Alexa to listen for them.
 No phrase starts with "play", so Alexa isn't tempted to hand it to a music service.
 
 The command goes to 24bit7 on your PC, with your key and the ID of the speaker
 that heard it, and 24bit7 plays the playlist on that speaker's zone.
   started  -> a short tone (ACK_TONE), then the music
   pending  -> "Please wait, request pending." (runs after the current build)
-  ask      -> Alexa asks which album, and listens for "by <artist>"
+  ask      -> Alexa asks which album, and listens for the artist
   problem  -> Alexa says what's wrong
 
 In the Code tab of an Alexa-hosted (Python) skill: create skill_settings.py next to
@@ -44,6 +45,8 @@ from xml.sax.saxutils import escape
 import ask_sdk_core.utils as ask_utils
 from ask_sdk_core.dispatch_components import AbstractExceptionHandler, AbstractRequestHandler
 from ask_sdk_core.skill_builder import SkillBuilder
+from ask_sdk_model.dialog import DynamicEntitiesDirective
+from ask_sdk_model.er.dynamic import Entity, EntityListItem, EntityValueAndSynonyms, UpdateBehavior
 
 from skill_settings import BIT7_KEY, BIT7_URL, CHIME   # your address, key and chime
 
@@ -64,6 +67,7 @@ COMMANDS = ("To build a playlist: songs by, music like, or tracks like, then an 
             "Top up, then any command, to add to what's playing instead of replacing it. "
             "Switch, or switch to, then a zone. "
             "And multiroom, so the speakers follow, or single room, to keep the music in this room only.")
+WHICH_ARTIST = "Say the artist's name."
 REPROMPT = {"playlist": "Say by, then the folder.", "zone": "Say to, then the zone.",
             "station": "Say the station's name, or its number.",
             "top_up": "Say music like, songs by, radio, or playlist, then what you'd like."}
@@ -71,6 +75,10 @@ INTENTS = {"SongsByIntent": "songs_by", "MusicLikeIntent": "music_like", "GenreI
            "TracksLikeIntent": "tracks_like",
            "AlbumIntent": "album", "SongIntent": "song", "PlaylistIntent": "playlist",
            "ShuffleIntent": "shuffle", "RadioIntent": "radio", "TopUpIntent": "top_up"}
+# Questions that wait for a name. A slotless command heard while one is open is most likely the name misheard
+# (18 Nov 2026: "Godsmack", in answer to "Which artist?", came through as keep it going), so Alexa asks again
+NAME_ASKS = ("album", "song", "tracks_like", "playlist", "station", "zone")
+NOT_A_NAME_OK = ("StopMusicIntent", "PauseMusicIntent")   # these still act mid-question
 ZONE_INTENTS = {"SkipIntent": "skip", "WhoIsThisIntent": "who_is_this", "MoreLikeThisIntent": "more_like",
                 "MoreArtistsLikeThisIntent": "more_artists",
                 "SwitchZonesIntent": "switch_zones", "KeepGoingIntent": "keep_going",
@@ -114,6 +122,11 @@ def send(intent, value, device, top_up=False):
         return "problem", "24bit7 isn't answering. Is it running on the media PC?", {}
 
 
+def without_the(name):
+    """'The Kooks' can be answered 'Kooks'."""
+    return [name[4:]] if name.lower().startswith("the ") and len(name) > 4 else []
+
+
 def respond(handler_input, status, speech, reply):
     """A tone when it starts; a question that keeps listening; otherwise Alexa says what's wrong."""
     builder = handler_input.response_builder
@@ -122,7 +135,14 @@ def respond(handler_input, status, speech, reply):
         session["ask"], session["title"] = reply.get("ask", "album"), reply.get("title", "")
         if reply.get("ask") == "top_up":
             session["top_up"] = True
-        return builder.speak(escape(speech)).ask(REPROMPT.get(reply.get("ask"), "Say by, then the artist.")).response
+        session.pop("reasked", None)
+        choices = [c for c in reply.get("choices") or [] if c][:100]
+        if choices:   # Alexa listens for these names until the question is answered
+            builder.add_directive(DynamicEntitiesDirective(update_behavior=UpdateBehavior.REPLACE, types=[
+                EntityListItem(name="ARTIST", values=[
+                    Entity(id=f"choice{i}", name=EntityValueAndSynonyms(value=c, synonyms=without_the(c)))
+                    for i, c in enumerate(choices)])]))
+        return builder.speak(escape(speech)).ask(REPROMPT.get(reply.get("ask"), WHICH_ARTIST)).response
     speech = f'<audio src="{ACK_TONE}"/>' if status == "started" else escape(speech)
     return builder.speak(speech).set_should_end_session(True).response
 
@@ -142,7 +162,8 @@ def heard_words(handler_input):
     """The words in the request's slot: "query" for most intents, "station" for Radio and Station (10 Nov 2026:
     the console wants one slot name to mean one slot type across the model, and STATION is its own type)."""
     return (ask_utils.get_slot_value(handler_input, "query")
-            or ask_utils.get_slot_value(handler_input, "station") or "")
+            or ask_utils.get_slot_value(handler_input, "station")
+            or ask_utils.get_slot_value(handler_input, "artist") or "")
 
 
 class CommandHandler(AbstractRequestHandler):
@@ -156,44 +177,61 @@ class CommandHandler(AbstractRequestHandler):
         return respond(handler_input, *send(intent, value, device, topping_up(handler_input)))
 
 
+def asking_again(handler_input):
+    """
+    The reply when a question for a name is open and what came back has no name in it: the question again, once,
+    then a short line to start over. None when no such question is open.
+    """
+    session = handler_input.attributes_manager.session_attributes
+    ask = session.get("ask")
+    if ask not in NAME_ASKS or (ask in ("album", "song", "tracks_like", "playlist") and not session.get("title")):
+        return None
+    builder = handler_input.response_builder
+    if session.get("reasked"):
+        for key in ("ask", "title", "reasked"):
+            session.pop(key, None)
+        return builder.speak(NOT_CAUGHT).set_should_end_session(True).response
+    session["reasked"] = True
+    again = REPROMPT.get(ask, WHICH_ARTIST)
+    return builder.speak(f"Sorry, which one? {again}").ask(again).response
+
+
 class ZoneHandler(AbstractRequestHandler):
     """Skip, who is this, more like this: no slot, they act on what this device's zone is playing."""
     def can_handle(self, handler_input):
         return any(ask_utils.is_intent_name(name)(handler_input) for name in ZONE_INTENTS)
 
     def handle(self, handler_input):
+        name = ask_utils.get_intent_name(handler_input)
+        if name not in NOT_A_NAME_OK:
+            again = asking_again(handler_input)
+            if again:
+                return again
         intent = ZONE_INTENTS[ask_utils.get_intent_name(handler_input)]
         device = handler_input.request_envelope.context.system.device.device_id
         return respond(handler_input, *send(intent, "", device))
 
 
-class ByArtistHandler(AbstractRequestHandler):
-    """The answer to "Which artist?" after several albums or songs shared a title."""
+class AnswerHandler(AbstractRequestHandler):
+    """
+    The answer to a question: "Which artist?" (several albums or songs share a title), which playlist, or which
+    station. "by Godsmack", a bare "Godsmack" (Artist, listened for by name) and a bare station name (Station) can
+    each be heard for either question, so the open question decides what the words mean.
+    """
     def can_handle(self, handler_input):
-        return ask_utils.is_intent_name("ByArtistIntent")(handler_input)
+        return any(ask_utils.is_intent_name(name)(handler_input)
+                   for name in ("ByArtistIntent", "ArtistIntent", "StationIntent"))
 
     def handle(self, handler_input):
         session = handler_input.attributes_manager.session_attributes
-        kind, title = session.get("ask", "album"), session.get("title")
-        artist = ask_utils.get_slot_value(handler_input, "query") or ""
-        if not title:
-            return handler_input.response_builder.speak(NOT_CAUGHT).set_should_end_session(False).response
-        device = handler_input.request_envelope.context.system.device.device_id
-        return respond(handler_input, *send(kind, f"{title} by {artist}", device, topping_up(handler_input)))
-
-
-class StationHandler(AbstractRequestHandler):
-    """The answer to "Which station?": a name, or "the second one"."""
-    def can_handle(self, handler_input):
-        return ask_utils.is_intent_name("StationIntent")(handler_input)
-
-    def handle(self, handler_input):
-        session = handler_input.attributes_manager.session_attributes
+        kind, title = session.get("ask"), session.get("title")
         heard = heard_words(handler_input)
-        if session.get("ask") != "station" or not heard:
-            return handler_input.response_builder.speak(NOT_CAUGHT).set_should_end_session(False).response
         device = handler_input.request_envelope.context.system.device.device_id
-        return respond(handler_input, *send("radio", heard, device, topping_up(handler_input)))
+        if kind == "station" and heard:
+            return respond(handler_input, *send("radio", heard, device, topping_up(handler_input)))
+        if kind in ("album", "song", "tracks_like", "playlist") and title and heard:
+            return respond(handler_input, *send(kind, f"{title} by {heard}", device, topping_up(handler_input)))
+        return handler_input.response_builder.speak(NOT_CAUGHT).set_should_end_session(False).response
 
 
 class SwitchToHandler(AbstractRequestHandler):
@@ -223,7 +261,7 @@ class FallbackHandler(AbstractRequestHandler):
         return ask_utils.is_intent_name("AMAZON.FallbackIntent")(handler_input)
 
     def handle(self, handler_input):
-        return handler_input.response_builder.speak(NOT_CAUGHT).set_should_end_session(False).response
+        return asking_again(handler_input) or             handler_input.response_builder.speak(NOT_CAUGHT).set_should_end_session(False).response
 
 
 class StopHandler(AbstractRequestHandler):
@@ -256,7 +294,7 @@ class ErrorHandler(AbstractExceptionHandler):
 
 
 sb = SkillBuilder()
-for handler in (LaunchHandler(), CommandHandler(), ZoneHandler(), ByArtistHandler(), StationHandler(), SwitchToHandler(),
+for handler in (LaunchHandler(), CommandHandler(), ZoneHandler(), AnswerHandler(), SwitchToHandler(),
                 HelpHandler(), FallbackHandler(), StopHandler(), SessionEndedHandler()):
     sb.add_request_handler(handler)
 sb.add_exception_handler(ErrorHandler())

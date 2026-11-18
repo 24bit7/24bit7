@@ -129,6 +129,11 @@
           "samples": ["{station}", "the {station} one", "the {station}", "number {station}", "{station} please"]
         },
         {
+          "name": "ArtistIntent",
+          "slots": [{"name": "artist", "type": "ARTIST"}],
+          "samples": ["{artist}", "it's {artist}", "the {artist} version", "the {artist} song", "the {artist} album"]
+        },
+        {
           "name": "TopUpIntent",
           "samples": ["top up", "top it up", "top up the music", "top up playing now"]
         },
@@ -139,6 +144,14 @@
         {"name": "AMAZON.FallbackIntent", "samples": []}
       ],
       "types": [
+        {
+          "name": "ARTIST",
+          "values": [
+            {"name": {"value": "the beatles"}},
+            {"name": {"value": "queen"}},
+            {"name": {"value": "godsmack"}}
+          ]
+        },
         {
           "name": "STATION",
           "values": [

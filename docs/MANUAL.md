@@ -617,7 +617,7 @@ Open the skill first ("Alexa, open needle drop"), then say the command, or say i
 
 **Switch** moves the music from the zone that's playing (the asking device's own, if it is) to another zone ticked under **Enable Switch To**. With two zones it goes straight to the other one; with three or more, Alexa asks which and you answer "to the kitchen", or say it up front: "switch to the kitchen". It carries on from the same song and point, a paused zone arrives paused, and Non-stop follows the music. A Sonos or other DLNA zone carries on from the same point too: it starts quietly, jumps to the right place once it's playing, and the room you left stops a moment later. Fine-tune it with Switch Timing Adjustment under Settings > Voice Commands. A plain "Alexa, stop" goes to the speaker itself, so stopping a JRiver zone needs "ask needle drop to stop the music".
 
-When several albums or songs share a title, Alexa asks which artist, and you answer "by *artist*". When two playlists share a name, she asks which, and you answer "by smartlist", "by playlist" or "by" and the folder. To skip the question, say it up front: "playlist vocal jazz smartlist".
+When several albums or songs share a title, Alexa asks which artist, naming them if there are five or fewer, and you answer with the name ("Godsmack", or "by Godsmack"). If she mishears the answer as another command, she asks again rather than doing it. When two playlists share a name, she asks which, and you answer "by smartlist", "by playlist" or "by" and the folder. To skip the question, say it up front: "playlist vocal jazz smartlist".
 
 No command starts with "play". Alexa tends to hand anything starting with "play" to a music service instead of the skill.
 

@@ -263,6 +263,28 @@ def _either(names):
     return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " or " + names[-1]
 
 
+NAMED_UP_TO = 5      # "Which artist?" names them all up to this many
+CHOICES_UP_TO = 100  # names the skill tells Alexa to listen for (Alexa takes a hundred at most)
+
+
+def _which_artist(ask, plural, matches):
+    """
+    "Which artist?" when several albums or songs share a title: up to five are named, and the names go back to the
+    skill as "choices", which it gives Alexa to listen for, so a bare "Godsmack" answers it. 18 Nov 2026: Jo asked
+    for Voodoo, answered "Godsmack" without "by", and Alexa heard "keep it going".
+    """
+    title = matches[0][0]
+    artists = list(dict.fromkeys(artist for _, artist, _ in matches))
+    if len(artists) <= 3:
+        speech = f"{title} by {_either(artists)}. Which one?"
+    elif len(artists) <= NAMED_UP_TO:
+        speech = f"You have {len(artists)} {plural} called {title}, by {_either(artists)}. Which one?"
+    else:
+        speech = f"You have {len(artists)} {plural} called {title}. Which artist?"
+    return "ask", speech, {"ask": ask, "title": title,
+                           "choices": [library.spoken(a) for a in artists[:CHOICES_UP_TO]]}
+
+
 def _top_five_start(artist, keys):
     """A random pick from the artist's top 5 that's in the shuffle, or None."""
     try:
@@ -307,13 +329,7 @@ def _play_now(intent, value, zone, device=None, top_up=False):
             what = "an album" if intent == "album" else "a song"
             return "problem", f"I couldn't find {what} called {value.rsplit(' by ', 1)[0]}.", {}
         if not found:
-            title = matches[0][0]
-            artists = [artist for _, artist, _ in matches]
-            if len(artists) <= 3:
-                speech = f"{title} by {_either(artists)}. Which one?"
-            else:
-                speech = f"You have {len(artists)} {intent}s called {title}. Which artist?"
-            return "ask", speech, {"ask": intent, "title": title}
+            return _which_artist(intent, f"{intent}s", matches)
         title, artist, keys = matches[0]
         keys = keys if intent == "album" else [keys]
         if top_up:
@@ -372,13 +388,7 @@ def _tracks_like_seed(value):
     if not matches:
         return None, ("problem", f"I couldn't find a song called {value}. "
                                  f"Say tracks like, then the song, by the artist.", {})
-    title = matches[0][0]
-    artists = [artist for _, artist, _ in matches]
-    if len(artists) <= 3:
-        speech = f"{title} by {_either(artists)}. Which one?"
-    else:
-        speech = f"You have {len(artists)} songs called {title}. Which artist?"
-    return None, ("ask", speech, {"ask": "tracks_like", "title": title})
+    return None, _which_artist("tracks_like", "songs", matches)
 
 
 # --- skip, who is this, more like this ----------------------------------------
@@ -445,6 +455,8 @@ def _zone_command(intent, device, body):
         pos, count = -1, 0
     state = engine.zone_state(zid)
     if pos < 0 or count == 0 or state == 0:
+        if intent == "keep_going":
+            return "problem", KEEP_GOING_NOTHING.format(zone=zone), {}
         return "problem", f"Nothing's playing on {zone}.", {}
 
     if intent == "keep_going":
@@ -845,6 +857,10 @@ def _switch(device, value, body):
     return "started", f"Switching to {target}.", {}
 
 
+# Said so it can't be taken for a fault (18 Nov 2026: it was what a misheard answer to "Which artist?" got)
+KEEP_GOING_NOTHING = "Nothing's playing on {zone}, so there's nothing to keep going."
+
+
 def keep_going(zone, device=None):
     """
     Keep It Going: Non-stop, once, for whatever is playing on a zone, even music
@@ -860,14 +876,14 @@ def keep_going(zone, device=None):
     if zid is None:
         return _no_zone(zone)
     if not _playing(zid):
-        return "problem", f"Nothing's playing on {zone}.", {}
+        return "problem", KEEP_GOING_NOTHING.format(zone=zone), {}
     with engine._nonstop_lock:
         entry = engine.NONSTOP_ZONES.get(zid)
     if entry and nonstop.config_for(zone, entry).get("on"):
         return "said", f"Non-stop is already on for {zone}.", {}
     keys = [r["Key"] for r in engine.playing_now_rows(zid) if r.get("Key")]
     if not keys:
-        return "problem", f"Nothing's playing on {zone}.", {}
+        return "problem", KEEP_GOING_NOTHING.format(zone=zone), {}
     button = devices.playlist_for(device, "tracks_like") if device else buttons.standard("tracks")
     if button is None:
         return "problem", "There's no Track Matching playlist to top up with. Restore the default playlists in 24bit7's settings.", {}

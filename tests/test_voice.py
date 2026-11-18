@@ -41,7 +41,7 @@ class Alexa:
 
     def say(self, intent, query=None, device=KITCHEN, new=True):
         # the slot is named as the interaction model names it: "station" for Radio and Station, "query" elsewhere
-        slot = "station" if intent in ("RadioIntent", "StationIntent") else "query"
+        slot = {"RadioIntent": "station", "StationIntent": "station", "ArtistIntent": "artist"}.get(intent, "query")
         slots = {slot: {"name": slot, "value": query}} if query is not None else {}
         out = self.skill.lambda_handler(self._envelope(
             {"type": "IntentRequest", "intent": {"name": intent, "confirmationStatus": "NONE", "slots": slots}},
@@ -325,7 +325,7 @@ def test_model_has_every_intent_the_skill_handles(app, alexa):
     model = json.load(open(app.folder / "alexa" / "interaction_model.json", encoding="utf-8"))
     names = {i["name"] for i in model["interactionModel"]["languageModel"]["intents"]}
     handled = set(alexa.skill.INTENTS) | set(alexa.skill.ZONE_INTENTS) | {
-        "ByArtistIntent", "StationIntent", "SwitchToIntent", "ListCommandsIntent", "AMAZON.HelpIntent", "AMAZON.FallbackIntent",
+        "ByArtistIntent", "ArtistIntent", "StationIntent", "SwitchToIntent", "ListCommandsIntent", "AMAZON.HelpIntent", "AMAZON.FallbackIntent",
         "AMAZON.StopIntent", "AMAZON.CancelIntent"}
     assert handled <= names, handled - names
     for intent in model["interactionModel"]["languageModel"]["intents"]:
@@ -395,6 +395,76 @@ def test_album_shared_title_asks_then_by_artist(app, alexa):
     r = alexa.say("ByArtistIntent", "queen", new=False)
     assert r.started, r
     assert app.jriver.titles("Kitchen")[0] == "Queen - Bohemian Rhapsody"
+
+
+def _four_voodoos(app):
+    """Four songs called Voodoo, by four artists (Ben's library on 18 Nov 2026 had four)."""
+    for i, artist in enumerate(("Godsmack", "Ozzy Osbourne", "Biffy Clyro", "The Kooks")):
+        row = dict(app.jriver.tracks[0], Key=str(9100 + i), Name="Voodoo", Artist=artist, Album=f"{artist} Album",
+                   **{"Album Artist (auto)": artist})
+        app.jriver.tracks.append(row)
+        app.jriver.by_key[row["Key"]] = row
+
+
+def test_which_artist_is_answered_by_a_bare_name(app, alexa):
+    """18 Nov 2026: Jo asked for Voodoo, answered "Which artist?" with "Godsmack", and Alexa heard keep it going.
+    The question names the four, the skill tells Alexa to listen for them, and the bare name plays the song."""
+    _four_voodoos(app)
+    r = alexa.say("SongIntent", "voodoo")
+    assert r.ends is not True, r
+    assert "You have 4 songs called Voodoo, by Godsmack, Ozzy Osbourne, Biffy Clyro or The Kooks. Which one?" in r.ssml, r
+    directives = r.raw["response"].get("directives") or []
+    entities = [d for d in directives if d.get("type") == "Dialog.UpdateDynamicEntities"]
+    assert entities and entities[0]["updateBehavior"] == "REPLACE", directives
+    listened = {v["name"]["value"]: v["name"].get("synonyms") for v in entities[0]["types"][0]["values"]}
+    assert entities[0]["types"][0]["name"] == "ARTIST"
+    assert set(listened) == {"Godsmack", "Ozzy Osbourne", "Biffy Clyro", "The Kooks"}
+    assert listened["The Kooks"] == ["Kooks"], "the Kooks can be answered Kooks"
+    assert "artist's name" in r.reprompt, r.reprompt
+    r = alexa.say("ArtistIntent", "godsmack", new=False)
+    assert r.started, r
+    assert app.jriver.titles("Kitchen") == ["Godsmack - Voodoo"]
+
+
+def test_which_artist_by_station_words_or_by(app, alexa):
+    """Alexa may hear a bare name as a station's, or keep the old "by": while the question is open, both answer it."""
+    _four_voodoos(app)
+    alexa.say("SongIntent", "voodoo")
+    assert alexa.say("StationIntent", "biffy clyro", new=False).started
+    assert app.jriver.titles("Kitchen") == ["Biffy Clyro - Voodoo"]
+    alexa.say("SongIntent", "voodoo")
+    assert alexa.say("ByArtistIntent", "ozzy osbourne", new=False).started
+    assert app.jriver.titles("Kitchen") == ["Ozzy Osbourne - Voodoo"]
+
+
+def test_misheard_answer_asks_again_instead_of_acting(app, alexa):
+    """A command with no name in it, heard while "Which artist?" is open, is the name misheard: Alexa asks again
+    once, and the second time says she didn't catch it. Keep It Going never runs."""
+    _four_voodoos(app)
+    alexa.say("SongIntent", "voodoo")
+    r = alexa.say("KeepGoingIntent", new=False)
+    assert "Sorry, which one?" in r.ssml and r.ends is not True, r
+    assert "keep going" not in r.ssml.lower() and alexa.session.get("ask") == "song", r
+    r = alexa.say("ArtistIntent", "godsmack", new=False)
+    assert r.started and app.jriver.titles("Kitchen") == ["Godsmack - Voodoo"], r
+    alexa.say("SongIntent", "voodoo")
+    alexa.say("AMAZON.FallbackIntent", new=False)
+    r = alexa.say("KeepGoingIntent", new=False)
+    assert "didn't catch that" in r.ssml and r.ends is True, r
+    assert not app.engine.NONSTOP_ZONES, "Keep It Going never ran"
+
+
+def test_stop_the_music_still_works_mid_question(app, alexa):
+    app.jriver.play("Kitchen", app.jriver.playlists[0]["keys"][:2])
+    _four_voodoos(app)
+    alexa.say("SongIntent", "voodoo")
+    r = alexa.say("StopMusicIntent", new=False)
+    assert "Sorry, which one?" not in r.ssml, r
+
+
+def test_keep_it_going_with_nothing_playing_says_so_plainly(app, alexa):
+    r = alexa.say("KeepGoingIntent")
+    assert "Nothing's playing on Kitchen, so there's nothing to keep going." in r.ssml, r
 
 
 def test_song(app, alexa):

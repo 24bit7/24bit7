@@ -242,7 +242,7 @@ Once it is set up, each device plays to its zone:
 | "top up", then a command | The next command joins what's left of Playing Now instead of replacing it |
 | "list commands" | Alexa reads the commands once |
 
-When a command is accepted, Alexa plays a short tone rather than talking over the music, which with fast start follows almost at once. When several albums or songs share a title, Alexa asks which artist, and you answer "by *artist*". When two playlists share a name, she asks which one, and you answer "by smartlist", "by playlist" or "by" and the folder.
+When a command is accepted, Alexa plays a short tone rather than talking over the music, which with fast start follows almost at once. When several albums or songs share a title, Alexa asks which artist, and you answer with the name ("Godsmack", or "by Godsmack"). When two playlists share a name, she asks which one, and you answer "by smartlist", "by playlist" or "by" and the folder.
 
 **Settings > JRiver Playlists** decides how your own playlists play when you ask for them: **Shuffle**, **Blend** (new music woven through the playlist, one for one, from similar artists or similar tracks, up to 50 songs), **Non-stop** (No, Similar artists or Similar tracks), **Reseed from** and **Skip recent**, either one row for every playlist or a row each. The table shows each playlist's folder and whether it's a smartlist, sorts by folder or name, and can show one folder at a time. A playlist with nothing changed plays exactly as JRiver has it. No command starts with "play", because Alexa tends to hand anything starting "play" to a music service instead of the skill. The skill name is up to you; the one in this repository is "needle drop", chosen because Alexa kept mishearing the first one.
 
