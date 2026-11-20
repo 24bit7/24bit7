@@ -57,7 +57,8 @@ def has_fields(names):
 _albums = {}             # (album, album artist) -> [track rows]
 _artists = {}            # normalised artist -> artist as tagged
 _tracks = []
-_songs = {}              # normalised title -> [(title, artist, key, album, album artist, compilation)]
+_songs = {}              # normalised title -> [(title, artist, key, album, album artist, compilation,
+                         #                       year, full title keys, tagged)]: see _entry
 _song_titles = []
 _playlists = []
 _loaded_at = 0.0
@@ -166,17 +167,25 @@ _BRACKET_DROP_START = re.compile(r"\s*(feat\.?|featuring|ft\.?|with|from)\b", re
 _BRACKET_DROP_ANY = re.compile(r"\b(remix|bonus|deluxe|" + engine.VERSION_WORDS.strip("()") + r")\b", re.I)
 
 
+_BRACKETS = re.compile(r"\(.*?\)|\[.*?\]")
+
+
+def _is_tag(inner):
+    """True for what a bracket holds when it's a version tag or a credit: Remastered, Live, feat. Someone."""
+    return bool(_BRACKET_DROP_START.match(inner) or _BRACKET_DROP_ANY.search(inner))
+
+
 def _unwrap_brackets(title):
     """
     'Long Cool Woman (in a Black Dress)' -> 'Long Cool Woman  in a Black Dress '.
     Brackets holding a version tag or a credit are dropped instead, as norm() does.
     """
-    def keep(m):
-        inner = m.group(0)[1:-1]
-        if _BRACKET_DROP_START.match(inner) or _BRACKET_DROP_ANY.search(inner):
-            return " "
-        return f" {inner} "
-    return re.sub(r"\(.*?\)|\[.*?\]", keep, title or "")
+    return _BRACKETS.sub(lambda m: " " if _is_tag(m.group(0)[1:-1]) else f" {m.group(0)[1:-1]} ", title or "")
+
+
+def _tagged(title):
+    """True when a title carries a version tag or a credit in brackets: 'Blue Monday (Hardfloor Remix)'."""
+    return any(_is_tag(m.group(0)[1:-1]) for m in _BRACKETS.finditer(title or ""))
 
 
 # A dropped "g" at the end of a word, straight or curly apostrophe: Lightnin', Lovin', Ramblin'
@@ -190,12 +199,39 @@ def title_keys(title):
     the title. Most titles have no brackets and give one key.
     Each form is also filed with a dropped "g" restored (Lightnin' -> Lightning).
     """
-    keys = []
-    for form in (title, _unwrap_brackets(title)):
+    return _title_forms(title)[0]
+
+
+def _title_forms(title):
+    """
+    (keys, full): every key a title is filed under, as title_keys gives them, and the keys of its fullest
+    form alone, the one that keeps the bracketed words that are part of the title. 'Another Brick In The Wall
+    (Part 2)' is filed under both forms and its full keys are the 'part two' one; a title with no brackets,
+    or only a version tag in them, has one form and its full keys are its plain ones.
+    """
+    def keys_of(form):
+        out = []
         for k in (norm(form), norm(_DROPPED_G.sub("ing", form or ""))):
-            if k and k not in keys:
-                keys.append(k)
-    return keys
+            if k and k not in out:
+                out.append(k)
+        return out
+    plain = keys_of(title)
+    full = keys_of(_unwrap_brackets(title)) if _BRACKETS.search(title or "") else plain
+    return plain + [k for k in full if k not in plain], frozenset(full)
+
+
+NO_YEAR = 9999   # a copy with no year sorts after the dated ones
+
+
+def _year(row):
+    m = re.match(r"\s*(\d{4})", str(row.get("Date (year)") or ""))
+    return int(m.group(1)) if m and int(m.group(1)) else NO_YEAR
+
+
+def _entry(title, artist, row, compilation, full):
+    """One copy of a song as the library files it: what's shown, and what choosing between copies needs."""
+    return (title, artist, row["Key"], row.get("Album") or "", row.get("Album Artist (auto)") or "", compilation,
+            _year(row), full, _tagged(title))
 
 
 def score(heard, name):
@@ -262,20 +298,22 @@ def load():
         title, artist = (row.get("Name") or "").strip(), (row.get("Artist") or "").strip()
         album, album_artist = row.get("Album") or "", row.get("Album Artist (auto)") or ""
         if title:
-            keys = title_keys(title)
+            keys, full = _title_forms(title)
+            entry = _entry(title, artist, row, False, full)
             for k in keys:
-                songs.setdefault(k, []).append((title, artist, row["Key"], album, album_artist, False))
+                songs.setdefault(k, []).append(entry)
             if keys and artist:
                 if artist not in normed:
                     normed[artist] = norm(artist)
                 live = "live" in album.lower() and "live" in norm(album).split()   # another song, not a copy
-                groups.setdefault((normed[artist], keys[0], live), []).append(
-                    (title, artist, row["Key"], album, album_artist, False))
+                groups.setdefault((normed[artist], keys[0], live), []).append(entry)
         if " - " in title:   # a compilation track named 'Artist - Title'
             by, just_title = (part.strip() for part in title.split(" - ", 1))
             if by and just_title:
-                for k in title_keys(just_title):
-                    songs.setdefault(k, []).append((just_title, by, row["Key"], album, album_artist, True))
+                keys, full = _title_forms(just_title)
+                entry = _entry(just_title, by, row, True, full)
+                for k in keys:
+                    songs.setdefault(k, []).append(entry)
         name = (row.get("Album") or "").strip()
         if name:
             albums.setdefault((name, row.get("Album Artist (auto)", "")), []).append(row)
@@ -305,9 +343,10 @@ def load():
                 played[str(row["Key"])] = when
     by_key = {str(row.get("Key")): row for row in tracks}
     copies_of = {}
-    for (artist_norm, _, _), entries in groups.items():
+    for (artist_norm, title_key, _), entries in groups.items():
         if len(entries) > 1:
-            best = [str(e[2]) for e in sorted(entries, key=lambda e: _album_version_first(e, artist_norm))]
+            asked = frozenset((title_key,))
+            best = [str(e[2]) for e in sorted(entries, key=lambda e: _best_copy_first(e, artist_norm, asked))]
             for k in best:
                 copies_of[k] = best
     with _lock:
@@ -400,7 +439,7 @@ def last_played(key):
 def copies(key):
     """
     Every copy you own of this track: the key itself first, then the others the way
-    find_track_key prefers them (studio album first). A copy is the same artist and title
+    find_track_key prefers them (_best_copy_first). A copy is the same artist and title
     as tagged, such as a stereo MP3 and a surround FLAC of one album; a live recording
     only counts as a copy of another live one. Just [key] for a track with no copies.
     """
@@ -497,9 +536,24 @@ def _artist_score(heard, artist):
 
 def _album_version_first(entry, artist_norm):
     """Sorts an artist's copies of a song: studio album, then own compilation, then others."""
-    _, artist, _, album, album_artist, compilation = entry
+    album, album_artist, compilation = entry[3], entry[4], entry[5]
     live = "live" in norm(album).split()
     return compilation, norm(album_artist) != artist_norm, live
+
+
+def _best_copy_first(entry, artist_norm, asked):
+    """
+    Sorts the copies you own of a song, best first (Ben, 20 Nov 2026):
+      1. the title asked for (asked: its full keys) before any other, and a title with no version tag or
+         credit in brackets before one with: 'Blue Monday' before 'Blue Monday (Hardfloor Remix)', and
+         'Another Brick In The Wall (Part 2)' first when Part 2 is what was asked for;
+      2. the earliest year, a copy with no year after the dated ones: IV's Black Dog (1971) before
+         Celebration Day's (2012), which has no 'live' in its name for the old rule to catch;
+      3. the album rules, for what's left: own album, then own compilation, then others, live last.
+    A version tag in the request itself is ignored as it always was, so 'Black Dog (Live)' finds the original.
+    """
+    year, full, tagged = entry[6], entry[7], entry[8]
+    return (not (asked & full), tagged, year) + _album_version_first(entry, artist_norm)
 
 
 def find_song(heard):
@@ -514,6 +568,7 @@ def find_song(heard):
     if " by " in heard:
         heard, by = heard.rsplit(" by ", 1)
     want = norm(heard)
+    asked = _title_forms(heard)[1] | {want}
     with _lock:
         if want in _songs:
             titles = [want]
@@ -529,7 +584,7 @@ def find_song(heard):
         if best_score < GOOD:
             return False, []
         best = [e for s, e in ranked if s == best_score]
-        pick = sorted(best, key=lambda e: _album_version_first(e, norm(e[1])))[0]
+        pick = sorted(best, key=lambda e: _best_copy_first(e, norm(e[1]), asked))[0]
         return True, [(pick[0], pick[1], pick[2])]
     copies = [e for tval, e in entries if tval == titles[0]]
     artists = {}
@@ -538,7 +593,7 @@ def find_song(heard):
     if len(artists) > 1:
         return False, [(group[0][0], group[0][1], None) for group in artists.values()]
     artist_norm, group = next(iter(artists.items()))
-    pick = sorted(group, key=lambda e: _album_version_first(e, artist_norm))[0]
+    pick = sorted(group, key=lambda e: _best_copy_first(e, artist_norm, asked))[0]
     return True, [(pick[0], pick[1], pick[2])]
 
 
@@ -547,10 +602,11 @@ def find_track_key(artist, title):
     The library key for a track named by a similarity source, or None. Title
     and artist both have to match (forgiving about case, version tags and
     'Kooks, The'), and compilation copies named 'Artist - Title' count. Where
-    you own several copies, the studio album version wins.
+    you own several copies, _best_copy_first chooses: the title asked for, then
+    the earliest year, then the album rules.
     """
     ensure_loaded()
-    wants = title_keys(title)
+    wants, asked = _title_forms(title)
     if not wants:
         return None
     entries, seen = [], set()
@@ -583,7 +639,9 @@ def find_track_key(artist, title):
             engine.debug(f"Matched on band name: {artist} - {title} (as {matches[0][1]})")
     if not matches:
         return None
-    return sorted(matches, key=lambda e: _album_version_first(e, norm(e[1])))[0][2]
+    if len(matches) == 1:
+        return matches[0][2]
+    return sorted(matches, key=lambda e: _best_copy_first(e, norm(e[1]), asked))[0][2]
 
 
 def _credit_words(text):
