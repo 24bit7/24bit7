@@ -61,6 +61,23 @@ def find_device(hint, found=None, prefer="ASIO"):
     return best
 
 
+def reload(device):
+    """
+    Reads the list of devices again and returns the index the same device (its name and host API) has in it.
+    PortAudio reads the list once, when it loads; a DAC switched off and on after that can't be opened until it's
+    read again. Only with no stream open. Raises LookupError if the device isn't in the new list.
+    """
+    sd = _sd()
+    was = sd.query_devices(device)
+    name, api = was["name"], sd.query_hostapis(was["hostapi"])["name"]
+    sd._terminate()
+    sd._initialize()
+    for i, n, a, _ in devices():
+        if n == name and a == api:
+            return i
+    raise LookupError(f"{name} isn't among the output devices now")
+
+
 class Output:
     """A PortAudio output stream at one rate. callback(out, frames, now) fills out, a (frames, channels) array."""
 

@@ -121,11 +121,23 @@ class Service:
         try:
             f.run(self.stop_event)
         except Exception as e:
-            self.send(problem=f"The follower stopped ({e}).")
+            self.send(problem=f"The follower stopped ({error_line(e)}).")
         finally:
             self.follower = None
             clock.stop()
             self.send(state="idle")
+
+
+def error_line(e):
+    """
+    An error with its kind and where it was raised: "TypeError: 'NoneType' object is not subscriptable, follower.py
+    line 811". The message alone ("'NoneType' object is not subscriptable", 22 Nov 2026) said nothing to go on.
+    """
+    import os
+    import traceback
+    frames = traceback.extract_tb(e.__traceback__)
+    place = f", {os.path.basename(frames[-1].filename)} line {frames[-1].lineno}" if frames else ""
+    return f"{type(e).__name__}: {e}{place}"
 
 
 def main(argv=None):

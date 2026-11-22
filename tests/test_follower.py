@@ -379,7 +379,8 @@ def test_joining_under_halfway_starts_the_track_again_in_both_rooms():
     assert w.jr.stopped == ["Sonos"] and w.jr.started == [("play", "Sonos")]
     assert w.said("Note: the Speakers joined partway through Track 3, so both rooms start it again from the top "
                   "together, the way they stay in step.")
-    assert len(w.outs) == 1, "joined the old run as well"
+    played = [o for o in w.outs if o.callback is not follower._silence]   # not the silent try of the DAC before it
+    assert len(played) == 1, "joined the old run as well"
     off = w.offsets(fresh[0] + START, since=fresh[0] + 2.5)
     assert len(off) > 50 and np.abs(off).max() < TOL
 
@@ -855,3 +856,128 @@ def test_the_hugos_asio_driver_is_found_from_jrivers_name_for_it():
     assert output.find_device("Chord", found) == 18
     assert output.find_device("Speakers (Xonar SoundCard)", found) == 22
     assert output.find_device("Garage", found) is None
+
+
+# --- a DAC that won't open (22 Nov 2026) --------------------------------------------------------------
+
+class DeadDac:
+    """An output that can't be opened while dead, as a DAC switched off (ASIO error -1000); the tries are counted."""
+
+    def __init__(self, w, dead=True, fail_first=0):
+        self.w, self.dead, self.fail_first = w, dead, fail_first
+        self.tries, self.reloads = 0, 0
+        make = w.f.open_output
+
+        def open_output(dev, rate, channels, callback):
+            self.tries += 1
+            if self.dead or self.tries <= self.fail_first:
+                raise RuntimeError("Error starting stream: Hardware input or output is not present or available")
+            return make(dev, rate, channels, callback)
+
+        def reload():
+            self.reloads += 1
+            return "reloaded"
+        w.f.open_output, w.f.reload_output = open_output, reload
+
+
+def test_a_dac_that_wont_open_is_said_once_and_the_follower_carries_on():
+    # The house copy, 22 Nov 2026: the DAC wouldn't open for a new follower's first track, and the tidy-up read a
+    # track that wasn't there yet, so the console said "'NoneType' object is not subscriptable" and the follower
+    # stopped for good. It says what's wrong, once, and keeps going.
+    w = World()
+    dac = DeadDac(w)
+    w.run(0.5)
+    w.play()
+    w.run(70.0)
+    assert len(w.said("Problem: couldn't open the Speakers' DAC")) == 1, w.lines
+    assert "not present or available" in w.said("Problem: couldn't open")[0]
+    assert w.f.player is None and w.f.out is None and not w.outs
+    assert dac.reloads >= 3, "the audio layer is reloaded before each new try"
+    assert w.jr.stopped == [] and w.jr.started == [], "the Sonos is left alone meanwhile"
+    w.f.finish()   # what run() does on the way out: it must never raise
+
+
+def test_a_stale_audio_layer_is_reloaded_and_the_open_tried_once_more():
+    w = World()
+    dac = DeadDac(w, dead=False, fail_first=1)
+    w.run(0.5)
+    o = w.play()
+    w.run(8.0)
+    assert dac.reloads == 1 and w.f.device == "reloaded"
+    assert not w.said("Problem"), w.lines
+    off = w.offsets(o + START, since=o + 2.5)
+    assert len(off) > 50 and np.abs(off).max() < TOL
+
+
+def test_the_speakers_join_when_the_dac_is_back():
+    w = World()
+    dac = DeadDac(w)
+    w.run(0.5)
+    o = w.play()
+    w.run(40.0)
+    assert w.said("Problem: couldn't open the Speakers' DAC") and not w.outs
+    dac.dead = False
+    w.run(follower.DAC_RETRY + 8.0)
+    assert w.said("The Speakers' DAC is back."), w.lines
+    assert len(w.said("Problem")) == 1
+    off = w.offsets(o + START, since=w.sim.t - 4.0)
+    assert len(off) > 50 and np.abs(off).max() < TOL
+
+
+def test_a_join_partway_leaves_the_sonos_alone_while_the_dac_wont_open():
+    # Joining partway starts both rooms together, which restarts or skips the Sonos's track: not for a DAC that
+    # can't play, or a DAC left switched off would cut a track on the Sonos at every try.
+    w, fresh = joining(at_ms=40000)
+    dac = DeadDac(w)
+    w.run(follower.DAC_RETRY * 2 + 5.0)
+    assert w.jr.stopped == [] and w.jr.started == [], "the Sonos's track was cut for Speakers that can't play"
+    assert len(w.said("Problem: couldn't open the Speakers' DAC")) == 1
+    dac.dead = False
+    w.run(follower.DAC_RETRY + 8.0)
+    assert w.said("The Speakers' DAC is back.")
+    assert w.jr.started == [("play", "Sonos")], "back, the Speakers join the usual way: both rooms from the top"
+    off = w.offsets(fresh[0] + START, since=fresh[0] + 2.5)
+    assert len(off) > 50 and np.abs(off).max() < TOL
+
+
+class FakeAudioLayer:
+    """sounddevice as output.reload uses it: the device list changes when the layer is loaded again."""
+
+    def __init__(self, before, after):
+        self.lists, self.loads = [before, after], 0
+
+    def query_hostapis(self, index=None):
+        apis = [{"name": "MME"}, {"name": "ASIO"}]
+        return apis if index is None else apis[index]
+
+    def query_devices(self, index=None):
+        rows = [{"name": n, "hostapi": a, "max_output_channels": 2} for n, a in self.lists[min(self.loads, 1)]]
+        return rows if index is None else rows[index]
+
+    def _terminate(self):
+        pass
+
+    def _initialize(self):
+        self.loads += 1
+
+
+def test_reloading_the_audio_layer_finds_the_same_device_again(monkeypatch):
+    before = [("Speakers (Realtek)", 0), ("ASIO Chord  1.04", 1)]
+    after = [("Speakers (Realtek)", 0), ("Headset", 0), ("ASIO Chord  1.04", 1)]
+    layer = FakeAudioLayer(before, after)
+    monkeypatch.setattr(output, "_sd", lambda: layer)
+    assert output.reload(1) == 2 and layer.loads == 1, "the same DAC, wherever the new list has it"
+    gone = FakeAudioLayer(before, [("Speakers (Realtek)", 0), ("ASIO Chord  1.04", 0)])
+    monkeypatch.setattr(output, "_sd", lambda: gone)
+    with pytest.raises(LookupError, match="ASIO Chord"):
+        output.reload(1)   # the name under another host API isn't the same device: its delay would differ
+
+
+def test_a_follower_that_stops_says_what_kind_of_error_and_where():
+    from multiroom import service
+    track = None
+    try:
+        track["key"]
+    except TypeError as e:
+        line = service.error_line(e)
+    assert line.startswith("TypeError: 'NoneType' object is not subscriptable, test_follower.py line ")

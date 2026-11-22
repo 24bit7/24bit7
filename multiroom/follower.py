@@ -271,18 +271,29 @@ class Source:
 # we watched it begin (a read came just before it) rather than finding it already going.
 Run = collections.namedtuple("Run", "t pos_ms fresh seen")
 
+DAC_RETRY = 30.0   # seconds between tries of a DAC that wouldn't open
+
+
+def _silence(out, frames, now):
+    out[:] = 0
+
 
 class Follower:
     """
     The control loop: step() is called about fifty times a second. clock is a sonos.ReadLog (a SonosClock), jriver
     an mcws.JRiver, source a Source, open_output(device, rate, channels, callback) an output.Output or a fake. say
-    gets each console line.
+    gets each console line. reload_output() reloads the audio layer and returns the device to use from then on
+    (output.reload): see _open_output.
     """
 
     def __init__(self, clock, jriver, leader, follower, source, open_output, device=None, start_ms=90.0,
-                 resume_ms=95.0, dac=1660, now=time.perf_counter, say=print, poll=0.5):
+                 resume_ms=95.0, dac=1660, now=time.perf_counter, say=print, poll=0.5, reload_output=None):
         self.clock, self.jriver, self.leader, self.follower = clock, jriver, leader, follower
         self.source, self.open_output, self.device = source, open_output, device
+        self.reload_output = reload_output
+        self._dac_down = None                # (rate, channels) of the stream that wouldn't open, while the DAC won't
+        self._dac_try_at = 0.0               # our time of the next try
+        self._dac_ok_at = None               # our time the DAC was last seen to open (_dac_opens)
         self.start_s, self.resume_s, self.dac = start_ms / 1000, resume_ms / 1000, dac
         self.now, self.say, self.poll = now, say, poll
         self.info, self.info_at = None, None
@@ -363,6 +374,8 @@ class Follower:
             return
         if not (self._sonos_playing() and info["state"] == mcws.PLAYING and info["key"]):
             return
+        if self._dac_down is not None and not self._dac_back(now):
+            return   # the DAC wouldn't open: nothing starts, and the Sonos is left alone, until it does
         run = self.runs[-1] if self.runs else None
         last, end = self.last, None
         if last is not None:
@@ -412,6 +425,8 @@ class Follower:
             return
         if run is not None and not (run.fresh and run.seen) and self._together(info, now):
             return
+        if self._dac_down is not None:
+            return   # _together found the DAC won't open
         self._start(info["key"], run, now, end=end)
 
     def _together(self, info, now):
@@ -427,6 +442,8 @@ class Follower:
         """
         if self._together_at is not None and now - self._together_at < TOGETHER_GAP:
             return False
+        if not self._dac_opens(info["key"], now):
+            return False   # Speakers that can't play don't cut the Sonos's track
         self._together_at = now
         name = self.name(info["key"])
         half = info.get("duration_ms") and info.get("position_ms", 0) >= info["duration_ms"] / 2
@@ -553,9 +570,16 @@ class Follower:
         first = max(0, int(round((now + 0.3 - o) * fmt.rate)) + self.dac)
         stream = self.source.open(key, fmt, first)
         stream.wait_buffered(int(0.25 * fmt.rate), timeout=3)
-        self.player = Player(stream, fmt.rate, fmt.channels, self.dac, o)
-        self.out = self.open_output(self.device, fmt.rate, fmt.channels, self.player.callback)
-        self.out.start()
+        player = Player(stream, fmt.rate, fmt.channels, self.dac, o)
+        try:
+            out = self._open_output(fmt.rate, fmt.channels, player.callback)
+        except Exception as e:
+            stream.close()
+            self._dac_lost(e, fmt, now)
+            return
+        # Only once the DAC is running: a player with no track behind it made finish() fail in its turn, and the
+        # console said "'NoneType' object is not subscriptable" in place of what was wrong (22 Nov 2026).
+        self.player, self.out = player, out
         self._chains = 0
         self.track = {"key": key, "fmt": fmt, "run_t": run.t, "c": c, "late": late, "carried": how == "change",
                       "refined": how == "join" and now - run.t >= REFINE_AFTER,   # a run joined young is refined later
@@ -577,6 +601,76 @@ class Follower:
     @staticmethod
     def _format(fmt):
         return f"{fmt.rate / 1000:g} kHz, {fmt.bits}-bit{' float' if fmt.is_float else ''}"
+
+    # --- a DAC that won't open -----------------------------------------------------------------
+    def _open_output(self, rate, channels, callback):
+        """
+        The DAC's stream, started. PortAudio lists the devices once, when it loads, and the follower runs for days:
+        a DAC switched off and on since then can't be opened until the list is read again (the house copy, 18 and
+        22 Nov 2026: "Hardware input or output is not present or available" from a follower three days old, while
+        a fresh process opened the same DAC). So a failed open reloads the audio layer and tries once more.
+        """
+        try:
+            return self._started(rate, channels, callback)
+        except Exception:
+            if self.reload_output is None:
+                raise
+            self.device = self.reload_output()
+            return self._started(rate, channels, callback)
+
+    def _started(self, rate, channels, callback):
+        out = self.open_output(self.device, rate, channels, callback)
+        try:
+            out.start()
+        except Exception:
+            try:
+                out.close()
+            except Exception:
+                pass
+            raise
+        return out
+
+    def _dac_lost(self, e, fmt, now):
+        """The DAC wouldn't open, reload and all: said once, then tried again every DAC_RETRY seconds (_dac_back)."""
+        if self._dac_down is None:
+            self.say(f"Problem: couldn't open the Speakers' DAC ({e}). Is it switched on? The Speakers join in "
+                     f"when it opens.")
+        self._dac_down = (fmt.rate, fmt.channels)
+        self._dac_try_at = now + DAC_RETRY
+
+    def _dac_back(self, now):
+        """While the DAC won't open: tries it with silence when a try is due. True once it opens."""
+        if now < self._dac_try_at:
+            return False
+        rate, channels = self._dac_down
+        try:
+            self.begin()
+            self._open_output(rate, channels, _silence).close()
+        except Exception:
+            self._dac_try_at = now + DAC_RETRY
+            return False
+        self._dac_down, self._dac_ok_at = None, now
+        self.say("The Speakers' DAC is back.")
+        return True
+
+    def _dac_opens(self, key, now):
+        """
+        Whether the DAC opens for this track, tried with silence, before both rooms are started together: that
+        restarts or skips the Sonos's track, which Speakers that can't play have no business doing.
+        """
+        if self._dac_ok_at == now:
+            return True   # it opened this very step
+        try:
+            fmt = self.source.format(key)
+        except Exception:
+            return True   # the track itself is the trouble: _start says so
+        try:
+            self.begin()
+            self._open_output(fmt.rate, fmt.channels, _silence).close()
+        except Exception as e:
+            self._dac_lost(e, fmt, now)
+            return False
+        return True
 
     # --- the next track -------------------------------------------------------------------------
     def _next_key(self):
@@ -808,8 +902,9 @@ class Follower:
             p.stream.close()
             if p.next is not None:
                 p.next.close()
-            self.last = {"key": self.track["key"], "run_t": self.track["run_t"], "at": self.now(), "end": end,
-                         "next": self.track.get("next_key")}
+            if self.track is not None:   # never an error of its own on the way out of one (22 Nov 2026)
+                self.last = {"key": self.track["key"], "run_t": self.track["run_t"], "at": self.now(), "end": end,
+                             "next": self.track.get("next_key")}
         self.out = self.player = None
         self._stopped_since = None
         if self.leaving:
@@ -867,6 +962,7 @@ def build(leader="Sonos", follower="Speakers", server="Multiroom", sonos_name=No
                    f"Start {start:g} ms, Resume {resume:g} ms, DAC {dac} samples.")
     clock = sonos.SonosClock(s["ip"], s["householdId"], s["groupId"])
     f = Follower(clock, jr, leader, follower, source, output.Output, dev, start, resume, dac, say=say)
+    f.reload_output = lambda: output.reload(f.device)
     return clock, f, description
 
 
