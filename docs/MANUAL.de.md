@@ -343,7 +343,7 @@ Eine Config KI-Playlist hat keine Quellen zu wählen, und der Abschnitt Drift ih
 
 #### Filter bearbeiten
 
-![Filter bearbeiten](images/de/edit_filters.png)
+![Einstellungen > Filter](images/de/settings_filters.png)
 
 Ein Fenster mit benannten Filtern, die eingrenzen, was 24bit7 wählt, Drift-Runden und Non-stop-Ergänzungen eingeschlossen. Wo ein Filter gilt, entscheidest du, indem du ihn in einer Config anhakst, für jede Playlist, die diese Config erstellt, wohin sie auch geht. **Verwendet von** an jedem Filter sagt, welche Playlists ihn angehakt haben, und bei mehreren Configs welche. Jeder Filter hat:
 

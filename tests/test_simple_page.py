@@ -27,13 +27,7 @@ def test_simple_shows_one_plain_config_and_greys_what_needs_advanced(app, ui):
                  "If All Else Fails", "Run After Building", "+ Add Another Config", "Separate Settings for Review Mode"):
         assert gone not in texts, gone
     assert "Sources" in texts and "Playlist Selection" in texts and "Filters" in texts
-    filters_box = next(w for w in walk(s._button_inner) if isinstance(w, tk.Frame) and hasattr(w, "is_open")
-                       and any(c.cget("text") == "Filters" for c in w.master.winfo_children()[0].winfo_children()
-                               if isinstance(c, tk.Label)))
-    assert filters_box.is_open() is False, "Filters collapsed in Simple"
-    filters_box.master.winfo_children()[0].event_generate("<Button-1>")
-    ui.pump(0.2)
-    assert filters_box.is_open() is True, "a click opens it"
+    assert "Use Main Filter" in texts, "Simple shows the line as Advanced does (20 Nov 2026; folded away before)"
     by_name = {b._name: b for b in ui.play.play_buttons}
     assert str(by_name["Artist + Guests"].cget("state")) == "disabled" and str(by_name["Consensus"].cget("state")) == "disabled"
     assert str(by_name["Similar Artists"].cget("state")) == "normal"

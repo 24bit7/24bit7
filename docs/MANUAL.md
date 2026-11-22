@@ -340,7 +340,7 @@ An AI Playlist config has no sources to pick, and its playlist's Drift section h
 
 #### Edit Filters
 
-![Edit Filters](images/edit_filters.png)
+![Settings > Filters](images/settings_filters.png)
 
 A window of named filters that narrow what 24bit7 picks, Drift rounds and what Non-stop adds included. Where a filter applies is decided by ticking it on a config, for every playlist that config builds, wherever it's sent. **Used by** on each filter says which playlists have it ticked, and which config where there are several. Each filter has:
 

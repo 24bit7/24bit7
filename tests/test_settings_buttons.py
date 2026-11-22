@@ -79,7 +79,8 @@ def inner_page(ui, title):
 def test_playlists_tab_replaces_sources_playlist_and_filters(app, ui):
     s = buttons_page(ui)
     titles = tab_titles(settings_pane(ui))
-    assert "Playlist Settings" in titles and not {"Sources", "Playlist", "Filters", "Buttons", "Playlists", "Zones"} & set(titles), titles
+    assert "Playlist Settings" in titles and not {"Sources", "Playlist", "Buttons", "Playlists", "Zones"} & set(titles), titles
+    assert titles.index("Filters") == titles.index("Other") - 1, "Filters is a tab again (20 Nov 2026), before Other"
     assert "Devices" in titles, "folded into Playlist Settings on 2 Nov 2026, its own tab again on 5 Nov 2026"
     assert s._button_names() == ["Similar Artists", "Similar Tracks", "Artist's Top Tracks", "Artist + Guests", "Consensus", "AI Playlist"]
     assert s._button_id == s._buttons[0]["id"] and s._button_page.button["name"] == "Similar Artists"
@@ -338,32 +339,46 @@ def test_the_playing_now_line_and_review_tick_are_only_on_the_standard_button(ap
     assert "When Seed is Current Track" in texts and "tracks, from" in texts
 
 
-def test_filters_tick_on_the_page_and_edit_filters_opens_a_window(app, ui):
+def test_use_main_filter_on_the_page_and_edit_filters_goes_to_the_filters_tab(app, ui):
+    """Ben, 20 Nov 2026: one line, Use Main Filter, Yes by default; No shows a line of ticks, the playlist's own."""
     import buttons
     import filters
     f = filters.blank("Stereo")
     filters.save([f])
     p = pick_button(ui, "Artist + Guests")
     s = ui.settings
-    ticks = [w for w in walk(s._button_filter_row) if isinstance(w, ttk.Checkbutton)]
-    assert [t.cget("text") for t in ticks] == ["Stereo"]
-    ticks[0].invoke()
+
+    def ticks():
+        return [w for w in walk(s._button_filter_row) if isinstance(w, ttk.Checkbutton)]
+    assert "Use Main Filter" in labels(s._button_filter_row) and s._button_filter_row.use_main.get() == "Yes"
+    assert not ticks() and "Nothing is in the Main Filter yet." in labels(s._button_filter_row)
+    s._button_filter_row.use_main.set("No")
+    s._button_filter_row.choice.event_generate("<<ComboboxSelected>>")
+    ui.pump(0.3)
+    assert [t.cget("text") for t in ticks()] == ["Stereo"] and not ticks()[0].instate(["selected"])
+    assert buttons.get(p.button["id"])["filters"] == [], "its own ticks, a copy of the Main Filter's: none"
+    ticks()[0].invoke()
     ui.pump(0.2)
     assert buttons.get(p.button["id"])["filters"] == [f["id"]]
     assert ui.play.play_buttons[3]._tooltip.text.endswith("Filters"), "the Play tab's note follows"
-    win = s._open_filters()
+    page = s._open_filters()
     ui.pump(0.4)
-    assert win.title() == "Edit Filters" and win.winfo_exists()
-    texts = labels(win)
+    texts = labels(page)
     assert "Applies on" not in texts and "Active filters" not in texts
     assert "Used by: Artist + Guests (config 1)" in texts, texts   # filters are each config's (2 Nov 2026)
-    assert s._open_filters() is win, "opened again, it's the same window"
-    ticks[0].invoke()
+    assert s._open_filters() is page, "asked for again, it's the same page"
+    pick_button(ui, "Artist + Guests")
     ui.pump(0.2)
-    s._filter_fill_editor()
-    assert any(t.startswith("Not ticked on any button yet") for t in labels(win))
-    win.destroy()
+    ticks()[0].invoke()
     ui.pump(0.2)
+    s._open_filters()
+    ui.pump(0.3)
+    assert any(t.startswith("Not used yet") for t in labels(page))
+    pick_button(ui, "Artist + Guests")
+    s._button_filter_row.use_main.set("Yes")
+    s._button_filter_row.choice.event_generate("<<ComboboxSelected>>")
+    ui.pump(0.3)
+    assert buttons.uses_main(buttons.configs(buttons.get(p.button["id"]))[0]) and not ticks()
     assert not ui.errors, ui.errors[0]
 
 

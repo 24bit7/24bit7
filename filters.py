@@ -180,11 +180,15 @@ def used_by(filter_id):
     config's own (2 Nov 2026): a playlist of several configs names the config, "Artist + Guests (config 2)".
     """
     import buttons
-    out = []
-    if next((x for x in load() if x["id"] == filter_id and x.get("every")), None):
-        out.append(t("Main Filter"))   # and any playlist on its own ticks that has it ticked too
+    out, on_main, held = [], 0, []
     for b in buttons.load():
         cfgs = buttons.configs(b) or ([{"filters": b.get("filters") or []}] if buttons.is_radio(b) else [])
+        held.append((b, cfgs))
+        on_main += any(MAIN in cfg["filters"] for cfg in cfgs)
+    if next((x for x in load() if x["id"] == filter_id and x.get("every")), None):
+        # "the Main Filter (14 playlists)", then any playlist on its own ticks that has it ticked too
+        out.append(tn("the Main Filter ({count} playlist)", "the Main Filter ({count} playlists)", on_main))
+    for b, cfgs in held:
         for i, cfg in enumerate(cfgs):
             if MAIN not in cfg["filters"] and filter_id in cfg["filters"]:
                 out.append(b["name"] if len(cfgs) == 1 else t("{name} (config {n})", name=b["name"], n=i + 1))

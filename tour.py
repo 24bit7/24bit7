@@ -25,8 +25,9 @@ SECTION_NOTES = {
     "Playlist Selection": N_("How many tracks the playlist aims for and how they're chosen from the artists found, with a "
                              "second line for Seed on Playing Now. Change these when playlists come out too long, too short "
                              "or too samey."),
-    "Filters": N_("Rules every track this config finds must pass, such as stereo only or nothing played this month. Each "
-                  "config has its own, so one can draw on the whole library while another stays strict."),
+    "Filters": N_("Rules every track this config finds must pass, such as stereo only or nothing played this month. A "
+                  "config uses the Main Filter, the one set for every playlist, unless it's given filters of its own, "
+                  "so one can draw on the whole library while another stays strict."),
     "Mix": N_("How two or more configs come together: shuffled in, one after the other, or taking turns by a pattern. "
               "It's what makes Artist + Guests alternate two hosts with a guest."),
     "Consensus": N_("Takes the seed's closest few artists and keeps only the artists their own lists agree on, so every "

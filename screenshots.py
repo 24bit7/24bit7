@@ -61,7 +61,7 @@ SHOTS = [
      "button:Similar Artists:Playlist"),
     ("settings_buttons_ai_playlist", ["Settings", "Playlist Settings"], ["settings_gui.py", "buttons.py"],
      "button:AI Playlist:Playlist"),
-    ("edit_filters", ["Settings", "Playlist Settings"], ["settings_gui.py", "filters.py"], "edit_filters"),
+    ("settings_filters", ["Settings", "Filters"], ["settings_gui.py", "filters.py"], None),   # a tab again (20 Nov 2026)
     ("settings_devices", ["Settings", "Devices"], ["settings_gui.py", "devices.py"], "device:demo-kitchen"),
     ("settings_discover_sites", ["Settings", "Discover"], ["settings_gui.py"], None),
     ("settings_keys", ["Settings", "Keys"], ["settings_gui.py"], None),
@@ -491,6 +491,7 @@ def start_demo(gui, temp):
     import filters
     stereo = filters.blank(in_language("Stereo only"))
     stereo["rules"] = [{"field": "sample_rate", "op": "at_most", "value": "48", "value2": ""}]
+    stereo["every"] = True   # in the Main Filter, and ticked on Kitchen Tracks, which has filters of its own
     filters.save([stereo])
     buttons.load()
     kitchen = buttons.add(in_language("Kitchen Tracks"), "tracks")
@@ -937,8 +938,6 @@ def main():
                 phrase = next((ph for ph, _l, _b, own in devices.rows(device_id) if own), "music_like")
                 play.settings._device_slot_page(device_id, phrase)   # with the strip at the top (3 Nov 2026)
                 settle(root, 0.5)
-            elif action == "edit_filters":
-                dialog = play.settings._open_filters()
             elif action == "multiroom":   # Settings > Other scrolled to Multiroom, the kit "found" (1.32.0)
                 show_multiroom(play.settings, root)
             elif action == "calibrate":   # the Calibrate Multiroom window with a result shown (1.32.0)

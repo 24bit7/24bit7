@@ -1359,6 +1359,7 @@ class SettingsTab(tk.Frame):
         self._build_keys(nb)
         self._build_voice(nb)
         self._build_saved(nb)   # after Voice Commands: these settings only apply to playlists asked for by voice
+        self._build_filters(nb)
         self._build_other(nb)
         self._build_about(nb)
         tabs.use_fonts(self)   # every tick box, dropdown and number box in the Settings body font
@@ -2568,70 +2569,85 @@ class SettingsTab(tk.Frame):
         entry.bind("<FocusOut>", lambda e: finish(True))
         entry.bind("<Escape>", lambda e: finish(False))
 
-    def _filter_ticks(self, row, ticked, command, title=None, help_text=None):
-        """A tick per filter in a row, then Edit Filters. Returns {filter id: BooleanVar}."""
-        for child in row.winfo_children():
-            child.destroy()
-        if title:
-            label = tk.Label(row, text=title, font=LABEL_FONT)
-            label.pack(side="left", padx=(0, 10))
-            if help_text:
-                help_mark(row, help_text, on=label)
-        items = filters.load()
-        if not items:
-            tk.Label(row, text=t("No filters yet."), fg=PALETTE["help_fg"]).pack(side="left", padx=(0, 10))
-        out = {}
-        for f in items:
-            if f.get("every"):   # every playlist's already: ticked and greyed, not one of this playlist's
-                text = filters.tick_name(f) + "   " + (t("(every playlist)") if f.get("on") else t("(off)"))
-                shown = tk.BooleanVar(value=bool(f.get("on")))
-                tick = ttk.Checkbutton(row, text=text, variable=shown)
-                tick.state(["disabled"])
-                tick.shown = shown   # held while the tick shows
-                tick.pack(side="left", padx=(0, 12))
-                Tooltip(tick, t("Set to Every playlist in Edit Filters."))
-                continue
-            var = tk.BooleanVar(value=f["id"] in ticked)
-            out[f["id"]] = var
-            text = filters.tick_name(f) + ("" if f.get("on") else "   " + t("(off)"))
-            ttk.Checkbutton(row, text=text, variable=var, command=command).pack(side="left", padx=(0, 12))
-        tk.Button(row, text=t("Edit Filters..."), command=self._open_filters).pack(side="left")
-        return out
-
-    def _filter_ticks_refresh(self):
-        """After Edit Filters closes or saves: the ticks on the open playlist's page follow."""
-        self._button_filters_refresh()
-
     def _config_filters(self, body, button, n):
-        """Filters at the end of a config's box: a tick per filter for this config, then Edit Filters (2 Nov 2026)."""
-        cfg = {"filters": button.get("filters") or []} if buttons.is_radio(button) else buttons.configs(button)[n]
-        box = section(body, t("Filters"), tour.note_for("Filters"),
-                      fold=(lambda: False) if mode.is_simple() else None)   # closed in Simple; a click opens it
-        row = tk.Frame(box)
-        row.grid(row=0, column=0, sticky="w")
-        self._button_filter_rows[n] = row
-        self._button_filter_vars[n] = self._filter_ticks(row, cfg["filters"], lambda n=n: self._config_filters_changed(n))
+        """
+        Filters at the end of a config's box (Ben, 20 Nov 2026): Use Main Filter, Yes or No. Yes, the default, and
+        the config builds under the Main Filter, which the grey text names. No, and a second line shows a tick per
+        filter, its own: they start as the Main Filter's, and from then the Main Filter doesn't apply to it at all.
+        Simple shows it as Advanced does (it kept Filters folded away before).
+        """
+        box = section(body, t("Filters"), tour.note_for("Filters"))
+        holder = tk.Frame(box)
+        holder.grid(row=0, column=0, sticky="w")
+        self._button_filter_rows[n] = holder
+        self._filter_lines(holder, button, n)
         if n == 0:
-            self._button_filter_row = row
+            self._button_filter_row = holder
+
+    @staticmethod
+    def _filter_config(button, n):
+        """Config n of a playlist as far as filters go; Radio has the one list, shared by every Radio button."""
+        cfgs = [{"filters": button.get("filters") or []}] if buttons.is_radio(button) else buttons.configs(button)
+        return cfgs[n] if 0 <= n < len(cfgs) else None
+
+    def _filter_lines(self, holder, button, n):
+        for child in holder.winfo_children():
+            child.destroy()
+        self._button_filter_vars[n] = {}
+        cfg = self._filter_config(button, n)
+        if cfg is None:
+            return
+        uses, items = buttons.uses_main(cfg), filters.load()
+
+        def named(f):
+            return filters.tick_name(f) + ("" if f.get("on") else "   " + t("(off)"))
+        line = tk.Frame(holder)
+        line.pack(anchor="w")
+        label = tk.Label(line, text=t("Use Main Filter"), font=LABEL_FONT)
+        label.pack(side="left", padx=(0, 10))
+        help_mark(line, t("Yes: this playlist builds under the Main Filter, the filters with In Main Filter ticked "
+                          "under Settings > Filters, so one change there reaches every playlist. No: it has "
+                          "filters of its own, ticked on the line below, and the Main Filter doesn't apply to it."),
+                  on=label)
+        var = tk.StringVar(value=t("Yes") if uses else t("No"))
+        choice = TCombobox(line, textvariable=var, values=[t("Yes"), t("No")], state="readonly", width=5)
+        choice.pack(side="left")
+        choice.bind("<<ComboboxSelected>>", lambda e, n=n: self._use_main_changed(n, var.get() == t("Yes")))
+        holder.use_main, holder.choice = var, choice   # held while the line shows; the tests pick it
+        if uses:
+            names = [filters.tick_name(f) + ("" if f.get("on") else " " + t("(off)")) for f in items if f.get("every")]
+            tk.Label(line, text=", ".join(names) if names else t("Nothing is in the Main Filter yet."),
+                     fg=PALETTE["help_fg"]).pack(side="left", padx=(12, 0))
+            return
+        ticks = tk.Frame(holder)
+        ticks.pack(anchor="w", pady=(8, 0))
+        if not items:
+            tk.Label(ticks, text=t("No filters yet."), fg=PALETTE["help_fg"]).pack(side="left", padx=(0, 10))
+        for f in items:
+            ticked = tk.BooleanVar(value=f["id"] in cfg["filters"])
+            self._button_filter_vars[n][f["id"]] = ticked
+            ttk.Checkbutton(ticks, text=named(f), variable=ticked,
+                            command=lambda n=n: self._config_filters_changed(n)).pack(side="left", padx=(0, 12))
+        tk.Button(ticks, text=t("Edit Filters..."), command=self._open_filters).pack(side="left")
+
+    def _use_main_changed(self, n, yes):
+        if self._button_id:
+            buttons.set_use_main(self._button_id, yes, n)
+            self._button_filters_refresh()
+            self._buttons_changed()
 
     def _button_filters_refresh(self):
-        """After Edit Filters closes or saves: every config's ticks on the open page follow."""
+        """A change of Use Main Filter, or of the filters themselves: every config's lines on the open page follow."""
         button = buttons.get(self._button_id) if self._button_id else None
         if button is None:
             return
-        cfgs = [{"filters": button.get("filters") or []}] if buttons.is_radio(button) else buttons.configs(button)
-        for n, row in list(getattr(self, "_button_filter_rows", {}).items()):
-            if row.winfo_exists() and n < len(cfgs):
-                self._button_filter_vars[n] = self._filter_ticks(row, cfgs[n]["filters"],
-                                                                 lambda n=n: self._config_filters_changed(n))
+        for n, holder in list(getattr(self, "_button_filter_rows", {}).items()):
+            if holder.winfo_exists():
+                self._filter_lines(holder, button, n)
 
     def _config_filters_changed(self, n):
         if self._button_id:
-            # Until this row is the Use Main Filter line (20 Nov 2026): nothing ticked is the Main Filter; a tick
-            # makes the config's own list, with the Main Filter's filters in it, as the greyed ticks beside it show
-            ids = [fid for fid, var in self._button_filter_vars[n].items() if var.get()]
-            main = filters.main_ids()
-            buttons.set_filters(self._button_id, ids + [i for i in main if i not in ids] if ids else [filters.MAIN], n)
+            buttons.set_filters(self._button_id, [fid for fid, var in self._button_filter_vars[n].items() if var.get()], n)
             self._buttons_changed()
 
     def _save_button_page(self, p):
@@ -3062,18 +3078,27 @@ class SettingsTab(tk.Frame):
         self._shortcut_row(box, 0, hotkeys.button_code(button["id"]), N_("Shortcut"), button.get("shortcut") or "")
         self.refresh_hotkey_notes()
 
-    def _open_filters(self):
-        """Edit Filters: a window with the named filters on the left and the chosen one's rules on the right."""
-        win = getattr(self, "_filter_win", None)
-        if win is not None and win.winfo_exists():
-            win.lift()
-            win.focus_set()
-            return win
-        win = self._filter_win = tk.Toplevel(self)
-        win.title(t("Edit Filters"))
-        win.transient(self.winfo_toplevel())
-        win.bind("<Destroy>", lambda e: self._filter_ticks_refresh() if e.widget is win else None)
-        tab = self._scroll_page(win)
+    def _build_filters(self, nb):
+        """
+        Settings > Filters, a tab again (Ben, 20 Nov 2026; a window opened from a playlist's page since 2 Nov): the
+        named filters on the left and the chosen one's rules on the right. Built the first time it's shown, since
+        a filter's Only pick from may read JRiver's playlists.
+        """
+        outer = tk.Frame(nb)
+        nb.add(outer, text=t("Filters"))
+        self._filters_outer, self._filter_win = outer, None
+        outer.bind("<Map>", lambda e: self._filters_shown() if e.widget is outer else None)
+
+    def _filters_shown(self):
+        """The tab came into view: built the first time; after that, the list as it's kept now."""
+        tab = self._filter_win
+        if tab is not None and tab.winfo_exists():
+            self._filters = filters.load()
+            if self._filter_i is not None and self._filter_i >= len(self._filters):
+                self._filter_i = 0 if self._filters else None
+            self._filter_refresh()
+            return tab
+        tab = self._filter_win = self._scroll_page(self._filters_outer, fill_outer=False)   # dialogs and timers hang off it
         self._filters = filters.load()
         self._filter_i = 0 if self._filters else None
         left = tk.Frame(tab)
@@ -3082,12 +3107,13 @@ class SettingsTab(tk.Frame):
         self._filter_right.grid(row=0, column=1, sticky="nwe")
         tab.grid_columnconfigure(1, weight=1)
 
-        box = section(left, t("Your filters"),
-                      t("Filters narrow the playlists 24bit7 builds, Drift and what Non-stop adds included. Tick a "
-                      "filter under Filters on a button's page (Settings > Buttons) and every playlist that button "
-                      "builds must pass it. Where several apply, a track must pass them all. Albums, songs, "
-                      "shuffles and JRiver playlists asked for by voice play as asked."))
-        self._filter_list = tk.Listbox(box, height=8, width=26, activestyle="none", exportselection=False,
+        box = section(left, t("Your Filters"),
+                      t("Filters narrow the playlists 24bit7 builds, Drift and what Non-stop adds included. A filter "
+                        "with In Main Filter ticked is part of the Main Filter, which every playlist uses until it's "
+                        "given filters of its own on its page (Use Main Filter: No). Where several apply, a track "
+                        "must pass them all. Albums, songs, shuffles and JRiver playlists asked for by voice play "
+                        "as asked."))
+        self._filter_list = tk.Listbox(box, height=8, width=30, activestyle="none", exportselection=False,
                                        font=("Segoe UI", 10))
         self._filter_list.grid(row=0, column=0, sticky="w")
         self._filter_list.bind("<<ListboxSelect>>", self._filter_picked)
@@ -3095,24 +3121,16 @@ class SettingsTab(tk.Frame):
         row.grid(row=1, column=0, sticky="w", pady=(8, 0))
         for text, command in ((t("New"), self._filter_new), (t("Rename"), self._filter_rename),
                               (t("Duplicate"), self._filter_duplicate), (t("Delete"), self._filter_delete)):
-            tk.Button(row, text=text, width=9, command=command).pack(side="left", padx=(0, 3))
+            # as wide as its word needs: nine clipped the German Umbenennen (seen in the shot, 22 Nov 2026)
+            tk.Button(row, text=text, width=max(9, len(text) + 1), command=command).pack(side="left", padx=(0, 3))
+        tabs.use_fonts(tab)
         self._filter_refresh()
-        self._fit_filters(win, tab)
-        return win
+        return tab
 
-    def _fit_filters(self, win, tab):
-        """
-        Edit Filters opens at the size the filter on show needs, never taller or wider than the screen allows with
-        room around it; a filter with many rules scrolls. It opened at a fixed 980 by 700 before, about two hundred
-        pixels of it empty (Ben, 13 Nov 2026: "far too big").
-        """
-        win.update_idletasks()
-        bar = scaled(self, 20)   # the scrollbar beside the page
-        w = min(max(tab.winfo_reqwidth() + bar, scaled(self, 700)), win.winfo_screenwidth() - scaled(self, 80))
-        h = min(max(tab.winfo_reqheight(), scaled(self, 300)), win.winfo_screenheight() - scaled(self, 160))
-        win.geometry(f"{w}x{h}")
-        win.minsize(min(w, scaled(self, 700)), min(h, scaled(self, 300)))
-        self._filter_fit = (w, h)   # for the tests
+    def _open_filters(self):
+        """Edit Filters... on a playlist's page: Settings > Filters comes to the front. Returns the tab's page."""
+        self._pane.select(self._filters_outer)
+        return self._filters_shown()
 
     def _filter_playlists(self):
         """[(id, label)] for Only pick from, from the JRiver Playlists table (read from JRiver if it's empty)."""
@@ -3132,7 +3150,7 @@ class SettingsTab(tk.Frame):
         except Exception as e:
             messagebox.showerror(t("Save failed"), str(e), parent=self)
         self._filter_fill_list()
-        self._filter_ticks_refresh()   # the ticks on the button's page follow names and On
+        self._button_filters_refresh()   # the open playlist's Filters lines follow names, On and In Main Filter
 
     def _filter_refresh(self):
         self._filter_fill_list()
@@ -3143,8 +3161,10 @@ class SettingsTab(tk.Frame):
         if not lb.winfo_exists():
             return
         lb.delete(0, "end")
-        for item in self._filters:
-            lb.insert("end", item["name"] + ("" if item.get("on") else "   " + t("(off)")))
+        for item in self._filters:   # "Stereo only   (Main)", "Long Tracks   (Main, off)", "Country"
+            tag = {(True, True): t("(Main)"), (True, False): t("(Main, off)"), (False, False): t("(off)")}.get(
+                (bool(item.get("every")), bool(item.get("on"))), "")
+            lb.insert("end", item["name"] + ("   " + tag if tag else ""))
         if self._filter_i is not None and self._filter_i < len(self._filters):
             lb.selection_set(self._filter_i)
 
@@ -3186,13 +3206,13 @@ class SettingsTab(tk.Frame):
             item["every"] = every.get()
             self._filter_save()
             self._filter_fill_editor()
-        ttk.Checkbutton(row, text=t("Every playlist"), variable=every, command=every_toggled).pack(side="left",
+        ttk.Checkbutton(row, text=t("In Main Filter"), variable=every, command=every_toggled).pack(side="left",
                                                                                                   padx=(24, 0))
-        help_mark(row, t("Ticked, the filter applies to every playlist 24bit7 builds, whether it's ticked on the "
-                         "playlist's page or not.")).pack(side="left", padx=(8, 0))
+        help_mark(row, t("Ticked, the filter is part of the Main Filter, which every playlist uses unless it has "
+                         "filters of its own (Use Main Filter: No on its page).")).pack(side="left", padx=(8, 0))
         parts = filters.used_by(item["id"])
         tk.Label(box, text=(t("Used by: {names}", names=", ".join(parts)) if parts else
-                            t("Not ticked on any button yet. Tick it under Filters on a button's page.")),
+                            t("Not used yet. Tick In Main Filter, or tick it on a playlist that has filters of its own.")),
                  fg=PALETTE["help_fg"], font=HELP_FONT, wraplength=scaled(box, 560), justify="left").grid(
             row=1, column=0, sticky="w", pady=(8, 0))
 

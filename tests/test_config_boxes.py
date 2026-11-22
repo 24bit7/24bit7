@@ -27,15 +27,19 @@ def test_each_config_is_a_bordered_box_with_sources_across_and_its_own_filters(a
                                        and int(box.cget("highlightthickness")) >= 1):
             box = box.master
         assert box is not None, "the Filters strip sits inside the config's bordered box"
-    ticks = [w for w in walk(s._button_filter_rows[1]) if isinstance(w, ttk.Checkbutton)
-             and not w.instate(["disabled"])]   # an every-playlist filter (Skipped Tracks) shows greyed, not this config's
-    assert [t_.cget("text") for t_ in ticks] == ["Stereo"]
-    ticks[0].invoke()
+    assert not [w for w in walk(s._button_filter_rows[1]) if isinstance(w, ttk.Checkbutton)], "on the Main Filter: no ticks"
+    s._button_filter_rows[1].use_main.set("No")   # filters of its own, which start as the Main Filter's
+    s._button_filter_rows[1].choice.event_generate("<<ComboboxSelected>>")
+    ui.pump(0.3)
+    ticks = {w.cget("text"): w for w in walk(s._button_filter_rows[1]) if isinstance(w, ttk.Checkbutton)}
+    assert sorted(ticks) == sorted(["Stereo", "Skipped Tracks   (off)", "Long Tracks   (off)"]), list(ticks)
+    assert ticks["Skipped Tracks   (off)"].instate(["selected"]) and not ticks["Stereo"].instate(["selected"])
+    ticks["Stereo"].invoke()
     ui.pump(0.3)
     guests = next(b for b in buttons.load() if b["name"] == "Artist + Guests")
     hosts, their_guests = buttons.configs(guests)
     assert buttons.uses_main(hosts), "the first config is left on the Main Filter"
-    assert not buttons.uses_main(their_guests) and their_guests["filters"][0] == f["id"], "ticked on the second config only"
+    assert not buttons.uses_main(their_guests) and f["id"] in their_guests["filters"], "ticked on the second config only"
     assert set(their_guests["filters"]) == {f["id"], *filters.main_ids()}, "its own ticks, the Main Filter's among them"
     assert filters.used_by(f["id"]) == ["Artist + Guests (config 2)"]
     # the sources read across: every tick of the first config's Sources on one line

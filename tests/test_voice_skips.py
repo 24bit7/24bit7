@@ -34,7 +34,7 @@ def test_skipped_tracks_ships_off_and_for_every_playlist(app):
     shipped = [x for x in items if x.get("builtin") == "skipped"]
     assert len(shipped) == 1 and shipped[0]["name"] == "Skipped Tracks"
     assert shipped[0]["on"] is False and shipped[0]["every"] is True
-    assert filters.used_by(shipped[0]["id"]) == ["Main Filter"]
+    assert [u.split(" (")[0] for u in filters.used_by(shipped[0]["id"])] == ["the Main Filter"]
     assert filters.by_ids(None) == [], "off: nothing applies"
     filters.save([x for x in items if not x.get("builtin")])
     assert not [x for x in filters.load() if x.get("builtin")], "added once only"
@@ -85,7 +85,7 @@ def test_every_playlist_applies_an_unticked_filter(app):
     filters.save(items)
     active = filters.Active(None, report=app.Lines())
     assert active and not active.allows(app.jriver.tracks[0]["Key"]), "every track here is flac"
-    assert filters.used_by(item["id"]) == ["Main Filter"]
+    assert [u.split(" (")[0] for u in filters.used_by(item["id"])] == ["the Main Filter"]
 
 
 def test_a_build_leaves_out_skipped_tracks(app):

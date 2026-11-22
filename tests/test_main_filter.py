@@ -101,7 +101,8 @@ def test_each_config_builds_under_the_main_filter_or_its_own(app, monkeypatch):
     assert seen == [[main], [other]], "the hosts under the Main Filter, the guests under their own"
     assert filters.used_by(other) == ["Artist + Guests (config 2)"]
     used = filters.used_by(main)
-    assert used[0] == "Main Filter" and "Artist + Guests (config 2)" not in used
+    on_main = sum(1 for b in buttons.load() if any(filters.MAIN in l for l in lists(b)))
+    assert used == [f"the Main Filter ({on_main} playlists)"], "how many playlists that is, and not the one on its own ticks"
 
 
 def test_the_upgrade_takes_every_playlist_filters_as_the_main_filter(app):

@@ -1,6 +1,7 @@
 """
-Edit Filters with Every playlist (Ben, 5 Nov 2026): a tick beside On; Skipped Tracks shows what it leaves out
-in place of rules and can't be deleted; a playlist's own ticks show an Every playlist filter ticked and greyed.
+Settings > Filters (a tab again, 20 Nov 2026; Edit Filters was a window from 2 Nov) with In Main Filter (Every
+playlist, 5 Nov, before it): a tick beside On; Skipped Tracks shows what it leaves out in place of rules and can't
+be deleted; a playlist that uses the Main Filter names what's in it beside Use Main Filter.
 """
 
 from tkinter import ttk
@@ -28,7 +29,7 @@ def test_every_playlist_tick_and_skipped_tracks_in_edit_filters(app, ui, monkeyp
     ui.pump(0.2)
     texts = labels(win)
     assert "What It Leaves Out" in texts and "Rules" not in texts and "Only pick from" not in texts
-    assert "Used by: Main Filter" in texts
+    assert any(x.startswith("Used by: the Main Filter (") and x.endswith(" playlists)") for x in texts), texts
     told = []
     monkeypatch.setattr(messagebox, "showinfo", lambda *a, **k: told.append(a[1]))
     s._filter_delete()
@@ -36,14 +37,17 @@ def test_every_playlist_tick_and_skipped_tracks_in_edit_filters(app, ui, monkeyp
     s._filter_i = names.index("Stereo")
     s._filter_fill_editor()
     ui.pump(0.2)
-    checks(win)["Every playlist"].invoke()
+    assert "Every playlist" not in checks(win), "the tick has its new name"
+    checks(win)["In Main Filter"].invoke()
     ui.pump(0.3)
     assert next(x for x in filters.load() if x["id"] == f["id"])["every"] is True
-    assert "Used by: Main Filter" in labels(win)
-    win.destroy()
+    assert any(x.startswith("Used by: the Main Filter (") for x in labels(win))
+    assert "Stereo   (Main)" in s._filter_list.get(0, "end") and "Skipped Tracks   (Main, off)" in s._filter_list.get(0, "end")
+    pick_button(ui, "Artist + Guests")   # back on its page: the Main Filter it uses is named beside Use Main Filter
     ui.pump(0.3)
-    row = checks(s._button_filter_row)
-    assert row["Stereo   (every playlist)"].instate(["disabled", "selected"]), row.keys()
+    row = labels(s._button_filter_row)
+    assert "Use Main Filter" in row and any("Stereo" in x and "Skipped Tracks (off)" in x for x in row), row
+    assert not checks(s._button_filter_row), "no ticks while it uses the Main Filter"
     assert not ui.errors, ui.errors[0]
 
 
@@ -80,7 +84,6 @@ def test_skipped_tracks_lists_whats_left_out_and_lets_it_back_in(app, ui):
     ui.pump(0.3)
     assert all(j.by_key[k]["24bit7 Voice Skips"] == "" for k in beatles)
     assert "Nothing yet: no track has been skipped by voice 2 times." in labels(win)
-    win.destroy()
     assert not ui.errors, ui.errors[0]
 
 
@@ -110,24 +113,31 @@ def test_skipped_tracks_numbers_are_set_on_its_page_and_left_out_now_follows(app
     texts = labels(win)
     assert line not in texts and "Nothing yet: no track has been skipped by voice 3 times." in texts, texts
     assert texts.count("Left Out Now") == 1, "the old section went"
-    win.destroy()
     assert not ui.errors, ui.errors[0]
 
 
-def test_edit_filters_opens_at_the_size_its_filter_needs(app, ui):
-    """Ben, 13 Nov 2026: Edit Filters opened at a fixed 980 by 700, far too big for what it held. It now opens at
-    what the filter on show needs: nothing clipped, little left empty, never past the screen."""
+def test_filters_is_a_settings_tab_and_edit_filters_goes_to_it(app, ui):
+    """Ben, 20 Nov 2026: the Filters tab back in Settings. Edit Filters... on a playlist's page brings it forward."""
+    import tkinter as tk
+    import buttons
     import filters
     f = filters.blank("Stereo")
     filters.save([f] + filters.load())
-    pick_button(ui, "Artist + Guests")
+    p = pick_button(ui, "Artist + Guests")
     s = ui.settings
-    win = s._open_filters()
-    ui.pump(0.5)
-    win.update_idletasks()
-    content = s._filter_right.master   # the scrolling page inside the window
-    need = content.winfo_reqheight()
-    assert win.winfo_height() >= need - 2, f"clipped: {win.winfo_height()} for {need}"
-    assert win.winfo_height() <= need + 40, f"empty space: {win.winfo_height()} for {need}"
-    assert win.winfo_height() <= win.winfo_screenheight() - 100
+    titles = [s._pane.tab(i, "text") for i in range(len(s._pane.tabs()))] if hasattr(s._pane, "tabs") else None
+    if titles is not None:
+        assert titles.index("Filters") == titles.index("Other") - 1, titles
+    assert not [w for w in s.winfo_toplevel().winfo_children() if isinstance(w, tk.Toplevel) and w.winfo_viewable()
+                and w.title() == "Edit Filters"]
+    buttons.set_use_main(p.button["id"], False)
+    s._button_filters_refresh()
+    ui.pump(0.2)
+    edit = next(w for w in walk(s._button_filter_row) if isinstance(w, tk.Button) and w.cget("text") == "Edit Filters...")
+    edit.invoke()
+    ui.pump(0.4)
+    assert s._pane.select() == str(s._filters_outer), "the Filters tab is the one showing"
+    page = s._filter_win
+    assert "Your Filters" in labels(page) and "Stereo" in labels(page)
+    assert s._open_filters() is page, "asked for again, it's the same page"
     assert not ui.errors, ui.errors[0]

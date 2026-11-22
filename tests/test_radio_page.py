@@ -94,6 +94,10 @@ def test_filters_tick_onto_radio(app, ui):
     made = made_radio()
     pick_button(ui, "Radio")
     s = ui.settings
+    assert s._button_filter_vars[0] == {} and buttons.uses_main(buttons.get(made["id"])), "Radio starts on the Main Filter"
+    s._button_filter_rows[0].use_main.set("No")   # filters of its own: a tick per filter
+    s._button_filter_rows[0].choice.event_generate("<<ComboboxSelected>>")
+    ui.pump(0.3)
     ticks = s._button_filter_vars[0]
     assert list(ticks) == [f["id"]]
     ticks[f["id"]].set(True)

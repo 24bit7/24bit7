@@ -91,7 +91,6 @@ def test_what_it_does_and_an_other_field_rule(app, ui):
     s._filter_fill_editor()
     ui.pump(0.3)
     assert "JRiver has no field called Countyr, so this rule does nothing." in labels(win)
-    win.destroy()
     ui.pump(0.3)
     ticks = [w.cget("text") for w in walk(s._button_filter_row) if isinstance(w, ttk.Checkbutton)]
     assert "Kiwi Music (at least 25%)" in ticks, ticks
