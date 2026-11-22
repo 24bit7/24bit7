@@ -6707,7 +6707,8 @@ class SettingsTab(tk.Frame):
         ttk.Checkbutton(box, text=t("Voice Commands (listen for commands from the Alexa skill)"),
                         variable=self.voice_on, command=self._voice_toggled).grid(
             row=0, column=0, columnspan=5, sticky="w")
-        self.voice_status = tk.Label(box, text=voice.status_shown(), fg=PALETTE["help_fg"], font=HELP_FONT)
+        self.voice_status = tk.Label(box, text=self._voice_status_text(), fg=PALETTE["help_fg"], font=HELP_FONT,
+                                     justify="left")
         self.voice_status.grid(row=1, column=0, columnspan=5, sticky="w")
 
         tk.Label(box, text=t("Key"), anchor="w").grid(row=2, column=0, sticky="w", pady=(12, 2))
@@ -6788,7 +6789,13 @@ class SettingsTab(tk.Frame):
             link.bind("<Button-1>", lambda e, u=url: webbrowser.open_new_tab(u))
             tk.Label(box, text=t(blurb), fg=PALETTE["help_fg"], font=HELP_FONT).grid(row=r, column=1, sticky="w", padx=(12, 0))
 
-        tab.bind("<<Shown>>", lambda e: self.voice_status.config(text=voice.status_shown()))
+        tab.bind("<<Shown>>", lambda e: self.voice_status.config(text=self._voice_status_text()))
+
+    @staticmethod
+    def _voice_status_text(status=None):
+        """The listener's status, and under it whether the skill that last called in is up to date (22 Nov 2026)."""
+        skill = voice.skill_shown()
+        return voice.status_shown(status) + ("\n" + skill if skill else "")
 
     def _voice_toggled(self):
         updates = {"VOICE_ENABLED": "1" if self.voice_on.get() else "0"}
@@ -6801,7 +6808,7 @@ class SettingsTab(tk.Frame):
         self._voice_restart()
 
     def _voice_restart(self):
-        self.voice_status.config(text=voice.status_shown(voice.restart()))
+        self.voice_status.config(text=self._voice_status_text(voice.restart()))
         self.voice_key_var.set(engine.VOICE_KEY or "")
 
     def _voice_copy_key(self):

@@ -100,9 +100,15 @@ def topping_up(handler_input):
     return bool(handler_input.attributes_manager.session_attributes.get("top_up"))
 
 
+# This skill's number, sent with every command, so 24bit7 can say when the skill is older than the 24bit7 it
+# talks to and its two files want pasting in again. It goes up whenever this file or the interaction model
+# changes (2: "Which artist?" answered by the bare name, and the number itself).
+SKILL_VERSION = 2
+
+
 def send(intent, value, device, top_up=False):
     """Sends one command to 24bit7. Returns (status, speech, the whole reply)."""
-    command = {"intent": intent, "value": value, "device": device}
+    command = {"intent": intent, "value": value, "device": device, "skill": SKILL_VERSION}
     if top_up:
         command["top_up"] = True
     body = json.dumps(command).encode("utf-8")

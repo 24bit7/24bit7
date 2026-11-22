@@ -78,6 +78,14 @@ _server = None
 _thread = None
 _submit = None          # set by the GUI: submit(job, heading) queues a build on the Play tab
 _status = "Off"
+
+# The skill this 24bit7 ships (alexa/lambda_function.py's SKILL_VERSION) and what's new in it. Every user's skill is
+# their own, pasted by hand, so when one older than this calls in, 24bit7 says so (22 Nov 2026): once a run in the
+# console, and on Settings > Voice Commands. Alexa says nothing about it. A skill from before the number counts as 1.
+SKILL_VERSION = 2
+SKILL_NEWS = {2: N_('"Which artist?" answered with just the name')}
+_skill_seen = None    # the number the last command from a skill carried; None until one calls in
+_skill_said = False   # the console note has been said this run
 _lock = threading.Lock()
 
 
@@ -1121,6 +1129,7 @@ class _Handler(BaseHTTPRequestHandler):
                 raise ValueError
         except ValueError:
             return self._reply(400, {"error": "body must be a JSON object"})
+        _note_skill(body)
         status, speech, extra = respond(body)
         if status == "problem":
             _log_problem(body, speech)
@@ -1234,6 +1243,39 @@ def new_key():
 
 def status():
     return _status
+
+
+def _note_skill(body):
+    """A command came in: which skill sent it. Settings' own Test button isn't a skill."""
+    global _skill_seen, _skill_said
+    if (body.get("device") or "") == TEST_DEVICE:
+        return
+    try:
+        _skill_seen = int(body.get("skill") or 1)
+    except (TypeError, ValueError):
+        _skill_seen = 1
+    if _skill_seen < SKILL_VERSION and not _skill_said:
+        _skill_said = True
+        engine.print(t("Note: your Alexa skill is older than this 24bit7. Paste the two new files into it to get: "
+                       "{news}. The steps are in the manual, under Upgrading.", news=t(SKILL_NEWS[SKILL_VERSION])))
+
+
+def skill_state():
+    """"current" or "old", by the last command a skill sent; None before one has called in this run."""
+    if _skill_seen is None:
+        return None
+    return "old" if _skill_seen < SKILL_VERSION else "current"
+
+
+def skill_shown():
+    """The line under the listener's status on Settings > Voice Commands: nothing until a skill has called in."""
+    state = skill_state()
+    if state is None:
+        return ""
+    if state == "current":
+        return t("Skill: up to date.")
+    return t("Skill: older than this 24bit7. Paste the two new files into it to get: {news}.",
+             news=t(SKILL_NEWS[SKILL_VERSION]))
 
 
 def status_shown(status=None):
