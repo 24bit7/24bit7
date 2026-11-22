@@ -76,3 +76,15 @@ def test_the_same_year_falls_back_to_the_album_rules(app):
     assert app.library.find_track_key("New Order", "Temptation") == own
     assert app.library.copies(own) == [own, compilation], "a live recording is another song, not a copy"
     assert app.library.copies(live) == [live]
+
+
+def test_a_live_named_album_loses_even_when_its_the_earlier(app):
+    """Ben, 22 Nov 2026: on his library the year alone picked Live At Leeds over Tommy, and sixty one like it."""
+    live = _add(app, 9361, "We're Not Gonna Take It", "The Who", "Live At Leeds", 1970)
+    studio = _add(app, 9362, "We're Not Gonna Take It", "The Who", "Tommy", 1979)
+    only_live = _add(app, 9363, "Young Man Blues", "The Who", "Live At Leeds", 1970)
+    app.library.load()
+    assert app.library.find_track_key("The Who", "We're Not Gonna Take It") == studio
+    found, matches = app.library.find_song("we're not gonna take it")
+    assert found and matches[0][2] == studio
+    assert app.library.find_track_key("The Who", "Young Man Blues") == only_live, "a live copy still plays when it's all you own"

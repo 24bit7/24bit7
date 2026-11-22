@@ -547,13 +547,17 @@ def _best_copy_first(entry, artist_norm, asked):
       1. the title asked for (asked: its full keys) before any other, and a title with no version tag or
          credit in brackets before one with: 'Blue Monday' before 'Blue Monday (Hardfloor Remix)', and
          'Another Brick In The Wall (Part 2)' first when Part 2 is what was asked for;
-      2. the earliest year, a copy with no year after the dated ones: IV's Black Dog (1971) before
-         Celebration Day's (2012), which has no 'live' in its name for the old rule to catch;
-      3. the album rules, for what's left: own album, then own compilation, then others, live last.
+      2. an album with no 'live' in its name before one with (22 Nov 2026): Tommy's We're Not Gonna Take It
+         before Live At Leeds's, though Leeds is the earlier. On his library the year alone picked a live
+         album for sixty two songs;
+      3. the earliest year, a copy with no year after the dated ones: A Trick Of The Tail's Dance On A
+         Volcano (1976) before Seconds Out's, a live album with no 'live' in its name for rule two to catch;
+      4. the album rules, for what's left: own album, then own compilation, then others.
     A version tag in the request itself is ignored as it always was, so 'Black Dog (Live)' finds the original.
     """
     year, full, tagged = entry[6], entry[7], entry[8]
-    return (not (asked & full), tagged, year) + _album_version_first(entry, artist_norm)
+    album = _album_version_first(entry, artist_norm)
+    return (not (asked & full), tagged, album[2], year) + album
 
 
 def find_song(heard):
@@ -602,8 +606,8 @@ def find_track_key(artist, title):
     The library key for a track named by a similarity source, or None. Title
     and artist both have to match (forgiving about case, version tags and
     'Kooks, The'), and compilation copies named 'Artist - Title' count. Where
-    you own several copies, _best_copy_first chooses: the title asked for, then
-    the earliest year, then the album rules.
+    you own several copies, _best_copy_first chooses: the title asked for, an
+    album that isn't live, the earliest year, then the album rules.
     """
     ensure_loaded()
     wants, asked = _title_forms(title)
