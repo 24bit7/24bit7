@@ -28,7 +28,7 @@ def test_every_playlist_tick_and_skipped_tracks_in_edit_filters(app, ui, monkeyp
     ui.pump(0.2)
     texts = labels(win)
     assert "What It Leaves Out" in texts and "Rules" not in texts and "Only pick from" not in texts
-    assert "Used by: Every playlist" in texts
+    assert "Used by: Main Filter" in texts
     told = []
     monkeypatch.setattr(messagebox, "showinfo", lambda *a, **k: told.append(a[1]))
     s._filter_delete()
@@ -39,7 +39,7 @@ def test_every_playlist_tick_and_skipped_tracks_in_edit_filters(app, ui, monkeyp
     checks(win)["Every playlist"].invoke()
     ui.pump(0.3)
     assert next(x for x in filters.load() if x["id"] == f["id"])["every"] is True
-    assert "Used by: Every playlist" in labels(win)
+    assert "Used by: Main Filter" in labels(win)
     win.destroy()
     ui.pump(0.3)
     row = checks(s._button_filter_row)

@@ -27,12 +27,12 @@ def test_the_track_number_is_the_filters_own(app):
     key = next(r["Key"] for r in j.tracks if r["Artist"] != "The Beatles")
     tag_skips(app, {key: 2})
     switch_on_skipped()
-    assert not filters.Active([], report=app.Lines()).allows(key), "two, as shipped"
+    assert not filters.Active(None, report=app.Lines()).allows(key), "two, as shipped"
     set_limits(track=3)
-    assert filters.Active([], report=app.Lines()).allows(key), "set to three: two skips let it through"
+    assert filters.Active(None, report=app.Lines()).allows(key), "set to three: two skips let it through"
     set_limits(track=1)
     tag_skips(app, {key: 1})
-    assert not filters.Active([], report=app.Lines()).allows(key), "set to one: one skip does it"
+    assert not filters.Active(None, report=app.Lines()).allows(key), "set to one: one skip does it"
 
 
 def test_the_artist_number_counts_tracks_left_out(app):
@@ -41,12 +41,12 @@ def test_the_artist_number_counts_tracks_left_out(app):
     beatles = [r["Key"] for r in j.tracks if r["Artist"] == "The Beatles"]
     switch_on_skipped()
     tag_skips(app, {beatles[0]: 2, beatles[1]: 1, beatles[2]: 1})
-    assert filters.Active([], report=app.Lines()).allows(beatles[3]), "one left out of three needed"
+    assert filters.Active(None, report=app.Lines()).allows(beatles[3]), "one left out of three needed"
     set_limits(artist=1)
-    active = filters.Active([], report=app.Lines())
+    active = filters.Active(None, report=app.Lines())
     assert not active.allows(beatles[3]), "set to one: one track left out takes the artist"
     set_limits(track=3, artist=1)
-    assert filters.Active([], report=app.Lines()).allows(beatles[3]), \
+    assert filters.Active(None, report=app.Lines()).allows(beatles[3]), \
         "skipped once or twice isn't left out at three, so it doesn't count towards the artist"
 
 

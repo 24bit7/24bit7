@@ -70,10 +70,10 @@ def test_a_mix_carries_on_as_its_config_with_that_configs_filters(app):
     carried = buttons.continue_as(g)
     assert carried["kind"] == "artists" and carried["filters"] == [f["id"]], "Non-stop tops up under the guests' filter"
     g["mix"]["continue_as"] = 0
-    assert buttons.continue_as(g)["filters"] == [], "or under the hosts' (none) when it carries on as them"
+    assert buttons.continue_as(g)["filters"] == [buttons.MAIN_FILTER], "or under the hosts' (the Main Filter) when it carries on as them"
     # a copy keeps each config's filters; the first config moving up takes its own with it
     copy = buttons.duplicate(guests["id"])
-    assert [c["filters"] for c in buttons.configs(copy)] == [[], [f["id"]]]
+    assert [c["filters"] for c in buttons.configs(copy)] == [[buttons.MAIN_FILTER], [f["id"]]]
     buttons.remove_config(copy["id"], 0)
     moved = buttons.get(copy["id"])
     assert moved["kind"] == "artists" and moved["filters"] == [f["id"]]

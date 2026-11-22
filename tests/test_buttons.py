@@ -156,8 +156,11 @@ def test_upgrade_ticks_shared_filters_on_the_standard_playlists_and_says_so_for_
     main_only = add_filter(app, name="Main", devices=["main"])
     kitchen_only = add_filter(app, name="Kitchen", devices=[KITCHEN])
     items = buttons.load()
+    # shared by every playlist, so since the Main Filter (20 Nov 2026) they're in it, and every playlist uses it
     for b in items:
-        assert b["filters"] == [everyone["id"], main_only["id"]], (b["name"], b["filters"])
+        assert b["filters"] == [filters.MAIN], (b["name"], b["filters"])
+    assert {everyone["id"], main_only["id"]} <= set(filters.main_ids()) and kitchen_only["id"] not in filters.main_ids()
+    assert set(buttons.filter_ids(items[0])) >= {everyone["id"], main_only["id"]}
     assert filters.used_by(kitchen_only["id"]) == []
     assert app.printed.has("the filter Kitchen applied to Kitchen Echo only"), app.printed.text()
 

@@ -2627,7 +2627,11 @@ class SettingsTab(tk.Frame):
 
     def _config_filters_changed(self, n):
         if self._button_id:
-            buttons.set_filters(self._button_id, [fid for fid, var in self._button_filter_vars[n].items() if var.get()], n)
+            # Until this row is the Use Main Filter line (20 Nov 2026): nothing ticked is the Main Filter; a tick
+            # makes the config's own list, with the Main Filter's filters in it, as the greyed ticks beside it show
+            ids = [fid for fid, var in self._button_filter_vars[n].items() if var.get()]
+            main = filters.main_ids()
+            buttons.set_filters(self._button_id, ids + [i for i in main if i not in ids] if ids else [filters.MAIN], n)
             self._buttons_changed()
 
     def _save_button_page(self, p):

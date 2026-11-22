@@ -1495,6 +1495,8 @@
   "Match Tempo left out {off} off tempo and {untagged} with no BPM tag.": "Match Tempo hat {off} mit anderem Tempo und {untagged} ohne BPM-Tag weggelassen.",
   "Skipped Tracks": "Übersprungene Titel",
   "Every playlist": "Jede Playlist",
+  "Main Filter": "Hauptfilter",
+  "Note: now in the Main Filter: {names} (ticked on every playlist). A playlist uses the Main Filter unless it's given filters of its own.": "Hinweis: Jetzt im Hauptfilter: {names} (bei jeder Playlist angehakt). Eine Playlist nutzt den Hauptfilter, solange sie keine eigenen Filter bekommt.",
   "Ticked, the filter applies to every playlist 24bit7 builds, whether it's ticked on the playlist's page or not.": "Angehakt gilt der Filter für jede Playlist, die 24bit7 erstellt, ob er auf der Seite der Playlist angehakt ist oder nicht.",
   "What It Leaves Out": "Was er weglässt",
   "{name} comes with 24bit7, so it stays. Untick On to switch it off.": "{name} gehört zu 24bit7 und bleibt deshalb. Nimm den Haken bei An weg, um ihn auszuschalten.",

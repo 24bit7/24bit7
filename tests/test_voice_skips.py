@@ -34,8 +34,8 @@ def test_skipped_tracks_ships_off_and_for_every_playlist(app):
     shipped = [x for x in items if x.get("builtin") == "skipped"]
     assert len(shipped) == 1 and shipped[0]["name"] == "Skipped Tracks"
     assert shipped[0]["on"] is False and shipped[0]["every"] is True
-    assert filters.used_by(shipped[0]["id"]) == ["Every playlist"]
-    assert filters.by_ids([]) == [], "off: nothing applies"
+    assert filters.used_by(shipped[0]["id"]) == ["Main Filter"]
+    assert filters.by_ids(None) == [], "off: nothing applies"
     filters.save([x for x in items if not x.get("builtin")])
     assert not [x for x in filters.load() if x.get("builtin")], "added once only"
 
@@ -63,12 +63,12 @@ def test_skipped_twice_is_left_out_and_three_such_tracks_take_the_artist(app):
     other = next(r["Key"] for r in j.tracks if r["Artist"] not in ("The Beatles",))
     tag_skips(app, {other: 2, beatles[0]: 1})
     switch_on_skipped()
-    active = filters.Active([], report=app.Lines())
+    active = filters.Active(None, report=app.Lines())
     assert active, "on, and for every playlist: it applies with nothing ticked"
     assert not active.allows(other), "skipped twice"
     assert active.allows(beatles[0]) and active.allows(beatles[1]), "once isn't enough"
     tag_skips(app, {beatles[0]: 2, beatles[1]: 3, beatles[2]: 2})
-    active = filters.Active([], report=app.Lines())
+    active = filters.Active(None, report=app.Lines())
     assert not active.allows(beatles[3]), "three of theirs skipped twice or more: the artist goes"
 
 
@@ -78,14 +78,14 @@ def test_every_playlist_applies_an_unticked_filter(app):
     item["rules"] = [{"field": "file_type", "op": "is", "value": "mp3", "value2": ""}]
     items = filters.load() + [item]
     filters.save(items)
-    assert not filters.Active([], report=app.Lines()), "not ticked anywhere, not Every playlist"
+    assert not filters.Active(None, report=app.Lines()), "not ticked anywhere, not in the Main Filter"
     for x in items:
         if x["id"] == item["id"]:
             x["every"] = True
     filters.save(items)
-    active = filters.Active([], report=app.Lines())
+    active = filters.Active(None, report=app.Lines())
     assert active and not active.allows(app.jriver.tracks[0]["Key"]), "every track here is flac"
-    assert filters.used_by(item["id"]) == ["Every playlist"]
+    assert filters.used_by(item["id"]) == ["Main Filter"]
 
 
 def test_a_build_leaves_out_skipped_tracks(app):

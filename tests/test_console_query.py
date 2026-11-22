@@ -61,7 +61,7 @@ def test_the_settings_builds_use_go_with_the_question(app, monkeypatch):
     assert "Mode: Advanced" in user and "More Options row: closed" in user
     assert f"- {similar['name']} (playlist, a button" in user
     assert "Config 1, Artist Matching, every setting:" in user and f"{key}=17" in user
-    assert "Filters (Settings > Filters):" in user and "Skipped Tracks: off, every playlist" in user
+    assert "Filters (Settings > Filters):" in user and "Skipped Tracks: off, in the Main Filter" in user
     import console_query
     assert console_query._shown({"TIDAL_TOKEN": "x", "LIMIT": "3"}) == "LIMIT=3", "secrets stay out of playlist settings too"
 

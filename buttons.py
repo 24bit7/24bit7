@@ -27,6 +27,7 @@ from i18n import N_, t
 import engine
 
 META_KEY = "buttons"
+MAIN_FILTER = "main"   # filters.MAIN: in a config's list of filters, it uses the Main Filter
 
 KINDS = [("artists", N_("Similar Artists")), ("tracks", N_("Similar Tracks")),
          ("top", N_("Artist's Top Tracks")), ("vibe", N_("AI Playlist"))]
@@ -144,7 +145,9 @@ def blank(name, kind):
     is a blank slate (New under the Play tab's +): no config yet, so nothing to build until one
     is added on its page; the first config added becomes its own.
     """
-    return {"id": uuid.uuid4().hex[:8], "name": name, "kind": kind, "settings": {}, "filters": [],
+    return {"id": uuid.uuid4().hex[:8], "name": name, "kind": kind, "settings": {},
+            "filters": [MAIN_FILTER],      # it uses the Main Filter until it's given ticks of its own (20 Nov 2026)
+            "main_filter": "1",            # its lists of filters are in that form: one saved before has no mark
             "shortcut": "", "standard": "", "shown": True, "configs": [], "mix": mix_default(),
             "parent": "", "default": "",   # nested under another playlist; a parent's default child (see nest)
             "subtitle": "",                # Title in Menu: how its row reads in a menu (a parent's own row, or a child's)
@@ -162,7 +165,9 @@ def tidy(item):
     else:
         kind = item.get("kind") if item.get("kind") in KIND_NAMES else "artists"
     out = blank(str(item.get("name") or t("Button")), kind)
+    out["filters"] = []   # a saved playlist says its own; only a new one starts on the Main Filter
     out.update({k: v for k, v in item.items() if k in out})
+    out["main_filter"] = "1" if item.get("main_filter") else ""
     settings = {str(k): str(v) for k, v in (item.get("settings") or {}).items()}
     first_filters = [str(f) for f in (out.get("filters") or [])]
     out["configs"] = [{"kind": c["kind"], "settings": {str(k): str(v) for k, v in (c.get("settings") or {}).items()
@@ -227,6 +232,45 @@ def configs(button):
         return []
     first = {"kind": button["kind"], "settings": button.get("settings") or {}, "filters": list(button.get("filters") or [])}
     return [first] + [dict(c, filters=list(c.get("filters") or [])) for c in (button.get("configs") or [])]
+
+
+def uses_main(cfg):
+    """Whether a config (or a Radio playlist) uses the Main Filter, as against ticks of its own."""
+    return MAIN_FILTER in (cfg.get("filters") or [])
+
+
+def own_filters(cfg):
+    """A config's own ticks: what it runs under on its own, and what waits while it uses the Main Filter."""
+    return [i for i in (cfg.get("filters") or []) if i != MAIN_FILTER]
+
+
+def filter_ids(cfg, extra=()):
+    """
+    The ids of the filters a config (or a Radio playlist) builds under: the Main Filter's, or its own ticks.
+    extra: more ids a track must pass too (a Non-stop top-up's: the playlist that built the music).
+    """
+    import filters as filter_store
+    ids = filter_store.resolve(cfg.get("filters") or [])
+    return ids + [str(i) for i in extra if str(i) not in ids]
+
+
+def set_use_main(button_id, yes, index=0):
+    """
+    Use Main Filter, Yes or No, for one of a playlist's configs. No starts as a copy of the Main Filter, so
+    nothing changes until something is unticked; Yes keeps the ticks in the list, in case of a change of mind.
+    """
+    import filters as filter_store
+    target = get(button_id)
+    if target is None:
+        return
+    cfgs = [{"filters": target.get("filters") or []}] if is_radio(target) else configs(target)
+    if not 0 <= index < len(cfgs):
+        return
+    ticks = own_filters(cfgs[index])
+    if yes:
+        set_filters(button_id, [MAIN_FILTER] + ticks, index)
+    elif uses_main(cfgs[index]):
+        set_filters(button_id, ticks or filter_store.main_ids(), index)
 
 
 def follows_seed(button):
@@ -508,13 +552,62 @@ def _share_radio_once(items):
     return items
 
 
+def _adopt_main_filter(items):
+    """
+    20 Nov 2026: the Main Filter. A playlist saved before it has no mark; until then its configs ran under their
+    own ticks and every filter with Every playlist ticked. Day one must build the same playlists, so:
+      - the Main Filter is those Every playlist filters, plus, the first time, any filter ticked on every config
+        of every playlist (the same across all builds, which is what the Main Filter is for);
+      - a config whose filters came to exactly the Main Filter uses it;
+      - any other keeps its ticks, with the Every playlist filters ticked beside them, as they applied to it.
+    Marked a playlist at a time, not once for the lot, so the playlists an older profile puts back are upgraded too.
+    """
+    old = [b for b in items if not b.get("main_filter")]
+    if not old:
+        return items
+    import filters as filter_store
+    held = filter_store.load()
+    every = [x["id"] for x in held if x.get("every")]
+    known = {x["id"] for x in held}
+
+    def lists_of(b):   # each list of filters a playlist holds, as (holder, key)
+        return [(b, "filters")] + [(c, "filters") for c in (b.get("configs") or [])]
+
+    slots = [s for b in old for s in lists_of(b) if not (b.get("kind") is None and s[0] is b)]
+    common = set()
+    if len(old) == len(items) and slots:   # the first time: every playlist is from before
+        common = set.intersection(*[set(h.get(k) or []) for h, k in slots]) & known - set(every)
+    main = set(every) | common
+    for holder, key in [s for b in old for s in lists_of(b)]:
+        ticks = [str(i) for i in (holder.get(key) or [])]
+        if MAIN_FILTER in ticks:
+            continue
+        if set(ticks) | set(every) == main:
+            holder[key] = [MAIN_FILTER]
+        else:
+            holder[key] = ticks + [i for i in every if i not in ticks]
+    for b in old:
+        b["main_filter"] = "1"
+    if common:
+        for x in held:
+            if x["id"] in common:
+                x["every"] = True
+        filter_store.save(held)
+        engine.print(t("Note: now in the Main Filter: {names} (ticked on every playlist). A playlist uses the Main "
+                       "Filter unless it's given filters of its own.",
+                       names=", ".join(x["name"] for x in held if x["id"] in common)))
+    save(items)
+    return items
+
+
 def load():
     """Every button, in the order shown. The first call ever makes them from today's settings."""
     items = _stored()
     if items is None:
         upgrade()
         items = _stored() or []
-    return settle(_share_radio_once(_adopt_131(_adopt_env_shortcuts(_adopt_130(_rename_shipped(items))))))
+    return settle(_adopt_main_filter(_share_radio_once(_adopt_131(_adopt_env_shortcuts(_adopt_130(
+        _rename_shipped(items)))))))
 
 
 # --- nesting: a playlist under another, one level deep ---------------------------------------------
@@ -1053,7 +1146,7 @@ def ready_made_button(key, bases):
         b["made"] = key
         base = bases.get("artists")
         b["settings"] = radio_settings(base or {})
-        b["filters"] = list(base["filters"]) if base else []
+        b["filters"] = list(base["filters"]) if base else [MAIN_FILTER]
         return b
 
     def start(kind):
@@ -1063,7 +1156,7 @@ def ready_made_button(key, bases):
     b["made"] = key
     b["settings"] = dict(start(recipe["kind"]), **recipe["settings"])
     base = bases.get(recipe["kind"])
-    b["filters"] = list(base["filters"]) if base else []
+    b["filters"] = list(base["filters"]) if base else [MAIN_FILTER]
     b["configs"] = [{"kind": kind, "settings": dict(start(kind), **extra)} for kind, extra in recipe["configs"]]
     b["mix"] = tidy_mix(recipe["mix"], len(b["configs"]) + 1)
     return b
@@ -1244,6 +1337,8 @@ def upgrade():
             engine.print(t("Note: {name} had settings of its own. They're now its own playlists under Settings > "
                            "Devices ({names}), which its voice commands run.",
                            name=shown_name, names=", ".join(x["name"] for x in made)))
+    for b in items:
+        b["main_filter"] = ""   # their filters are in the form from before the Main Filter: load() turns them
     save(arrange_shipped(items))   # last, so the devices above were compared with the settings the user had
     devices.save(device_data)
     _set_meta(RADIO_ADOPTED_KEY, "1")   # a fresh install has Radio as shipped: no 1.31.0 step to come
@@ -1330,7 +1425,7 @@ def run_radio(button, report=print, lane_id=None):
     settings.update(mode.layer(RADIO_GROUP))
     settings.update(overrides.layer(button, RADIO_GROUP, settings))
     engine.use_profile(dict(settings, **previous))
-    engine.FILTER_IDS = [str(i) for i in button.get("filters") or []]
+    engine.FILTER_IDS = filter_ids(button)
     engine.BUILD_BUTTON = button["id"]
     try:
         if radio.analysis() is None:   # the first press ever: the lanes first
@@ -1354,9 +1449,8 @@ def run_radio(button, report=print, lane_id=None):
 
 
 def _run_one(button, kind, settings, filters, report, seed_info, build, extra_filters, options):
-    """One config of a playlist, under that config's filters."""
-    ids = [str(i) for i in filters or []]
-    ids += [i for i in extra_filters if i not in ids]
+    """One config of a playlist, under that config's filters: the Main Filter's, or its own ticks."""
+    ids = filter_ids({"filters": filters}, extra_filters)
     previous = dict(engine.PROFILE)
     before = engine.BUILD_BUTTON
     import mode
@@ -1460,7 +1554,7 @@ def describe(button):
             bits.append(t("Moderator"))
         if s.get("DEEP_CUTS_ARTISTS", "off") not in ("off", ""):
             bits.append("Deep Cuts")
-        if button.get("filters"):
+        if own_filters(button) and not uses_main(button):
             bits.append(t("Filters"))
         return ", ".join(bits)
     cfgs = configs(button)
@@ -1480,6 +1574,6 @@ def describe(button):
     n = cfgs[mix["continue_as"]]
     if n["settings"].get(f"NONSTOP_{n['kind'].upper()}", "0") in engine.YES:
         bits.append("Non-stop")
-    if any(c["filters"] for c in cfgs):
+    if any(c["filters"] and not uses_main(c) for c in cfgs):   # ticks of its own, not the Main Filter
         bits.append(t("Filters"))
     return ", ".join(bits)

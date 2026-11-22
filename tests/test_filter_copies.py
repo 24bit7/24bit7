@@ -32,7 +32,7 @@ def _stereo_filter():
     f.update(pick_from="299", pick_name="AutoPlay Stereo")
     filters.save(filters.load() + [f])
     vibe = buttons.standard("vibe")
-    buttons.set_filters(vibe["id"], (vibe.get("filters") or []) + [f["id"]])
+    buttons.set_filters(vibe["id"], buttons.own_filters(vibe) + [f["id"]])   # ticks of its own, not the Main Filter
 
 
 def _ai_picks(app, rows):

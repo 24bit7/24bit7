@@ -142,7 +142,7 @@ def _build(mode, seed, zone_name, origin, report):
                         kind=t(buttons.KIND_NAMES[mode])))
         return
     # under the filters of the config the original playlist carries on as (each config's own, 2 Nov 2026)
-    extra = list(buttons.continue_as(origin).get("filters") or []) if origin is not None else []
+    extra = buttons.filter_ids(buttons.continue_as(origin)) if origin is not None else []
     options = {"topup": True} if mode == "artists" else {}
     buttons.run(button, report=report, seed_info=seed, extra_filters=extra, **options)
 

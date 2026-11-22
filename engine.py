@@ -1366,7 +1366,7 @@ NONSTOP_CONTEXT = {}     # the build in progress (set by session_start)
 # RUN_AFTER: group -> (on, path), from Settings > Playlist > Run After Building. Set only by load_settings():
 # a default here would undo the startup load.
 NONSTOP_APPEND = False   # True while a non-stop top-up builds: it only ever adds, never repeats
-FILTER_IDS = None        # the filters a build runs under (the button's plus the zone's, set by buttons.run); None: no filters
+FILTER_IDS = None        # the filters a build runs under (its config's, set by buttons.run); None: no playlist, so the Main Filter
 BUILD_BUTTON = None      # the id of the button whose build is running (buttons.run), kept with its playlist for Non-stop
 NONSTOP_ZONES = {}       # zone ID -> {"keys", "build", "kind", "vibe", "top_artist", "top_first", "stage", "fired"}
 _nonstop_lock = _threading.Lock()
@@ -6206,7 +6206,7 @@ class PlayedFilter:
         if filters:   # the filters ticked on the button and its zone, for the playlists 24bit7 builds
             try:
                 import filters as filter_settings
-                self.filters = filter_settings.Active(FILTER_IDS or [], report) or None
+                self.filters = filter_settings.Active(FILTER_IDS, report) or None
             except Exception as e:
                 report("  " + t("Problem: the filters didn't run ({e}).", e=e))
         if not self.on:

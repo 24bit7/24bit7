@@ -121,7 +121,7 @@ def add_filter(app, tick=True, **kw):
     filters.save(filters.load() + [f])
     if tick:
         for b in buttons.load():
-            buttons.set_filters(b["id"], (b.get("filters") or []) + [f["id"]])
+            buttons.set_filters(b["id"], buttons.own_filters(b) + [f["id"]])   # ticks of its own, not the Main Filter
     return f
 
 

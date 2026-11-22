@@ -13,8 +13,13 @@ them all. The seed track is never filtered out. A track
 with no value for a rule's field passes it (an unrated track counts as rating 0,
 an unplayed one as played 0 times and never played).
 
-Every playlist (Ben, 5 Nov 2026): a filter with it ticked applies to every playlist
-24bit7 builds, ticked on its page or not. Skipped Tracks ships, off: it leaves out
+The Main Filter (Ben, 20 Nov 2026; before it, Every playlist, 5 Nov): setting filters on each
+playlist was a pain, so a filter is In Main Filter or not (kept as "every", the name it had), and
+each config of a playlist either uses the Main Filter, the default, or has ticks of its own, in which
+case the Main Filter doesn't apply to it at all. A config's list holds MAIN while it uses the Main
+Filter, beside any ticks it had before, which wait there in case it goes back to its own. A build
+with no playlist behind it (Blend, Embellish) runs under the Main Filter. Skipped Tracks ships, off,
+in the Main Filter: it leaves out
 tracks skipped by voice twice or more, and every track by an artist with three such
 tracks (the Alexa skip counts them in 24bit7's own JRiver field); both numbers are set
 on its page (8 Nov 2026).
@@ -43,6 +48,7 @@ from i18n import N_, t, tn
 import engine
 
 META_KEY = "filters"
+MAIN = "main"   # in a config's list of filters: it uses the Main Filter (never a filter's own id)
 
 
 SKIPPED_ID = "skipped"
@@ -174,21 +180,37 @@ def used_by(filter_id):
     config's own (2 Nov 2026): a playlist of several configs names the config, "Artist + Guests (config 2)".
     """
     import buttons
-    if next((x for x in load() if x["id"] == filter_id and x.get("every")), None):
-        return [t("Every playlist")]
     out = []
+    if next((x for x in load() if x["id"] == filter_id and x.get("every")), None):
+        out.append(t("Main Filter"))   # and any playlist on its own ticks that has it ticked too
     for b in buttons.load():
-        cfgs = buttons.configs(b)
+        cfgs = buttons.configs(b) or ([{"filters": b.get("filters") or []}] if buttons.is_radio(b) else [])
         for i, cfg in enumerate(cfgs):
-            if filter_id in cfg["filters"]:
+            if MAIN not in cfg["filters"] and filter_id in cfg["filters"]:
                 out.append(b["name"] if len(cfgs) == 1 else t("{name} (config {n})", name=b["name"], n=i + 1))
-    return out
+    return list(dict.fromkeys(out))   # Radio's filters are one set: named once
+
+
+def main_ids(items=None):
+    """The ids of the filters in the Main Filter, on or off, in the order shown."""
+    return [x["id"] for x in (load() if items is None else items) if x.get("every")]
+
+
+def resolve(ids, items=None):
+    """
+    The filters a config's list stands for: the Main Filter's while it holds MAIN, else the ones ticked
+    (none ticked: none). None, a build with no playlist behind it, is the Main Filter too.
+    """
+    if ids is None or MAIN in ids:
+        return main_ids(items)
+    return [str(i) for i in ids]
 
 
 def by_ids(ids):
-    """The filters a button build runs under: the ones named, in the order shown, that are on."""
-    wanted = {str(i) for i in ids}
-    return [x for x in load() if (x["id"] in wanted or x.get("every")) and x.get("on")]
+    """The filters a build runs under: the ones its list stands for (resolve), in the order shown, that are on."""
+    items = load()
+    wanted = set(resolve(ids, items))
+    return [x for x in items if x["id"] in wanted and x.get("on")]
 
 
 def skipped_list(limits=None):
@@ -472,14 +494,14 @@ def matches(item, key, row=None):
 
 class Active:
     """
-    The filters for one build: the ids it runs under (its playlist's).
+    The filters for one build: the ids it runs under (its playlist's; None, no playlist, is the Main Filter).
     allows(key) is False for a track any of them rules out. Playlists named in Only
     pick from are read once, here.
     """
 
     def __init__(self, ids, report=print):
         self.report, self.left_out, self.missing = report, 0, 0
-        everything = by_ids(ids or [])
+        everything = by_ids(ids)
         self.shares = [x for x in everything if is_share(x)]   # At least: engine.apply_shares does those
         self.items = [x for x in everything if not is_share(x)]
         self.share_pools = {}   # an At least filter's id -> the keys on its Only pick from playlist

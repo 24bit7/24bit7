@@ -61,8 +61,9 @@ beat every playlist's own settings. The settings say whether it's open.
 Simple, only suggest an advanced section (Moderator, Drift, Deep Cuts, Non-stop, Consensus, Hidden \
 Tracks, If All Else Fails, Run After Building, Shortcut, a second config) by saying it needs Advanced, \
 the Simple / Advanced switch at the top right of a playlist's page.
-- Filters are kept under Settings > Filters (Edit Filters) and ticked per config; one with Every \
-playlist applies to every build. Skipped Tracks leaves out what's been skipped by voice.
+- Filters are kept under Settings > Filters (Edit Filters). The Main Filter is the set every playlist \
+uses unless a config is given ticks of its own, which then replace it. Skipped Tracks leaves out what's \
+been skipped by voice.
 - 24bit7 is honest about results: a seed that finds little gives a short playlist and says so. \
 Fallbacks (If All Else Fails, Consensus's plain Artist Matching finish) are opt-in. Don't present a \
 fallback as something that happened unless the console shows it.
@@ -192,7 +193,7 @@ def state_text():
         lines = ["Filters (Settings > Filters):"]
         for x in items:
             lines.append(f"- {x['name']}: {'on' if x.get('on') else 'off'}"
-                         f"{', every playlist' if x.get('every') else ''}; {filters.describe(x)}")
+                         f"{', in the Main Filter' if x.get('every') else ''}; {filters.describe(x)}")
         return lines if len(lines) > 1 else ["Filters: none"]
 
     def playlist_lines():
@@ -214,7 +215,8 @@ def state_text():
             cfgs = buttons.configs(b)
             for n, c in enumerate(cfgs, start=1):
                 kind_name = buttons.KIND_LABELS.get(c["kind"], c["kind"])
-                ticked = ", ".join(names.get(str(i), str(i)) for i in c.get("filters") or []) or "none"
+                ticked = ("the Main Filter" if buttons.uses_main(c) else
+                          ", ".join(names.get(str(i), str(i)) for i in c.get("filters") or []) or "none")
                 try:
                     lines.append(f"    Config {n}, {kind_name}, as its page shows it: {page_view(b, c)}")
                 except Exception as e:
