@@ -151,3 +151,42 @@ def test_without_the_launcher_media_center_itself_is_started_as_media_server(app
 def test_a_jriver_running_under_either_name_counts(app, line, running):
     out = '"System Idle Process","0","Services","0","8 K"\n' + line + '\n"pythonw.exe","300","Console","1","80,000 K"\n'
     assert app.engine.jriver_in_tasklist(out) is running
+
+
+# --- what Windows recorded (22 Nov 2026) ---------------------------------------------------------------
+
+def test_a_crash_windows_recorded_is_said_once_when_jriver_is_started_again(app, alexa, local, monkeypatch):
+    """Two crashes on 15 and 16 Nov 2026, both in ntdll.dll, and nothing in 24bit7's Log to go on."""
+    import time
+    e = app.engine
+    at = time.time() - 600
+    asked = []
+    monkeypatch.setattr(e, "jriver_crash_records",
+                        lambda seconds: asked.append(seconds) or [(int(at), "crash", "ntdll.dll", "0xc0000005"),
+                                                                  (int(at) - 5000, "crash", "ntdll.dll", "0xc0000005")])
+    alexa.say("SongsByIntent", "the beatles")
+    shown = time.strftime("%H:%M", time.localtime(at))
+    line = f"Note: Windows recorded JRiver crashing at {shown}, in ntdll.dll (0xc0000005)."
+    assert wait_for(lambda: app.printed.has(line)), app.printed.text()
+    assert asked == [e.JRIVER_CRASH_WINDOW], "the last day's records"
+    lines = list(app.printed)
+    assert lines.index(line) > lines.index("JRiver wasn't running, so 24bit7 started it."), "after the line it explains"
+    assert e.jriver_crash_line([(int(at), "crash", "ntdll.dll", "0xc0000005")]) == "", "the same record isn't said twice"
+    later = e.jriver_crash_line([(int(at) + 60, "hang", "", "")])
+    assert later.startswith("Note: Windows recorded JRiver hanging at "), "a newer one is"
+
+
+def test_no_record_means_no_line(app, alexa, local):
+    """JRiver closed by hand leaves no record: nothing is guessed."""
+    alexa.say("SongsByIntent", "the beatles")
+    assert wait_for(lambda: alexa.jobs)
+    assert not app.printed.has("Windows recorded"), app.printed.text()
+    assert app.engine.jriver_crash_line([]) == ""
+
+
+def test_a_record_from_another_day_gives_its_date(app):
+    import time
+    e = app.engine
+    now = time.mktime((2026, 11, 17, 9, 0, 0, 0, 0, -1))
+    then = time.mktime((2026, 11, 16, 13, 27, 0, 0, 0, -1))
+    assert e.jriver_crash_line([(int(then), "crash", "ntdll.dll", "0xc0000005")], now=now) ==         "Note: Windows recorded JRiver crashing at 16/11 13:27, in ntdll.dll (0xc0000005)."

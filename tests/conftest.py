@@ -120,6 +120,7 @@ def app(tmp_path, monkeypatch):
                         lambda on: startup.update(command=tray.launch_command() if on else None))
     printed = Lines()
     engine.OUTPUT_HOOK = printed
+    engine.jriver_crash_records = lambda seconds: []   # Windows' own log is the real PC's: never read in the fake world
     library = importlib.import_module("library")
     voice = importlib.import_module("voice")
     # The fake world starts on the flat row the tests were written against (the standard four with Artist + Guests

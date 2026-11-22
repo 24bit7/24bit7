@@ -2045,8 +2045,97 @@ def start_jriver():
         return True
     if _start_server(N_("Problem: JRiver wasn't running, and 24bit7 couldn't start it ({e}).")):
         print(t("JRiver wasn't running, so 24bit7 started it."))
+        say_jriver_crash()
         return True
     return False
+
+
+# --- what Windows recorded when JRiver stopped (22 Nov 2026) --------------------------------------------
+# Two crashes on 15 and 16 Nov 2026, both in ntdll.dll, cause unknown, and nothing in 24bit7's Log to go on.
+# Windows keeps a record of every crash and hang, readable without admin rights, so when 24bit7 has had to start
+# JRiver again, the newest one from the last day goes into the console and the Log beside it. No record, no line:
+# JRiver was closed, not crashed. Read on a thread of its own, so a slow log never holds the music up.
+
+JRIVER_CRASH_WINDOW = 24 * 3600
+JRIVER_CRASH_SAID_KEY = "jriver_crash_said"   # meta: the time of the last record said, so it's said once
+_jriver_crash_said = [0]   # the same, for this run
+
+
+def jriver_crash_records(seconds):
+    """
+    JRiver's crashes and hangs in Windows' Application log over the last `seconds`, newest first:
+    [(when as Unix seconds, "crash" or "hang", faulting module or "", exception code or "")]. [] if there are none
+    or the log can't be read. The fields come from the record's own values, not its text, so any Windows language.
+    """
+    import subprocess
+    script = (
+        "$since = (Get-Date).AddSeconds(-%d); "
+        "Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='Application Error','Application Hang'; "
+        "StartTime=$since} -ErrorAction SilentlyContinue | ForEach-Object { "
+        "$p = @($_.Properties | ForEach-Object { [string]$_.Value }); "
+        "if ($p[0] -match '^(Media Center \\d+|MC\\d+)\\.exe$') { "
+        "$when = [int][double]::Parse((Get-Date $_.TimeCreated.ToUniversalTime() -UFormat %%s)); "
+        "if ($_.ProviderName -eq 'Application Error') { \"$when`tcrash`t$($p[3])`t$($p[6])\" } "
+        "else { \"$when`thang`t`t\" } } }" % int(seconds))
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True,
+                             text=True, timeout=10, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+    except Exception:
+        return []
+    rows = []
+    for line in out.splitlines():
+        parts = line.split("\t")
+        if len(parts) == 4 and parts[0].strip().isdigit():
+            code = parts[3].strip()
+            rows.append((int(parts[0]), parts[1], parts[2].strip(), ("0x" + code) if code and not code.startswith("0x") else code))
+    return sorted(rows, reverse=True)
+
+
+def jriver_crash_line(records, now=None):
+    """The console line for the newest record not said before, or "" (and remembers it was said)."""
+    if not records:
+        return ""
+    when, kind, module, code = records[0]
+    if when <= _jriver_crash_said[0]:
+        return ""
+    # Kept in the database too, so a restart of 24bit7 doesn't say an old crash again. Through a connection of its
+    # own: this runs on its own thread, and a second writer on the shared one can lose the other's write (1.37.2).
+    try:
+        db()   # the tables exist
+        con = sqlite3.connect(DB_FILE, timeout=10)
+        try:
+            row = con.execute("SELECT value FROM meta WHERE key=?", (JRIVER_CRASH_SAID_KEY,)).fetchone()
+            if row and row[0] and int(float(row[0])) >= when:
+                _jriver_crash_said[0] = int(float(row[0]))
+                return ""
+            con.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (JRIVER_CRASH_SAID_KEY, str(when)))
+            con.commit()
+        finally:
+            con.close()
+    except Exception as e:
+        debug(f"JRiver's crash record couldn't be marked as said: {e}")   # said all the same, once this run
+    _jriver_crash_said[0] = when
+    at = time.localtime(when)
+    today = time.localtime(now or time.time())
+    shown = time.strftime("%H:%M" if at[:3] == today[:3] else "%d/%m %H:%M", at)
+    if kind == "hang":
+        return t("Note: Windows recorded JRiver hanging at {when}.", when=shown)
+    if module and code:
+        return t("Note: Windows recorded JRiver crashing at {when}, in {module} ({code}).", when=shown, module=module,
+                 code=code)
+    return t("Note: Windows recorded JRiver crashing at {when}.", when=shown)
+
+
+def say_jriver_crash():
+    """After 24bit7 has started JRiver again: what Windows recorded, if anything, said once. Never waits."""
+    def look():
+        try:
+            line = jriver_crash_line(jriver_crash_records(JRIVER_CRASH_WINDOW))
+            if line:
+                print(line)
+        except Exception as e:
+            debug(f"JRiver's crash record couldn't be read: {e}")
+    _threading.Thread(target=look, daemon=True, name="jriver-crash").start()
 
 
 def _start_server(problem):
@@ -2120,6 +2209,7 @@ def restart_jriver():
             return False
         print(t("JRiver had stopped answering, so 24bit7 closed it by force and started it again.") if forced else
               t("JRiver had stopped answering, so 24bit7 closed it and started it again."))
+        say_jriver_crash()
     return wait_for_jriver()
 
 
