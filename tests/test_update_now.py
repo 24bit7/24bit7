@@ -156,3 +156,51 @@ def test_the_build_ships_the_updater_and_publishes_the_fingerprint():
     assert '--add-data "update.ps1;."' in build, "Update Now runs the update.ps1 that came with the program"
     publish = (root / "release.ps1").read_text(encoding="utf-8")
     assert "Get-FileHash -Algorithm SHA256" in publish and "gh release create $tag $Zip $sha" in publish
+
+
+# --- the update window in the user's language (22 Nov 2026) ----------------------------------------------
+
+def said_in_the_script():
+    """Every line the script says, as written in it: Say '...' or Say "...", and the window's title."""
+    import re
+    text = SCRIPT.read_text(encoding="ascii")
+    lines = re.findall(r"""^\s*Say (?:'([^']*)'|"([^"]*)")""", text, re.M)
+    title = re.search(r"WindowTitle = \(Line '([^']*)'", text).group(1)
+    return [title] + [a or b for a, b in lines]
+
+
+def test_every_line_the_script_says_is_handed_over_in_the_chosen_language(app, tmp_path):
+    e = app.engine
+    said = said_in_the_script()
+    assert len(said) == 10 and sorted(said) == sorted(e.UPDATE_LINES), \
+        "a line in update.ps1 that isn't in engine.UPDATE_LINES would stay English for everyone"
+    import i18n
+    i18n.set_language("de")
+    try:
+        path = e.write_update_texts(str(tmp_path))
+    finally:
+        i18n.set_language("en")
+    import json
+    texts = json.loads(open(path, encoding="utf-8").read())
+    assert texts["Putting your old copy back."] == "Deine alte Kopie wird zurückgestellt."
+    assert set(texts) == set(e.UPDATE_LINES) and all(v and v != k for k, v in texts.items()), "each has its German"
+
+
+def test_the_script_speaks_the_language_its_handed_and_english_without(tmp_path):
+    import json
+    app_dir, work, new = lay_out(tmp_path)
+    texts = tmp_path / "texts.json"
+    texts.write_text(json.dumps({"Updating 24bit7 from {old} to {new}.": "Von {old} auf {new}, bitte.",
+                                 "Your old copy is kept as {folder}.": "Alte Kopie: {folder}."}), encoding="utf-8")
+    r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(SCRIPT),
+                        "-AppDir", str(app_dir), "-NewDir", str(new), "-WorkDir", str(work), "-Version", "99.0.0",
+                        "-OldVersion", "1.37.2", "-Texts", str(texts), "-NoStart", "-NoPause"],
+                       capture_output=True, text=True, timeout=120,
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "Von 1.37.2 auf 99.0.0, bitte." in r.stdout and "Alte Kopie: 24bit7 1.37.2 backup." in r.stdout, r.stdout
+    assert "Starting 24bit7 99.0.0." in r.stdout, "a line that wasn't handed over is said in English"
+    # and with nothing handed over, or a file that can't be read, the lot in English
+    app_dir, work, new = lay_out(tmp_path / "again")
+    r = run_script(app_dir, work, new)
+    assert r.returncode == 0 and "Updating 24bit7 from 1.37.2 to 99.0.0." in r.stdout, r.stdout + r.stderr

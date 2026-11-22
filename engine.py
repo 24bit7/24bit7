@@ -176,6 +176,20 @@ def say_if_newer(report=print):
 
 UPDATE_SCRIPT = "update.ps1"
 UPDATE_RESULT = "update_result.txt"
+UPDATE_TEXTS = "update_texts.json"
+# update.ps1's own lines, as it says them in English. It runs with 24bit7 closed, so launch_update hands it these
+# in the language 24bit7 is set to (22 Nov 2026; English only before). tests/test_update_now.py holds the two lists
+# together: a line in the script that isn't here would stay English for everyone.
+UPDATE_LINES = [N_("Updating 24bit7 to {new}"),
+                N_("Updating 24bit7 from {old} to {new}."),
+                N_("Waiting for 24bit7 to close..."),
+                N_("The update didn't start: {why}"),
+                N_("Your old copy is kept as {folder}."),
+                N_("Your settings, history and profiles are copied across."),
+                N_("The update didn't finish: {why}"),
+                N_("Putting your old copy back."),
+                N_("It couldn't be put back ({why}). Your old copy is in {folder}."),
+                N_("Starting 24bit7 {new}.")]
 UPDATE_PENDING = None   # (unpacked folder, version) once Update Now has a release ready: run on closing
 
 
@@ -249,15 +263,30 @@ def prepare_update(info, report=print):
         return None
 
 
+def write_update_texts(folder):
+    """update.ps1's lines in the chosen language, as a file for it to read. Its path, or "" if it couldn't be written
+    (the script then speaks English)."""
+    try:
+        path = os.path.join(folder, UPDATE_TEXTS)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({line: t(line) for line in UPDATE_LINES}, f, ensure_ascii=False)
+        return path
+    except Exception as e:
+        debug(f"The update window's lines couldn't be handed over: {e}")
+        return ""
+
+
 def launch_update(new_dir, latest):
     """Starts update.ps1, from a copy in the update folder, in a window of its own; 24bit7 then closes."""
     import shutil
     import subprocess
     script = os.path.join(update_folder(latest), UPDATE_SCRIPT)
     shutil.copyfile(os.path.join(getattr(sys, "_MEIPASS", APP_DIR), UPDATE_SCRIPT), script)
+    texts = write_update_texts(update_folder(latest))
     subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script,
                       "-AppDir", os.path.normpath(APP_DIR), "-NewDir", new_dir, "-WorkDir", update_folder(latest),
-                      "-Version", latest, "-OldVersion", VERSION, "-WaitPid", str(os.getpid())],
+                      "-Version", latest, "-OldVersion", VERSION, "-WaitPid", str(os.getpid()),
+                      *(["-Texts", texts] if texts else [])],
                      cwd=os.path.dirname(os.path.normpath(APP_DIR)),
                      creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
 
