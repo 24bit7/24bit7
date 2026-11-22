@@ -1,0 +1,24 @@
+name: Tests
+
+# The windowless tests, on GitHub's machines (22 Nov 2026). They need nothing from the house, no JRiver and no
+# keys, and the media PC they'd otherwise run on is fanless. build.bat still runs everything, the window tests
+# included, before a release: this is an early word, not the release's gate.
+
+on:
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+
+jobs:
+  windowless:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Install what 24bit7 and its tests need
+        run: python -m pip install -r requirements.txt -r tests/requirements.txt
+      - name: The windowless tests (the timing ones need a quiet machine, so they stay at home)
+        run: python -m pytest -q -m "not windows and not timing"
