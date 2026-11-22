@@ -665,6 +665,8 @@
   "Off: no key yet": "Aus: noch kein Schlüssel",
   "Note: your Alexa skill is older than this 24bit7. Paste the two new files into it to get: {news}. The steps are in the manual, under Upgrading.": "Hinweis: Dein Alexa-Skill ist älter als dieses 24bit7. Füg die zwei neuen Dateien ein, dann bekommst du: {news}. Die Schritte stehen im Handbuch unter Aktualisieren.",
   "Skill: up to date.": "Skill: aktuell.",
+  "Problem: Alexa can't reach 24bit7 at {address}. Has the PC's name or the tunnel changed?": "Problem: Alexa erreicht 24bit7 unter {address} nicht. Hat sich der Name des PCs oder der Tunnel geändert?",
+  "Alexa can reach 24bit7 again at {address}.": "Alexa erreicht 24bit7 wieder unter {address}.",
   "Skill: older than this 24bit7. Paste the two new files into it to get: {news}.": "Skill: älter als dieses 24bit7. Füg die zwei neuen Dateien ein, dann bekommst du: {news}.",
   "\"Which artist?\" answered with just the name": "„Which artist?“ nur mit dem Namen beantworten",
   "Off: port {port} is already in use": "Aus: Port {port} wird schon verwendet",

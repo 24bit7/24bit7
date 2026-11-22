@@ -86,6 +86,20 @@ SKILL_VERSION = 2
 SKILL_NEWS = {2: N_('"Which artist?" answered with just the name')}
 _skill_seen = None    # the number the last command from a skill carried; None until one calls in
 _skill_said = False   # the console note has been said this run
+
+# Alexa checks its own connection (Ben, 20 Nov 2026). The media PC was renamed on 17 Nov, its public address
+# changed with it, and the first anyone knew was the Echo saying 24bit7 wasn't connected. The listener learns the
+# address Alexa's requests come in on (no setting), and 24bit7 tries it at start-up and each hour: two misses
+# running, and the console says so, once; and once more when it answers again. It's tried from inside the house,
+# so it catches the name or the tunnel changing, not trouble on Amazon's side.
+ADDRESS_KEY = "voice_public_address"   # meta: the address Alexa last reached 24bit7 on
+ADDRESS_FIRST = 60      # seconds after the listener starts before the first try
+ADDRESS_EVERY = 3600    # between tries
+ADDRESS_RETRY = 300     # after one miss, before it's called dead
+_address = None         # as kept; None until read
+_address_fails = 0
+_address_down = False   # said
+_address_stop = None    # the checking thread's stop
 _lock = threading.Lock()
 
 
@@ -1130,6 +1144,7 @@ class _Handler(BaseHTTPRequestHandler):
         except ValueError:
             return self._reply(400, {"error": "body must be a JSON object"})
         _note_skill(body)
+        _note_address(self.headers, body)
         status, speech, extra = respond(body)
         if status == "problem":
             _log_problem(body, speech)
@@ -1245,6 +1260,91 @@ def status():
     return _status
 
 
+def public_address():
+    """The address Alexa last reached 24bit7 on, such as https://mediaserver.example.ts.net; "" until it has."""
+    global _address
+    if _address is None:
+        try:
+            with _lock:
+                row = engine.db().execute("SELECT value FROM meta WHERE key=?", (ADDRESS_KEY,)).fetchone()
+            _address = (row[0] if row and row[0] else "")
+        except Exception:
+            return ""
+    return _address
+
+
+def _note_address(headers, body):
+    """A command came in: the public name it was sent to, as the tunnel passes it on. Not Settings' Test button's."""
+    global _address
+    if (body.get("device") or "") == TEST_DEVICE:
+        return
+    host = (headers.get("X-Forwarded-Host") or headers.get("Host") or "").split(",")[0].strip().lower()
+    name = host.rsplit(":", 1)[0] if host.count(":") == 1 else host
+    if not name or name in ("localhost", "[::1]", "::1") or name.replace(".", "").isdigit():
+        return   # this PC's own address: the request didn't come through a tunnel
+    proto = (headers.get("X-Forwarded-Proto") or "https").split(",")[0].strip().lower()
+    address = f"{proto if proto in ('http', 'https') else 'https'}://{host}"
+    if address == public_address():
+        return
+    _address = address
+    try:
+        with _lock:
+            con = engine.db()
+            con.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (ADDRESS_KEY, address))
+            con.commit()
+    except Exception as e:
+        engine.debug(f"Voice: couldn't keep Alexa's address: {e}")
+
+
+def _address_answers(address):
+    """Whether anything answers at the address: asked without the key, the listener's 401 is an answer."""
+    import urllib.error
+    import urllib.request
+    try:
+        urllib.request.urlopen(address.rstrip("/") + "/ping", timeout=10).close()
+        return True
+    except urllib.error.HTTPError:
+        return True
+    except Exception:
+        return False
+
+
+def check_address():
+    """One try of the address Alexa uses. Returns the console line when there's something to say, else None."""
+    global _address_fails, _address_down
+    address = public_address()
+    if not address:
+        return None
+    if _address_answers(address):
+        was_down, _address_fails, _address_down = _address_down, 0, False
+        return t("Alexa can reach 24bit7 again at {address}.", address=address) if was_down else None
+    _address_fails += 1
+    if _address_fails >= 2 and not _address_down:
+        _address_down = True
+        return t("Problem: Alexa can't reach 24bit7 at {address}. Has the PC's name or the tunnel changed?",
+                 address=address)
+    return None
+
+
+def address_wait():
+    """Seconds until the next try: sooner after a first miss."""
+    return ADDRESS_RETRY if _address_fails == 1 else ADDRESS_EVERY
+
+
+def _address_loop(stop):
+    if stop.wait(ADDRESS_FIRST):
+        return
+    while True:
+        try:
+            line = check_address()
+            if line:
+                engine.print(line)
+        except Exception as e:
+            engine.debug(f"Voice: the address check failed: {e}")
+        if stop.wait(address_wait()):
+            return
+
+
 def _note_skill(body):
     """A command came in: which skill sent it. Settings' own Test button isn't a skill."""
     global _skill_seen, _skill_said
@@ -1291,7 +1391,10 @@ def status_shown(status=None):
 
 
 def stop():
-    global _server, _thread, _status
+    global _server, _thread, _status, _address_stop
+    if _address_stop is not None:
+        _address_stop.set()
+        _address_stop = None
     if _server is not None:
         _server.shutdown()
         _server.server_close()
@@ -1317,6 +1420,9 @@ def restart():
     _thread = threading.Thread(target=_server.serve_forever, daemon=True)
     _thread.start()
     _status = f"Listening on 127.0.0.1:{engine.VOICE_PORT}"
+    global _address_stop
+    _address_stop = threading.Event()
+    threading.Thread(target=_address_loop, args=(_address_stop,), daemon=True, name="voice-address").start()
     return _status
 
 

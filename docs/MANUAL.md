@@ -389,6 +389,8 @@ Keys never leave your PC except to the service they belong to, and they never ap
 
 ![Settings, Voice Commands](images/settings_voice_commands.png)
 
+24bit7 keeps an eye on the connection itself. It notes the address Alexa's requests arrive on, with nothing to set, and tries it at start-up and each hour. If it stops answering, the console says "Problem: Alexa can't reach 24bit7 at (the address). Has the PC's name or the tunnel changed?", once, and says when it's back. Renaming the PC is the usual cause: a Tailscale address follows the PC's name, so the tunnel and the address in `skill_settings.py` both want setting again. It's tried from inside your house, so it can't see trouble on Amazon's side.
+
 Switches voice on, holds the key the Alexa skill sends and sets **New Playlists**; the devices' zones and playlists are under [Settings > Devices](#devices). **Switch Timing Adjustment** fine-tunes switching to a Sonos or other DLNA speaker: if it repeats the last moment you heard in the other room, move it towards minus; if it skips a little, towards plus. **New Playlists** decides what a playlist asked for by voice does when the zone is already playing: **After this track** (the default) lets the song finish, clears what was queued after it and plays the new playlist next; **Play now** takes over straight away. A stopped or paused zone starts at once either way, and albums, songs, your JRiver playlists and shuffles always play at once. **Test** sends a pretend command, as if a device had heard it. See [Voice Commands](#voice-commands) and [Setting up the Alexa skill](#setting-up-the-alexa-skill).
 
 ### Playlists & Albums
