@@ -5552,8 +5552,8 @@ def _why(sources, seed, artist, session, mode, track=""):
     if sources in FEATURE_SOURCES:
         return sources, t("Added by {feature}, from artists like the ones in {name}.", feature=sources,
                           name=s_track or seed)
-    if mode == "top_tracks":
-        return sources, t("One of {artist}'s top tracks on {sources}.", artist=artist, sources=sources)
+    if mode == "top_tracks" or (mode == "radio" and seed and artist_key(seed) == artist_key(artist)):
+        return sources, t("One of {artist}'s top tracks on {sources}.", artist=artist, sources=sources)   # a pillar's own
     if mode in ("similar_tracks",) and seed:
         return sources, t("{sources} named it as like {seed}.", sources=sources, seed=seed)
     if seed:

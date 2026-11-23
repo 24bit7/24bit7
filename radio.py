@@ -1062,13 +1062,19 @@ def find(lane_, report, minutes=TARGET_MINUTES, avoid=(), own=None, first=None, 
     own = [] if own is None else own
     fits = fitter(lane_)
 
-    def seen_for(artist):
+    def seen_for(artist, seed):
         def seen(title, found, sources=()):
             report("    " + t("{found_label}: {track_name}", track_name=title,
                               found_label=t("In library") if found else t("Not in library")))
             if session_id is not None:   # the sources that named it, as Artist Matching logs (Ben, 23 Nov 2026)
-                engine.session_log(session_id, artist, title, list(sources) or ["Radio"], found=found)
+                engine.session_log(session_id, artist, title, list(sources) or ["Radio"], found=found, seed=seed)
         return seen
+
+    def first_pillar(artist):
+        """Discover's Seed for an agreeing artist (Ben, 23 Nov 2026): the first pillar whose list named it."""
+        a = engine.artist_key(artist)
+        return next((p for p in circle if a in {engine.artist_key(n) for n in lists[engine.artist_key(p)]}),
+                    circle[0] if circle else "")
     try:
         while pillars and len(circle) < CIRCLE_MAX and (not picks or _minutes(picks) < minutes):
             engine.check_cancelled()
@@ -1079,7 +1085,7 @@ def find(lane_, report, minutes=TARGET_MINUTES, avoid=(), own=None, first=None, 
                                 minutes=minutes, artist=joining[0], count=len(circle) + 1, most=CIRCLE_MAX))
             for p in joining:   # a couple of each pillar's own, at random from its best known five
                 report("  " + t("Pillar: {artist}...", artist=p))
-                for key in _owned_top(p, have, played, 2, pool=PILLAR_SONGS, seen=seen_for(p)):
+                for key in _owned_top(p, have, played, 2, pool=PILLAR_SONGS, seen=seen_for(p, p)):
                     have.add(key)
                     picks.append(key)
                     own.append(key)
@@ -1103,7 +1109,7 @@ def find(lane_, report, minutes=TARGET_MINUTES, avoid=(), own=None, first=None, 
                 report("  " + t("{artist}...", artist=artist))
                 for key in _owned_top(artist, have, played, engine.TRACKS_PER_ARTIST_PICK,
                                       pool=max(engine.TRACKS_PER_ARTIST_POOL, engine.TRACKS_PER_ARTIST_PICK),
-                                      seen=seen_for(artist), report=report):
+                                      seen=seen_for(artist, first_pillar(artist)), report=report):
                     have.add(key)
                     picks.append(key)
         if off:

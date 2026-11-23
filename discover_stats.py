@@ -73,6 +73,8 @@ def seed_artist(mode, session_artist, seed):
     """The artist that led to a row: a Playing Now build's sampled track, else the session's seed artist."""
     if seed and " - " in seed:
         return seed.split(" - ")[0].strip()
+    if mode == "radio" and seed:   # the pillar that led to it (23 Nov 2026)
+        return seed.strip()
     if mode in NO_SEED_ARTIST:
         return ""
     return (session_artist or "").strip()
