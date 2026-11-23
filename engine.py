@@ -2770,6 +2770,14 @@ def lastfm_top_tracks(artist_name, limit=10):
 _deezer_id_cache = {}
 
 
+def _loose_name(name):
+    """A name with case, accents and punctuation set aside: "P.O.D" and "P.O.D." are one. A name that's all
+    punctuation ("!!!") keeps it, or every such name would be the same."""
+    plain = (name or "").strip().lower()
+    loose = re.sub(r"[\W_]+", "", strip_accents(plain))
+    return loose or plain
+
+
 def deezer_artist_id(artist_name, verbose=False):
     """
     Resolves an artist name to a Deezer ID. Deezer's search isn't ranked
@@ -2784,8 +2792,10 @@ def deezer_artist_id(artist_name, verbose=False):
                          params={"q": artist_name, "limit": 10})
         data = r.json().get("data", [])
         if data:
-            target = artist_name.strip().lower()
-            exact = [a for a in data if a.get("name", "").strip().lower() == target]
+            # punctuation ignored (23 Nov 2026): Deezer files the real P.O.D. as "P.O.D" and an empty namesake as
+            # "P.O.D.", so an exact match found the namesake; both count now and the fan count picks the band
+            target = _loose_name(artist_name)
+            exact = [a for a in data if _loose_name(a.get("name", "")) == target]
             pool = exact if exact else data
             best = max(pool, key=lambda a: a.get("nb_fan", 0))
             artist_id = best["id"]
