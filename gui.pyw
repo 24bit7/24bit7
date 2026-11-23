@@ -2004,7 +2004,7 @@ class PlayTab(tk.Frame):
         self._save_shown, self._save_zone = False, None
         # Copy to Phone: on the Playlists & Albums tab once one is picked, left of Save Playlist (Ben, 23 Nov 2026)
         self.copy_button = FlatButton(frame, text=t("Copy to Phone"), command=self.on_copy_to_phone, width=14,
-                                      height=2, quiet=True)
+                                      height=2, quiet=True, fits=(t("Copy to Phone"),))   # the German is longer
         Tooltip(self.copy_button, t(PLAY_NOTES["Copy to Phone"]), when=self.help_on, wrap=self.note_wrap)
         self._copy_shown = False
         self._draw_buttons()

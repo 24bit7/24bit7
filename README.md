@@ -310,7 +310,14 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.40.0
+## What's new in 1.41.0
+
+- **Copy to Phone from Playlists & Albums.** Pick an album or playlist and **Copy to Phone** copies it straight to your phone, without playing it or saving anything in JRiver.
+- **Artist and album folders on the phone.** Copied tracks go into artist and album folders, with the playlist's .m3u8 at the top of the folder, and a window shows how the copy is going, with **Stop**. A copy that's stopped or cut off picks up the rest next time.
+- **Browse** for the folder on the phone, for music kept somewhere other than Music.
+- **Play's arrow plays at once**, as Embellish's does, and stacking artists on Search says one short line each.
+
+### Earlier: 1.40.0
 
 - **Copy a playlist to your phone.** Save Playlist has a **Copy Tracks To** tick: plug in an Android phone by USB and the tracks go into a folder named after the playlist, with an .m3u8 beside them. Name each phone, set a folder and a limit in GB, and tick Clear Music First for a clean slate. Saving the same playlist again copies only what's new.
 - **Several artists from Search.** Click into the Artist box for your own artists, **+ Add** a few, and a green **Go** plays so many songs you own from each, shuffled with the artists spread out.

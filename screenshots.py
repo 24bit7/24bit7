@@ -48,6 +48,7 @@ SHOTS = [
     ("save_playlist_copy", ["Play", "Now Playing"], ["gui.pyw", "phone.py", "tabs.py"], "copy_to_phone"),
     ("play_search", ["Play", "Search"], ["gui.pyw", "stack.py", "tabs.py"], "search_stack"),
     ("play_jriver_playlists", ["Play", "Playlists & Albums"], ["gui.pyw", "embellish.py", "tabs.py"], "playlists_list"),
+    ("play_copy_to_phone", ["Play", "Playlists & Albums"], ["gui.pyw", "tabs.py"], "copy_to_phone_button"),
     ("play_radio", ["Play", "Now Playing"], ["gui.pyw", "radio.py", "tabs.py"], "radio_list"),
     ("play_review", ["Play", "Now Playing"], ["gui.pyw", "review_gui.py"], "review"),
     ("ai_playlist_create", ["Play", "Now Playing"], ["ai_dialog.py"], "ai_create"),
@@ -826,6 +827,17 @@ def save_if_changed(image, name):
     return True
 
 
+def clear_search_lines(play):
+    """The Search shot's lines (its note and the stacked artists) out of the console, as a fresh visit would have
+    it: the note stays when something's been said after it, and the stack lines were said after it."""
+    try:
+        play.log.config(state="normal")
+        play.log.delete("search_tip", "end-1c")
+        play.log.config(state="disabled")
+    except Exception:
+        pass
+
+
 def show_multiroom(settings, root):
     """
     The Multiroom section on, with a Sonos One, the Multiroom server and the Hugo "found" (stand-ins, nothing on
@@ -956,11 +968,16 @@ def main():
             elif action == "playlists_list":   # an artist typed, their albums listed under the box (1.36.0)
                 play._show_more(False, save=False)
                 play._close_playlists_if_away = lambda: None   # the shot takes the keyboard from the box
+                clear_search_lines(play)
                 play.playlist_entry.delete(0, "end")
                 play.playlist_entry.insert(0, "Beatles")
                 settle(root, 0.3)
                 play._open_playlists()
                 popup = play._playlists_pop
+            elif action == "copy_to_phone_button":   # an album picked, Copy to Phone at the row's top right (1.41.0)
+                play._show_more(False, save=False)
+                clear_search_lines(play)
+                play._pick_playlist({"kind": "album", "Name": "Abbey Road", "Artist": "The Beatles"})
             elif action == "search_stack":   # two artists added, Go showing, a third typed with the list open (1.40.0)
                 import library
                 play._show_more(False, save=False)
