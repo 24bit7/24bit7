@@ -217,14 +217,22 @@ def test_an_album_picked_changes_the_menus_and_plays_in_order(app, ui):
     p._choice_menu("order")
     ui.pump(0.2)
     assert [c for c, _, m in p._children_popup._rows if m] == ["ordered"], "an album starts in order"
+    keys = library.album_keys("Abbey Road", "The Beatles")
     p._choose("order", "shuffled")
     assert embellish.choices()["album_order"] == "shuffled" and embellish.choices()["order"] == "shuffled"
-    embellish.set_choice("album_order", "ordered")
-    p.play_list_button._command()
     ui.wait_idle()
-    keys = library.album_keys("Abbey Road", "The Beatles")
-    assert app.jriver.zone("Speakers").playlist == keys, console(ui)
-    assert "Play: Abbey Road by The Beatles, 7 tracks, in order." in console(ui)
+    assert sorted(app.jriver.zone("Speakers").playlist) == sorted(keys), \
+        "a pick from Play's arrow plays at once, as Embellish's does (Ben, 23 Nov 2026: it looked broken)"
+    p._choice_menu("order")
+    ui.pump(0.2)
+    p._choose("order", "ordered")
+    ui.wait_idle()
+    assert embellish.choices()["album_order"] == "ordered"
+    assert "Play: Abbey Road by The Beatles, 7 tracks, in order." in console(ui), console(ui)
+    ui.play._clear_log() if hasattr(ui.play, "_clear_log") else ui.play.log.delete("1.0", "end")
+    p.play_list_button._command()   # and the button itself plays the remembered order
+    ui.wait_idle()
+    assert "Play: Abbey Road by The Beatles, 7 tracks, in order." in console(ui), console(ui)
     p.playlist_entry.delete(0, "end")
     p._open_playlists()
     ui.pump(0.2)

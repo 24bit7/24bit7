@@ -139,7 +139,7 @@ PLAY_NOTES = {
     "Album or Playlist": N_("One of your albums, or a JRiver playlist or smartlist. Click into the box for the five "
                             "you played here most recently, then your playlists; type part of a name to find an "
                             "album or playlist, or an artist's name for their albums."),
-    "Play": N_("Plays the album or playlist as it is. The arrow chooses Play Shuffled or Play Ordered, remembered "
+    "Play": N_("Plays the album or playlist as it is. The arrow plays it shuffled or in order and remembers which, "
                "apart for albums, which start in order."),
     "Embellish": N_("Plays the album or playlist with new tracks woven in: the top tracks you own by artists that "
                     "its own artists agree on. The arrow chooses how many, and for an album also With Their Hits or "
@@ -713,18 +713,22 @@ class PlayTab(tk.Frame):
         self._close_artists()
 
     def _stack_toggle(self, artist):
-        """+ Add or Remove, said in the console; the box clears for the next name and the list shows what's added."""
+        """
+        + Add or Remove, one line each in the console with how many are stacked, never the whole list again (Ben,
+        23 Nov 2026: restating every artist "looks a bit busy"); the box clears for the next name.
+        """
         import stack
+        n = len(self._stack)
         if artist in self._stack:
             self._stack.remove(artist)
-            self._append_log(t("Removed {artist}.", artist=artist))
+            self._append_log(tn("{artist} taken off the stack, now {count} artist.",
+                                "{artist} taken off the stack, now {count} artists.", n - 1, artist=artist)
+                             if n > 1 else t("{artist} taken off the stack, which is empty now.", artist=artist))
         else:
             self._stack.append(artist)
-            self._append_log(t("Added {artist}. Add more, or click Go.", artist=artist))
-        if len(self._stack) > 1 or (self._stack and artist not in self._stack):   # one added: its line says it
-            self._append_log(t("Stacked: {names}.", names=", ".join(self._stack)))
-        elif not self._stack:
-            self._append_log(t("Nothing stacked now."))
+            self._append_log(t("{artist} added to the stack. Add more, or click Go.", artist=artist) if not n else
+                             tn("{artist} added to the stack, now {count} artist.",
+                                "{artist} added to the stack, now {count} artists.", n + 1, artist=artist))
         self.search_artist.delete(0, "end")
         self._sync_stack_row()
         self.search_artist.entry.focus_set()
@@ -1100,8 +1104,9 @@ class PlayTab(tk.Frame):
 
     def _choose(self, which, code):
         self._close_children()
-        if which == "order":
+        if which == "order":   # remembered, and played at once, as Embellish's arrow runs (Ben, 23 Nov 2026)
             embellish.set_choice("album_order" if embellish.is_album(self._playlist_chosen) else "order", code)
+            self.on_play_playlist(False)
         else:   # an amount from the arrow: this once, the default stays as Settings has it
             self.on_play_playlist(True, amount=code)
 

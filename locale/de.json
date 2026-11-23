@@ -1871,7 +1871,6 @@
   "With Their Hits": "With Their Hits",
   "And Their Hits": "And Their Hits",
   "One of your albums, or a JRiver playlist or smartlist. Click into the box for the five you played here most recently, then your playlists; type part of a name to find an album or playlist, or an artist's name for their albums.": "Eines deiner Alben oder eine JRiver-Playlist oder Smartlist. Klick in das Feld für die fünf, die du hier zuletzt abgespielt hast, dann deine Playlists; tippe einen Teil eines Namens, um ein Album oder eine Playlist zu finden, oder den Namen eines Künstlers für seine Alben.",
-  "Plays the album or playlist as it is. The arrow chooses Play Shuffled or Play Ordered, remembered apart for albums, which start in order.": "Spielt das Album oder die Playlist so ab, wie es ist. Der Pfeil wählt Gemischt abspielen oder Der Reihe nach abspielen, für Alben getrennt gemerkt; die laufen anfangs der Reihe nach.",
   "Plays the album or playlist with new tracks woven in: the top tracks you own by artists that its own artists agree on. The arrow chooses how many, and for an album also With Their Hits or And Their Hits. Shuffle, Deep Cuts and the Moderator are under Settings > Playlists & Albums.": "Spielt das Album oder die Playlist mit eingewobenen neuen Titeln ab: den Top-Titeln, die du besitzt, von Künstlern, auf die sich seine eigenen Künstler einigen. Der Pfeil wählt, wie viele, und bei einem Album auch With Their Hits oder And Their Hits. Mischen, Deep Cuts und der Moderator stehen unter Einstellungen > Playlists & Alben.",
   "Playlists & Albums": "Playlists & Alben",
   "Album or Playlist": "Album oder Playlist",
@@ -1959,10 +1958,6 @@
   "Search: {names}": "Suche: {names}",
   "Plays up to this many songs you own by each artist you added, shuffled with the artists spread out.": "Spielt bis zu so viele deiner Titel von jedem hinzugefügten Künstler, gemischt und mit den Künstlern verteilt.",
   "Go": "Los",
-  "Removed {artist}.": "{artist} entfernt.",
-  "Added {artist}. Add more, or click Go.": "{artist} hinzugefügt. Füge weitere hinzu oder klicke auf Los.",
-  "Stacked: {names}.": "Gesammelt: {names}.",
-  "Nothing stacked now.": "Jetzt ist nichts gesammelt.",
   "each": "je",
   "Added": "Hinzugefügt",
   "{names} and {count} more": "{names} und {count} weitere",
@@ -2022,5 +2017,12 @@
   "Note: {count} tracks ({size}) didn't fit within {limit} GB, so they were left out.": "Hinweis: {count} Titel ({size}) passten nicht in {limit} GB und wurden weggelassen.",
   "Note: {count} track ({size}) didn't fit in the phone's free space, so it was left out.": "Hinweis: {count} Titel ({size}) passte nicht in den freien Speicher des Handys und wurde weggelassen.",
   "Note: {count} tracks ({size}) didn't fit in the phone's free space, so they were left out.": "Hinweis: {count} Titel ({size}) passten nicht in den freien Speicher des Handys und wurden weggelassen.",
-  "Already on {phone}: {count} tracks in {folder}/{name}, with {name}.m3u8.": "Schon auf {phone}: {count} Titel in {folder}/{name}, mit {name}.m3u8."
+  "Already on {phone}: {count} tracks in {folder}/{name}, with {name}.m3u8.": "Schon auf {phone}: {count} Titel in {folder}/{name}, mit {name}.m3u8.",
+  "{artist} added to the stack. Add more, or click Go.": "{artist} gesammelt. Füge weitere hinzu oder klicke auf Los.",
+  "{artist} added to the stack, now {count} artist.": "{artist} gesammelt, jetzt {count} Künstler.",
+  "{artist} added to the stack, now {count} artists.": "{artist} gesammelt, jetzt {count} Künstler.",
+  "{artist} taken off the stack, now {count} artist.": "{artist} herausgenommen, jetzt {count} Künstler.",
+  "{artist} taken off the stack, now {count} artists.": "{artist} herausgenommen, jetzt {count} Künstler.",
+  "{artist} taken off the stack, which is empty now.": "{artist} herausgenommen, jetzt ist nichts mehr gesammelt.",
+  "Plays the album or playlist as it is. The arrow plays it shuffled or in order and remembers which, apart for albums, which start in order.": "Spielt das Album oder die Playlist so ab, wie es ist. Der Pfeil spielt gemischt oder der Reihe nach und merkt sich, was du gewählt hast, für Alben getrennt; die laufen anfangs der Reihe nach."
 }

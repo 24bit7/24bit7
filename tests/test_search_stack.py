@@ -25,7 +25,7 @@ def test_add_shows_go_and_go_plays_and_clears(app, ui):
     p._stack_toggle(name)
     ui.pump(0.4)
     assert p._stack == [name] and p.search_artist.get() == ""
-    assert f"Added {name}. Add more, or click Go." in p.log.get("1.0", "end")
+    assert f"{name} added to the stack. Add more, or click Go." in p.log.get("1.0", "end")
     assert p.stack_row.winfo_ismapped(), "Go shows once someone is added"
     # on the same row: after the Track box, clear of Output
     track_right = p.search_track.winfo_rootx() + p.search_track.winfo_width()
@@ -51,19 +51,27 @@ def test_add_shows_go_and_go_plays_and_clears(app, ui):
     assert not ui.errors, ui.errors[0]
 
 
-def test_remove_takes_go_away_again(app, ui):
+def test_one_line_each_with_the_count_and_remove_takes_go_away_again(app, ui):
+    """Ben, 23 Nov 2026: "Seether added to the stack, now 11 artists", never every artist restated each time."""
     import library
     library.load()
     p = ui.play
     p._end_greeting()   # while the greeting types, lines wait for it
     p.seed_nb.select(p.search_tab)
     ui.pump(0.3)
-    name = library.artist_list()[0]
-    p._stack_toggle(name)
+    first, second = library.artist_list()[:2]
+    p._stack_toggle(first)
+    p._stack_toggle(second)
     ui.pump(0.3)
-    p._stack_toggle(name)
+    log = p.log.get("1.0", "end")
+    assert f"{second} added to the stack, now 2 artists." in log, log
+    assert log.count(first) == 1, "the first artist isn't said again when the second is added"
+    p._stack_toggle(second)
+    ui.pump(0.2)
+    assert f"{second} taken off the stack, now 1 artist." in p.log.get("1.0", "end")
+    p._stack_toggle(first)
     ui.pump(0.3)
     assert p._stack == [] and not p.stack_row.winfo_ismapped()
-    assert "Nothing stacked now." in p.log.get("1.0", "end")
+    assert f"{first} taken off the stack, which is empty now." in p.log.get("1.0", "end")
     p._close_artists()
     assert not ui.errors, ui.errors[0]
