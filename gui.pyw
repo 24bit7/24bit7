@@ -246,6 +246,163 @@ class ChangeZonePrompt(tabs.PromptWindow):
         self.destroy()
 
 
+class SavePlaylistPrompt(tabs.NamePrompt):
+    """
+    Save Playlist's pop-up: the name, as always, and under it Copy Tracks To (Ben, 23 Nov 2026), off each time. Ticked,
+    its lines show: Device (a drop-down of the phones plugged in, by the names you gave them, with Rename and the free
+    space), Folder (Music to start), Limit (GB, blank for none, with the playlist's size) and Clear Music First in amber;
+    OK reads Save and Copy. With no phone plugged in the tick is greyed and a line says why. Device, folder, limit and
+    Clear First are remembered per phone. .copy is None, or what to copy to.
+    """
+
+    def __init__(self, parent, title, prompt, initial, size):
+        self._size = size   # the playlist's tracks, in bytes
+        self.copy = None
+        super().__init__(parent, title, prompt, initial)
+
+    def _extra(self, inner, bg, fg):
+        import phone
+        px = self._px
+        self._phones = phone.devices()
+        self.copy_var = tk.BooleanVar(value=False)
+        tick = ttk.Checkbutton(inner, text=t("Copy Tracks To"), variable=self.copy_var, command=self._copy_toggled)
+        tick.pack(anchor="w", pady=(px(10), 0))
+        if not self._phones:
+            tick.state(["disabled"])
+            tk.Label(inner, text=t("Plug in a phone, unlocked and set to File Transfer, to copy to it."),
+                     font=("Segoe UI", 9), bg=bg, fg=PALETTE["help_fg"]).pack(anchor="w", padx=(px(22), 0))
+        self.copy_tick = tick
+        lines = self.copy_lines = tk.Frame(inner, bg=bg)   # hidden until ticked
+        grid = dict(sticky="w", pady=px(3))
+        tk.Label(lines, text=t("Device"), font=("Segoe UI", 10), bg=bg, fg=fg).grid(row=0, column=0, **grid)
+        self.device_var = tk.StringVar()
+        self.device_cb = ttk.Combobox(lines, textvariable=self.device_var, state="readonly", width=22)
+        self.device_cb.grid(row=0, column=1, **grid)
+        self.device_cb.bind("<<ComboboxSelected>>", lambda e: self._device_chosen())
+        rename = tk.Label(lines, text=t("Rename"), font=("Segoe UI", 9, "underline"), bg=bg,
+                          fg=PALETTE["button_fg"], cursor="hand2")
+        rename.grid(row=0, column=2, sticky="w", padx=(px(8), 0))
+        rename.bind("<Button-1>", lambda e: self._rename())
+        self.free_label = tk.Label(lines, text="", font=("Segoe UI", 9), bg=bg, fg=PALETTE["help_fg"])
+        self.free_label.grid(row=0, column=3, sticky="w", padx=(px(8), 0))
+        tk.Label(lines, text=t("Folder"), font=("Segoe UI", 10), bg=bg, fg=fg).grid(row=1, column=0, **grid)
+        self.folder_box = RoundedEntry(lines, width=24, font=("Segoe UI", 10))
+        self.folder_box.grid(row=1, column=1, columnspan=3, **grid)
+        self.folder_box.entry.bind("<KeyRelease>", lambda e: self._sync_clear_text(), add="+")
+        tk.Label(lines, text=t("Limit"), font=("Segoe UI", 10), bg=bg, fg=fg).grid(row=2, column=0, **grid)
+        limit = tk.Frame(lines, bg=bg)
+        limit.grid(row=2, column=1, columnspan=3, **grid)
+        self.limit_box = RoundedEntry(limit, width=5, font=("Segoe UI", 10))
+        self.limit_box.pack(side="left")
+        import phone as ph
+        tk.Label(limit, text=t("GB (blank for none; this playlist is {size})", size=ph.size_text(self._size)),
+                 font=("Segoe UI", 9), bg=bg, fg=PALETTE["help_fg"]).pack(side="left", padx=(px(6), 0))
+        self.clear_var = tk.BooleanVar(value=False)
+        style = "CopyClear.TCheckbutton"
+        try:
+            ttk.Style(self).configure(style, foreground=PALETTE["amber"])
+        except tk.TclError:
+            style = "TCheckbutton"
+        self.clear_tick = ttk.Checkbutton(lines, text="", variable=self.clear_var, style=style)
+        self.clear_tick.grid(row=3, column=0, columnspan=4, sticky="w", pady=(px(6), 0))
+        lines.columnconfigure(0, minsize=px(70))
+        self._ids = []
+
+    def _copy_toggled(self):
+        import phone
+        if not self.copy_var.get():
+            self.copy_lines.pack_forget()
+            self.set_ok_text(t("OK"))
+            self._refit()
+            return
+        self._ids = [i for i, _ in self._phones]
+        names = [phone.settings(i, model)["name"] for i, model in self._phones]
+        self.device_cb.config(values=names)
+        last = phone.last_device()
+        self.device_cb.current(self._ids.index(last) if last in self._ids else 0)
+        self.copy_lines.pack(anchor="w", padx=(self._px(22), 0), before=self.ok_button.master)
+        self._device_chosen()
+        self.set_ok_text(t("Save and Copy"))
+        self._refit()
+
+    def _refit(self):
+        """Grown or shrunk to what it holds now, where it is, with its rounded corners redrawn at the new size
+        (Windows 10 clips the window to a region set when it first showed: the first shot cut the lines off)."""
+        self.update_idletasks()
+        self.geometry(f"{self.winfo_reqwidth()}x{self.winfo_reqheight()}+{self.winfo_x()}+{self.winfo_y()}")
+        self.update_idletasks()
+        self.corners = tabs.round_corners(self, self._px(10))
+
+    def _device(self):
+        i = max(0, self.device_cb.current())
+        return self._phones[i]
+
+    def _device_chosen(self):
+        """The phone's remembered choices, and its free space read from it."""
+        import phone
+        device_id, model = self._device()
+        s = phone.settings(device_id, model)
+        self.folder_box.delete(0, "end")
+        self.folder_box.insert(0, s["folder"])
+        self.limit_box.delete(0, "end")
+        if s["limit_gb"]:
+            self.limit_box.insert(0, f"{s['limit_gb']:g}")
+        self.clear_var.set(s["clear"])
+        self._sync_clear_text()
+        self.free_label.config(text="")
+        try:
+            p = phone.WpdPhone(device_id, s["name"])
+            try:
+                free, cap = p.free(), p.capacity()
+            finally:
+                p.close()
+            self.free_label.config(text=t("{free} of {size} GB free", free=f"{free / phone.GB:.0f}",
+                                          size=f"{cap / phone.GB:.0f}"))
+        except Exception as e:
+            self.free_label.config(text=t("Can't read it: is it unlocked?"))
+            engine.debug(f"Copy Tracks To: {e}")
+
+    def _sync_clear_text(self):
+        folder = self.folder_box.get().strip() or "Music"
+        self.clear_tick.config(text=t("Clear {folder} First", folder=folder))
+
+    def _rename(self):
+        import phone
+        device_id, model = self._device()
+        name = tabs.ask_name(self, t("Rename"), t("A name for this phone, so you can tell it from others:"),
+                             initial=phone.settings(device_id, model)["name"])
+        if name and name.strip():
+            phone.remember(device_id, name=name.strip())
+            names = list(self.device_cb.cget("values"))
+            names[self._ids.index(device_id)] = name.strip()
+            self.device_cb.config(values=names)
+            self.device_var.set(name.strip())
+
+    def ok(self):
+        if self.copy_var.get() and self._phones:
+            import phone
+            device_id, model = self._device()
+            try:
+                limit = float(self.limit_box.get().strip().replace(",", ".") or 0)
+            except ValueError:
+                limit = 0.0
+            self.copy = {"device": device_id, "name": phone.settings(device_id, model)["name"],
+                         "folder": self.folder_box.get().strip().strip("/\\") or "Music", "limit_gb": max(0.0, limit),
+                         "clear": bool(self.clear_var.get())}
+        super().ok()
+
+
+def ask_save(parent, title, prompt, initial, size):
+    """Save Playlist's pop-up, waited on: (the name or None, what to copy to the phone or None)."""
+    win = SavePlaylistPrompt(parent, title, prompt, initial, size)
+    try:
+        win.grab_set()
+    except tk.TclError:
+        pass
+    win.wait_window()
+    return win.result, win.copy
+
+
 class PlayTab(tk.Frame):
     def __init__(self, master, root):
         super().__init__(master)
@@ -1196,11 +1353,12 @@ class PlayTab(tk.Frame):
             messagebox.showinfo(t("Save Playlist"), t("Playing Now in {zone} is empty, so there's nothing to save.",
                                                       zone=label), parent=self)
             return
-        from tabs import ask_name
-        name = ask_name(self, t("Save Playlist"),
-                        t("Save what's in Playing Now in {zone} ({tracks}) as a JRiver playlist called:", zone=label,
-                          tracks=tn("{count} track", "{count} tracks", len(keys))),
-                        initial=getattr(self, "_save_default", "") or "")
+        import phone
+        tracks = phone.tracks_for(keys)   # for Copy Tracks To: the files, and the playlist's size
+        name, copy = ask_save(self, t("Save Playlist"),
+                              t("Save what's in Playing Now in {zone} ({tracks}) as a JRiver playlist called:",
+                                zone=label, tracks=tn("{count} track", "{count} tracks", len(keys))),
+                              getattr(self, "_save_default", "") or "", sum(tr["size"] for tr in tracks))
         name = (name or "").strip()
         if not name:
             return
@@ -1222,6 +1380,57 @@ class PlayTab(tk.Frame):
             return
         self._append_log(t('Saved {tracks} as the JRiver playlist "{name}".',
                            tracks=tn("{count} track", "{count} tracks", len(keys)), name=name))
+        if copy:
+            self._copy_to_phone(copy, name, tracks)
+
+    def _copy_to_phone(self, copy, name, tracks):
+        """
+        Copy Tracks To, after the save (Ben, 23 Nov 2026): Clear First asked once with the count, then the copy on a
+        thread, saying its progress in the console. The phone's choices are remembered for next time.
+        """
+        import phone
+        phone.remember(copy["device"], name=copy["name"], folder=copy["folder"], limit_gb=copy["limit_gb"],
+                       clear=copy["clear"])
+        if not tracks:
+            self._append_log(t("Problem: none of the tracks' files could be found, so nothing was copied."))
+            return
+        clear = copy["clear"]
+        if clear:
+            try:
+                p = phone.WpdPhone(copy["device"], copy["name"])
+                try:
+                    folders, files = phone.clear_count(p, copy["folder"])
+                finally:
+                    p.close()
+            except Exception as e:
+                self._append_log(t("Problem: couldn't reach {phone} ({e}). Is it unlocked and set to File Transfer?",
+                                   phone=copy["name"], e=e))
+                return
+            if folders or files:
+                ask = t("Clear {folder} on {phone} first? It takes out {folders} and {files} there (dot folders such "
+                        "as .thumbnails stay). This can't be undone.", folder=copy["folder"], phone=copy["name"],
+                        folders=tn("{count} folder", "{count} folders", folders),
+                        files=tn("{count} file", "{count} files", files))
+                if not messagebox.askyesno(t("Copy Tracks To"), ask, parent=self):
+                    clear = False
+        say = self.log_queue.put
+        say(t("Copying to {phone}...", phone=copy["name"]))
+
+        def work():
+            phone.com_begin()   # each thread that talks to a phone needs COM of its own
+            try:
+                p = phone.WpdPhone(copy["device"], copy["name"])
+                try:
+                    phone.copy_playlist(p, copy["folder"], name, tracks, limit_gb=copy["limit_gb"], clear=clear,
+                                        say=say)
+                finally:
+                    p.close()
+            except Exception as e:
+                say(t("Problem: the copy to {phone} stopped ({e}). Is it still plugged in and unlocked?",
+                      phone=copy["name"], e=e))
+            finally:
+                phone.com_end()
+        threading.Thread(target=work, daemon=True, name="copy-to-phone").start()
 
     def _fill_zone_list(self):
         engine.refresh_settings_if_changed()

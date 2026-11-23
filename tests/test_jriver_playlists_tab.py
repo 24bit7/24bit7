@@ -66,13 +66,12 @@ def test_play_and_embellish_then_save_playlist(app, ui):
     assert all(b._state == "disabled" for b in p.play_buttons), "still on the tab after the build"
     assert p._save_shown and p.save_button.winfo_manager() == "place", "Save Playlist after a build to a zone"
     assert p._save_default == "Road Trip (Embellished)"
-    import tabs
-    real = tabs.ask_name
-    tabs.ask_name = lambda parent, title, prompt, initial="": initial
+    real = ui.gui.ask_save
+    ui.gui.ask_save = lambda parent, title, prompt, initial, size: (initial, None)
     try:
         p.save_button._command()
     finally:
-        tabs.ask_name = real
+        ui.gui.ask_save = real
     ui.pump(0.3)
     saved = next(x for x in j.playlists if x["Name"] == "Road Trip (Embellished)")
     assert saved["keys"] == z, "the zone's Playing Now, as it is"

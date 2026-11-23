@@ -7,3 +7,4 @@ Pillow
 numpy
 sounddevice
 websockets
+comtypes; sys_platform == "win32"

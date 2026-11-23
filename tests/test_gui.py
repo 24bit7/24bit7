@@ -48,6 +48,7 @@ def ui(app, monkeypatch):
         v.update_device(device, name=name, zone=zone)
 
     gui = load_gui(app.folder)
+    monkeypatch.setattr(gui, "ask_save", lambda *a, **k: (None, None))   # Save Playlist's pop-up: Cancel
     errors = []
     root = tk.Tk()
     root.report_callback_exception = lambda *exc: errors.append(exc)

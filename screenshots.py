@@ -45,6 +45,7 @@ SHOTS = [
     ("play", ["Play", "Now Playing"], ["gui.pyw", "mix_gui.py", "tabs.py"], "more_closed"),
     ("play_more_options", ["Play", "Now Playing"], ["gui.pyw", "mix_gui.py", "tabs.py"], "more_open"),
     ("play_change_zone", ["Play", "Now Playing"], ["gui.pyw", "voice.py"], "change_zone"),
+    ("save_playlist_copy", ["Play", "Now Playing"], ["gui.pyw", "phone.py", "tabs.py"], "copy_to_phone"),
     ("play_search", ["Play", "Search"], ["gui.pyw", "stack.py", "tabs.py"], "search_stack"),
     ("play_jriver_playlists", ["Play", "Playlists & Albums"], ["gui.pyw", "embellish.py", "tabs.py"], "playlists_list"),
     ("play_radio", ["Play", "Now Playing"], ["gui.pyw", "radio.py", "tabs.py"], "radio_list"),
@@ -1003,6 +1004,33 @@ def main():
             elif action in ("ai_create", "ai_steer"):
                 play._show_more(False, save=False)
                 dialog = open_ai_window(gui, root, play, "steer" if action == "ai_steer" else "create")
+            elif action == "copy_to_phone":   # Save Playlist with Copy Tracks To ticked, a stand-in phone (1.40.0)
+                import phone
+
+                class DemoPhone:
+                    name = "Jo's Phone"
+
+                    def free(self):
+                        return 57 * phone.GB
+
+                    def capacity(self):
+                        return 117 * phone.GB
+
+                    def close(self):
+                        pass
+                demo_id = "\\\\?\\usb#vid_18d1&pid_4ee1#demo#{6ac27878}"
+                phone.devices = lambda: [(demo_id, "Pixel 9a")]
+                phone.WpdPhone = lambda device_id, name: DemoPhone()
+                phone.remember(demo_id, name="Jo's Phone", folder="Music", limit_gb=32, clear=True)
+                play._show_more(False, save=False)
+                dialog = gui.SavePlaylistPrompt(
+                    play, gui.t("Save Playlist"),
+                    gui.t("Save what's in Playing Now in {zone} ({tracks}) as a JRiver playlist called:",
+                          zone="Speakers", tracks=gui.tn("{count} track", "{count} tracks", 30)),
+                    "Road Trip (Embellished)", int(2.1 * phone.GB))
+                settle(root, 0.3)
+                dialog.copy_var.set(True)
+                dialog._copy_toggled()
             elif action == "change_zone":   # Change Zone's pop-up from the Speakers, Multiroom among the choices (1.40.0)
                 import voice
                 play._show_more(False, save=False)
