@@ -804,7 +804,10 @@ class FlatButton(tk.Frame):
     """
 
     def __init__(self, master, text="", command=None, width=None, height=None, quiet=False,
-                 accent=None, text_fg=None, arrow=False, arrow_command=None, **kw):
+                 accent=None, text_fg=None, arrow=False, arrow_command=None, fits=(), **kw):
+        """fits: every text the button will show (Stop's other face is Clear Playing Now), so it's never narrower
+        than the longest in the language in use (23 Nov 2026: German ran over the Now Playing row's edges)."""
+        self._fits = tuple(fits) + ((text,) if fits else ())
         back = master.cget("bg")
         super().__init__(master, bg=back, **kw)
         self._arrow_command = arrow_command
@@ -855,6 +858,8 @@ class FlatButton(tk.Frame):
         px, line = self._px, self._px(1)
         if self._chars:
             text_w = self._chars * self._font.measure("0")
+            if self._fits:
+                text_w = max(text_w, max(self._font.measure(x) for x in self._fits) + 2 * px(8))
         else:
             text_w = max(self._font.measure(part) for part in (text or " ").split("\n")) + 2 * px(8)
         lines = self._lines or max(1, (text or "").count("\n") + 1)

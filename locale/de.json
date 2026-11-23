@@ -1971,5 +1971,22 @@
   "Search: {names}, up to {count} each.": "Suche: {names}, bis zu {count} je Künstler.",
   "Problem: none of their top tracks are {where}.": "Problem: Keiner ihrer Top-Titel ist {where}.",
   "{artist}: {count} track.": "{artist}: {count} Titel.",
-  "{artist}: {count} tracks.": "{artist}: {count} Titel."
+  "{artist}: {count} tracks.": "{artist}: {count} Titel.",
+  "Moves what this zone is playing to another zone, or to Multiroom: this track from the top, or from the next track. Greyed while the zone is stopped.": "Verschiebt, was in dieser Zone läuft, in eine andere Zone oder auf Multiroom: diesen Titel von vorn oder ab dem nächsten Titel. Ausgegraut, solange die Zone gestoppt ist.",
+  "Move": "Verschieben",
+  "Move From {zone}": "Verschieben aus {zone}",
+  "Change Zone": "Zone wechseln",
+  "There's no other zone to move to.": "Es gibt keine andere Zone, in die verschoben werden kann.",
+  "Restart This Track": "Diesen Titel neu starten",
+  "From the Next Track": "Ab dem nächsten Titel",
+  "To": "Nach",
+  "Just the {zone} now.": "Jetzt nur noch {zone}.",
+  "Multiroom: the {follower} join {leader}.": "Multiroom: {follower} schließen sich {leader} an.",
+  "Nothing's playing in {zone}, so there's nothing to move.": "In {zone} läuft nichts, also gibt es nichts zu verschieben.",
+  "After this track in {source}, the next one plays in {target}.": "Nach diesem Titel in {source} läuft der nächste in {target}.",
+  "Problem: JRiver didn't move the music.": "Problem: JRiver hat die Musik nicht verschoben.",
+  "Moved to Multiroom: {leader} leads, the {follower} follow.": "Auf Multiroom verschoben: {leader} führt, {follower} folgen.",
+  "Moved from {source} to {target}.": "Von {source} nach {target} verschoben.",
+  "This is the last track in {zone}, so nothing follows it to move.": "Das ist der letzte Titel in {zone}, danach kommt nichts, das verschoben werden kann.",
+  "{zone} stopped before the track ended, so nothing moved.": "{zone} hat vor dem Ende des Titels gestoppt, also wurde nichts verschoben."
 }

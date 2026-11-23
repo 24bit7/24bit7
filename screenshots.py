@@ -44,6 +44,7 @@ SCALE = 1.0   # Windows' display scaling while the shots are taken (set by build
 SHOTS = [
     ("play", ["Play", "Now Playing"], ["gui.pyw", "mix_gui.py", "tabs.py"], "more_closed"),
     ("play_more_options", ["Play", "Now Playing"], ["gui.pyw", "mix_gui.py", "tabs.py"], "more_open"),
+    ("play_change_zone", ["Play", "Now Playing"], ["gui.pyw", "voice.py"], "change_zone"),
     ("play_search", ["Play", "Search"], ["gui.pyw", "stack.py", "tabs.py"], "search_stack"),
     ("play_jriver_playlists", ["Play", "Playlists & Albums"], ["gui.pyw", "embellish.py", "tabs.py"], "playlists_list"),
     ("play_radio", ["Play", "Now Playing"], ["gui.pyw", "radio.py", "tabs.py"], "radio_list"),
@@ -1002,6 +1003,11 @@ def main():
             elif action in ("ai_create", "ai_steer"):
                 play._show_more(False, save=False)
                 dialog = open_ai_window(gui, root, play, "steer" if action == "ai_steer" else "create")
+            elif action == "change_zone":   # Change Zone's pop-up from the Speakers, Multiroom among the choices (1.40.0)
+                import voice
+                play._show_more(False, save=False)
+                zones = [z for z in gui.engine.listed_zone_names() if z != "Speakers"] or ["Kitchen", "Sonos"]
+                dialog = gui.ChangeZonePrompt(play, "Speakers", zones + [voice.MULTIROOM], True)
             settle(root, 1.0 if name in ("settings_jriver_playlists", "play_review") or dialog else 0.5)
             if popup is not None:   # a drop-down list, kept above the window while it's grabbed
                 popup.attributes("-topmost", True)

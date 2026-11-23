@@ -133,6 +133,8 @@ PLAY_NOTES = {
     "Stop": N_("Stops this zone; in multiroom, both rooms. Once the zone is stopped the button reads Clear Playing "
                "Now, in red, and one click empties the zone's list."),
     "Skip Track": N_("The next track in this zone's list. Greyed while the zone is stopped or nothing follows."),
+    "Change Zone": N_("Moves what this zone is playing to another zone, or to Multiroom: this track from the top, or "
+                      "from the next track. Greyed while the zone is stopped."),
     "Help": N_("Hover notes for the Play tab: on, hovering over anything here explains it; off, no pop-ups."),
     "Album or Playlist": N_("One of your albums, or a JRiver playlist or smartlist. Click into the box for the five "
                             "you played here most recently, then your playlists; type part of a name to find an "
@@ -197,6 +199,51 @@ class DropPill(tk.Canvas):
             self.create_line(r, h, w - r, h, fill=c, width=line, dash=dash)
             fg = c
         self.create_text(self._pw / 2, self._ph / 2, text=self._text, font=self._font, fill=fg)
+
+
+class ChangeZonePrompt(tabs.PromptWindow):
+    """
+    Change Zone's pop-up (Ben, 23 Nov 2026, as drawn): "Move From the Speakers", To (the other zones, then
+    Multiroom while it's set up) and When (Restart This Track, or From the Next Track). From the leader, Multiroom
+    needs no When (the follower joins mid-track), so When greys for it; while Multiroom runs there's no When at all.
+    .result is (target, when), or None for Cancel.
+    """
+
+    ok_text = N_("Move")
+
+    def __init__(self, parent, source, targets, needs_when, joins=False):
+        self._targets, self._needs_when, self._joins = targets, needs_when, joins
+        super().__init__(parent, t("Move From {zone}", zone=source))
+
+    def _body(self, inner, bg, fg):
+        px = self._px
+        self.to_var = tk.StringVar(value=self._targets[0])
+        self.when_var = tk.StringVar(value=voice.RESTART)
+        tk.Label(inner, text=t("To"), font=("Segoe UI", 10, "bold"), bg=bg, fg=fg).pack(anchor="w")
+        for z in self._targets:
+            ttk.Radiobutton(inner, text=MULTIROOM_LABEL if z == voice.MULTIROOM else z, value=z, variable=self.to_var,
+                            command=self._sync_when).pack(anchor="w", padx=(px(10), 0), pady=px(1))
+        self.when_buttons = []
+        if self._needs_when:
+            tk.Label(inner, text=t("When"), font=("Segoe UI", 10, "bold"), bg=bg, fg=fg).pack(anchor="w",
+                                                                                            pady=(px(10), 0))
+            for value, text in ((voice.RESTART, t("Restart This Track")), (voice.NEXT, t("From the Next Track"))):
+                b = ttk.Radiobutton(inner, text=text, value=value, variable=self.when_var)
+                b.pack(anchor="w", padx=(px(10), 0), pady=px(1))
+                self.when_buttons.append(b)
+        self._sync_when()
+
+    def _sync_when(self):
+        """Multiroom from the leader: the follower joins mid-track, so there's no When to choose."""
+        off = self._joins and self.to_var.get() == voice.MULTIROOM
+        for b in self.when_buttons:
+            b.state(["disabled"] if off else ["!disabled"])
+
+    def ok(self):
+        target = self.to_var.get()
+        when = self.when_var.get() if self._needs_when and not (self._joins and target == voice.MULTIROOM) else None
+        self.result = (target, when)
+        self.destroy()
 
 
 class PlayTab(tk.Frame):
@@ -285,12 +332,17 @@ class PlayTab(tk.Frame):
         # characters, and packed after it the buttons were clipped off the row.
         self._np_controls = tk.Frame(frame)
         self._np_controls.pack(side="right", padx=(12, 0))   # _place_output adds the room Output takes
+        # wide enough for their words in any language (German ran over the edges, 23 Nov 2026)
         self.stop_button = FlatButton(self._np_controls, text=t("Stop"), command=self._stop_clicked, width=16,
-                                      height=1, quiet=True)
+                                      height=1, quiet=True, fits=(t("Clear Playing Now"),))
         self.stop_button.pack(side="left")
-        self.skip_button = FlatButton(self._np_controls, text=t("Skip Track"), command=self._skip_clicked, width=10,
-                                      height=1, quiet=True)
+        self.skip_button = FlatButton(self._np_controls, text=t("Skip Track"), command=self._skip_clicked,
+                                      width=10, height=1, quiet=True, fits=(t("Skip Track"),))
         self.skip_button.pack(side="left", padx=(8, 0))
+        # Change Zone (Ben, 23 Nov 2026): what this zone plays, moved to another zone or Multiroom
+        self.change_button = FlatButton(self._np_controls, text=t("Change Zone"), command=self._change_zone_clicked,
+                                        width=12, height=1, quiet=True, fits=(t("Change Zone"),))
+        self.change_button.pack(side="left", padx=(8, 0))
         self._np_stopped = None   # what the buttons last read: None before the first answer
 
         info = tk.Frame(frame)
@@ -1208,6 +1260,46 @@ class PlayTab(tk.Frame):
         else:
             self.stop_button.config(text=t("Stop"), armed=PALETTE["amber"], command=self._stop_clicked, state="normal")
         self.skip_button.config(state="normal" if not stopped and has_next else "disabled")
+        self.change_button.config(state="disabled" if stopped else "normal")
+
+    def _change_zone_clicked(self):
+        """
+        Change Zone's pop-up, "Move From the Speakers": To and When. The move runs on a thread (From the Next Track
+        waits for the track to end), says its lines in the console, and the row then shows the zone the music went to.
+        """
+        source = self._zone_name()
+        if not source:
+            return
+        engine.refresh_settings_if_changed()
+        targets, needs_when = voice.change_targets(source)
+        if not targets:
+            self.report(t("There's no other zone to move to."))
+            return
+        running = needs_when is False
+        win = ChangeZonePrompt(self, MULTIROOM_LABEL if running else source, targets, needs_when,
+                               joins=source == engine.MULTIROOM_LEADER)
+        try:
+            win.grab_set()
+        except tk.TclError:
+            pass
+        win.wait_window()
+        if not win.result:
+            return
+        target, when = win.result
+        say = lambda line: self.log_queue.put(line)
+
+        def work():
+            try:
+                moved = voice.change_zone(source, target, when, say)
+            except Exception as e:
+                say(t("Problem: JRiver didn't answer ({e}).", e=e))
+                moved = False
+            if moved:
+                shown = MULTIROOM_LABEL if target == voice.MULTIROOM else target
+                self.after(0, lambda: (self.zone_var.set(shown), self._on_zone_changed()))
+            else:
+                self.after(0, self._update_now_playing)
+        threading.Thread(target=work, daemon=True, name="change-zone").start()
 
     def _zone_action(self, call, line, settle=False):
         """
@@ -1479,6 +1571,7 @@ class PlayTab(tk.Frame):
                              (self.zone_cb, "Zone"), (self.seed_cb, "Seed"), (self.behaviour_cb, "Mode"),
                              (self.add_playlist_button, "+ Add JRiver Playlist"), (self.help_cb, "Help"),
                              (self.top_up_button, "Top-Up"), (self.stop_button, "Stop"), (self.skip_button, "Skip Track"),
+                             (self.change_button, "Change Zone"),
                              (self.override_cbs["deep_cuts"], "Deep Cuts"), (self.override_cbs["nonstop"], "Non-stop")):
             Tooltip(widget, t(PLAY_NOTES[name]), when=on, wrap=wrap)
         Tooltip(self.override_cbs["moderator"], t(PLAY_NOTES["Moderator"]), when=lambda: on() and engine.ai_enabled(),

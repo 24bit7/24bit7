@@ -796,10 +796,11 @@ def _handover(sid, tid, target, level):
         _leave(sid, tid)
 
 
-def _move(source, target):
+def _move(source, target, said=True):
     """
     Moves source's Playing Now to target at the same track and point; source stops. Non-stop follows.
     Onto a DLNA zone (the Sonos) it hands over: see _handover, which carries on in the background.
+    said: the [Voice] line (the Now Playing row's Change Zone says its own).
     """
     sid, tid = engine.zone_id(source), engine.zone_id(target)
     items = _info_items(sid)
@@ -822,7 +823,8 @@ def _move(source, target):
             threading.Thread(target=job, daemon=True, name="switch-handover").start()
         else:
             job()
-        print(t("[Voice] Switched from {source} to {target}", source=source, target=target))
+        if said:
+            print(t("[Voice] Switched from {source} to {target}", source=source, target=target))
         return True
     if not saved_playlists._send(keys, tid):
         return False
@@ -833,7 +835,139 @@ def _move(source, target):
     if paused:
         _mcws("Playback/Pause", State=1, Zone=tid)
     _leave(sid, tid)
-    print(t("[Voice] Switched from {source} to {target}", source=source, target=target))
+    if said:
+        print(t("[Voice] Switched from {source} to {target}", source=source, target=target))
+    return True
+
+
+# --- Change Zone on the Now Playing row (Ben, 23 Nov 2026) ------------------------------------------------
+# A pop-up "Move From the Speakers": To (the other zones, and Multiroom while it's set up) and When (Restart This
+# Track, or From the Next Track). Restart: the zone stops now and the other starts this track from the top. Next
+# track: the zone finishes this track, stops, and the other starts the next one. To Multiroom the leader plays
+# and the follower joins it, so the leader is always playing first. From the leader, Multiroom is the follower
+# joining mid-track, as by voice; while Multiroom runs, the choices are just the leader or just the follower.
+
+MULTIROOM = "Multiroom"   # Change Zone's To for the feature, not a JRiver zone
+RESTART, NEXT = "restart", "next"
+NEXT_EDGE_MS = 200        # this close to the track's end counts as its end
+NEXT_SLEEP_MAX = 5.0      # the longest sleep between reads while a track plays out
+NEXT_POLL = 0.1           # reads in the last second and a half
+NEXT_GRACE = 60           # seconds past the track's end before a waiting move gives up
+NEXT_READS_MIN = 3        # reads it always makes, whatever the clock says
+_move_turn = [0]   # each Change Zone takes the next number; a From the Next Track move still waiting gives way
+
+
+def multiroom_following():
+    return bool(_multiroom and engine.MULTIROOM_ENABLED and _multiroom["following"]())
+
+
+def change_targets(source):
+    """
+    (targets, needs_when) for the pop-up. While Multiroom runs (the source is the leader and the follower follows):
+    just the leader, or just the follower, moved mid-track. Otherwise every other zone, then Multiroom while it's
+    set up; Multiroom from the leader needs no When, as the follower joins mid-track.
+    """
+    leader, follower = engine.MULTIROOM_LEADER, engine.MULTIROOM_FOLLOWER
+    if engine.MULTIROOM_ENABLED and source == leader and multiroom_following():
+        return [leader, follower], False
+    zones = [z for z in engine.listed_zone_names() if z != source]
+    if engine.MULTIROOM_ENABLED and _multiroom is not None and leader and follower:
+        zones.append(MULTIROOM)
+    return zones, True
+
+
+def _restart_on(sid, tid, pos):
+    """The source stops (Non-stop going with the music) and the target plays its Playing Now from track pos."""
+    keys = [r["Key"] for r in engine.playing_now_rows(sid) if r.get("Key")]
+    if not keys or pos >= len(keys):
+        return False
+    _leave(sid, tid)
+    if not saved_playlists._send(keys, tid):
+        return False
+    if pos > 0:
+        _mcws("Playback/PlayByIndex", Index=pos, Zone=tid)
+    return True
+
+
+def _wait_track_end(sid, turn):
+    """
+    Until the source's track ends: the index the next track has, or None if it stopped (or another Change Zone
+    came along) first. It sleeps while there's time to spare, then reads every tenth of a second near the end.
+    """
+    items = _info_items(sid)
+    pos = int(items.get("PlayingNowPosition") or 0)
+    # a deadline, so a clock that never moves (JRiver hung mid-track) can't keep it waiting for ever
+    deadline = time.time() + (int(float(items.get("DurationMS") or 0)) - _ms(items)) / 1000 + NEXT_GRACE
+    reads = 0
+    while _move_turn[0] == turn and (time.time() < deadline or reads < NEXT_READS_MIN):
+        reads += 1
+        if items.get("State") == "0":
+            return None
+        now = int(items.get("PlayingNowPosition") or 0)
+        if now != pos:
+            return now   # the next one started a moment ago: it's the one that moves
+        left = int(float(items.get("DurationMS") or 0)) - _ms(items)
+        if left <= NEXT_EDGE_MS:
+            return pos + 1
+        time.sleep(NEXT_POLL if left < 1500 else min(NEXT_SLEEP_MAX, (left - 1500) / 1000))
+        items = _info_items(sid)
+    return None
+
+
+def change_zone(source, target, when=RESTART, say=print):
+    """
+    The Now Playing row's Change Zone: moves what source plays to target (a zone, or MULTIROOM). Blocks while a
+    From the Next Track move waits for the track to end, so the app runs it on a thread. True once it's moved.
+    """
+    engine.refresh_settings_if_changed()
+    _move_turn[0] += 1   # a move still waiting from before gives way to this one
+    turn = _move_turn[0]
+    leader, follower = engine.MULTIROOM_LEADER, engine.MULTIROOM_FOLLOWER
+    sid = engine.zone_id(source)
+    if sid is None:
+        say(t("Problem: the zone '{name}' isn't in JRiver.", name=source))
+        return False
+    if engine.MULTIROOM_ENABLED and source == leader and multiroom_following():   # Multiroom running
+        _multiroom["stop"]()
+        if target == follower:
+            if not _move(leader, follower, said=False):
+                say(t("Problem: JRiver didn't move the music."))
+                return False
+        say(t("Just the {zone} now.", zone=target))
+        return True
+    if target == MULTIROOM and source == leader:   # the follower joins what the leader plays, mid-track
+        _multiroom["start"]()
+        say(t("Multiroom: the {follower} join {leader}.", follower=follower, leader=leader))
+        return True
+    to = leader if target == MULTIROOM else target
+    tid = engine.zone_id(to)
+    if tid is None:
+        say(t("Problem: the zone '{name}' isn't in JRiver.", name=to))
+        return False
+    items = _info_items(sid)
+    if items.get("State") not in ("1", "2"):
+        say(t("Nothing's playing in {zone}, so there's nothing to move.", zone=source))
+        return False
+    pos = int(items.get("PlayingNowPosition") or 0)
+    if when == NEXT:
+        if pos + 1 >= int(items.get("PlayingNowTracks") or 0):
+            say(t("This is the last track in {zone}, so nothing follows it to move.", zone=source))
+            return False
+        say(t("After this track in {source}, the next one plays in {target}.", source=source,
+              target=MULTIROOM if target == MULTIROOM else to))
+        pos = _wait_track_end(sid, turn)
+        if pos is None:
+            if _move_turn[0] == turn:
+                say(t("{zone} stopped before the track ended, so nothing moved.", zone=source))
+            return False
+    if not _restart_on(sid, tid, pos):
+        say(t("Problem: JRiver didn't move the music."))
+        return False
+    if target == MULTIROOM:
+        _multiroom["start"]()   # the leader is playing: the follower joins it
+        say(t("Moved to Multiroom: {leader} leads, the {follower} follow.", leader=leader, follower=follower))
+    else:
+        say(t("Moved from {source} to {target}.", source=source, target=to))
     return True
 
 
