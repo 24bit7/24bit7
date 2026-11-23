@@ -1631,15 +1631,25 @@ class PickRow(tk.Canvas):
         self._shape, self._shape_id = None, None
         self.indent, self.fold = indent, fold
         x = px(6) + indent
-        self._fold_id = None
+        self._fold_id, self._fold_box, self._strip = None, None, 0
         if fold is not None:
-            self._fold_id = self.create_text(x + px(4), self._h // 2, text="\u25be" if fold == "open" else "\u25b8",
-                                             anchor="w", font=self._tag_font, fill=PALETTE["help_fg"])
+            # the arrow in a small box (Ben, 22 Nov 2026: Radio's list was janky, the arrow alone too small to hit).
+            # Everything left of the name, at the row's full height, opens and closes; the rest of the row is
+            # the row's own click
+            self._fold_box, self._fold_id = fold_box(self, x + px(9), self._h // 2, px(15), fold == "open",
+                                                     self._bg, self._tag_font)
+            x += px(24)
+            self._strip = x
             if on_fold is not None:
-                self.tag_bind(self._fold_id, "<Button-1>", lambda e: (on_fold(), "break")[1])
-            x += px(16)
+                self._on_fold, self._fold_pressed = on_fold, False
+                strip = f"PickRowFold{id(self)}"   # ahead of the row's own bindings, so a click here stops here
+                self.bind_class(strip, "<Button-1>", self._strip_press)
+                self.bind_class(strip, "<ButtonRelease-1>", self._strip_release)
+                self.bind_class(strip, "<Motion>", lambda e: self._light_fold(self.fold_at(e.x)))
+                self.bind_class(strip, "<Leave>", lambda e: self._light_fold(False))
+                self.bindtags((strip,) + self.bindtags())
         elif fold_space:
-            x += px(16)
+            x += px(24)
         self.left = left(self) if left is not None else None
         if self.left is not None:
             self.create_window(x, self._h // 2, window=self.left, anchor="w")
@@ -1674,6 +1684,35 @@ class PickRow(tk.Canvas):
     def set_text(self, text):
         self.itemconfig(self._text_id, text=text)
 
+    def fold_at(self, x):
+        """True when a point is in the strip left of the name that opens and closes the row's children."""
+        return self._fold_box is not None and 0 <= x < self._strip
+
+    def set_fold(self, fold):
+        """'open' or 'closed', redrawn in place (Radio's list updates without being built again)."""
+        if self._fold_id is not None and fold in ("open", "closed"):
+            self.fold = fold
+            self.itemconfig(self._fold_id, text="▾" if fold == "open" else "▸")
+
+    def _strip_press(self, e):
+        if not self.fold_at(e.x):
+            return None
+        self._fold_pressed = True
+        self._on_fold()
+        return "break"
+
+    def _strip_release(self, e):
+        if self._fold_pressed:   # the press opened or closed: the release isn't the row's click
+            self._fold_pressed = False
+            return "break"
+        return None
+
+    def _light_fold(self, lit):
+        try:
+            light_fold_box(self, self._fold_box, self._fold_id, lit)
+        except tk.TclError:
+            pass
+
     def _redraw(self, width=None):
         w = width or self.winfo_width()
         if w <= 1:
@@ -1686,6 +1725,64 @@ class PickRow(tk.Canvas):
             self.tag_lower(self._shape_id)
         else:
             self.itemconfig(self._shape_id, image=self._shape)
+
+
+def fold_box(canvas, cx, cy, size, open_, bg, font):
+    """
+    A fold's arrow in a small rounded box, centred on (cx, cy), on a canvas (Ben, 22 Nov 2026): Radio's station
+    lists and Settings' parent playlists. Returns (box, arrow) item ids, for light_fold_box and set_fold.
+    """
+    h = size // 2
+    x0, y0, x1, y1, r = cx - h, cy - h, cx + h, cy + h, max(2, size // 4)
+    points = [x0 + r, y0, x1 - r, y0, x1, y0, x1, y0 + r, x1, y1 - r, x1, y1, x1 - r, y1, x0 + r, y1, x0, y1,
+              x0, y1 - r, x0, y0 + r, x0, y0]
+    box = canvas.create_polygon(points, smooth=True, fill=bg, outline=PALETTE["help_fg"], width=1)
+    arrow = canvas.create_text(cx, cy, text="▾" if open_ else "▸", anchor="center", font=font,
+                               fill=PALETTE["help_fg"])
+    return box, arrow
+
+
+def light_fold_box(canvas, box, arrow, lit):
+    """The box and its arrow in the accent while the mouse is over the strip that opens and closes."""
+    colour = PALETTE["button_fg"] if lit else PALETTE["help_fg"]
+    canvas.itemconfig(box, outline=colour)
+    canvas.itemconfig(arrow, fill=colour)
+
+
+class FoldBox(tk.Canvas):
+    """
+    The fold box as a widget of its own, for a grid row (Settings' Radio Stations table): the whole cell opens
+    and closes, at the row's full height, and lights while the mouse is in it.
+    """
+
+    def __init__(self, master, open_, command, font=None):
+        bg = master.cget("bg")
+        super().__init__(master, bg=bg, bd=0, highlightthickness=0, cursor="hand2")
+        try:
+            scale = max(1.0, self.winfo_fpixels("1i") / 96.0)
+        except tk.TclError:
+            scale = 1.0
+        self._px = lambda n: max(1, int(round(n * scale)))
+        self._open, self._bg, self._font = bool(open_), bg, font or ("Segoe UI", 8)
+        self._items = None
+        self.configure(width=self._px(26), height=self._px(22))
+        self.bind("<Configure>", lambda e: self._draw())
+        self.bind("<Button-1>", lambda e: command())
+        self.bind("<Enter>", lambda e: self._light(True))
+        self.bind("<Leave>", lambda e: self._light(False))
+
+    @property
+    def is_open(self):
+        return self._open
+
+    def _draw(self):
+        self.delete("all")
+        w, h = max(self.winfo_width(), self._px(26)), max(self.winfo_height(), self._px(22))
+        self._items = fold_box(self, w // 2, h // 2, self._px(15), self._open, self._bg, self._font)
+
+    def _light(self, lit):
+        if self._items:
+            light_fold_box(self, *self._items, lit)
 
 
 class PromptWindow(tk.Toplevel):

@@ -2298,14 +2298,13 @@ class SettingsTab(tk.Frame):
             opened = set(radio.row()["open"])
             width = max([len(x["name"]) for x in radio.lanes(include_children=True)] + [18]) + 2
             for r, (lane_, depth) in enumerate(radio.visible_rows()):
-                splits = bool(lane_.get("children"))
-                arrow = tk.Label(table, text=("▾" if lane_["id"] in opened else "▸") if splits else "",
-                                 fg=PALETTE["section_fg"], cursor="hand2" if splits else "", width=2)
-                arrow.grid(row=r, column=0, sticky="w")
-                if splits:
-                    arrow.bind("<Button-1>", lambda e, i=lane_["id"]: fold(i))
+                if lane_.get("children"):   # the arrow in a box, the whole cell a target (Ben, 22 Nov 2026)
+                    arrow = tabs.FoldBox(table, lane_["id"] in opened, lambda i=lane_["id"]: fold(i))
+                    arrow.grid(row=r, column=0, sticky="nsw")
                     Tooltip(arrow, t("Split: the stations within this one, here and in the Play tab's list. "
                                      "Click again to join them back."))
+                else:   # the box's room, so the names line up
+                    tk.Frame(table, width=scaled(table, 26), height=1).grid(row=r, column=0, sticky="w")
                 cell = tk.Frame(table)
                 cell.grid(row=r, column=1, sticky="w", padx=(18 * depth, 0), pady=1)
                 entry = ttk.Entry(cell, width=width)

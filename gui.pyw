@@ -803,22 +803,11 @@ class PlayTab(tk.Frame):
             tk.Label(inner, text=self._radio_resting_text(), fg=muted, bg=bg, font=("Segoe UI", 9), wraplength=320,
                      justify="left").pack(anchor="w", padx=10, pady=6)
         rows = radio.visible_rows()
-        any_split = any(x.get("children") for x, _d in rows)   # every name starts where a split's does
+        pop._inner, pop._face = inner, face
+        pop._any_split = any(x.get("children") for x, _d in rows)   # every name starts where a split's does
         for lane_, depth in rows:
-            splits = bool(lane_.get("children"))
-            tag = f"{radio.share(lane_)}%"
-            if face is not None and lane_["id"] == face["id"]:
-                tag = t("default") + " \u00b7 " + tag
-            r = tabs.PickRow(inner, lane_["name"], fg=fg, bg=bg, fit=True, tag=tag, indent=18 * depth,
-                             fold=("open" if lane_["id"] in opened else "closed") if splits else None,
-                             on_fold=(lambda i=lane_["id"]: self._radio_fold(i)) if splits else None,
-                             fold_space=any_split)
-            r.configure(cursor="hand2")
+            r = self._radio_row(pop, lane_, depth, opened)
             r.pack(fill="x", padx=3, pady=1)
-            r.bind("<Enter>", lambda e, w=r: w.set_chosen(True))
-            r.bind("<Leave>", lambda e, w=r: w.set_chosen(False))
-            r.bind("<ButtonRelease-1>", lambda e, i=lane_["id"]: (self._close_children(), self.on_radio(button, i)))
-            r.bind("<Button-3>", lambda e, i=lane_["id"]: self._radio_lane_menu(e, button, i))
             pop._rows.append((lane_["id"], r))
         tk.Frame(inner, bg=line, height=1).pack(fill="x", pady=4)
         when = self._when((result or {}).get("when")) if result else ""
@@ -839,6 +828,25 @@ class PlayTab(tk.Frame):
         pop.bind("<Escape>", lambda e: self._close_children())
         pop.bind("<FocusOut>", lambda e: self.after(100, self._close_children_if_unfocused))
 
+    def _radio_row(self, pop, lane_, depth, opened):
+        """One station in the arrow's list: a click plays it, the box at its left opens or closes its halves."""
+        button, face = pop._button, pop._face
+        splits = bool(lane_.get("children"))
+        tag = f"{radio.share(lane_)}%"
+        if face is not None and lane_["id"] == face["id"]:
+            tag = t("default") + " · " + tag
+        bg = PALETTE["field_bg"]
+        r = tabs.PickRow(pop._inner, lane_["name"], fg=PALETTE["text"], bg=bg, fit=True, tag=tag, indent=18 * depth,
+                         fold=("open" if lane_["id"] in opened else "closed") if splits else None,
+                         on_fold=(lambda i=lane_["id"]: self._radio_fold(i)) if splits else None,
+                         fold_space=pop._any_split)
+        r.configure(cursor="hand2")
+        r.bind("<Enter>", lambda e, w=r: w.set_chosen(True))
+        r.bind("<Leave>", lambda e, w=r: w.set_chosen(False))
+        r.bind("<ButtonRelease-1>", lambda e, i=lane_["id"]: (self._close_children(), self.on_radio(button, i)))
+        r.bind("<Button-3>", lambda e, i=lane_["id"]: self._radio_lane_menu(e, button, i))
+        return r
+
     def _radio_fold(self, lane_id, open_=None):
         """Split (open) or Join Back (closed): the lane's halves shown under it, or folded away."""
         opened = radio.row()["open"]
@@ -848,8 +856,44 @@ class PlayTab(tk.Frame):
             opened.append(lane_id)
         radio.set_row(open=opened)
         pop = getattr(self, "_children_popup", None)
-        if pop is not None and getattr(pop, "_button", None):
-            self._open_radio(pop._button)
+        if pop is not None and getattr(pop, "_button", None) and getattr(pop, "_inner", None) is not None:
+            self._radio_relay(pop)
+
+    def _radio_relay(self, pop):
+        """
+        The open list brought up to date where it stands (Ben, 22 Nov 2026): halves put in under their station or
+        taken away, every other row left as it was, so nothing jumps under the mouse. It used to be closed and
+        built again at every Split, which made the list flicker and the next click land on a different row.
+        """
+        try:
+            if not pop.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        opened = set(radio.row()["open"])
+        have = dict(pop._rows)
+        want = radio.visible_rows()
+        keep = {x["id"] for x, _d in want}
+        for lane_id, r in pop._rows:
+            if lane_id not in keep:
+                r.destroy()
+        rows, prev = [], None
+        for lane_, depth in want:
+            r = have.get(lane_["id"])
+            if r is None or not r.winfo_exists():
+                r = self._radio_row(pop, lane_, depth, opened)
+                if prev is not None:
+                    r.pack(fill="x", padx=3, pady=1, after=prev)
+                else:
+                    r.pack(fill="x", padx=3, pady=1, before=pop._inner.winfo_children()[0])
+            elif lane_.get("children"):
+                r.set_fold("open" if lane_["id"] in opened else "closed")
+            rows.append((lane_["id"], r))
+            prev = r
+        pop._rows = rows
+        pop.update_idletasks()
+        w = max(pop.winfo_width(), pop.winfo_reqwidth())
+        pop.geometry(f"{w}x{pop.winfo_reqheight()}+{pop.winfo_x()}+{pop.winfo_y()}")
 
     def _radio_lane_menu(self, event, button, lane_id):
         """Right-click a lane: Split or Join Back, and Add as a Button (a Radio playlist of that lane)."""

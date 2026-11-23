@@ -160,3 +160,52 @@ def test_station_names_line_up_whether_or_not_they_split(app, ui, lowered, monke
     assert split_row.coords(split_row._text_id)[0] == plain_row.coords(plain_row._text_id)[0]
     ui.play._close_children()
     assert not ui.errors, ui.errors[0]
+
+
+def test_the_box_left_of_a_station_opens_it_in_place_and_never_plays(app, ui, lowered, monkeypatch):
+    """
+    Ben, 22 Nov 2026: the list was janky. The arrow alone took the click, so a near miss played the station, and
+    every Split built the list again under the mouse. Now the whole strip left of the name opens and closes, in
+    place; the name still plays.
+    """
+    radio = lowered
+    play_counts(app, EVERYONE)
+    radio.set_row(count=3)
+    radio.analyse(app.Lines())
+    result = radio.analysis()
+    tops = result["lanes"]
+    if not any(x.get("children") for x in tops):
+        tops[0]["children"] = [dict(tops[0], id=tops[0]["id"] + "a", name="One Half", children=[]),
+                               dict(tops[0], id=tops[0]["id"] + "b", name="Other Half", children=[])]
+        radio._set_meta(radio.ANALYSIS_KEY, result)
+    lane_ = next(x for x in radio.lanes() if x.get("children"))
+    made, fb = with_radio(ui)
+    played = []
+    monkeypatch.setattr(ui.play, "on_radio", lambda button, lane_id=None: played.append(lane_id))
+    ui.play._open_radio(made)
+    ui.pump(0.3)
+    pop = ui.play._children_popup
+    before = dict(pop._rows)
+    row = before[lane_["id"]]
+    assert row.fold == "closed" and row._fold_box is not None, "a box, not a bare arrow"
+    assert row.tag.endswith("%"), f"a station that splits keeps its share at the right: {row.tag!r}"
+    y = row.winfo_height() // 2
+    row.event_generate("<Button-1>", x=2, y=y)      # at the very left edge: nowhere near the arrow itself
+    row.event_generate("<ButtonRelease-1>", x=2, y=y)
+    ui.pump(0.3)
+    assert played == [], "a click in the strip never plays"
+    assert lane_["id"] in radio.row()["open"]
+    assert ui.play._children_popup is pop and pop.winfo_exists(), "the same list, not one built again"
+    after = dict(pop._rows)
+    assert all(after[i] is r for i, r in before.items()), "every row that was there is the same row"
+    ids = [i for i, _ in pop._rows]
+    assert ids[ids.index(lane_["id"]) + 1] == lane_["children"][0]["id"], "the halves come in under it"
+    assert row.fold == "open"
+    row.event_generate("<Button-1>", x=2, y=y)
+    row.event_generate("<ButtonRelease-1>", x=2, y=y)
+    ui.pump(0.3)
+    assert lane_["children"][0]["id"] not in [i for i, _ in pop._rows] and row.fold == "closed"
+    row.event_generate("<ButtonRelease-1>", x=row.winfo_width() // 2, y=y)   # the name: plays, as it always did
+    ui.pump(0.3)
+    assert played == [lane_["id"]], played
+    assert not ui.errors, ui.errors[0]

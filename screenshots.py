@@ -520,6 +520,13 @@ def start_demo(gui, temp):
         embellish._set_meta(embellish.RECENT_KEY, DEMO_RECENT)
     except ImportError:
         pass
+    # The Zombies' albums, as Missing Artists' album line would have read them from Deezer (1.39.0), so the shot
+    # says "Most are on Odessey and Oracle (3 of 4), then Begin Here (1)" without asking anyone
+    engine.cache_put("deezer", "discography", engine.artist_key("The Zombies"), [
+        {"title": "Begin Here", "date": "1965-04-01", "tracks": ["Road Runner", "She's Not There", "Summertime"]},
+        {"title": "Odessey and Oracle", "date": "1968-04-19",
+         "tracks": ["Care of Cell 44", "Beechwood Park", "This Will Be Our Year", "Time of the Season"]},
+        {"title": "Odessey and Oracle (Live)", "date": "2008-03-07", "tracks": ["Care of Cell 44 (Live)"]}])
     try:   # the console's Log (1.11.0 and later)
         import buildlog
         buildlog._table(con)
@@ -973,6 +980,10 @@ def main():
                         settle(root, 0.2)
                     if stats.tree.get_children():
                         stats.tree.selection_set(stats.tree.get_children()[0])
+                        end = time.time() + 10   # the album line, from the demo's own Zombies albums
+                        settle(root, 0.2)
+                        while stats._album_busy and time.time() < end:
+                            settle(root, 0.2)
                 settle(root, 0.5)
             if action == "review":
                 show_review(play)
