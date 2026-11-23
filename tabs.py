@@ -1872,6 +1872,15 @@ class PromptWindow(tk.Toplevel):
                                       PALETTE["button_accent"])
         self.ok_button.pack(side="left")
 
+    def refit(self):
+        """Grown or shrunk to what it holds now, where it is, with its rounded corners redrawn at the new size
+        (Windows 10 clips the window to a region set when it first showed: Save Playlist's first shot cut its lines
+        off)."""
+        self.update_idletasks()
+        self.geometry(f"{self.winfo_reqwidth()}x{self.winfo_reqheight()}+{self.winfo_x()}+{self.winfo_y()}")
+        self.update_idletasks()
+        self.corners = round_corners(self, self._px(10))
+
     def _button(self, parent, text, command, fill, edge):
         """A rounded button drawn as an image with the text on top, as the AI Playlist window's."""
         px = self._px

@@ -4,8 +4,9 @@
 Ben and Jo build playlists in 24bit7 and want them on their phones (both Google Pixels) without fluffing about in
 JRiver. Save Playlist's pop-up has a Copy Tracks To tick: the phone (named as you like, "Ben's Phone", told apart by
 Windows' device id, which carries the serial, so two of the same phone keep their own names), the folder on it
-(Music to start), a limit in GB, and Clear Music First. The tracks go into a folder named after the playlist, with
-an .m3u8 beside them listing them in order by file name, so the phone's player shows it as a playlist.
+(Music to start), a limit in GB, and Clear Music First. The tracks go into artist and album folders under the chosen
+one, with the playlist's .m3u8 at the top listing them in order by their paths, so the phone's player shows it as a
+playlist (1.40.0 put each playlist in a folder of its own; Ben, 23 Nov 2026, wanted the band and album folders).
 
 A phone over USB has no drive letter: it's reached through Windows Portable Devices (WPD), here through comtypes.
 Proved on Ben's Pixel 9a on 23 Nov 2026: a folder made, files written (37 MB a second), a recursive delete with
@@ -13,7 +14,8 @@ no prompt. Everything below WpdPhone works against any object with the same few 
 
 Rules:
 - Clear First empties the chosen folder (asked once, with the count), leaving dot folders like .thumbnails be.
-- Saving the same playlist again copies only what's new, and takes out what's left the playlist, in its own folder.
+- Saving the same playlist again copies only what's new, and takes out what's left the playlist unless another
+  playlist copied to that folder still lists it (what each put there is kept with the device's choices).
 - The limit and the phone's free space (less a margin) are filled in playlist order; what doesn't fit is said.
 """
 
@@ -76,31 +78,40 @@ def safe_name(text):
 
 def file_names(tracks):
     """
-    One name per track for the phone: 'Artist - Title.flac', a number added where two would share a name
-    ('Intro (2).flac'), so the same track gets the same name on every save and only new ones are copied.
+    One path per track on the phone, under the chosen folder: 'Album Artist/Album/05 Title.flac' (Ben, 23 Nov 2026:
+    "keep the band/album folder structure, even though we might only have one track in a folder"). A second disc
+    reads '2-05 Title'; a track with no album sits in its artist's folder. Two that would share a path get a
+    number ('Intro (2).flac'). The same track gets the same path on every save, so only new ones are copied, and a
+    song on two playlists is one file.
     """
     seen, out = set(), []
     for tr in tracks:
         ext = os.path.splitext(tr["path"])[1].lower()
-        base = safe_name(f"{tr.get('artist') or ''} - {tr.get('title') or ''}".strip(" -"))
-        name, n = base + ext, 1
-        while name.lower() in seen:
+        artist = safe_name(tr.get("album_artist") or tr.get("artist") or t("Unknown Artist"))
+        album = tr.get("album") or ""
+        disc, number = tr.get("disc") or 0, tr.get("number") or 0
+        lead = (f"{disc}-" if disc > 1 else "") + (f"{number:02d} " if number else "")
+        title = safe_name(lead + (tr.get("title") or os.path.splitext(os.path.basename(tr["path"]))[0]))
+        where = f"{artist}/{safe_name(album)}" if album else artist
+        path, n = f"{where}/{title}{ext}", 1
+        while path.lower() in seen:
             n += 1
-            name = f"{base} ({n}){ext}"
-        seen.add(name.lower())
-        out.append(name)
+            path = f"{where}/{title} ({n}){ext}"
+        seen.add(path.lower())
+        out.append(path)
     return out
 
 
-def m3u8_text(names):
-    """The playlist file: the tracks in order, by name, beside it in the same folder."""
-    return "#EXTM3U\n" + "".join(n + "\n" for n in names)
+def m3u8_text(paths):
+    """The playlist file, at the top of the chosen folder: the tracks in order, by their paths from there."""
+    return "#EXTM3U\n" + "".join(p + "\n" for p in paths)
 
 
 # --- the copy ------------------------------------------------------------------------------------------------
 
 def tracks_for(keys):
-    """The playlist's tracks you have files for: {key, path, artist, title, size}, in order."""
+    """The playlist's tracks you have files for: {key, path, artist, title, album, album_artist, disc, number,
+    size}, in order."""
     import library
     out = []
     for k in keys:
@@ -108,8 +119,10 @@ def tracks_for(keys):
         path = row.get("Filename") or ""
         if not path or not os.path.isfile(path):
             continue
+        disc, number = library.track_order(row)
         out.append({"key": str(k), "path": path, "artist": row.get("Artist") or "", "title": row.get("Name") or "",
-                    "size": os.path.getsize(path)})
+                    "album": row.get("Album") or "", "album_artist": row.get("Album Artist (auto)") or "",
+                    "disc": disc or 0, "number": number or 0, "size": os.path.getsize(path)})
     return out
 
 
@@ -126,79 +139,202 @@ def clear_count(phone, folder):
     return sum(1 for e in kept if e["folder"]), sum(1 for e in kept if not e["folder"])
 
 
-def copy_playlist(phone, folder, playlist, tracks, limit_gb=0, clear=False, say=print):
+def _records(phone):
     """
-    Copies tracks (from tracks_for) into folder/playlist on the phone, with playlist.m3u8 beside them. Returns
-    how many tracks are there now.
+    What each playlist has put on this phone, by folder: (the device's key, {folder: {playlist.m3u8: [paths]}}).
+    Kept with the device's choices, so a second save knows what was its own and a song another playlist still
+    lists is never taken off.
+    """
+    key = getattr(phone, "id", None) or phone.name
+    return key, dict((_meta(META_KEY, {}).get(key) or {}).get("copied") or {})
+
+
+def _keep_records(key, copied):
+    every = _meta(META_KEY, {})
+    every[key] = dict(every.get(key) or {}, copied=copied)
+    _set_meta(META_KEY, every)
+
+
+class _Dirs:
+    """The folders under the chosen one, by path from it ('Godsmack/Awake'), each listed once, made when needed."""
+
+    def __init__(self, phone, root):
+        self.phone, self.ids, self.kids, self.files = phone, {"": root}, {}, {}
+
+    def _list(self, rel):
+        if rel not in self.kids:
+            fid = self.ids.get(rel)
+            entries = self.phone.list(fid) if fid else []
+            self.kids[rel] = {e["name"].lower(): e["id"] for e in entries if e["folder"]}
+            self.files[rel] = {e["name"].lower(): e for e in entries if not e["folder"]}
+        return self.kids[rel]
+
+    def get(self, rel, make=False):
+        if rel in self.ids:
+            return self.ids[rel]
+        parent_rel, _, name = rel.rpartition("/")
+        parent = self.get(parent_rel, make)
+        if parent is None:
+            return None
+        found = self._list(parent_rel).get(name.lower())
+        if found is None and make:
+            found = self.phone.make(parent, name)
+            self.kids[parent_rel][name.lower()] = found
+            self.kids[rel], self.files[rel] = {}, {}
+        if found is not None:
+            self.ids[rel] = found
+        return found
+
+    def listing(self, rel):
+        """{name: entry} of the files in a folder, {} if it isn't there."""
+        if self.get(rel) is None:
+            return {}
+        self._list(rel)
+        return self.files[rel]
+
+    def forget(self, rel):
+        parent_rel, _, name = rel.rpartition("/")
+        self.kids.get(parent_rel, {}).pop(name.lower(), None)
+        for d in [d for d in self.ids if d == rel or d.startswith(rel + "/")]:
+            self.ids.pop(d, None)
+            self.kids.pop(d, None)
+            self.files.pop(d, None)
+
+    def drop_if_empty(self, rel):
+        """An album or artist folder left with nothing in it goes too (its parent next, up to the chosen folder)."""
+        while rel:
+            fid = self.get(rel)
+            if fid is None or self.phone.list(fid):
+                return
+            self.phone.delete([fid])
+            self.forget(rel)
+            rel = rel.rpartition("/")[0]
+
+
+def copy_playlist(phone, folder, playlist, tracks, limit_gb=0, clear=False, say=print, progress=None, stop=None):
+    """
+    Copies tracks (from tracks_for) into the chosen folder on the phone, each in its artist's and album's folders,
+    with playlist.m3u8 at the top listing them in order. Returns how many tracks the .m3u8 lists.
+    progress, if given, is called with a dict as each track starts and once at the end ("state" copying, done or
+    stopped, "done" and "count" tracks, "bytes" and "total", "track", and at the end "line" and "note").
+    stop, if given, is asked before each track: True stops there, the .m3u8 listing what's on the phone.
     """
     started = time.time()
     root = phone.folder(folder, make=True)
+    device, copied = _records(phone)
+    fkey = re.sub(r"[\\/]+", "/", folder or "").strip("/").lower()
+    mine = dict(copied.get(fkey) or {})
     if clear:
         gone = [e for e in phone.list(root) if not e["name"].startswith(".")]
         if gone:
             phone.delete([e["id"] for e in gone])
             say("  " + t("Cleared {folder} on {phone}: {count} folders and files taken out.", folder=folder,
                          phone=phone.name, count=len(gone)))
-    here = phone.child(root, safe_name(playlist))
-    if here is None:
-        here = phone.make(root, safe_name(playlist))
-    names = file_names(tracks)
+        mine = {}
+    dirs = _Dirs(phone, root)
     m3u = safe_name(playlist) + ".m3u8"
-    on_phone = {e["name"].lower(): e for e in phone.list(here) if not e["folder"]}
-    wanted = {n.lower() for n in names} | {m3u.lower()}
-    stale = [e for n, e in on_phone.items() if n not in wanted]
-    if stale:
-        phone.delete([e["id"] for e in stale])
+    pkey = m3u.lower()
+    # 1.40.0 put a playlist in a folder of its own, its .m3u8 inside: that goes, the tracks now in artists' folders
+    own = safe_name(playlist)
+    old = dirs.get(own)
+    if old is not None and pkey in dirs.listing(own):
+        phone.delete([old])
+        dirs.forget(own)
+        say("  " + t("{name} had a folder of its own from before: its tracks now go in artist and album folders.",
+                     name=own))
+    paths = file_names(tracks)
+    wanted = {p.lower() for p in paths}
+    others = {p.lower() for name, ps in mine.items() if name != pkey for p in ps}
+    stale = [p for p in mine.get(pkey, []) if p.lower() not in wanted and p.lower() not in others]
+    removed = 0
+    for p in stale:
+        d, _, name = p.rpartition("/")
+        e = dirs.listing(d).get(name.lower())
+        if e:
+            phone.delete([e["id"]])
+            dirs.files[d].pop(name.lower(), None)
+            removed += 1
+    for d in sorted({p.rpartition("/")[0] for p in stale}, key=lambda d: -d.count("/")):
+        dirs.drop_if_empty(d)
+    if removed:
         say("  " + tn("Took out {count} track no longer in the playlist.",
-                      "Took out {count} tracks no longer in the playlist.", len(stale)))
+                      "Took out {count} tracks no longer in the playlist.", removed))
     # what fits: the limit and the phone's free space, filled in playlist order
+    on_phone = {}
+    for p in paths:
+        d, _, name = p.rpartition("/")
+        on_phone[p] = dirs.listing(d).get(name.lower())
     room = phone.free() - SPARE
     if limit_gb:
-        held = sum(e.get("size") or 0 for n, e in on_phone.items() if n in wanted and n != m3u.lower())
+        held = sum(e.get("size") or 0 for e in on_phone.values() if e)
         room = min(room, limit_gb * GB - held)
-    todo, kept, left_out = [], [], []
-    for tr, name in zip(tracks, names):
-        already = on_phone.get(name.lower())
+    todo, kept, left_out = [], set(), []
+    for tr, p in zip(tracks, paths):
+        already = on_phone[p]
         if already is not None and (already.get("size") in (None, tr["size"])):
-            kept.append(name)
+            kept.add(p)
             continue
         if tr["size"] > room:
             left_out.append(tr)
             continue
         room -= tr["size"]
-        todo.append((tr, name, already))
-        kept.append(name)
+        todo.append((tr, p, already))
     total = sum(tr["size"] for tr, _, _ in todo)
+    count = len(kept) + len(todo)
     if todo:
         say("  " + t("Copying {count} tracks ({size}) to {phone}...", count=len(todo), size=size_text(total),
                      phone=phone.name))
-    done_bytes = 0
-    for i, (tr, name, already) in enumerate(todo, 1):
+    done_bytes, done, stopped = 0, 0, False
+    for i, (tr, p, already) in enumerate(todo, 1):
+        if stop is not None and stop():
+            stopped = True
+            break
+        if progress is not None:
+            progress({"state": "copying", "done": len(kept), "count": count, "bytes": done_bytes, "total": total,
+                      "track": f"{tr.get('artist') or ''} - {tr.get('title') or ''}".strip(" -")})
+        d, _, name = p.rpartition("/")
+        parent = dirs.get(d, make=True)
         if already is not None:   # a different size: a newer file of the same track
             phone.delete([already["id"]])
-        phone.put(here, tr["path"], name, tr["size"])
+        phone.put(parent, tr["path"], name, tr["size"])
+        kept.add(p)
         done_bytes += tr["size"]
-        if i == len(todo) or i % 5 == 0:
+        done = i
+        if i == len(todo) or i % 10 == 0:
             say("  " + t("Copied {done} of {count} ({size}).", done=i, count=len(todo), size=size_text(done_bytes)))
-    old = on_phone.get(m3u.lower())
-    if old is not None:
-        phone.delete([old["id"]])
-    phone.put_text(here, m3u, m3u8_text(kept))
+    listed = [p for p in paths if p in kept]
+    old_m3u = dirs.listing("").get(pkey)
+    if old_m3u is not None:
+        phone.delete([old_m3u["id"]])
+    phone.put_text(root, m3u, m3u8_text(listed))
+    mine[pkey] = listed
+    copied[fkey] = mine
+    _keep_records(device, copied)
+    note = ""
     if left_out:
         what = size_text(sum(tr["size"] for tr in left_out))
-        say("  " + (tn("Note: {count} track ({size}) didn't fit within {limit} GB, so it was left out.",
-                       "Note: {count} tracks ({size}) didn't fit within {limit} GB, so they were left out.",
-                       len(left_out), size=what, limit=f"{limit_gb:g}") if limit_gb else
-                    tn("Note: {count} track ({size}) didn't fit in the phone's free space, so it was left out.",
-                       "Note: {count} tracks ({size}) didn't fit in the phone's free space, so they were left out.",
-                       len(left_out), size=what)))
-    if todo:
-        say(t('Copied to {phone}: {count} tracks in {folder}/{name}, with {name}.m3u8 ({secs} s).', phone=phone.name,
-              count=len(kept), folder=folder, name=safe_name(playlist), secs=round(time.time() - started)))
+        note = (tn("Note: {count} track ({size}) didn't fit within {limit} GB, so it was left out.",
+                   "Note: {count} tracks ({size}) didn't fit within {limit} GB, so they were left out.",
+                   len(left_out), size=what, limit=f"{limit_gb:g}") if limit_gb else
+                tn("Note: {count} track ({size}) didn't fit in the phone's free space, so it was left out.",
+                   "Note: {count} tracks ({size}) didn't fit in the phone's free space, so they were left out.",
+                   len(left_out), size=what))
+        say("  " + note)
+    secs = round(time.time() - started)
+    if stopped:
+        line = t("Stopped: {count} of {total} tracks are on {phone}, with {name}.m3u8. Copying again picks up the "
+                 "rest.", count=len(listed), total=count, phone=phone.name, name=own)
+    elif todo:
+        line = t("Copied to {phone}: {count} tracks in {folder}, with {name}.m3u8 ({secs} s).", phone=phone.name,
+                 count=len(listed), folder=folder, name=own, secs=secs)
     else:   # saved again with nothing new: only the .m3u8 was written
-        say(t("Already on {phone}: {count} tracks in {folder}/{name}, with {name}.m3u8.", phone=phone.name,
-              count=len(kept), folder=folder, name=safe_name(playlist)))
-    return len(kept)
+        line = t("Already on {phone}: {count} tracks in {folder}, with {name}.m3u8.", phone=phone.name,
+                 count=len(listed), folder=folder, name=own)
+    say(line)
+    if progress is not None:
+        progress({"state": "stopped" if stopped else "done", "done": len(listed), "count": count,
+                  "bytes": done_bytes, "total": total, "track": "", "line": line, "note": note, "secs": secs})
+    return len(listed)
 
 
 # --- Windows Portable Devices ----------------------------------------------------------------------------------

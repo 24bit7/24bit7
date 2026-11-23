@@ -80,13 +80,42 @@ def test_save_and_copy_puts_the_tracks_on_the_phone(app, ui, monkeypatch, tmp_pa
     copy = {"device": DEVICE, "name": "Ben's Phone", "folder": "Music", "limit_gb": 0, "clear": False}
     monkeypatch.setattr(ui.gui, "ask_save", lambda *a, **k: ("Jo's Mix", copy))
     p.on_save_playlist()
-    ui.pump(until=lambda: ph.names("Music/Jo's Mix") and len(ph.names("Music/Jo's Mix")) == 4, timeout=10)
-    ui.pump(0.5)
-    assert ph.names("Music/Jo's Mix") == ["A - Song 0.flac", "A - Song 1.flac", "A - Song 2.flac", "Jo's Mix.m3u8"]
+    win = p.copy_window
+    ui.pump(until=lambda: win.finished, timeout=10)
+    ui.pump(0.3)
+    assert ph.names("Music") == ["A", "Jo's Mix.m3u8"]
+    assert ph.names("Music/A") == ["Song 0.flac", "Song 1.flac", "Song 2.flac"]
     assert any(x["Name"] == "Jo's Mix" for x in j.playlists), "saved in JRiver first, as always"
     log = p.log.get("1.0", "end")
-    assert "Copying to Ben's Phone..." in log and "Copied to Ben's Phone: 3 tracks in Music/Jo's Mix" in log, log
+    assert "Copying to Ben's Phone..." in log and "Copied to Ben's Phone: 3 tracks in Music" in log, log
+    # the pop-up: how it went, and Close
+    assert win.heading.cget("text") == "Copied to Ben's Phone"
+    assert win.track.cget("text").startswith("Copied to Ben's Phone: 3 tracks in Music, with Jo's Mix.m3u8")
+    assert win.ok_button.cget("text") == "Close" and not win.cancel_button.winfo_ismapped()
+    assert win.ok_button.winfo_rooty() + win.ok_button.winfo_height() <= win.winfo_rooty() + win.winfo_height()
+    win.ok()
+    assert not win.winfo_exists()
     assert phone.settings(DEVICE)["name"] == "Ben's Phone", "remembered for next time"
+    assert not ui.errors, ui.errors[0]
+
+
+def test_the_pop_up_shows_progress_and_stop_and_a_phone_going_away(app, ui):
+    win = ui.gui.CopyProgress(ui.play, "Jo's Phone")
+    ui.pump(0.3)
+    assert win.heading.cget("text") == "Copying to Jo's Phone" and win.ok_button.cget("text") == "Stop"
+    win.news.put({"state": "copying", "done": 29, "count": 81, "bytes": 1_200_000_000, "total": 3_300_000_000,
+                  "track": "SOiL - Halo"})
+    ui.pump(0.3)
+    assert win.track.cget("text") == "SOiL - Halo"
+    assert win.counts.cget("text").startswith("29 of 81 tracks, 1.2 GB of 3.3 GB"), win.counts.cget("text")
+    win.ok()   # Stop
+    assert win.stopping and win.winfo_exists(), "Stop finishes the track under way; the window stays to say so"
+    win.news.put({"state": "failed", "error": "gone"})
+    ui.pump(0.3)
+    assert win.heading.cget("text") == "Jo's Phone went away"
+    assert win.track.cget("text").startswith("29 of 81 tracks are on it.")
+    assert win.ok_button.cget("text") == "Close"
+    win.ok()
     assert not ui.errors, ui.errors[0]
 
 
@@ -108,8 +137,9 @@ def test_clear_first_asks_and_no_keeps_the_folder(app, ui, monkeypatch, tmp_path
     copy = {"device": DEVICE, "name": "Ben's Phone", "folder": "Music", "limit_gb": 0, "clear": True}
     monkeypatch.setattr(ui.gui, "ask_save", lambda *a, **k: ("Mix", copy))
     p.on_save_playlist()   # the fixture answers No to the question
-    ui.pump(until=lambda: ph.names("Music/Mix"), timeout=10)
+    ui.pump(until=lambda: p.copy_window.finished, timeout=10)
     ui.pump(0.3)
+    p.copy_window.ok()
     asked = [a for n, a in ui.answers if n == "askyesno"]
     assert asked and "Clear Music on Ben's Phone first? It takes out 1 folder and 0 files" in asked[-1][1], asked
     assert "Old Album" in ph.names("Music"), "No: nothing cleared"

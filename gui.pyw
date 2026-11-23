@@ -326,12 +326,7 @@ class SavePlaylistPrompt(tabs.NamePrompt):
         self._refit()
 
     def _refit(self):
-        """Grown or shrunk to what it holds now, where it is, with its rounded corners redrawn at the new size
-        (Windows 10 clips the window to a region set when it first showed: the first shot cut the lines off)."""
-        self.update_idletasks()
-        self.geometry(f"{self.winfo_reqwidth()}x{self.winfo_reqheight()}+{self.winfo_x()}+{self.winfo_y()}")
-        self.update_idletasks()
-        self.corners = tabs.round_corners(self, self._px(10))
+        self.refit()
 
     def _device(self):
         i = max(0, self.device_cb.current())
@@ -401,6 +396,125 @@ def ask_save(parent, title, prompt, initial, size):
         pass
     win.wait_window()
     return win.result, win.copy
+
+
+class CopyProgress(tabs.PromptWindow):
+    """
+    How a copy to a phone is going (Ben, 23 Nov 2026: "is it in progress has it finished, I don't know, we probably
+    need a pop-up"): the track being copied, a bar, the tracks and GB done and roughly how long is left, and Stop,
+    which finishes the track under way and lists what's on the phone. At the end it says Copied, Stopped, or that
+    the phone went away and how many tracks got there, with Close. It doesn't hold the app up: closing it leaves
+    the copy going, and the console says how it ends. The copy's thread hands its news over through a queue the
+    window reads, never by touching the window itself.
+    """
+
+    ok_text = N_("Stop")
+    BAR_WIDTH = 380
+
+    def __init__(self, parent, phone_name):
+        self._phone, self.stopping, self.finished, self.last = phone_name, False, False, None
+        self.news = queue.Queue()
+        self._started = time.time()
+        super().__init__(parent, t("Copy Tracks To"))
+        self.cancel_button.pack_forget()
+        self.unbind("<Return>")
+        self._poll = self.after(100, self._read_news)
+        self.bind("<Destroy>", self._gone, add="+")
+
+    def _body(self, inner, bg, fg):
+        px = self._px
+        self._fg = fg
+        self.heading = tk.Label(inner, text=t("Copying to {phone}", phone=self._phone), font=("Segoe UI", 11, "bold"),
+                                bg=bg, fg=fg, anchor="w")
+        self.heading.pack(anchor="w")
+        self.track = tk.Label(inner, text=t("Getting ready..."), font=("Segoe UI", 10), bg=bg, fg=PALETTE["help_fg"],
+                              anchor="w", justify="left", width=52, wraplength=px(self.BAR_WIDTH))
+        self.track.pack(anchor="w", pady=(px(6), px(8)))
+        self.bar = tk.Canvas(inner, width=px(self.BAR_WIDTH), height=px(10), bg=PALETTE["line"],
+                             highlightthickness=0, bd=0)
+        self.bar.pack(anchor="w")
+        self.counts = tk.Label(inner, text="", font=("Segoe UI", 9), bg=bg, fg=PALETTE["help_fg"], anchor="w")
+        self.counts.pack(anchor="w", pady=(px(6), 0))
+
+    def _gone(self, event):
+        if event.widget is self and getattr(self, "_poll", None):
+            try:
+                self.after_cancel(self._poll)
+            except tk.TclError:
+                pass
+            self._poll = None
+
+    def _read_news(self):
+        self._poll = None
+        try:
+            while True:
+                self.show(self.news.get_nowait())
+        except queue.Empty:
+            pass
+        if not self.finished:
+            self._poll = self.after(100, self._read_news)
+
+    def _fill(self, share):
+        px = self._px
+        self.bar.delete("all")
+        self.bar.create_rectangle(0, 0, int(px(self.BAR_WIDTH) * max(0.0, min(1.0, share))), px(10),
+                                  fill=PALETTE["go"], width=0)
+
+    def show(self, news):
+        """One piece of news from the copy: copying (a track starting), done, stopped or failed."""
+        import phone
+        state = news.get("state")
+        if state == "copying":
+            self.last = news
+            total, done = news.get("total") or 0, news.get("bytes") or 0
+            self._fill(done / total if total else 0)
+            self.track.config(text=news.get("track") or "")
+            text = t("{done} of {count} tracks, {size} of {total}", done=news["done"], count=news["count"],
+                     size=phone.size_text(done), total=phone.size_text(total))
+            spent = time.time() - self._started
+            if done and spent > 3:
+                left = spent * (total - done) / done
+                text += ", " + (t("under a minute left") if left < 60 else
+                                tn("about {count} minute left", "about {count} minutes left", round(left / 60)))
+            if not self.stopping:
+                self.counts.config(text=text)
+            return
+        if state == "failed":
+            got = (self.last or {}).get("done", 0)
+            count = (self.last or {}).get("count", 0)
+            self._finish(t("{phone} went away", phone=self._phone),
+                         t("{done} of {count} tracks are on it. Plug it back in, unlocked, and copying again picks "
+                           "up the rest.", done=got, count=count) if count else
+                         t("Nothing was copied ({e}). Is it still plugged in and unlocked?", e=news.get("error")),
+                         warn=True)
+            return
+        self._fill(1.0 if state == "done" else (news.get("bytes") or 0) / max(1, news.get("total") or 1))
+        line = news.get("line") or ""
+        if news.get("note"):
+            line += "\n" + news["note"]
+        self._finish(t("Copied to {phone}", phone=self._phone) if state == "done" else t("Copy stopped"), line,
+                     warn=state != "done")
+
+    def _finish(self, heading, text, warn=False):
+        self.finished = True
+        self.heading.config(text=heading, fg=PALETTE["amber"] if warn else self._fg)
+        self.track.config(text=text, fg=self._fg)
+        self.counts.config(text="")
+        self.set_ok_text(t("Close"))
+        self.bind("<Return>", lambda e: self.ok())
+        self.refit()
+
+    def ok(self):
+        """Stop while copying (the track under way finishes, so no half file is left), Close once it's over."""
+        if self.finished:
+            self.destroy()
+            return
+        self.stopping = True
+        self.counts.config(text=t("Stopping after this track..."))
+
+    def cancel(self):
+        """The close mark or Escape: the window goes, the copy carries on, and the console says how it ends."""
+        self.destroy()
 
 
 class PlayTab(tk.Frame):
@@ -1420,6 +1534,8 @@ class PlayTab(tk.Frame):
                     clear = False
         say = self.log_queue.put
         say(t("Copying to {phone}...", phone=copy["name"]))
+        win = self.copy_window = CopyProgress(self, copy["name"])
+        news = win.news
 
         def work():
             phone.com_begin()   # each thread that talks to a phone needs COM of its own
@@ -1427,12 +1543,13 @@ class PlayTab(tk.Frame):
                 p = phone.WpdPhone(copy["device"], copy["name"])
                 try:
                     phone.copy_playlist(p, copy["folder"], name, tracks, limit_gb=copy["limit_gb"], clear=clear,
-                                        say=say)
+                                        say=say, progress=news.put, stop=lambda: win.stopping)
                 finally:
                     p.close()
             except Exception as e:
                 say(t("Problem: the copy to {phone} stopped ({e}). Is it still plugged in and unlocked?",
                       phone=copy["name"], e=e))
+                news.put({"state": "failed", "error": str(e)})
             finally:
                 phone.com_end()
         threading.Thread(target=work, daemon=True, name="copy-to-phone").start()
