@@ -36,10 +36,34 @@ def test_bar_and_output_stay_put_between_the_seed_tabs(app, ui):
     assert abs(row_mid - seen["lists"]["output"]) <= 2, (row_mid, seen["lists"]["output"])
     p.seed_nb.select(p.search_tab)
     ui.pump(0.3)
-    top = p.search_artist.winfo_rooty()
-    hint = [w for w in p.search_tab.grid_slaves(row=1, column=0)][0]
-    bottom = hint.winfo_rooty() + hint.winfo_height()
-    assert abs((top + bottom) // 2 - seen["search"]["output"]) <= 3, "the boxes and their line centred as one"
+    box_mid = p.search_artist.winfo_rooty() + p.search_artist.winfo_height() // 2
+    assert abs(box_mid - seen["search"]["output"]) <= 3, "the boxes centred, as Playlists & Albums' row is"
+    assert not p.search_tab.grid_slaves(row=1), "the line under them is in the console now (23 Nov 2026)"
+    assert not ui.errors, ui.errors[0]
+
+
+def test_search_says_its_line_in_the_console_while_open(app, ui):
+    """Ben, 23 Nov 2026: the line under Artist and Track goes to the console when Search is opened and comes
+    out again on leaving, that line only, and not once something has been said after it."""
+    import gui
+    p = ui.play
+    tip = gui.SEARCH_TIP
+    p._end_greeting()   # while the greeting types, a line waits for it (and leaves with it on leaving)
+    p.seed_nb.select(p.seed_nb._pages[0])
+    ui.pump(0.3)
+    before = list(p._live)
+    p.seed_nb.select(p.search_tab)
+    ui.pump(0.3)
+    assert p._live[-1].endswith(tip) and tip in p.log.get("1.0", "end"), "said on opening"
+    p.seed_nb.select(p.playlists_tab)
+    ui.pump(0.3)
+    assert p._live == before and tip not in p.log.get("1.0", "end"), "taken out on leaving, the rest kept"
+    p.seed_nb.select(p.search_tab)
+    ui.pump(0.3)
+    p._append_log("Something after it.")
+    p.seed_nb.select(p.seed_nb._pages[0])
+    ui.pump(0.3)
+    assert tip in p.log.get("1.0", "end"), "a line said since: it stays where it is"
     assert not ui.errors, ui.errors[0]
 
 

@@ -155,6 +155,8 @@ MONTHS = (N_("Jan"), N_("Feb"), N_("Mar"), N_("Apr"), N_("May"), N_("Jun"), N_("
 BUTTON_GAP = 8   # between the Play tab's buttons, and between its rows of them
 LIST_BOX_GAP = 24   # JRiver Playlists: between the Playlist box and Play
 LIST_BOX_HEIGHT = 1.12   # and the box's height, as a share of Play's (one line tall since 13 Nov 2026)
+SEARCH_TIP = N_("Build a playlist from any track, even one you don't own. Only Track Matching needs the track; the "
+                "other playlists need just the artist. Press Enter for Similar Artists.")   # said while Search is open
 
 
 class DropPill(tk.Canvas):
@@ -338,14 +340,41 @@ class PlayTab(tk.Frame):
         tk.Label(fields, text=t("Track"), font=("Segoe UI", 10)).pack(side="left")
         self.search_track = RoundedEntry(fields, width=30, font=("Segoe UI", 9))
         self.search_track.pack(side="left", padx=(4, 0))
-        tk.Label(self.search_tab, text=t("Build a playlist from any track, even one you don't own. "
-                                         "Only Track Matching needs the track; the other playlists need "
-                                         "just the artist. Press Enter for Similar Artists."),
-                 font=("Segoe UI", 8), fg=PALETTE["text_muted"]).grid(row=1, column=0, columnspan=4, sticky="w", pady=(6, 0))
+        # The line that sat under the boxes is said in the console while Search is open (Ben, 23 Nov 2026), so
+        # the boxes sit centred in the panel as Playlists & Albums' do
         for entry in (self.search_artist, self.search_track):
             entry.bind("<Return>", lambda e: self.on_similar())
+        self._search_tip_line = None
         self.seed_nb.bind("<<NotebookTabChanged>>", lambda e: (self._sync_seed_buttons(), self._place_output(),
-                                                              self.after_idle(self._line_up_lists)))
+                                                              self.after_idle(self._line_up_lists),
+                                                              self._search_tip(self._seed_is_search())))
+
+    def _search_tip(self, show):
+        """
+        The Search tab's line in the console while the tab is open (Ben, 23 Nov 2026): said on opening it, and
+        taken out again on leaving, that line only, and only while nothing has been said after it.
+        """
+        line = self._search_tip_line
+        if show:
+            if line is None and not self.running:
+                self.log.mark_set("search_tip", "end-1c")
+                self.log.mark_gravity("search_tip", "left")
+                self._search_tip_line = self._append_log(t(SEARCH_TIP))
+            return
+        self._search_tip_line = None
+        if line is None or not self._live or self._live[-1] is not line:
+            return   # something has been said since: the line stays where it is
+        self._live.pop()
+        if line in self._held:
+            self._held.remove(line)
+            return
+        try:
+            if self.log.get("search_tip", "end-1c") == line + "\n":
+                self.log.config(state="normal")
+                self.log.delete("search_tip", "end-1c")
+                self.log.config(state="disabled")
+        except tk.TclError:
+            pass
 
     # --- Playlists & Albums (Ben, 6 Nov 2026; albums 12 Nov): play or embellish an album or playlist you own ---
 

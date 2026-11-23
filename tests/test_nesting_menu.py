@@ -251,9 +251,8 @@ def test_the_playlists_list_is_only_as_wide_as_its_names_need(app, ui):
 def test_the_search_hint_names_track_matching_not_a_similar_tracks_button(app, ui):
     """2 Nov 2026, from the screenshots: the Search tab still said only the Similar Tracks button needs
     the track. That playlist is Track Matching now, in a menu, so the hint names it and says playlists."""
-    import tkinter as tk
-    hints = [w.cget("text") for w in ui.play.search_tab.winfo_children() if isinstance(w, tk.Label)]
-    hint = next(h for h in hints if "needs the track" in h)
+    import gui   # the line is said in the console while Search is open since 23 Nov 2026
+    hint = gui.SEARCH_TIP
     assert "Only Track Matching needs the track; the other playlists need just the artist." in hint
     assert "Similar Tracks" not in hint and "buttons" not in hint
 
