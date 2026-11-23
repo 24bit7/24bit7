@@ -154,6 +154,75 @@ def test_the_pop_up_shows_progress_and_stop_and_a_phone_going_away(app, ui):
     assert not ui.errors, ui.errors[0]
 
 
+def test_copy_to_phone_on_playlists_and_albums_copies_without_playing(app, ui, monkeypatch, tmp_path):
+    """Ben, 23 Nov 2026: "the option to be able to load a playlist without playing it" and copy it to the phone."""
+    import phone
+    from test_jriver_playlists_tab import lists_tab, type_in
+    ph = FakePhone(name="Jo's Phone")
+    with_phone(monkeypatch, ph)
+    j = app.jriver
+    p = lists_tab(ui)
+    assert not p.copy_button.winfo_ismapped(), "nothing picked yet"
+    road_trip = next(x for x in j.playlists if x["ID"] == "202")
+    p._pick_playlist({"ID": "202", "Name": "Road Trip", "Folder": "Mixes", "Type": "Playlist"})
+    ui.pump(0.3)
+    assert p.copy_button.winfo_ismapped() and p.copy_button.cget("text") == "Copy to Phone"
+    asked = []
+
+    def tracks_for(keys):
+        asked.append(list(keys))
+        out = []
+        for n, k in enumerate(keys[:2]):
+            f = tmp_path / f"{n}.flac"
+            f.write_bytes(b"x" * 10)
+            out.append({"key": k, "path": str(f), "artist": "A", "title": f"Song {n}", "size": 10})
+        return out
+    monkeypatch.setattr(phone, "tracks_for", tracks_for)
+    prompts = []
+    copy = {"device": DEVICE, "name": "Jo's Phone", "folder": "Music/Music", "limit_gb": 0, "clear": False}
+    monkeypatch.setattr(ui.gui, "ask_copy", lambda parent, prompt, size: prompts.append(prompt) or copy)
+    playlists = len(j.playlists)
+    p.copy_button._command()
+    ui.pump(until=lambda: p.copy_window.finished, timeout=10)
+    ui.pump(0.3)
+    p.copy_window.ok()
+    assert asked == [road_trip["keys"]], "the playlist's tracks, read from JRiver"
+    assert prompts and prompts[0].startswith(f"Copy the playlist Road Trip ({len(road_trip['keys'])} tracks, "), prompts
+    assert ph.names("Music/Music") == ["A", "Road Trip.m3u8"]
+    assert j.zone("Speakers").playlist == [], "nothing played"
+    assert len(j.playlists) == playlists, "and no JRiver playlist saved"
+    type_in(ui, p, "road")
+    assert not p.copy_button.winfo_ismapped(), "typing again takes it away until one is picked"
+    p._pick_playlist({"ID": "202", "Name": "Road Trip", "Folder": "Mixes", "Type": "Playlist"})
+    ui.pump(0.3)
+    assert p.copy_button.winfo_ismapped()
+    p.seed_nb.select(p.search_tab)
+    ui.pump(0.3)
+    assert not p.copy_button.winfo_ismapped()
+    assert not ui.errors, ui.errors[0]
+
+
+def test_copy_prompt_has_no_name_and_reads_copy(app, ui, monkeypatch):
+    with_phone(monkeypatch, FakePhone(name="Jo's Phone"))
+    win = ui.gui.CopyPrompt(ui.play, "Copy the album Abbey Road by The Beatles (17 tracks, 800 MB) to:", 800_000_000)
+    ui.pump(0.3)
+    assert not win.box.winfo_ismapped() and not win.copy_tick.winfo_ismapped()
+    assert win.copy_lines.winfo_ismapped() and win.ok_button.cget("text") == "Copy"
+    assert win.ok_button.winfo_rooty() + win.ok_button.winfo_height() <= win.winfo_rooty() + win.winfo_height()
+    win.ok()
+    assert win.copy["name"] == "Pixel 9a" and win.copy["folder"] == "Music", "its model's name until renamed"
+    import phone
+    monkeypatch.setattr(phone, "devices", lambda: [])
+    none = ui.gui.CopyPrompt(ui.play, "Copy ...", 1)
+    ui.pump(0.3)
+    texts = [w.cget("text") for w in none.copy_tick.master.winfo_children() if w.winfo_class() == "Label"]
+    assert "Plug in a phone, unlocked and set to File Transfer, to copy to it." in texts
+    none.ok()
+    assert none.winfo_exists() and none.copy is None, "Copy does nothing with no phone"
+    none.destroy()
+    assert not ui.errors, ui.errors[0]
+
+
 def test_clear_first_asks_and_no_keeps_the_folder(app, ui, monkeypatch, tmp_path):
     import engine
     import phone

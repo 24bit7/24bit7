@@ -149,6 +149,7 @@ PLAY_NOTES = {
                 "Right-click a station to split it or add it as a button."),
     "Save Playlist": N_("Saves what's in Playing Now in the zone the last playlist went to as a JRiver playlist, so "
                         "a chain of Top-Ups or an embellished playlist can be kept."),
+    "Copy to Phone": N_("Copies the album or playlist in the box to a phone plugged in, without playing it."),
     "Go": N_("Plays up to this many songs you own by each artist you added, shuffled with the artists spread out."),
     "Most Played": N_("Only the artist's most played songs, so a one-hit wonder gives just the hit. A song counts "
                       "when it has at least a fifth of the plays of the artist's biggest, by Last.fm's counts."),
@@ -255,6 +256,8 @@ class SavePlaylistPrompt(tabs.NamePrompt):
     Clear First are remembered per phone. .copy is None, or what to copy to.
     """
 
+    copy_ok = N_("Save and Copy")
+
     def __init__(self, parent, title, prompt, initial, size):
         self._size = size   # the playlist's tracks, in bytes
         self.copy = None
@@ -326,7 +329,7 @@ class SavePlaylistPrompt(tabs.NamePrompt):
         self.device_cb.current(self._ids.index(last) if last in self._ids else 0)
         self.copy_lines.pack(anchor="w", padx=(self._px(22), 0), before=self.ok_button.master)
         self._device_chosen()
-        self.set_ok_text(t("Save and Copy"))
+        self.set_ok_text(t(self.copy_ok))
         self._refit()
 
     def _refit(self):
@@ -417,6 +420,36 @@ class SavePlaylistPrompt(tabs.NamePrompt):
             self.copy = {"device": device_id, "name": phone.settings(device_id, model)["name"],
                          "folder": self.folder_box.get().strip().strip("/\\") or "Music", "limit_gb": max(0.0, limit),
                          "clear": bool(self.clear_var.get())}
+        super().ok()
+
+
+class CopyPrompt(SavePlaylistPrompt):
+    """
+    Copy to Phone, from the Playlists & Albums tab without playing it (Ben, 23 Nov 2026): Save Playlist's pop-up
+    with no name box and no tick, its copy lines shown from the start, and OK reading Copy. Nothing is saved in
+    JRiver. With no phone plugged in it says so and Copy does nothing.
+    """
+
+    copy_ok = N_("Copy")
+
+    def __init__(self, parent, prompt, size):
+        super().__init__(parent, t("Copy to Phone"), prompt, "", size)
+        self.box.pack_forget()
+        self.copy_tick.pack_forget()
+        if self._phones:
+            self.copy_var.set(True)
+            self._copy_toggled()
+        else:
+            self.set_ok_text(t(self.copy_ok))
+            self._refit()
+
+    def _focus_first(self):
+        if self._phones:
+            self.folder_box.entry.focus_set()
+
+    def ok(self):
+        if not self._phones:
+            return
         super().ok()
 
 
@@ -524,6 +557,17 @@ def ask_save(parent, title, prompt, initial, size):
         pass
     win.wait_window()
     return win.result, win.copy
+
+
+def ask_copy(parent, prompt, size):
+    """Copy to Phone's pop-up, waited on: what to copy to, or None."""
+    win = CopyPrompt(parent, prompt, size)
+    try:
+        win.grab_set()
+    except tk.TclError:
+        pass
+    win.wait_window()
+    return win.copy
 
 
 class CopyProgress(tabs.PromptWindow):
@@ -804,7 +848,8 @@ class PlayTab(tk.Frame):
         self._search_tip_line = None
         self.seed_nb.bind("<<NotebookTabChanged>>", lambda e: (self._sync_seed_buttons(), self._place_output(),
                                                               self.after_idle(self._line_up_lists),
-                                                              self._search_tip(self._seed_is_search())))
+                                                              self._search_tip(self._seed_is_search()),
+                                                              self._sync_copy_button()))
 
     def _search_tip(self, show):
         """
@@ -1130,6 +1175,7 @@ class PlayTab(tk.Frame):
             return
         self._playlist_chosen = None
         self._sync_amounts()   # nothing picked now: Embellish's arrow as a playlist's
+        self._sync_copy_button()
         if self._playlists_found is None:
             self._playlists_found = self._playlist_list()
         self._fill_playlists()
@@ -1251,6 +1297,7 @@ class PlayTab(tk.Frame):
         self._close_playlists()
         self._playlists_found = None
         self._sync_amounts()   # an album's arrow offers its hits too
+        self._sync_copy_button()
         self.focus_set()   # out of the box, so the list doesn't open again at once
 
     def _pick_first_playlist(self):
@@ -1587,6 +1634,52 @@ class PlayTab(tk.Frame):
                 self.save_button.place_forget()
             self._flow_buttons()
 
+    def _copy_wanted(self):
+        """Copy to Phone shows on the Playlists & Albums tab while an album or playlist is picked in the box."""
+        return bool(getattr(self, "playlists_tab", None) is not None and self._seed_is_playlists()
+                    and getattr(self, "_playlist_chosen", None))
+
+    def _sync_copy_button(self):
+        if hasattr(self, "copy_button") and self._copy_wanted() != self._copy_shown:
+            self._flow_buttons()
+
+    def on_copy_to_phone(self):
+        """
+        Copy to Phone (Ben, 23 Nov 2026: "the option to be able to load a playlist without playing it"): the album's
+        or playlist's tracks to a phone, as Save Playlist's Copy Tracks To does, without playing it or saving a
+        JRiver playlist.
+        """
+        playlist = self._chosen_playlist()
+        if playlist is None:
+            return
+        album = embellish.is_album(playlist)
+        name = playlist.get("Name") or t("playlist")
+        title = t("Copy to Phone")
+        if album:
+            keys = [str(k) for k in library.album_keys(name, playlist.get("Artist") or "")]
+        else:
+            import saved_playlists
+            try:
+                keys = saved_playlists.playlist_keys(str(playlist.get("ID")))
+            except Exception as e:
+                messagebox.showinfo(title, t("Couldn't read {name} from JRiver ({e}).", name=name, e=e), parent=self)
+                return
+        if not keys:
+            messagebox.showinfo(title, t("{name} has no tracks, so there's nothing to copy.",
+                                         name=embellish.shown_name(playlist)), parent=self)
+            return
+        import phone
+        tracks = phone.tracks_for(keys)
+        size = sum(tr["size"] for tr in tracks)
+        count = tn("{count} track", "{count} tracks", len(keys))
+        prompt = (t("Copy the album {name} ({tracks}, {size}) to:", name=embellish.shown_name(playlist),
+                    tracks=count, size=phone.size_text(size)) if album
+                  else t("Copy the playlist {name} ({tracks}, {size}) to:", name=name, tracks=count,
+                         size=phone.size_text(size)))
+        copy = ask_copy(self, prompt, size)
+        if copy:
+            self._copy_to_phone(copy, name, tracks)
+
     def on_save_playlist(self):
         zone = getattr(self, "_save_zone", None)
         if zone is None or self.running:
@@ -1909,6 +2002,11 @@ class PlayTab(tk.Frame):
                                       quiet=True)
         Tooltip(self.save_button, t(PLAY_NOTES["Save Playlist"]), when=self.help_on, wrap=self.note_wrap)
         self._save_shown, self._save_zone = False, None
+        # Copy to Phone: on the Playlists & Albums tab once one is picked, left of Save Playlist (Ben, 23 Nov 2026)
+        self.copy_button = FlatButton(frame, text=t("Copy to Phone"), command=self.on_copy_to_phone, width=14,
+                                      height=2, quiet=True)
+        Tooltip(self.copy_button, t(PLAY_NOTES["Copy to Phone"]), when=self.help_on, wrap=self.note_wrap)
+        self._copy_shown = False
         self._draw_buttons()
         frame.bind("<Configure>", lambda e: self._flow_buttons())
 
@@ -2118,10 +2216,20 @@ class PlayTab(tk.Frame):
         """Places the row's buttons left to right, wrapping onto another row when the window is narrow."""
         row = self.button_row
         avail = max(row.winfo_width(), 1) - 2 * 16
-        save = getattr(self, "save_button", None)
-        if save is not None and getattr(self, "_save_shown", False):
-            avail -= save._size[0] + BUTTON_GAP   # the row's top right is Save Playlist's
-            save.place(x=max(row.winfo_width(), 1) - 16 - save._size[0], y=4)
+        right = max(row.winfo_width(), 1) - 16
+        self._copy_shown = self._copy_wanted()
+        # the row's top right is Save Playlist's, with Copy to Phone to its left
+        for b, shown in ((getattr(self, "save_button", None), getattr(self, "_save_shown", False)),
+                         (getattr(self, "copy_button", None), self._copy_shown)):
+            if b is None:
+                continue
+            if not shown:
+                b.place_forget()
+                continue
+            right -= b._size[0]
+            b.place(x=right, y=4)
+            right -= BUTTON_GAP
+            avail -= b._size[0] + BUTTON_GAP
         x = y = 0
         height = 0
         for b in self.play_buttons + [self.more_button, self.add_button]:
