@@ -287,8 +287,12 @@ class SavePlaylistPrompt(tabs.NamePrompt):
         self.free_label.grid(row=0, column=3, sticky="w", padx=(px(8), 0))
         tk.Label(lines, text=t("Folder"), font=("Segoe UI", 10), bg=bg, fg=fg).grid(row=1, column=0, **grid)
         self.folder_box = RoundedEntry(lines, width=24, font=("Segoe UI", 10))
-        self.folder_box.grid(row=1, column=1, columnspan=3, **grid)
+        self.folder_box.grid(row=1, column=1, **grid)
         self.folder_box.entry.bind("<KeyRelease>", lambda e: self._sync_clear_text(), add="+")
+        browse = self.browse_link = tk.Label(lines, text=t("Browse"), font=("Segoe UI", 9, "underline"), bg=bg,
+                                             fg=PALETTE["button_fg"], cursor="hand2")
+        browse.grid(row=1, column=2, sticky="w", padx=(px(8), 0))
+        browse.bind("<Button-1>", lambda e: self._browse())
         tk.Label(lines, text=t("Limit"), font=("Segoe UI", 10), bg=bg, fg=fg).grid(row=2, column=0, **grid)
         limit = tk.Frame(lines, bg=bg)
         limit.grid(row=2, column=1, columnspan=3, **grid)
@@ -361,6 +365,35 @@ class SavePlaylistPrompt(tabs.NamePrompt):
         folder = self.folder_box.get().strip() or "Music"
         self.clear_tick.config(text=t("Clear {folder} First", folder=folder))
 
+    def _browse(self):
+        """Browse: the phone's folders, to go into and pick from (Ben, 23 Nov 2026: Jo's music is in Music/Music)."""
+        import phone
+        device_id, model = self._device()
+        name = phone.settings(device_id, model)["name"]
+        try:
+            p = phone.WpdPhone(device_id, name)
+        except Exception as e:
+            self.free_label.config(text=t("Can't read it: is it unlocked?"))
+            engine.debug(f"Copy Tracks To, Browse: {e}")
+            return
+        try:
+            picker = FolderPicker(self, p, name, self.folder_box.get().strip())
+            try:
+                picker.grab_set()
+            except tk.TclError:
+                pass
+            picker.wait_window()
+        finally:
+            p.close()
+        try:
+            self.grab_set()
+        except tk.TclError:
+            pass
+        if picker.result:
+            self.folder_box.delete(0, "end")
+            self.folder_box.insert(0, picker.result)
+            self._sync_clear_text()
+
     def _rename(self):
         import phone
         device_id, model = self._device()
@@ -385,6 +418,101 @@ class SavePlaylistPrompt(tabs.NamePrompt):
                          "folder": self.folder_box.get().strip().strip("/\\") or "Music", "limit_gb": max(0.0, limit),
                          "clear": bool(self.clear_var.get())}
         super().ok()
+
+
+class FolderPicker(tabs.PromptWindow):
+    """
+    Browse's window: a folder on the phone, from the folder in the box. The path at the top, each part clickable to
+    go back up; the folders here (dot folders such as .thumbnails left out), double-click to go in, Up to go back.
+    Use This Folder takes the one selected, or the one you're in. Never the phone's top level: with Clear Music
+    First ticked that would be everything on it. .result is the path ('Music/Music') or None.
+    """
+
+    ok_text = N_("Use This Folder")
+
+    def __init__(self, parent, phone_obj, phone_name, start=""):
+        self._ph = phone_obj
+        self.path = [p for p in re.split(r"[\\/]+", start or "") if p]
+        self.folders = []
+        super().__init__(parent, t("Choose a Folder on {phone}", phone=phone_name))
+
+    def _body(self, inner, bg, fg):
+        px = self._px
+        self._bg, self._fg = bg, fg
+        self.crumbs = tk.Frame(inner, bg=bg)
+        self.crumbs.pack(anchor="w", pady=(0, px(6)))
+        self.listbox = tk.Listbox(inner, height=10, width=42, activestyle="none", font=("Segoe UI", 10),
+                                  bg=PALETTE.get("field_bg") or bg, fg=fg, relief="flat", bd=0, highlightthickness=1,
+                                  highlightbackground=PALETTE["line"], selectbackground=PALETTE["button_accent"],
+                                  selectforeground=PALETTE.get("window_bg") or "#ffffff", exportselection=False)
+        self.listbox.pack(anchor="w", fill="x")
+        self.listbox.bind("<Double-Button-1>", lambda e: self._enter_selected())
+        self.note = tk.Label(inner, text=t("Double-click a folder to go into it."), font=("Segoe UI", 9), bg=bg,
+                             fg=PALETTE["help_fg"], anchor="w")
+        self.note.pack(anchor="w", pady=(px(6), 0))
+        self.show()
+
+    def _here(self):
+        """The folder the path reaches, the path cut back to the last part that's there."""
+        while True:
+            fid = self._ph.folder("/".join(self.path))
+            if fid is not None or not self.path:
+                return fid
+            self.path.pop()
+
+    def show(self):
+        fid = self._here()
+        entries = self._ph.list(fid) if fid is not None else []
+        self.folders = sorted((e["name"] for e in entries if e["folder"] and not e["name"].startswith(".")),
+                              key=str.lower)
+        self.listbox.delete(0, "end")
+        if self.path:
+            self.listbox.insert("end", "↑  " + t("Up"))
+        for name in self.folders:
+            self.listbox.insert("end", "    " + name)
+        for w in self.crumbs.winfo_children():
+            w.destroy()
+        parts = [t("Phone")] + self.path
+        for i, part in enumerate(parts):
+            if i:
+                tk.Label(self.crumbs, text="›", bg=self._bg, fg=PALETTE["help_fg"]).pack(side="left", padx=2)
+            last = i == len(parts) - 1
+            lab = tk.Label(self.crumbs, text=part, bg=self._bg, font=("Segoe UI", 10, "bold" if last else "underline"),
+                           fg=self._fg if last else PALETTE["button_fg"], cursor="" if last else "hand2")
+            lab.pack(side="left")
+            if not last:
+                lab.bind("<Button-1>", lambda e, depth=i: self.go_to(depth))
+
+    def go_to(self, depth):
+        self.path = self.path[:depth]
+        self.show()
+
+    def _selected(self):
+        """The folder name selected, 'up' for Up, or None."""
+        sel = self.listbox.curselection()
+        if not sel:
+            return None
+        i = sel[0] - (1 if self.path else 0)
+        return "up" if i < 0 else self.folders[i]
+
+    def enter(self, name):
+        if name == "up":
+            self.path = self.path[:-1]
+        elif name:
+            self.path = self.path + [name]
+        self.show()
+
+    def _enter_selected(self):
+        self.enter(self._selected())
+
+    def ok(self):
+        chosen = self._selected()
+        path = self.path + ([chosen] if chosen and chosen != "up" else [])
+        if not path:
+            self.note.config(text=t("Choose a folder, not the whole phone."), fg=PALETTE["amber"])
+            return
+        self.result = "/".join(path)
+        self.destroy()
 
 
 def ask_save(parent, title, prompt, initial, size):

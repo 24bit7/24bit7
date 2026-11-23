@@ -99,6 +99,41 @@ def test_save_and_copy_puts_the_tracks_on_the_phone(app, ui, monkeypatch, tmp_pa
     assert not ui.errors, ui.errors[0]
 
 
+def test_browse_goes_into_folders_and_hands_back_the_path(app, ui, monkeypatch):
+    """Ben, 23 Nov 2026: "I can't see how to navigate to or choose the right folder" (Jo's is Music/Music)."""
+    ph = FakePhone(name="Jo's Phone")
+    music = ph.folder("Music", make=True)
+    ph.make(music, "Music")
+    ph.make(music, "Signal")
+    ph.make(music, ".thumbnails")
+    with_phone(monkeypatch, ph)
+    save = prompt(ui)
+    ui.pump(0.3)
+    save.copy_var.set(True)
+    save._copy_toggled()
+    ui.pump(0.2)
+    assert save.browse_link.winfo_ismapped() and save.browse_link.cget("text") == "Browse"
+    win = ui.gui.FolderPicker(save, ph, "Jo's Phone", "Music")
+    ui.pump(0.3)
+    assert list(win.listbox.get(0, "end")) == ["↑  Up", "    Music", "    Signal"], "dot folders left out"
+    assert [w.cget("text") for w in win.crumbs.winfo_children()] == ["Phone", "›", "Music"]
+    win.enter("Music")
+    assert win.path == ["Music", "Music"] and list(win.listbox.get(0, "end")) == ["↑  Up"]
+    win.ok()
+    assert win.result == "Music/Music"
+    top = ui.gui.FolderPicker(save, ph, "Jo's Phone", "Nowhere/At All")
+    ui.pump(0.3)
+    assert top.path == [] and list(top.listbox.get(0, "end")) == ["    Music"], "a missing path falls back"
+    top.ok()
+    assert top.winfo_exists() and top.result is None, "never the phone's top level"
+    assert top.note.cget("text") == "Choose a folder, not the whole phone."
+    top.listbox.selection_set(0)
+    top.ok()
+    assert top.result == "Music", "or the folder selected"
+    save.destroy()
+    assert not ui.errors, ui.errors[0]
+
+
 def test_the_pop_up_shows_progress_and_stop_and_a_phone_going_away(app, ui):
     win = ui.gui.CopyProgress(ui.play, "Jo's Phone")
     ui.pump(0.3)
