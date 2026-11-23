@@ -3,7 +3,8 @@ Radio and Play & Embellish show their working and log it (Ben, 10 Nov 2026). Bot
 tracks against the library in silence: the console said little between the first line and the last, and their
 sessions in Discover were empty, since nothing looked up was ever logged. Now each pillar and agreeing artist is
 a line, each of its top tracks is said, In library or Not in library, and every one is logged to the session,
-hit or miss, with Radio or Embellish as its source. Nothing here opens a window.
+hit or miss. Its source was "Radio" or "Embellish" until 23 Nov 2026 (Ben: "It should really show the source");
+now it's the sources that named the track, as Artist Matching logs. Nothing here opens a window.
 """
 
 from test_radio import EVERYONE, play_counts
@@ -11,6 +12,12 @@ from test_radio_playlist import made_radio, radio  # noqa: F401  (the radio fixt
 
 ROAD_TRIP = {"ID": "202", "Name": "Road Trip"}
 MISSING = "A Song Not In The Library"   # the fake sources name it for every artist, and nobody owns it
+
+
+def named_by_sources(app, got):
+    """True when every row's Sources is made of real source names, never the feature's own."""
+    names = {name for name, _, _ in app.engine.top_track_plan(10)[0]}
+    return all(s and set(s.split(", ")) <= names for _a, _t, s, _f in got)
 
 
 def logged(app, mode):
@@ -36,9 +43,9 @@ def test_embellish_logs_every_track_it_looks_up_for_discover(app):
     embellish.embellish(ROAD_TRIP, None, "p50", app.Lines())
     got = logged(app, "embellish")
     assert got, "the session was empty"
-    assert {s for _a, _t, s, _f in got} == {"Embellish"}
-    assert ("The Kinks", "Waterloo Sunset", "Embellish", 1) in got
-    assert ("The Kinks", MISSING, "Embellish", 0) in got, "a miss is what Discover is for"
+    assert named_by_sources(app, got), got
+    assert ("The Kinks", "Waterloo Sunset", 1) in [(a, tr, f) for a, tr, _s, f in got]
+    assert ("The Kinks", MISSING, 0) in [(a, tr, f) for a, tr, _s, f in got], "a miss is what Discover is for"
     on_list = {"The Hollies", "Queen", "The Byrds", "Badfinger"}
     assert not {a for a, _t, _s, _f in got} & on_list, "artists already on the playlist aren't looked up"
 
@@ -64,7 +71,7 @@ def test_radio_logs_every_track_it_looks_up_for_discover(app, radio):
     buttons.run(buttons.get(b["id"]), report=r)
     got = logged(app, "radio")
     assert got, "the session was empty"
-    assert {s for _a, _t, s, _f in got} == {"Radio"}
+    assert named_by_sources(app, got), got
     assert any(f == 1 for _a, _t, _s, f in got) and any(f == 0 for _a, _t, _s, f in got), got
     sent = app.jriver.zone("Speakers").playlist
     hits = {(a, tr) for a, tr, _s, f in got if f == 1}

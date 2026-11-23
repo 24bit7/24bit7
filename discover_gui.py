@@ -75,6 +75,23 @@ def short_started(started):
         return started or "?"
 
 
+PLAYLIST_MODES = ("embellish", "jriver_playlist", "blend")
+
+
+def seed_label(mode, artist, track):
+    """
+    What a session was built from, for the Seed column and the session list. Radio and a JRiver playlist have no
+    seed artist, so they say what they are (Ben, 23 Nov 2026: they read "? - Classic Rock / Rock"): "Radio: Classic
+    Rock / Rock", "Playlist: Happy Go Lucky". An album keeps "Artist - Album"; the rest are "Artist - Track".
+    """
+    if mode == "radio" and not artist:
+        return t("Radio: {station}", station=track or "")
+    if mode in PLAYLIST_MODES and not artist:
+        return t("Playlist: {name}", name=track or "")
+    seed = artist or "?"
+    return f"{seed} - {track}" if track else seed
+
+
 class DiscoverTab(tk.Frame):
     def __init__(self, master):
         super().__init__(master)
@@ -335,9 +352,7 @@ class DiscoverTab(tk.Frame):
         labels = [t("All sessions")]
         self._session_ids = [None]
         for sid, started, mode, artist, track in self.sessions:
-            seed = artist or "?"
-            if track:
-                seed += f" - {track}"
+            seed = seed_label(mode, artist, track)
             labels.append(f"{short_started(started)}  {seed}")
             self._session_ids.append(sid)
         self.session_menu.config(values=labels)
@@ -376,9 +391,7 @@ class DiscoverTab(tk.Frame):
         return text
 
     def _seed_text(self, r):
-        seed = r.get("seed_artist") or "?"
-        if r.get("seed_track"):
-            seed += f" - {r['seed_track']}"
+        seed = seed_label(r.get("mode"), r.get("seed_artist"), r.get("seed_track"))
         if r.get("seed"):   # a Playing Now build: the sampled track this row came from
             seed = r["seed"]
         return seed

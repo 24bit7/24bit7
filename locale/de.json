@@ -1820,6 +1820,7 @@
   "Couldn't work the numbers out ({error}).": "Die Zahlen konnten nicht ausgewertet werden ({error}).",
   "{artist} is on the lists of": "{artist} steht auf den Listen von",
   "Songs named": "Genannte Songs",
+  "Playlist: {name}": "Playlist: {name}",
   "Most are on": "Die meisten sind auf",
   "{album} ({count} of {total})": "{album} ({count} von {total})",
   ", then {album} ({count})": ", dann {album} ({count})",

@@ -62,7 +62,7 @@ def interleave(rest, new):
 
 
 def _candidates(mode, artist, title, say):
-    """[((artist, title), weight)] for one seed."""
+    """[((artist, title), weight, sources)] for one seed: sources are those that named the track."""
     artists = engine.split_values(artist) or [artist]
     if mode == "artists":
         similar, _ = engine.blended_similar_artists(artists, limit=engine.SIMILAR_ARTIST_LIMIT,
@@ -70,16 +70,16 @@ def _candidates(mode, artist, title, say):
         out = []
         for a, sources in similar:
             top, _ = engine.blended_top_tracks(a, limit=engine.TRACKS_PER_ARTIST_POOL)
-            out += [((a, tval), len(sources)) for tval, _ in top]
+            out += [((a, tval), len(sources), named) for tval, named in top]
         return out
     candidates, _ = engine.similar_track_candidates(artists, title, report=say)
-    return [(pair, len(sources)) for pair, sources in candidates]
+    return [(pair, len(sources), sources) for pair, sources in candidates]
 
 
 def find(keys, report, quiet=None, mode="tracks", session_id=None):
     """
     New tracks like the playlist: [key], up to one per playlist track and CAP. Each suggestion checked against
-    the library goes to Discover under session_id, with Sources "Blend", once.
+    the library goes to Discover under session_id, once, with the sources that named it.
     """
     import library
     target = min(len(keys), CAP)
@@ -95,18 +95,18 @@ def find(keys, report, quiet=None, mode="tracks", session_id=None):
         votes = {}
         for artist, title, key in seeds:
             used.add(key)
-            for (a, tval), weight in _candidates(mode, artist, title, say):
+            for (a, tval), weight, named in _candidates(mode, artist, title, say):
                 ident = (engine.artist_key(a), engine.clean_name(tval))
-                score, pair = votes.get(ident, (0, (a, tval)))
-                votes[ident] = (score + 10 + weight, pair)   # agreement across seeds counts most
+                score, pair, by = votes.get(ident, (0, (a, tval), []))
+                votes[ident] = (score + 10 + weight, pair, by + [s for s in named if s not in by])   # agreement counts most
         added = 0
-        for ident, (_, (a, tval)) in sorted(votes.items(), key=lambda x: -x[1][0]):
+        for ident, (_, (a, tval), by) in sorted(votes.items(), key=lambda x: -x[1][0]):
             if len(found) >= target:
                 break
             key = library.find_track_key(a, tval)
             if session_id is not None and ident not in logged:
                 logged.add(ident)
-                engine.session_log(session_id, a, tval, ["Blend"], found=bool(key))
+                engine.session_log(session_id, a, tval, by or ["Blend"], found=bool(key))   # its sources (23 Nov 2026)
             if not key or str(key) in exclude or str(key) in found:
                 continue
             owner = engine.owner_key(a, key)

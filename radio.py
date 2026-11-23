@@ -974,8 +974,9 @@ def _owned_top(artist, have, played, limit, pool=None, seen=None, report=None):
     An artist's top tracks you own, then your most played of theirs, up to limit. pool: pick limit at
     random from the owned ones among the artist's top pool (Radio's page: "pick 3 of each artist's top 5"),
     as Artist Matching does; None takes them in the sources' order (a pillar's own songs: its best known).
-    seen(title, found): told about each of the pool's tracks as it's looked up, hit or miss (the console and
-    Discover, 10 Nov 2026); what's taken beyond the pool, or from your own most played, isn't a suggestion.
+    seen(title, found, sources): told about each of the pool's tracks as it's looked up, hit or miss, and which
+    sources named it (the console and Discover, 10 Nov 2026; the sources since 23 Nov 2026, where Discover had said
+    "Radio"); what's taken beyond the pool, or from your own most played, isn't a suggestion.
     report: Use Adaptive Selections (12 Nov 2026) for the agreeing artists: the pool and the pick shrink to the
     artist's widely played songs, and nothing is taken beyond them.
     """
@@ -989,10 +990,10 @@ def _owned_top(artist, have, played, limit, pool=None, seen=None, report=None):
             if not top:
                 return []
             owned = []
-            for title, _sources in top:
+            for title, sources in top:
                 key = library.find_track_key(artist, title)
                 if seen is not None:
-                    seen(title, bool(key))
+                    seen(title, bool(key), sources)
                 key = played.pick(key) if key and str(key) not in have else None
                 if key and str(key) not in have and str(key) not in owned:
                     owned.append(str(key))
@@ -1000,10 +1001,10 @@ def _owned_top(artist, have, played, limit, pool=None, seen=None, report=None):
             return owned[:limit]
     if pool:
         owned = []
-        for title, _sources in top[:pool]:
+        for title, sources in top[:pool]:
             key = library.find_track_key(artist, title)
             if seen is not None:
-                seen(title, bool(key))
+                seen(title, bool(key), sources)
             key = played.pick(key) if key and str(key) not in have else None
             if key and str(key) not in have and str(key) not in owned:
                 owned.append(str(key))
@@ -1062,11 +1063,11 @@ def find(lane_, report, minutes=TARGET_MINUTES, avoid=(), own=None, first=None, 
     fits = fitter(lane_)
 
     def seen_for(artist):
-        def seen(title, found):
+        def seen(title, found, sources=()):
             report("    " + t("{found_label}: {track_name}", track_name=title,
                               found_label=t("In library") if found else t("Not in library")))
-            if session_id is not None:
-                engine.session_log(session_id, artist, title, ["Radio"], found=found)
+            if session_id is not None:   # the sources that named it, as Artist Matching logs (Ben, 23 Nov 2026)
+                engine.session_log(session_id, artist, title, list(sources) or ["Radio"], found=found)
         return seen
     try:
         while pillars and len(circle) < CIRCLE_MAX and (not picks or _minutes(picks) < minutes):

@@ -183,9 +183,25 @@ def _unwrap_brackets(title):
     return _BRACKETS.sub(lambda m: " " if _is_tag(m.group(0)[1:-1]) else f" {m.group(0)[1:-1]} ", title or "")
 
 
+# A version after a dash at the end of a title (Ben, 23 Nov 2026): "Don't Stop Me Now - Remastered 2011" is the
+# song, as "(Remastered 2011)" always was. Radio missed three Queen songs he owns. engine.clean_name had the rule;
+# the library's look-up never did. Only the last dash part, and only when it holds a version word or is "From ...".
+_DASH_TAG = re.compile(r"\s+[-‐-―]\s+(from\s.*|[^-‐-―]*\b" + engine.VERSION_WORDS + r"\b[^-‐-―]*)$",
+                       re.I)
+
+
+def _drop_dash_tag(title):
+    """'Under Pressure - Remastered 2011' -> 'Under Pressure'; a title without a dash version is left as it is."""
+    return _DASH_TAG.sub("", title or "")
+
+
 def _tagged(title):
-    """True when a title carries a version tag or a credit in brackets: 'Blue Monday (Hardfloor Remix)'."""
-    return any(_is_tag(m.group(0)[1:-1]) for m in _BRACKETS.finditer(title or ""))
+    """
+    True when a title carries a version tag or a credit in brackets, 'Blue Monday (Hardfloor Remix)', or a version
+    after a dash, 'Paranoid - Live'.
+    """
+    return (any(_is_tag(m.group(0)[1:-1]) for m in _BRACKETS.finditer(title or ""))
+            or _drop_dash_tag(title) != (title or ""))
 
 
 # A dropped "g" at the end of a word, straight or curly apostrophe: Lightnin', Lovin', Ramblin'
@@ -215,9 +231,13 @@ def _title_forms(title):
             if k and k not in out:
                 out.append(k)
         return out
-    plain = keys_of(title)
-    full = keys_of(_unwrap_brackets(title)) if _BRACKETS.search(title or "") else plain
-    return plain + [k for k in full if k not in plain], frozenset(full)
+    base = _drop_dash_tag(title)   # a version after a dash goes, like one in brackets
+    plain = keys_of(base)
+    full = keys_of(_unwrap_brackets(base)) if _BRACKETS.search(base) else plain
+    keys = plain + [k for k in full if k not in plain]
+    if base != (title or ""):   # and the whole title is kept too, in case the dash was part of the song's name
+        keys += [k for k in keys_of(title) if k not in keys]
+    return keys, frozenset(full)
 
 
 NO_YEAR = 9999   # a copy with no year sorts after the dated ones

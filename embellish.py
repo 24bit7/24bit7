@@ -465,12 +465,12 @@ def find(keys, name, amount, report, spare=0, session_id=None):
                     top = top[:len(titles)]
                     most = each if cap else None
                 owned = []
-                for title, _sources in top:
+                for title, sources in top:
                     key = library.find_track_key(artist, title)
                     report("    " + t("{found_label}: {track_name}", track_name=title,
                                       found_label=t("In library") if key else t("Not in library")))
-                    if session_id is not None:
-                        engine.session_log(session_id, artist, title, ["Embellish"], found=bool(key))
+                    if session_id is not None:   # the sources that named it, not "Embellish" (Ben, 23 Nov 2026)
+                        engine.session_log(session_id, artist, title, list(sources) or ["Embellish"], found=bool(key))
                     key = played.pick(key) if key and str(key) not in have else None
                     if key and str(key) not in have and str(key) not in owned:
                         owned.append(str(key))
@@ -745,7 +745,7 @@ def their_hits(artist, keys, report, session_id=None):
         report("    " + t("{found_label}: {track_name}", track_name=title,
                           found_label=t("In library") if key else t("Not in library")))
         if session_id is not None:
-            engine.session_log(session_id, artist, title, ["Embellish"], found=bool(key))
+            engine.session_log(session_id, artist, title, ["Last.fm"], found=bool(key))   # hit_titles' counts
         if not key:
             missing += 1
         elif str(key) not in have and str(key) not in out:

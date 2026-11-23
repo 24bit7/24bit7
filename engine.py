@@ -1804,7 +1804,7 @@ def list_discoveries(found=None, session_id=None):
     session_id: restrict to one session, or None for all.
     """
     q = ("SELECT d.artist, d.track, d.sources, d.found, s.started_at, d.session_id, "
-         "s.seed_artist, s.seed_track, d.id, d.seed "
+         "s.seed_artist, s.seed_track, d.id, d.seed, s.mode "
          "FROM discoveries d JOIN sessions s ON s.id = d.session_id")
     conds, args = [], []
     if found is not None:
@@ -1819,7 +1819,7 @@ def list_discoveries(found=None, session_id=None):
     rows = db().execute(q, args).fetchall()
     return [{"artist": r[0], "track": r[1], "sources": r[2], "found": bool(r[3]),
              "date": r[4], "session_id": r[5], "seed_artist": r[6], "seed_track": r[7], "id": r[8],
-             "seed": r[9]}
+             "seed": r[9], "mode": r[10]}
             for r in rows]
 
 
