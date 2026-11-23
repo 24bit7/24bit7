@@ -535,6 +535,13 @@ def find_album(heard):
     return True, [(best[1], best[2], keys)]
 
 
+def artist_list():
+    """Every artist's name as the library has it, A to Z, for the Search tab's Artist box (23 Nov 2026). Empty until
+    the library's first read, so the box never waits on it."""
+    with _lock:
+        return sorted(_artists.values(), key=lambda a: a.lower())
+
+
 def album_list():
     """Every album as (album, album artist), for the Play tab's Album or Playlist box (12 Nov 2026). Empty until
     the library's first read, so the box never waits on it."""

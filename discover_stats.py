@@ -29,7 +29,7 @@ from i18n import N_
 PERIODS = (N_("All time"), N_("Last 6 months"), N_("Last 12 months"))
 PERIOD_DAYS = {"All time": None, "Last 6 months": 183, "Last 12 months": 365}
 VIEWS = (N_("Missing Artists"), N_("Gaps in Your Artists"))
-NO_SEED_ARTIST = {"vibe", "radio", "embellish", "jriver_playlist", "blend"}   # their seed_artist isn't an artist
+NO_SEED_ARTIST = {"vibe", "radio", "embellish", "jriver_playlist", "blend", "stack"}   # their seed_artist isn't an artist
 SOUND_MIN = 3        # a sound is listed when at least this many artists in view share it
 SOUNDS_PER_ARTIST = 8
 DECADE = re.compile(r"^(?:19|20)?(\d0)'?s$")   # 80s, 1980s, 80's: Radio's rule drops them, Sound keeps them

@@ -54,6 +54,7 @@ PALETTE.update({
     "ai_purple":      "#b000b0",   # magenta: anything that uses AI credits
     "amber":          "#b36b00",   # a warning that's still safe: the Now Playing row's Stop (9 Nov 2026)
     "red":            "#c62828",   # a step that can't be undone: Clear Playing Now
+    "go":             "#2e7d32",   # the Search tab's Go, once artists are stacked (23 Nov 2026)
 })
 LIGHT = dict(PALETTE)
 LIGHT.update({   # the redesign: a blue strip, #BFC3C9 header bars and inactive tabs, blue ticks
@@ -98,6 +99,7 @@ DARK = {
     "ai_purple":       "#ff33ff",   # bright magenta, so it reads on charcoal
     "amber":           "#ffb000",   # the console's note amber: the Now Playing row's Stop
     "red":             "#ff6b6b",   # the console's problem red: Clear Playing Now
+    "go":              "#4cd964",   # the Search tab's Go
     # the redesign: a black strip, black header bars, green ticks, dark grey fields
     "strip_bg":        "#000000",
     "strip_fg":        None,

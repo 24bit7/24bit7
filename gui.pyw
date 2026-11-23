@@ -147,6 +147,9 @@ PLAY_NOTES = {
                 "Right-click a station to split it or add it as a button."),
     "Save Playlist": N_("Saves what's in Playing Now in the zone the last playlist went to as a JRiver playlist, so "
                         "a chain of Top-Ups or an embellished playlist can be kept."),
+    "Go": N_("Plays up to this many songs you own by each artist you added, shuffled with the artists spread out."),
+    "Most Played": N_("Only the artist's most played songs, so a one-hit wonder gives just the hit. A song counts "
+                      "when it has at least a fifth of the plays of the artist's biggest, by Last.fm's counts."),
 }
 PLAYLISTS_SHOWN = 15   # rows of the All Playlists part of the list before "type to narrow"
 ALBUMS_SHOWN = 10      # and of the Albums part, once something is typed
@@ -156,7 +159,9 @@ BUTTON_GAP = 8   # between the Play tab's buttons, and between its rows of them
 LIST_BOX_GAP = 24   # JRiver Playlists: between the Playlist box and Play
 LIST_BOX_HEIGHT = 1.12   # and the box's height, as a share of Play's (one line tall since 13 Nov 2026)
 SEARCH_TIP = N_("Build a playlist from any track, even one you don't own. Only Track Matching needs the track; the "
-                "other playlists need just the artist. Press Enter for Similar Artists.")   # said while Search is open
+                "other playlists need just the artist. Press Enter for Similar Artists. For a few songs from each of "
+                "several artists you own, + Add them from the Artist list and click Go.")   # said while Search is open
+ARTISTS_SHOWN = 12   # rows of the Search tab's artist list before "type to narrow"
 
 
 class DropPill(tk.Canvas):
@@ -344,6 +349,7 @@ class PlayTab(tk.Frame):
         # the boxes sit centred in the panel as Playlists & Albums' do
         for entry in (self.search_artist, self.search_track):
             entry.bind("<Return>", lambda e: self.on_similar())
+        self._build_stack_row(fields)
         self._search_tip_line = None
         self.seed_nb.bind("<<NotebookTabChanged>>", lambda e: (self._sync_seed_buttons(), self._place_output(),
                                                               self.after_idle(self._line_up_lists),
@@ -375,6 +381,162 @@ class PlayTab(tk.Frame):
                 self.log.config(state="disabled")
         except tk.TclError:
             pass
+
+    # --- Stacking artists on Search (Ben, 23 Nov 2026): a few songs from each of several artists, then Go ---
+
+    def _build_stack_row(self, fields):
+        """
+        The Artist box lists your artists as you type, each with + Add; Go, how many each and Most Played sit
+        after the Track box, in the gap before Output, once something has been added.
+        """
+        import stack
+        self._stack, self._artists_pop = [], None
+        chosen = stack.choices()
+        row = self.stack_row = tk.Frame(fields)
+        self.stack_go = FlatButton(row, text=t("Go"), command=self.on_stack_go, width=6, height=1, quiet=True)
+        self.stack_go.config(armed=PALETTE["go"])
+        self.stack_go.pack(side="left")
+        self.stack_count = tk.StringVar(value=str(chosen["count"]))
+        count = self.stack_count_cb = ttk.Combobox(row, textvariable=self.stack_count, state="readonly", width=3,
+                                                   values=[str(n) for n in stack.COUNTS])
+        count.pack(side="left", padx=(8, 4))
+        count.bind("<<ComboboxSelected>>", lambda e: stack.set_choice("count", int(self.stack_count.get())))
+        tk.Label(row, text=t("each"), font=("Segoe UI", 9)).pack(side="left", padx=(0, 10))
+        self.stack_most = tk.BooleanVar(value=chosen["most_played"])
+        most = self.stack_most_tick = ttk.Checkbutton(
+            row, text=t("Most Played"), variable=self.stack_most,
+            command=lambda: stack.set_choice("most_played", "1" if self.stack_most.get() else "0"))
+        most.pack(side="left")
+        on, wrap = self.help_on, self.note_wrap
+        for widget, name in ((self.stack_go, "Go"), (count, "Go"), (most, "Most Played")):
+            Tooltip(widget, t(PLAY_NOTES[name]), when=on, wrap=wrap)
+        self.extra_list_buttons = getattr(self, "extra_list_buttons", []) + [self.stack_go]
+        entry = self.search_artist.entry
+        entry.bind("<FocusIn>", lambda e: self._artists_pop is None and self._fill_artists(), add="+")
+        entry.bind("<KeyRelease>", self._artists_typed, add="+")
+        entry.bind("<Escape>", lambda e: self._close_artists(), add="+")
+        entry.bind("<FocusOut>", lambda e: self.after(200, self._close_artists_if_away), add="+")
+
+    def _sync_stack_row(self):
+        """Go and its choices show only while something is stacked."""
+        if self._stack and not self.stack_row.winfo_manager():
+            self.stack_row.pack(side="left", padx=(LIST_BOX_GAP, 0))
+        elif not self._stack and self.stack_row.winfo_manager():
+            self.stack_row.pack_forget()
+        self.after_idle(self._place_output)
+
+    def _artists_typed(self, event):
+        if event.keysym not in ("Return", "Escape", "Tab"):
+            self._fill_artists()
+
+    def _artists_matching(self, typed):
+        """Your artists with what's typed in their name, those starting with it first."""
+        found = [a for a in library.artist_list() if typed in a.lower()]
+        found.sort(key=lambda a: (not a.lower().startswith(typed), a.lower()))
+        return found
+
+    def _fill_artists(self):
+        """
+        The list under the Artist box: with something typed, your artists with it in their name, each with + Add
+        (or Remove once added); with nothing typed, what's been added so far. No list when there's nothing to show,
+        so typing an artist you don't own works as it always has.
+        """
+        if getattr(self, "_artists_filling", False):
+            return   # the box took the keyboard back while the list was being drawn: one list at a time
+        self._artists_filling = True
+        try:
+            self._fill_artists_now()
+        finally:
+            self._artists_filling = False
+
+    def _fill_artists_now(self):
+        self._close_artists()
+        if self.running:
+            return
+        entry = self.search_artist
+        typed = entry.get().strip().lower()
+        found = self._artists_matching(typed) if typed else list(self._stack)
+        if not found:
+            return
+        bg, fg, muted, line = PALETTE["field_bg"], PALETTE["text"], PALETTE["help_fg"], PALETTE["line"]
+        pop = self._artists_pop = tk.Toplevel(self)
+        pop.withdraw()
+        pop.overrideredirect(True)
+        pop.configure(bg=line, padx=1, pady=1)
+        inner = tk.Frame(pop, bg=bg)
+        inner.pack(fill="both", expand=True)
+        pop._rows = []
+        tk.Label(inner, text=(t("Your Artists") if typed else t("Added")).upper(), font=("Segoe UI", 8), fg=muted,
+                 bg=bg).pack(anchor="w", padx=10, pady=(6, 1))
+        for artist in found[:ARTISTS_SHOWN]:
+            added = artist in self._stack
+            r = tabs.PickRow(inner, ("✓ " if added else "    ") + artist, fg=fg, bg=bg, fit=True,
+                             tag=t("Remove") if added else t("+ Add"))
+            r.configure(cursor="hand2")
+            r.pack(fill="x", padx=3, pady=1)
+            r.bind("<Enter>", lambda e, w=r: w.set_chosen(True))
+            r.bind("<Leave>", lambda e, w=r: w.set_chosen(False))
+            r.bind("<ButtonPress-1>", lambda e, a=artist: self._stack_toggle(a))
+            pop._rows.append((artist, r))
+        if len(found) > ARTISTS_SHOWN:
+            tk.Label(inner, text=t("and {count} more: type to narrow the list", count=len(found) - ARTISTS_SHOWN),
+                     fg=muted, bg=bg, font=("Segoe UI", 9)).pack(anchor="w", padx=10, pady=(0, 6))
+        pop.update_idletasks()
+        w = max(pop.winfo_reqwidth(), entry.winfo_width(), 300)
+        pop.geometry(f"{w}x{pop.winfo_reqheight()}+{entry.winfo_rootx()}+{entry.winfo_rooty() + entry.winfo_height() + 2}")
+        pop.deiconify()
+        pop.lift()
+
+    def _close_artists(self):
+        pop, self._artists_pop = self._artists_pop, None
+        if pop is not None:
+            try:
+                pop.destroy()
+            except tk.TclError:
+                pass
+
+    def _close_artists_if_away(self):
+        try:
+            if self.focus_get() is self.search_artist.entry:
+                return
+        except (KeyError, tk.TclError):
+            pass
+        self._close_artists()
+
+    def _stack_toggle(self, artist):
+        """+ Add or Remove, said in the console; the box clears for the next name and the list shows what's added."""
+        import stack
+        if artist in self._stack:
+            self._stack.remove(artist)
+            self._append_log(t("Removed {artist}.", artist=artist))
+        else:
+            self._stack.append(artist)
+            self._append_log(t("Added {artist}. Add more, or click Go.", artist=artist))
+        if len(self._stack) > 1 or (self._stack and artist not in self._stack):   # one added: its line says it
+            self._append_log(t("Stacked: {names}.", names=", ".join(self._stack)))
+        elif not self._stack:
+            self._append_log(t("Nothing stacked now."))
+        self.search_artist.delete(0, "end")
+        self._sync_stack_row()
+        self.search_artist.entry.focus_set()
+        self.after_idle(self._fill_artists)
+
+    def on_stack_go(self):
+        """Go: the stacked artists' songs to Output like any build, so Save Playlist keeps them; the stack clears."""
+        import stack
+        if self.running or not self._stack:
+            return
+        artists, self._stack = list(self._stack), []
+        try:
+            count = int(self.stack_count.get())
+        except ValueError:
+            count = stack.DEFAULT_COUNT
+        most_played = bool(self.stack_most.get())
+        self._close_artists()
+        self._sync_stack_row()
+        top_up = bool(getattr(self, "top_up_armed", False))
+        self._run_job(lambda: stack.build(artists, count, most_played, self.report), needs_playing=False, mix=False,
+                      review=True, top_up=top_up)
 
     # --- Playlists & Albums (Ben, 6 Nov 2026; albums 12 Nov): play or embellish an album or playlist you own ---
 

@@ -88,6 +88,8 @@ def seed_label(mode, artist, track):
         return t("Radio: {station}", station=track or "")
     if mode in PLAYLIST_MODES and not artist:
         return t("Playlist: {name}", name=track or "")
+    if mode == "stack" and not artist:   # the Search tab's stacked artists (23 Nov 2026)
+        return t("Search: {names}", names=track or "")
     seed = artist or "?"
     return f"{seed} - {track}" if track else seed
 

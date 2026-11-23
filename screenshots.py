@@ -44,7 +44,7 @@ SCALE = 1.0   # Windows' display scaling while the shots are taken (set by build
 SHOTS = [
     ("play", ["Play", "Now Playing"], ["gui.pyw", "mix_gui.py", "tabs.py"], "more_closed"),
     ("play_more_options", ["Play", "Now Playing"], ["gui.pyw", "mix_gui.py", "tabs.py"], "more_open"),
-    ("play_search", ["Play", "Search"], ["gui.pyw", "tabs.py"], "more_closed"),
+    ("play_search", ["Play", "Search"], ["gui.pyw", "stack.py", "tabs.py"], "search_stack"),
     ("play_jriver_playlists", ["Play", "Playlists & Albums"], ["gui.pyw", "embellish.py", "tabs.py"], "playlists_list"),
     ("play_radio", ["Play", "Now Playing"], ["gui.pyw", "radio.py", "tabs.py"], "radio_list"),
     ("play_review", ["Play", "Now Playing"], ["gui.pyw", "review_gui.py"], "review"),
@@ -473,6 +473,7 @@ def start_demo(gui, temp):
     owned = {library.norm(a) for a in DEMO_OWNED}
     library.has_artist = lambda name: library.norm(name or "") in owned   # never the real library
     library.album_list = lambda: list(DEMO_ALBUMS)
+    library.artist_list = lambda: sorted(DEMO_OWNED, key=str.lower)   # the Search tab's list (1.40.0)
     try:
         import discover_stats
         discover_stats.fetch_tags = lambda names, cancelled=None: 0   # no Last.fm in demo mode
@@ -958,6 +959,17 @@ def main():
                 settle(root, 0.3)
                 play._open_playlists()
                 popup = play._playlists_pop
+            elif action == "search_stack":   # two artists added, Go showing, a third typed with the list open (1.40.0)
+                import library
+                play._show_more(False, save=False)
+                play._close_artists_if_away = lambda: None   # the shot takes the keyboard from the box
+                for n in ("The Kinks", "Nick Drake"):
+                    play._stack_toggle(n)
+                play.search_artist.delete(0, "end")
+                play.search_artist.insert(0, "The B")
+                settle(root, 0.3)
+                play._fill_artists()
+                popup = play._artists_pop
             elif action == "radio_list":   # Radio's arrow open: the lanes, Classic Rock split
                 play._show_more(False, save=False)
                 play._close_children_if_unfocused = lambda: None
