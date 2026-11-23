@@ -1,5 +1,5 @@
 """
-Use Adaptive Selections (Ben, 12 Nov 2026): a tick in Similar Artists' and Radio's Playlist Selection, on by
+Most Played (Use Adaptive Selections until 23 Nov 2026; Ben, 12 Nov): a tick in Similar Artists' and Radio's Playlist Selection, on by
 default. "Pick 3 of each artist's top 5" shrinks for an artist whose Last.fm plays fall off a cliff: a hit is
 a song with at least a fifth of the plays of the artist's biggest, and the pool and the pick shrink to the
 number of hits, so a one-hit wonder gives its hit and not the rest. It only ever cuts down. Last.fm's counts
@@ -43,7 +43,7 @@ def test_a_one_hit_wonder_gives_its_hit_and_says_so(app):
     name, titles = owned_artist(app)
     app.web.plays[name] = [10000] + [300] * (len(titles) - 1)   # the next song has three per cent of the hit's plays
     r, sent = build(app)
-    assert r.has(f"Adaptive Selections: {name} has 1 widely played song, so the pick comes from that."), r.text()
+    assert r.has(f"Most Played: {name} has 1 widely played song, so the pick comes from that."), r.text()
     theirs = by(app, sent, name)
     assert len(theirs) == 1, (theirs, r.text())
     assert library.track_row(theirs[0])["Name"] == titles[0], "the hit, not one of the rest"
@@ -55,7 +55,7 @@ def test_two_hits_give_at_most_two(app):
     name, titles = owned_artist(app)
     app.web.plays[name] = [10000, 4000] + [500] * (len(titles) - 2)   # a fifth of 10,000 is 2,000
     r, sent = build(app)
-    assert r.has(f"Adaptive Selections: {name} has 2 widely played songs, so the pick comes from those."), r.text()
+    assert r.has(f"Most Played: {name} has 2 widely played songs, so the pick comes from those."), r.text()
     assert 1 <= len(by(app, sent, name)) <= 2, r.text()
 
 
@@ -64,7 +64,7 @@ def test_an_artist_whose_plays_hold_up_is_left_alone(app):
     import library
     library.load()
     r, sent = build(app)
-    assert not r.has("Adaptive Selections:"), r.text()
+    assert not r.has("Most Played:"), r.text()
 
 
 def test_unticked_it_picks_as_before(app):
@@ -73,7 +73,7 @@ def test_unticked_it_picks_as_before(app):
     name, titles = owned_artist(app)
     app.web.plays[name] = [10000] + [300] * (len(titles) - 1)
     r, sent = build(app, ADAPTIVE_ARTISTS="0")
-    assert not r.has("Adaptive Selections:"), r.text()
+    assert not r.has("Most Played:"), r.text()
     assert len(by(app, sent, name)) >= 2, "three picked from five, one of the five not owned"
 
 
@@ -85,7 +85,7 @@ def test_with_last_fm_silent_nothing_is_cut(app):
     app.set_env(TOP_TRACK_SOURCES="deezer")   # the titles from Deezer, as the shipped settings have them
     app.web.down.add("lastfm")
     r, sent = build(app, TOP_TRACK_SOURCES="deezer", SIMILAR_SOURCES="deezer", SIMILAR_MIN_AGREEMENT="1")
-    assert not r.has("Adaptive Selections:"), r.text()
+    assert not r.has("Most Played:"), r.text()
     assert not r.has("Problem: Last.fm didn't answer for"), "a second opinion fails quietly, artist by artist"
     assert len(by(app, sent, name)) >= 2, r.text()
 
@@ -96,7 +96,7 @@ def test_last_fm_sizes_the_cut_when_another_source_gives_the_titles(app):
     name, titles = owned_artist(app)
     app.web.plays[name] = [10000] + [300] * (len(titles) - 1)
     r, sent = build(app, TOP_TRACK_SOURCES="deezer")
-    assert r.has(f"Adaptive Selections: {name} has 1 widely played song"), r.text()
+    assert r.has(f"Most Played: {name} has 1 widely played song"), r.text()
     assert len(by(app, sent, name)) == 1, r.text()
 
 
@@ -123,7 +123,7 @@ def test_embellish_cuts_an_agreeing_one_hit_wonder_too(app):
     app.web.plays[name] = [10000] + [300] * (len(titles) - 1)
     r = app.Lines()
     embellish.embellish(road_trip, "ordered", "out", r)
-    assert r.has(f"Adaptive Selections: {name} has 1 widely played song"), r.text()
+    assert r.has(f"Most Played: {name} has 1 widely played song"), r.text()
     new = [k for k in app.jriver.zone("Speakers").playlist if k not in yours]
     assert len(by(app, new, name)) <= 1, r.text()
 
@@ -136,3 +136,35 @@ def test_the_tick_is_one_of_similar_artists_and_radios_settings_and_kept_in_prof
     assert "ADAPTIVE_ARTISTS" in engine.PROFILE_KEYS["playlist"]
     app.engine.load_settings()
     assert engine.ADAPTIVE_PICK is True, "on by default"
+
+
+def top_build(app, **env):
+    """Artist's Top Tracks for the one-hit wonder, ten asked for, most popular first."""
+    import library
+    library.load()
+    name, titles = owned_artist(app)
+    app.web.plays[name] = [10000, 4000] + [300] * (len(titles) - 2)   # two widely played
+    seed = app.engine.typed_seed_info(name, "")
+    app.set_env(TOP_TRACKS_COUNT="10", TOP_TRACKS_ORDER="popular", **env)
+    app.engine.load_settings()
+    r = app.Lines()
+    app.engine.play_top_n(report=r, seed_info=seed)
+    return r, name, titles, app.jriver.zone("Speakers").playlist
+
+
+def test_most_played_on_top_tracks_takes_only_the_widely_played(app):
+    """Ben, 23 Nov 2026, building playlists for Jo: "I don't want 10 tracks if they only have 4 worth adding"."""
+    import library
+    r, name, titles, sent = top_build(app, ADAPTIVE_TOP="1")
+    assert r.has(f"Most Played: {name} has 2 widely played songs, so the pick comes from those."), r.text()
+    assert 1 <= len(sent) <= 2 and {library.track_row(k)["Name"] for k in sent} <= set(titles[:2]), r.text()
+
+
+def test_top_tracks_is_as_before_unless_ticked(app):
+    r, name, titles, sent = top_build(app)
+    assert not r.has("Most Played:"), r.text()
+    assert len(sent) > 2, "off by default: Top 10 still means ten, as far as you own them"
+    import buttons
+    import engine
+    assert "ADAPTIVE_TOP" in buttons.KIND_KEYS["top"] and "ADAPTIVE_TOP" in engine.PROFILE_KEYS["playlist"]
+    assert engine.ADAPTIVE_TOP is False

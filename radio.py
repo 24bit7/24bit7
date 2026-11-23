@@ -977,7 +977,7 @@ def _owned_top(artist, have, played, limit, pool=None, seen=None, report=None):
     seen(title, found, sources): told about each of the pool's tracks as it's looked up, hit or miss, and which
     sources named it (the console and Discover, 10 Nov 2026; the sources since 23 Nov 2026, where Discover had said
     "Radio"); what's taken beyond the pool, or from your own most played, isn't a suggestion.
-    report: Use Adaptive Selections (12 Nov 2026) for the agreeing artists: the pool and the pick shrink to the
+    report: Most Played (12 Nov 2026) for the agreeing artists: the pool and the pick shrink to the
     artist's widely played songs, and nothing is taken beyond them.
     """
     import library

@@ -33,7 +33,7 @@ Albums too (Ben, 12 Nov 2026): the tab is Playlists & Albums, and Play & Embelli
 plays in order unless Play's arrow says otherwise (remembered apart from a playlist's), and Embellish offers
 the amounts, the album taken as a playlist of its tracks, plus With Their Hits (the album and the artist's
 widely played songs from their other albums, shuffled, its first track first) and And Their Hits (the album
-in order, then those songs, biggest first). A hit is as Use Adaptive Selections counts it, by Last.fm's plays.
+in order, then those songs, biggest first). A hit is as Most Played counts it, by Last.fm's plays.
 A playlist or album by one artist builds its circle from that artist and two picked at random from the five
 most like them. Play has no Non-stop of its own: More Options' switch turns it on.
 """
@@ -458,7 +458,7 @@ def find(keys, name, amount, report, spare=0, session_id=None):
                 report("  " + t("{artist}...", artist=artist))
                 if not top:
                     report("    " + t("No top tracks returned for {artist}.", artist=artist))
-                # Use Adaptive Selections (12 Nov 2026): a one-hit wonder gives its hit, not the rest
+                # Most Played (12 Nov 2026): a one-hit wonder gives its hit, not the rest
                 titles, each = engine.adaptive_cut(artist, [title for title, _ in top], cap or len(top), report)
                 most = cap
                 if len(titles) < len(top):

@@ -356,7 +356,7 @@ PROFILE_KEYS = {
                    for part in ("", "_SIZE", "_AGREE", "_FALLBACK", "_FALLBACK_MIN")],
                  "SKIP_LONG_CLOSERS", "LONG_CLOSER_MINUTES",
                  "SKIP_PLAYED_ARTISTS", "SKIP_PLAYED_ARTISTS_DAYS", "SKIP_PLAYED_TRACKS", "SKIP_PLAYED_TRACKS_DAYS",
-                 "MATCH_TEMPO_ARTISTS", "MATCH_TEMPO_TRACKS", "ADAPTIVE_ARTISTS",
+                 "MATCH_TEMPO_ARTISTS", "MATCH_TEMPO_TRACKS", "ADAPTIVE_ARTISTS", "ADAPTIVE_TOP",
                  "SKIP_PLAYED_TOP", "SKIP_PLAYED_TOP_DAYS", "SKIP_PLAYED_VIBE", "SKIP_PLAYED_VIBE_DAYS",
                  "NONSTOP", "NONSTOP_USING", "NONSTOP_RESEED", "NONSTOP_TOP_REST", "NONSTOP_TOP_REST_COUNT",
                  "NONSTOP_VIBE",
@@ -373,7 +373,8 @@ BPM_CEILING = 400    # a BPM tag above this is a mistake (Ben's library has abou
 TEMPO_BAND = 0.10    # Match Tempo's Strict: within ten per cent of the seed's BPM, as If All Else Fails uses
 TEMPO_GROUPS = ("artists", "tracks")
 MATCH_TEMPO = {g: "off" for g in TEMPO_GROUPS}
-ADAPTIVE_PICK = True   # Use Adaptive Selections (12 Nov 2026): an artist's pick shrinks to their widely played songs
+ADAPTIVE_PICK = True   # Most Played (Use Adaptive Selections until 23 Nov 2026): an artist's pick shrinks to their widely played songs
+ADAPTIVE_TOP = False   # Most Played on Artist's Top Tracks (23 Nov 2026): Top N is up to N of the widely played; off by default
 HIT_SHARE = 0.2        # a hit: a song with at least this share of the plays of the artist's biggest, on Last.fm
 HIT_DEPTH = 50         # how many of an artist's Last.fm top songs are read to count them
 PLAYED_GROUPS = ("artists", "tracks", "top", "vibe")
@@ -632,7 +633,7 @@ def load_settings():
     global SKIP_LONG_CLOSERS, LONG_CLOSER_MINUTES
     global SIMILAR_ARTIST_TRACK_COUNT, SIMILAR_ARTIST_TRACK_LIMIT, DRIFT, DEEP_CUTS
     global JRIVER_RESTORE
-    global AI_MODERATOR, MODERATOR_WARNED, SKIP_PLAYED, MATCH_TEMPO, ADAPTIVE_PICK
+    global AI_MODERATOR, MODERATOR_WARNED, SKIP_PLAYED, MATCH_TEMPO, ADAPTIVE_PICK, ADAPTIVE_TOP
     global NONSTOP, NONSTOP_USING, NONSTOP_RESEED, NONSTOP_TOP_REST, NONSTOP_TOP_REST_COUNT, NONSTOP_VIBE
     global NONSTOP_BY, LONG_CLOSERS, AI_MODERATOR_BY, RUN_AFTER, INNER_CIRCLE
     global CONSOLE_QUERY, USE_AI, CREDITS_SCOPE, CREDITS_FIRST
@@ -806,6 +807,7 @@ def load_settings():
         MATCH_TEMPO[group] = value if value in ("prefer", "strict") else "off"
     # Use Adaptive Selections, per artists config: on unless a config says otherwise (12 Nov 2026)
     ADAPTIVE_PICK = os.getenv("ADAPTIVE_ARTISTS", "1").strip().lower() in ("1", "true", "yes")
+    ADAPTIVE_TOP = os.getenv("ADAPTIVE_TOP", "0").strip().lower() in ("1", "true", "yes")
     # Non-stop (Settings > Playlist): top up a 24bit7 playlist when its last track starts
     NONSTOP = os.getenv("NONSTOP", "0").strip().lower() in ("1", "true", "yes")
     NONSTOP_USING = "artists" if os.getenv("NONSTOP_USING", "tracks").strip().lower() == "artists" else "tracks"
@@ -1025,9 +1027,11 @@ SKIP_PLAYED_VIBE_DAYS=1
 # Match Tempo for Similar Artists and Similar Tracks: off, prefer or strict
 MATCH_TEMPO_ARTISTS=off
 MATCH_TEMPO_TRACKS=off
-# Use Adaptive Selections for Similar Artists and Radio: fewer of an artist's top
-# tracks when only one or two of their songs are widely played (Last.fm's counts)
+# Most Played for Similar Artists and Radio: fewer of an artist's top tracks
+# when only one or two of their songs are widely played (Last.fm's counts)
 ADAPTIVE_ARTISTS=1
+# Most Played for Artist's Top Tracks: up to the number of tracks, only the widely played
+ADAPTIVE_TOP=0
 # Every playlist: skip an album's last track when it's longer than this many
 # minutes, as those files often carry a hidden track after a long silence
 SKIP_LONG_CLOSERS=1
@@ -5053,14 +5057,14 @@ def hit_titles(artist):
     return [name for name, plays in ranked if plays >= top * HIT_SHARE]
 
 
-def adaptive_cut(artist, names, pick, report, exclude_track=None, indent="    "):
+def adaptive_cut(artist, names, pick, report, exclude_track=None, indent="    ", on=None):
     """
-    Use Adaptive Selections: the pool (names, in the sources' order) and the pick shrunk to the artist's number
+    Most Played: the pool (names, in the sources' order) and the pick shrunk to the artist's number
     of hits, so a one-hit wonder gives its hit and not the rest. A hit that's being left out (the track that's
     playing) takes one off the count. Says so when it cuts; with the tick off, or no counts, nothing changes.
     Returns (names, pick).
     """
-    if not ADAPTIVE_PICK or not names:
+    if not (ADAPTIVE_PICK if on is None else on) or not names:
         return names, pick
     hits = hit_titles(artist)
     if not hits:
@@ -5071,11 +5075,11 @@ def adaptive_cut(artist, names, pick, report, exclude_track=None, indent="    ")
     if count >= len(names):
         return names, pick
     if count <= 0:
-        report(indent + t("Adaptive Selections: {artist}'s one widely played song is the one playing, so nothing "
+        report(indent + t("Most Played: {artist}'s one widely played song is the one playing, so nothing "
                           "more from them.", artist=artist))
         return [], 0
-    report(indent + tn("Adaptive Selections: {artist} has {count} widely played song, so the pick comes from that.",
-                       "Adaptive Selections: {artist} has {count} widely played songs, so the pick comes from those.",
+    report(indent + tn("Most Played: {artist} has {count} widely played song, so the pick comes from that.",
+                       "Most Played: {artist} has {count} widely played songs, so the pick comes from those.",
                        count, artist=artist))
     return names[:count], min(pick, count)
 
@@ -9223,6 +9227,9 @@ def play_top_n(report=print, seed_info=None):
             report("  " + t("Problem: no source returned top tracks for {artist}.", artist=artist))
             continue
         report("  " + t("{artist}: ranked from {replace}", artist=artist, replace=source_label.replace(' + ', ', ')))
+        if ADAPTIVE_TOP:   # Most Played (23 Nov 2026): Top N is up to N of the widely played
+            keep, _pick = adaptive_cut(artist, [tv for tv, _ in top_tracks[:n]], n, report, on=True)
+            top_tracks = [(tv, by) for tv, by in top_tracks[:n] if tv in keep]
         if source_label not in labels_used:
             labels_used.append(source_label)
         if session_id is None:
