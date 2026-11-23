@@ -2826,6 +2826,48 @@ def deezer_top_tracks(artist_name, limit=10):
         return []
 
 
+DISCOGRAPHY_MOST = 40   # albums and EPs read for one artist, oldest first: a few seconds at most
+
+
+def _deezer_json(url, params=None):
+    """Deezer's answer as JSON; its own errors (a quota, say) come back with a 200, so they're raised here."""
+    data = requests.get(url, params=params or {}, timeout=15).json()
+    if isinstance(data, dict) and data.get("error"):
+        raise RuntimeError(str(data["error"].get("message") or data["error"]))
+    return data
+
+
+def deezer_discography(artist):
+    """
+    An artist's albums and EPs on Deezer, oldest first, each {"title", "date", "tracks": [titles]}, for the album
+    line in Discover > Missing Artists (Ben, 22 Nov 2026). Singles are left out. [] when Deezer doesn't know the
+    artist, None when it didn't answer. The name is matched as the library matches names, so P.O.D and P.O.D.
+    are one, and the best known of those wins. Network only: the caller caches.
+    """
+    import library   # here rather than at the top: library imports engine
+    try:
+        found = _deezer_json("https://api.deezer.com/search/artist", {"q": artist, "limit": 10}).get("data") or []
+        same = [a for a in found if library.norm(a.get("name") or "") == library.norm(artist)]
+        if not same:
+            return []
+        best = max(same, key=lambda a: a.get("nb_fan") or 0)
+        albums = _deezer_json(f"https://api.deezer.com/artist/{best['id']}/albums", {"limit": 200}).get("data") or []
+        albums = sorted((a for a in albums if a.get("record_type") in ("album", "ep")),
+                        key=lambda a: a.get("release_date") or "9999")
+        def read(a):
+            tracks = _deezer_json(f"https://api.deezer.com/album/{a['id']}/tracks", {"limit": 200}).get("data") or []
+            return {"title": a.get("title") or "", "date": a.get("release_date") or "",
+                    "tracks": [x.get("title") or "" for x in tracks]}
+        # four at a time: Sevendust's 24 albums took eleven seconds one by one, and Deezer allows fifty asks
+        # in five seconds
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(4) as pool:
+            return list(pool.map(read, albums[:DISCOGRAPHY_MOST]))
+    except Exception as e:
+        debug(f"Deezer: no discography for {artist} ({e})")
+        return None
+
+
 # --- ListenBrainz (via MusicBrainz ID lookup, no key) ----------------------
 
 _mbid_cache = {}              # artist_key -> MusicBrainz ID (None = MusicBrainz doesn't know them)

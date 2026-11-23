@@ -413,6 +413,7 @@ class FakeWeb:
         self.unknown = set()            # artist names every service treats as unknown (joint credits)
         self.plays = {}                 # artist -> Last.fm play counts for its top tracks, in order (else even)
         self.acr_miss = set()           # (artist, title) ListenBrainz's own lookup can't find
+        self.discography = {}           # artist -> [(album, release date, record type, [track titles])] on Deezer
         self.tidal_login = {"challenge": None, "code": "good-code", "refresh": "fake-refresh",
                             "refresh_ok": True}   # the fake Tidal account sign-in
         lib_artists = []
@@ -493,6 +494,19 @@ class FakeWeb:
             if path == "/search/artist":
                 q = params.get("q", "")
                 return Resp(data={"data": [] if empty else [{"id": abs(hash(q.lower())) % 10**8, "name": q, "nb_fan": 9}]})
+            m = re.match(r"/artist/(\d+)/albums", path)
+            if m:   # the discography: albums numbered by their place in the fake's own list
+                name = self._deezer_name(int(m.group(1)))
+                albums = [] if empty else list(enumerate(self.discography.get(name) or []))
+                return Resp(data={"data": [{"id": self._album_id(name, i), "title": a, "release_date": d,
+                                            "record_type": kind} for i, (a, d, kind, _t) in albums]})
+            m = re.match(r"/album/(\d+)/tracks", path)
+            if m:
+                for name, albums in self.discography.items():
+                    for i, (_a, _d, _k, titles) in enumerate(albums):
+                        if self._album_id(name, i) == int(m.group(1)):
+                            return Resp(data={"data": [] if empty else [{"title": x} for x in titles]})
+                return Resp(data={"error": {"message": "no such album (fake)"}})
             m = re.match(r"/artist/(\d+)/(related|top)", path)
             if m:
                 name = self._deezer_name(int(m.group(1)))
@@ -687,10 +701,14 @@ class FakeWeb:
         return Resp(405, text="")
 
     def _deezer_name(self, artist_id):
-        for name in self.artists + self.lib_artists:
+        for name in self.artists + self.lib_artists + list(self.discography):
             if abs(hash(name.lower())) % 10**8 == artist_id:
                 return name
         return ""
+
+    @staticmethod
+    def _album_id(artist, i):
+        return (abs(hash(artist.lower())) % 10**6) * 100 + i
 
 
 # --- the AI ----------------------------------------------------------------------

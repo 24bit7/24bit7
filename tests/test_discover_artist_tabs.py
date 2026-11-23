@@ -208,3 +208,27 @@ def test_refresh_reads_the_library_again_and_an_artist_bought_since_drops_off(ap
     assert "Last read at" in s._refresh_note()
     assert "Last read" not in s.count_label.cget("text"), "the time goes in the hover note"
     assert not ui.errors, ui.errors[0]
+
+
+def test_an_opened_row_says_which_album_holds_most_of_the_songs(app, ui):
+    """The album to buy first (Ben, 22 Nov 2026): Looking... while Deezer is read, then the album."""
+    history(app)
+    app.web.discography["Nonpoint"] = [
+        ("Recoil", "2004-01-01", "album", ["Victim", "Alive and Kicking"]),
+        ("To the Pain", "2005-01-01", "album", ["Bullet With a Name"]),
+        ("Live and Kicking", "2006-01-01", "album", ["Bullet With a Name", "Victim"])]
+    s = artist_tab(ui)
+    s.tree.selection_set("0")
+
+    def most():
+        for row in s._open_lines.winfo_children():
+            labels = row.winfo_children()
+            if labels and labels[0].cget("text") == "Most are on":
+                return labels[1].cget("text")
+        return None
+    ui.pump(until=lambda: most() not in (None, "Looking..."), timeout=10)
+    assert most() == "Recoil (2 of 3), then To the Pain (1)", most()
+    s.tree.selection_set("1")   # Trivium: one song named, nothing to say
+    ui.pump(0.3)
+    assert most() is None
+    assert not ui.errors, ui.errors[0]

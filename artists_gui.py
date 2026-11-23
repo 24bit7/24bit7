@@ -69,6 +69,16 @@ def _list(names, most=3):
     return shown
 
 
+def album_text(found):
+    """The Most are on line's words: 'Odessey and Oracle (3 of 4), then Begin Here (1)'."""
+    if "spread" in found:
+        return t("No one album: they're spread over {count}.", count=found["spread"])
+    text = t("{album} ({count} of {total})", album=found["album"], count=found["count"], total=found["of"])
+    if found.get("then"):
+        text += t(", then {album} ({count})", album=found["then"], count=found["then_count"])
+    return text
+
+
 class ArtistsView(tk.Frame):
     def __init__(self, master, kind, shared, sites=None):
         super().__init__(master)
@@ -86,6 +96,7 @@ class ArtistsView(tk.Frame):
         self._inbox = queue.Queue()   # results from the worker threads, picked up on Tk's own thread
         self._polling = None
         self._label_busy = False
+        self._album_busy = False
         self._build()
 
     # --- layout ------------------------------------------------------------
@@ -293,7 +304,8 @@ class ArtistsView(tk.Frame):
             pass
         if not self.winfo_exists():
             return
-        if (not self.ready or self._fetching or self._label_busy or self._reloading) and self._polling is None:
+        if (not self.ready or self._fetching or self._label_busy or self._album_busy or self._reloading) \
+                and self._polling is None:
             self._polling = self.after(50, self._poll)   # (a refresh run above may have started one already)
 
     @staticmethod
@@ -521,6 +533,8 @@ class ArtistsView(tk.Frame):
             songs = [s for s, _n in item["songs"].most_common()]
             if songs:
                 line(t("Songs named"), _list(songs))
+            if len(songs) >= 2:
+                self._album_line(item["artist"], songs, line)
             track = songs[0] if songs else ""
         else:
             if item["missed"]:
@@ -534,6 +548,40 @@ class ArtistsView(tk.Frame):
             FlatButton(self._open_buttons, text=label, quiet=True, height=1,
                        command=lambda k=kind, f=builder: self._open_site(item["artist"], track, k, f)).pack(
                 side="left", padx=(0, 6))
+
+    def _album_line(self, artist, songs, line):
+        """
+        Most are on: the album holding most of the songs named (Ben, 22 Nov 2026). Looking... while Deezer's
+        discography is read the first time, on a thread; no line at all when there's nothing to say.
+        """
+        line(t("Most are on"), t("Looking..."))
+        row = self._open_lines.winfo_children()[-1]
+        row.winfo_children()[1].config(fg=PALETTE["text_muted"])
+        self._album_row = row
+        self._album_busy = True
+
+        def work():
+            try:
+                found = ds.album_line(artist, songs)
+            except Exception as e:
+                engine.debug(f"Discover: album line for {artist} ({e!r})")
+                found = None
+            self._inbox.put(lambda: self._album_done(row, found))
+        threading.Thread(target=work, daemon=True).start()
+        if self._polling is None:
+            self._poll()
+
+    def _album_done(self, row, found):
+        self._album_busy = False
+        try:
+            if not row.winfo_exists():
+                return   # another row was opened meanwhile
+            if found is None:
+                row.destroy()
+                return
+            row.winfo_children()[1].config(text=album_text(found), fg=PALETTE.get("text", "#000000"))
+        except tk.TclError:
+            pass
 
     @staticmethod
     def _open_site(artist, track, kind, builder):

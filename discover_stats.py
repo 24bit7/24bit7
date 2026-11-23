@@ -380,3 +380,90 @@ def build(kind="Missing Artists", period="All time", zone=None, station_id=None,
     items = with_sound(items, sound, cache)
     return {"items": items, "builds": len({r["session"] for r in view}), "looked_up": len(view),
             "sounds": sounds, "untagged": bare, "station": chosen}
+
+
+# --- the album to buy first (Ben, 20 and 22 Nov 2026) --------------------------------------------
+#
+# A missing artist's opened row says which album holds most of the songs the sources named: "Most are on
+# Satellite (3 of 7), then The Fundamental Elements of Southtown (2)". Deezer's discography is read once an
+# artist and kept, as the plain search found a greatest hits copy before the original as often as not (P.O.D.,
+# 22 Nov). Each song is filed under the album it first came out on, by the rules your own copies are chosen by:
+# the original recording (a live, acoustic or remixed copy doesn't count, a remaster does), not an album named
+# live, the earliest release. Editions fold into the album they're an edition of. An album is named only when
+# it holds two of the songs or more.
+
+EDITION = re.compile(r"\b(deluxe|edition|expanded|anniversary|special|bonus|limited|ltd|enh'?d|enhanced|version|"
+                     r"remaster(ed)?|clean|explicit|reissue|\d{4})\b", re.I)
+_SAME_RECORDING = re.compile(r"^\s*(\d{4}\s*)?((digital(ly)?\s*)?remaster(ed)?|explicit|clean|album version|"
+                             r"original( version)?)(\s*\d{4})?(\s*version)?\s*$", re.I)
+_PARTS = re.compile(r"[\(\[]([^\)\]]*)[\)\]]")
+
+
+def album_name(title):
+    """An album's name without its edition: 'The End Begins - Digital Deluxe', 'Satellite (Expanded Edition;
+    2021 Remaster)' and 'Seasons - Clean' are The End Begins, Satellite and Seasons."""
+    name = _PARTS.sub(lambda m: "" if EDITION.search(m.group(1)) else m.group(0), title or "")
+    head, sep, tail = name.partition(" - ")
+    if sep and EDITION.search(tail):
+        name = head
+    return " ".join(name.split()) or (title or "").strip()
+
+
+def original_recording(title):
+    """True unless the title says it's another recording: '(Live)', '(Acoustic Version)', ' - Radio Edit'.
+    A remaster, a credit and brackets that are part of the name ('Scars (The Echo Song)') are the original."""
+    import library
+    parts = _PARTS.findall(title or "")
+    _head, sep, tail = (title or "").partition(" - ")
+    if sep:
+        parts.append(tail)
+    return not any(library._is_tag(p) and not library._BRACKET_DROP_START.match(p) and not _SAME_RECORDING.match(p)
+                   for p in parts)
+
+
+def album_to_buy(songs, discography):
+    """
+    Which album holds most of the songs: {"album", "count", "of", "then", "then_count"} ("then" only when
+    another album holds some of the rest), {"spread": n} when no album holds two, or None when Deezer found
+    fewer than two of the songs (nothing worth saying).
+    """
+    import library
+    songs = list(songs)
+    picks = []
+    for song in songs:
+        keys, first = set(library.title_keys(song)), None
+        for album in discography or []:
+            if "live" in library.norm(album["title"]).split():
+                continue
+            if any(keys & set(library.title_keys(tr)) and original_recording(tr) for tr in album["tracks"]):
+                here = (album["date"] or "9999", album["title"])
+                first = here if first is None or here < first else first
+        if first:
+            picks.append(first)
+    if len(picks) < 2:
+        return None
+    groups = {}   # album's name, folded -> [songs, earliest date, name shown]
+    for date, title in picks:
+        g = groups.setdefault(library.norm(album_name(title)), [0, date, album_name(title)])
+        g[0] += 1
+        g[1] = min(g[1], date)
+    ranked = sorted(groups.values(), key=lambda g: (-g[0], g[1]))
+    if ranked[0][0] < 2:
+        return {"spread": len(ranked)}
+    out = {"album": ranked[0][2], "count": ranked[0][0], "of": len(songs)}
+    if len(ranked) > 1:
+        out["then"], out["then_count"] = ranked[1][2], ranked[1][0]
+    return out
+
+
+def album_line(artist, songs):
+    """album_to_buy for a missing artist, Deezer's discography read once and kept. None when there's nothing to
+    say, Deezer didn't answer included (that isn't kept, so the next look asks again). Network: on a thread."""
+    key = engine.artist_key(artist)
+    discography = engine.cache_get("deezer", "discography", key)
+    if discography is None:
+        discography = engine.deezer_discography(artist)
+        if discography is None:
+            return None
+        engine.cache_put("deezer", "discography", key, discography)
+    return album_to_buy(songs, discography)
