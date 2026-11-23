@@ -1225,6 +1225,27 @@ def deep_cuts(keys, seed, report):
     return engine.add_deep_cuts(keys, None, report, group="artists", genres=[genre], moderator_seed=seed)
 
 
+def _carried_session(lane_id, appending):
+    """
+    One Discover session per listen (Ben, 23 Nov 2026: "we only consolidate back to back sessions"): the session
+    a round carries on, or None for a new one. Non-stop's next round always carries on the station's session in
+    its zone; the station pressed again carries it on only while that zone is still playing it.
+    """
+    try:
+        zone = engine.output_zone(report=lambda *a, **k: None)
+    except Exception:
+        return None
+    if zone is None:
+        return None
+    with engine._nonstop_lock:
+        entry = dict(engine.NONSTOP_ZONES.get(zone) or {})
+    if entry.get("radio_lane") != lane_id or not entry.get("radio_session"):
+        return None
+    if not appending and engine.zone_state(zone) != 2:
+        return None
+    return entry["radio_session"]
+
+
 def build(lane_id, report=print):
     """Radio: one round for the lane, a pillar song first, the rest spread. Non-stop carries on from pillars."""
     lane_ = lane(lane_id)
@@ -1237,7 +1258,8 @@ def build(lane_id, report=print):
         report(t("Radio: {name}.", name=lane_["name"]))
         join_new_artists(report)
         lane_ = lane(lane_id) or lane_
-    session_id = engine.session_start("radio", {"Artist": "", "Name": lane_["name"]})
+    session_id = engine.session_start("radio", {"Artist": "", "Name": lane_["name"]},
+                                      carry=_carried_session(lane_id, appending))
     avoid = set()
     if appending and engine.OUTPUT_OVERRIDE:
         with engine._nonstop_lock:
@@ -1273,7 +1295,7 @@ def build(lane_id, report=print):
         with engine._nonstop_lock:
             entry = engine.NONSTOP_ZONES.get(zone)
             if entry is not None:
-                entry.update(radio_lane=lane_id, origin="radio", kind="radio")
+                entry.update(radio_lane=lane_id, origin="radio", kind="radio", radio_session=session_id)
                 if fast.started:   # the opener was sent too: Non-stop's later rounds don't repeat it
                     entry["keys"].add(fast.key)
                     entry.setdefault("original", set()).add(fast.key)

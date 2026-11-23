@@ -1515,6 +1515,7 @@ LAST_BUILD = None      # the finished build's mode, sources, tracks queued and m
 MODERATOR_RUN = {"level": None, "removed": 0, "ran": 0, "failed": 0}   # this build's Moderator (Drift rounds too)
 CLOSERS_DROPPED = 0    # tracks the hidden-track check left out when sending, so the Done line counts what went
 _SESSION_STARTED = {}
+_CARRIED = {}   # session -> (tracks queued before this build, last discovery row before it): see session_start
 
 
 CURRENT_SESSION = None   # the build in progress, for what's logged after its picks (Deep Cuts)
@@ -1560,7 +1561,11 @@ def sessions_kept(zone, asked_by):
     db().commit()
 
 
-def session_start(mode, seed_info, sources=""):
+def session_start(mode, seed_info, sources="", carry=None):
+    """
+    A build starts. carry: an earlier session this build carries on (Radio's rounds back to back, 23 Nov 2026):
+    its rows and count are added to, and the Done line still speaks for this build alone.
+    """
     globals()["CLOSERS_DROPPED"] = 0
     ai_off_reset()
     nonstop_begin(mode, seed_info)
@@ -1569,7 +1574,14 @@ def session_start(mode, seed_info, sources=""):
     globals().update(STREAM_MISSES=0, TIDAL_SENT=None, TIDAL_PLAYLIST_ID=None, TIDAL_OPENED=None)
     TIDAL_MISSED.clear()
     MODERATOR_RUN.update(level=None, removed=0, ran=0, failed=0)
-    sid = session_open(mode, seed_info, sources)
+    row = db().execute("SELECT queued, (SELECT COALESCE(MAX(id), 0) FROM discoveries) FROM sessions WHERE id=?",
+                       (carry,)).fetchone() if carry else None
+    if row:
+        sid = carry
+        _CARRIED[sid] = (row[0] or 0, row[1])   # its count so far, and the last row before this build
+        SOURCE_TROUBLE.clear()
+    else:
+        sid = session_open(mode, seed_info, sources)
     _SESSION_STARTED[sid] = time.time()
     globals()["CURRENT_SESSION"] = sid
     try:   # a finished source test the user hasn't opened yet: say so again
@@ -1672,13 +1684,14 @@ def session_finish(session_id, queued, sources=None, report=print):
     queued = max(0, queued - CLOSERS_DROPPED)   # anything the final hidden-track check left out
     if LAST_OUTPUT == "Tidal":
         queued = TIDAL_SENT or 0   # what went into the playlist, not just what was found
+    before, last_row = _CARRIED.pop(session_id, (0, 0))
     if sources is not None:
         db().execute("UPDATE sessions SET sources=? WHERE id=?", (sources, session_id))
-    db().execute("UPDATE sessions SET queued=? WHERE id=?", (queued, session_id))
+    db().execute("UPDATE sessions SET queued=? WHERE id=?", (before + queued, session_id))
     _keep_trouble(session_id)
     db().commit()
-    misses = db().execute("SELECT COUNT(*) FROM discoveries WHERE session_id=? AND found=0",
-                          (session_id,)).fetchone()[0]
+    misses = db().execute("SELECT COUNT(*) FROM discoveries WHERE session_id=? AND found=0 AND id>?",
+                          (session_id, last_row)).fetchone()[0]
     row = db().execute("SELECT mode, sources FROM sessions WHERE id=?", (session_id,)).fetchone() or ("", "")
     mod = moderator_column()
     globals()["LAST_BUILD"] = {"mode": row[0], "sources": row[1], "queued": queued, "misses": misses, "moderator": mod}
