@@ -310,7 +310,17 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.38.0
+## What's new in 1.39.0
+
+- **The Main Filter.** Filters have their own page again, under Settings > Filters. Tick **In Main Filter** on a filter and every playlist that uses the Main Filter, which is all of them to start, goes by it. A config that needs something different says **Use Main Filter: No** and ticks its own.
+- **The original plays when you own several copies.** The title asked for comes first, then an album without "live" in its name, then the earliest year, so a later live album or remix no longer slips in.
+- **Missing Artists says which album to buy first:** "Most are on Satellite (6 of 7), then Testify (1)", from the artist's discography on Deezer.
+- **Radio's stations open with a box.** Click the box, or anywhere left of a station's name, to see its narrower stations; a near miss no longer plays the station.
+- **Multiroom carries on when the DAC won't open.** The console says so once, the Sonos plays on, and the main system joins in when its DAC is back.
+- **Alexa checks her own connection.** 24bit7 notes the address the skill calls and says in the console if it stops answering. It also says when the skill is older than the one this version ships, and "Which artist?" can be answered with just the name.
+- After 24bit7 has had to start JRiver again, the console says what Windows recorded about the crash, and the update window speaks the language 24bit7 is set to.
+
+### Earlier: 1.38.0
 
 - **24bit7 updates itself.** When a newer version is out, the console lists every release since yours with its headline, so you can see whether it's worth it, and **Update Now** downloads it, checks it against the fingerprint published with it, swaps it in and starts it again, keeping your settings, history and profiles and your old copy as a backup. It first appears when the version after 1.38.0 comes out.
 - **Restore JRiver**, under Settings > Other: if JRiver on this PC isn't answering, 24bit7 starts its Media Server (the default), or tells you and leaves it (Off), or also restarts a JRiver that's stuck.
