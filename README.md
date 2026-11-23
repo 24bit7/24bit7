@@ -310,7 +310,15 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.39.0
+## What's new in 1.40.0
+
+- **Copy a playlist to your phone.** Save Playlist has a **Copy Tracks To** tick: plug in an Android phone by USB and the tracks go into a folder named after the playlist, with an .m3u8 beside them. Name each phone, set a folder and a limit in GB, and tick Clear Music First for a clean slate. Saving the same playlist again copies only what's new.
+- **Several artists from Search.** Click into the Artist box for your own artists, **+ Add** a few, and a green **Go** plays so many songs you own from each, shuffled with the artists spread out.
+- **Change Zone**, beside Stop and Skip Track, moves what's playing to another zone or to Multiroom: this track from the top, or from the next track.
+- **Most Played**, the new name for Use Adaptive Selections, keeps an artist to their widely played songs, and Artist's Top Tracks has a tick of its own for it, so a one-hit wonder gives just the hit.
+- **A Radio listen is one session** in Discover, however many rounds it plays, and Deezer finds bands whose names it spells with different punctuation, such as P.O.D.
+
+### Earlier: 1.39.0
 
 - **The Main Filter.** Filters have their own page again, under Settings > Filters. Tick **In Main Filter** on a filter and every playlist that uses the Main Filter, which is all of them to start, goes by it. A config that needs something different says **Use Main Filter: No** and ticks its own.
 - **The original plays when you own several copies.** The title asked for comes first, then an album without "live" in its name, then the earliest year, so a later live album or remix no longer slips in.
