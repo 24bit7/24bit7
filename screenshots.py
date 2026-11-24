@@ -46,6 +46,7 @@ SHOTS = [
     ("play_more_options", ["Play", "Now Playing"], ["gui.pyw", "mix_gui.py", "tabs.py"], "more_open"),
     ("play_change_zone", ["Play", "Now Playing"], ["gui.pyw", "voice.py"], "change_zone"),
     ("save_playlist_copy", ["Play", "Now Playing"], ["gui.pyw", "phone.py", "tabs.py"], "copy_to_phone"),
+    ("manage_folder", ["Play", "Now Playing"], ["gui.pyw", "phone.py", "tabs.py"], "manage_folder"),
     ("play_search", ["Play", "Search"], ["gui.pyw", "stack.py", "tabs.py"], "search_stack"),
     ("play_jriver_playlists", ["Play", "Playlists & Albums"], ["gui.pyw", "embellish.py", "tabs.py"], "playlists_list"),
     ("play_stack", ["Play", "Playlists & Albums"], ["gui.pyw", "embellish.py", "tabs.py"], "playlists_stack"),
@@ -1054,6 +1055,8 @@ def main():
                                 tracks=gui.tn("{count} track", "{count} tracks", 30), size=phone.size_text(int(2.1 * phone.GB))),
                     "Road Trip (Embellished)", int(2.1 * phone.GB), jriver=True, copy=True)
                 settle(root, 0.3)
+            elif action == "manage_folder":   # Manage Folder on a stand-in phone, an album ticked (1.43.0)
+                dialog = open_manage_folder(gui, root, play, temp)
             elif action == "change_zone":   # Change Zone's pop-up from the Speakers, Multiroom among the choices (1.40.0)
                 import voice
                 play._show_more(False, save=False)
@@ -1085,6 +1088,74 @@ def main():
     print(f"\nDone. {len(written)} saved, {len(same)} unchanged, in docs/{IMAGES}.")
     if written:
         print(f"Commit them with:  git add docs/{IMAGES}; git commit -m \"Manual screenshots\"")
+
+
+def open_manage_folder(gui, root, play, temp):
+    """Manage Folder over a stand-in phone: a folder of small files whose sizes are given, three playlists, an
+    album in no playlist, Radiohead and Pink Floyd open and OK Computer ticked, as Ben agreed the drawing."""
+    import phone
+    base = os.path.join(temp, "demo-phone")
+    mb = 10 ** 6
+    albums = {"Radiohead/OK Computer": [("01 Airbag.flac", 74), ("02 Paranoid Android.flac", 92),
+                                        ("03 Subterranean Homesick Alien.flac", 66), ("04 Exit Music.flac", 61)],
+              "Radiohead/In Rainbows": [("01 15 Step.flac", 58), ("02 Bodysnatchers.flac", 64),
+                                        ("03 Nude.flac", 55)],
+              "The Doors/L.A. Woman": [("01 The Changeling.flac", 112), ("02 Love Her Madly.flac", 97),
+                                       ("10 Riders On The Storm.flac", 214)],
+              "Pink Floyd/Wish You Were Here": [("01 Shine On You Crazy Diamond.flac", 310),
+                                                ("04 Wish You Were Here.flac", 128)]}
+    sizes = {}
+    for album, tracks in albums.items():
+        os.makedirs(os.path.join(base, "Music", *album.split("/")), exist_ok=True)
+        for name, size in tracks:
+            path = os.path.join(base, "Music", *album.split("/"), name)
+            open(path, "wb").close()
+            sizes[os.path.normcase(path)] = size * mb
+
+    def m3u(name, *picks):
+        with open(os.path.join(base, "Music", name + ".m3u8"), "w", encoding="utf-8") as f:
+            f.write("#EXTM3U\n" + "".join(f"{a}/{albums[a][i][0]}\n" for a, i in picks))
+    ok, rain, doors = "Radiohead/OK Computer", "Radiohead/In Rainbows", "The Doors/L.A. Woman"
+    m3u("Indie-Chill", (ok, 0), (ok, 1), (ok, 2), (rain, 0), (rain, 2))
+    m3u("Road Trip", (ok, 3), (rain, 1), (doors, 1), (doors, 2))
+    m3u("L.A. Woman", (doors, 0), (doors, 1), (doors, 2))
+    demo_id = "\\\\?\\usb#vid_18d1&pid_4ee1#demo#{6ac27878}"
+
+    class DemoPhone(phone.FolderDevice):
+        def __init__(self):
+            super().__init__("Jo's Phone")
+            self.id = demo_id
+
+        def folder(self, path, make=False):
+            p = os.path.join(base, *[x for x in path.replace("\\", "/").split("/") if x])
+            if not os.path.isdir(p):
+                return None
+            self.root = p
+            return p
+
+        def list(self, parent):
+            out = super().list(parent)
+            for e in out:
+                if not e["folder"]:
+                    e["size"] = sizes.get(os.path.normcase(e["id"]), e["size"])
+            return out
+
+        def free(self):
+            return 57 * phone.GB
+
+        def capacity(self):
+            return 117 * phone.GB
+    phone.open_device = lambda device_id, name: DemoPhone()
+    play._show_more(False, save=False)
+    win = gui.ManageFolder(play, demo_id, "Jo's Phone", "Music", 30.0, model="Pixel 9a")
+    end = time.time() + 10
+    while win.contents is None and time.time() < end:
+        settle(root, 0.1)
+    win._fold("Radiohead")
+    win._fold("Pink Floyd")
+    win._toggle(("dir", ok), True)
+    settle(root, 0.3)
+    return win
 
 
 if __name__ == "__main__":

@@ -257,6 +257,15 @@ def _decode(data):
         return data.decode("latin-1")
 
 
+def _relative(line):
+    """A playlist line as a path inside the folder ('Seether/Disclaimer II/03 Broken.flac'), or None for a line
+    with a drive, a web address or a path above the folder, which 24bit7 never judges."""
+    rel = line.strip().replace("\\", "/")
+    while rel.startswith("./"):
+        rel = rel[2:]
+    return None if ":" in rel or rel.startswith(("/", "../")) else rel
+
+
 def _tidy_playlists(phone, dirs, root, mine, skip, say):
     """
     Every other playlist file at the top of the folder, checked against what's there (Ben, 24 Nov 2026): a song
@@ -285,10 +294,8 @@ def _tidy_playlists(phone, dirs, root, mine, skip, say):
                 if not s or s.startswith("#"):
                     pending.append(line)
                     continue
-                rel = s.replace("\\", "/")
-                while rel.startswith("./"):
-                    rel = rel[2:]
-                if ":" in rel or rel.startswith(("/", "../")) or _exists(dirs, rel):
+                rel = _relative(s)
+                if rel is None or _exists(dirs, rel):
                     out += pending + [line]
                     left += 1
                 else:
@@ -541,6 +548,192 @@ def copy_playlist(phone, folder, playlist, tracks, limit_gb=0, clear=False, say=
     return len(listed)
 
 
+# --- Manage Folder ----------------------------------------------------------------------------------------------
+
+AUDIO = (".flac", ".mp3", ".m4a", ".aac", ".ogg", ".oga", ".opus", ".wav", ".aif", ".aiff", ".wma", ".ape", ".wv",
+         ".dsf", ".dff", ".mpc", ".alac")
+
+
+def is_track(name):
+    return name.lower().endswith(AUDIO)
+
+
+def names_text(names):
+    """"Indie-Chill", "Indie-Chill and Road Trip", "Indie-Chill, Road Trip and L.A. Woman": names only, never
+    translated, joined the way the language joins a list."""
+    names = list(names)
+    if len(names) < 2:
+        return "".join(names)
+    return t("{names} and {last}", names=", ".join(names[:-1]), last=names[-1])
+
+
+class Folder:
+    """
+    Manage Folder's picture of the folder copied to (Ben, 24 Nov 2026, as drawn), read once: its playlists (the
+    .m3u8 and .m3u files at its top, each with the songs it lists that are there), and every file under it, by
+    folder, so artists, albums and tracks can be ticked and deleted. Dot folders and files (.thumbnails, .24bit7)
+    are left out, as they are never touched.
+    """
+
+    def __init__(self, phone, folder):
+        self.phone, self.folder = phone, folder
+        self.root = phone.folder(folder, make=False)
+        self.device, self.copied = _records(phone)
+        self.fkey = re.sub(r"[\\/]+", "/", folder or "").strip("/").lower()
+        self.mine = dict(self.copied.get(self.fkey) or {})
+        self.dirs = _Dirs(phone, self.root) if self.root is not None else None
+        self.files = {}     # path.lower(): {"rel", "size", "id"}
+        self.folders = {}   # path.lower(): path, every folder under the chosen one
+        self.playlists = []
+        if self.root is None:
+            return
+        self._walk("")
+        for low, e in sorted(self.dirs.files[""].items()):
+            if low.startswith(".") or not low.endswith((".m3u8", ".m3u")):
+                continue
+            recorded = self.mine.get(low)
+            try:
+                listed = (recorded if recorded is not None else
+                          [r for r in map(_relative, _decode(phone.read(e["id"])).splitlines())
+                           if r and not r.startswith("#")])
+            except Exception as err:
+                engine.debug(f"Manage Folder: couldn't read {e['name']} ({err})")
+                listed = []
+            paths = list(dict.fromkeys(p.lower() for p in listed if p.lower() in self.files))
+            self.playlists.append({"name": e["name"].rsplit(".", 1)[0], "low": low, "id": e["id"], "paths": paths,
+                                   "tracks": sum(is_track(p) for p in paths),
+                                   "size": sum(self.files[p]["size"] for p in paths)})
+        self.lists_of = {}   # path.lower(): [the names of the playlists listing it]
+        for pl in self.playlists:
+            for p in pl["paths"]:
+                self.lists_of.setdefault(p, []).append(pl["name"])
+
+    def _walk(self, rel):
+        self.dirs._list(rel)
+        for low, real in sorted(self.dirs.names[rel].items()):
+            if real.startswith("."):
+                continue
+            child = f"{rel}/{real}" if rel else real
+            self.dirs.ids.setdefault(child, self.dirs.kids[rel][low])
+            self.folders[child.lower()] = child
+            self._walk(child)
+        for low, e in sorted(self.dirs.files[rel].items()):
+            if e["name"].startswith(".") or (not rel and low.endswith((".m3u8", ".m3u"))):
+                continue
+            path = f"{rel}/{e['name']}" if rel else e["name"]
+            self.files[path.lower()] = {"rel": path, "size": e.get("size") or 0, "id": e["id"]}
+
+    @property
+    def size(self):
+        return sum(f["size"] for f in self.files.values())
+
+    def under(self, folder):
+        """The files under a folder (its path from the chosen one), as path.lower()."""
+        start = folder.lower() + "/"
+        return {k for k in self.files if k.startswith(start)}
+
+    def tree(self):
+        """
+        Artists and albums: [node] for the folders at the top (artists), each with its folders (albums) and files
+        (tracks) as children, then loose files. A node is a dict: name, rel, kind ("folder" or "file"), children,
+        files (path.lower() of every file under it), tracks, size, lists (names of the playlists listing any).
+        """
+        def node(rel, kind):
+            files = self.under(rel) if kind == "folder" else {rel.lower()}
+            lists = sorted({n for f in files for n in self.lists_of.get(f, [])}, key=str.lower)
+            return {"name": rel.rpartition("/")[2], "rel": rel, "kind": kind, "children": [], "files": files,
+                    "tracks": sum(is_track(f) for f in files), "size": sum(self.files[f]["size"] for f in files),
+                    "lists": lists}
+
+        def children(parent):
+            depth = parent.count("/") + 1 if parent else 0
+            start = parent.lower() + "/" if parent else ""
+            subs = sorted((r for k, r in self.folders.items() if k.startswith(start) and r.count("/") == depth),
+                          key=str.lower)
+            loose = sorted((f["rel"] for k, f in self.files.items() if k.startswith(start)
+                            and f["rel"].count("/") == depth), key=str.lower)
+            out = []
+            for r in subs:
+                n = node(r, "folder")
+                n["children"] = children(r)
+                out.append(n)
+            return out + [node(r, "file") for r in loose]
+        return children("")
+
+    def plan(self, playlists=(), folders=(), files=()):
+        """
+        What deleting the ticked would do (Ben, 24 Nov 2026, as drawn): a playlist ticked takes its file and the
+        songs no other playlist lists; an album or artist ticked goes whole, and every playlist listing its songs
+        is amended (taken off if none are left). {"playlists": [low], "folders": [rel], "files": {path.lower()},
+        "loose": [path.lower()] deleted one by one, "tracks", "size", "amended": [names], "kept": songs of a ticked
+        playlist staying because another lists them}.
+        """
+        ticked = set(playlists)
+        folders = sorted({f for f in folders if f.lower() in self.folders}, key=lambda f: f.count("/"))
+        whole = []
+        for f in folders:
+            if not any(f.lower().startswith(w.lower() + "/") for w in whole):
+                whole.append(f)
+        going = set().union(*(self.under(f) for f in whole)) if whole else set()
+        going |= {f.lower() for f in files if f.lower() in self.files}
+        still = {p for pl in self.playlists if pl["low"] not in ticked for p in pl["paths"]}
+        kept = set()
+        for pl in self.playlists:
+            if pl["low"] in ticked:
+                going |= {p for p in pl["paths"] if p not in still}
+                kept |= {p for p in pl["paths"] if p in still and p not in going}
+        loose = sorted(p for p in going if not any(p.startswith(w.lower() + "/") for w in whole))
+        amended = [pl["name"] for pl in self.playlists
+                   if pl["low"] not in ticked and any(p in going for p in pl["paths"])]
+        return {"playlists": [pl["low"] for pl in self.playlists if pl["low"] in ticked], "folders": whole,
+                "files": going, "loose": loose, "tracks": sum(is_track(p) for p in going),
+                "size": sum(self.files[p]["size"] for p in going), "amended": amended, "kept": len(kept)}
+
+    def plan_text(self, plan, what):
+        """The amber line above Delete: what goes, said before it does, so no further question is asked."""
+        if not plan["playlists"] and not plan["files"]:
+            return ""
+        what = dict(what=what, phone=self.phone.name, size=size_text(plan["size"]),
+                    tracks=tn("{count} track", "{count} tracks", plan["tracks"]), lists=names_text(plan["amended"]))
+        if not plan["files"]:
+            return tn("Deleting {what} takes the playlist off {phone}. Its songs stay, as other playlists list them.",
+                      "Deleting {what} takes the playlists off {phone}. Their songs stay, as other playlists list "
+                      "them.", len(plan["playlists"]), **what)
+        if plan["amended"]:
+            return t("Deleting {what} takes {tracks} ({size}) off {phone} and out of {lists}.", **what)
+        return t("Deleting {what} takes {tracks} ({size}) off {phone}.", **what)
+
+    def delete(self, plan, say=print):
+        """Deletes what plan() said, amends the playlists left, and keeps 24bit7's records in step."""
+        if self.root is None:
+            return
+        by_name = {pl["low"]: pl for pl in self.playlists}
+        ids = [self.dirs.get(f) for f in plan["folders"]]
+        ids += [self.files[p]["id"] for p in plan["loose"]]
+        ids += [by_name[low]["id"] for low in plan["playlists"]]
+        self.phone.delete([i for i in ids if i is not None])
+        for f in plan["folders"]:
+            self.dirs.forget(f)
+        for p in plan["loose"]:
+            d, _, name = self.files[p]["rel"].rpartition("/")
+            self.dirs.files.get(d, {}).pop(name.lower(), None)
+        for low in plan["playlists"]:
+            self.dirs.files[""].pop(low, None)
+            self.mine.pop(low, None)
+            say("  " + t("Took {name} off {phone}.", name=by_name[low]["name"], phone=self.phone.name))
+        parents = {self.files[p]["rel"].rpartition("/")[0] for p in plan["loose"]}
+        parents |= {f.rpartition("/")[0] for f in plan["folders"]}
+        for d in sorted((d for d in parents if d), key=lambda d: -d.count("/")):
+            self.dirs.drop_if_empty(d)
+        if plan["files"]:
+            say("  " + tn("Deleted {count} track ({size}) from {folder} on {phone}.",
+                          "Deleted {count} tracks ({size}) from {folder} on {phone}.", plan["tracks"],
+                          size=size_text(plan["size"]), folder=self.folder, phone=self.phone.name))
+        _tidy_playlists(self.phone, self.dirs, self.root, self.mine, None, say)
+        self.copied[self.fkey] = self.mine
+        _keep_records(self.device, self.copied)
+
+
 # --- where a copy can go --------------------------------------------------------------------------------------
 
 def targets():
@@ -573,6 +766,46 @@ def open_device(device_id, name):
     if is_wifi(device_id):
         return WifiPhone.find(device_id, name)
     return WpdPhone(device_id, name)
+
+
+def _shell_item(parts):
+    """The shell's item for a path under This PC (a phone has no drive letter, so Explorer reaches it by names:
+    "Pixel 9a", its storage, then the folders), or None. The phone's storage is taken as its first."""
+    import comtypes.client as cc
+    shell = cc.CreateObject("Shell.Application", dynamic=True)
+    here, item = shell.NameSpace(17), None
+    for i, part in enumerate(parts):
+        items = here.Items()
+        found = [items.Item(k) for k in range(items.Count)]
+        found = [f for f in found if f.IsFolder]
+        if part is None:
+            item = found[0] if found else None
+        else:
+            item = next((f for f in found if (f.Name or "").lower() == part.lower()), None)
+        if item is None:
+            return None
+        if i < len(parts) - 1:
+            here = item.GetFolder
+    return item
+
+
+def open_in_explorer(device_id, model, folder):
+    """
+    Open Folder (Ben, 24 Nov 2026): Explorer at the folder copied to: a folder here as it is, a phone's by USB
+    through This PC. A phone over WiFi has none (Explorer can't reach it). False if it isn't there.
+    """
+    if device_id == PC:
+        if not folder or not os.path.isdir(folder):
+            return False
+        os.startfile(folder)
+        return True
+    if is_wifi(device_id):
+        return False
+    item = _shell_item([model, None] + [p for p in re.split(r"[\\/]+", folder or "") if p])
+    if item is None:
+        return False
+    item.InvokeVerb()
+    return True
 
 
 def pc_folder_problem(folder):
