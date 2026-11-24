@@ -118,6 +118,23 @@ def test_wrong_key_in_skill_is_explained(app, alexa, monkeypatch):
     assert "didn't accept the key" in r.ssml
 
 
+def test_a_refused_request_still_gets_its_answer(app, alexa):
+    """Seen in the 1.43.0 build (24 Nov 2026): refused with its body unread, the connection closed under the
+    request, Windows reset it, and the skill heard "connection aborted", so it said 24bit7 wasn't answering rather
+    than that the key was wrong. A body big enough to be left unread makes it happen every time."""
+    import http.client
+    body = json.dumps({"intent": "SongsByIntent", "query": "x" * 300_000}).encode()
+    for _ in range(5):
+        con = http.client.HTTPConnection("127.0.0.1", app.engine.VOICE_PORT, timeout=10)
+        try:
+            con.request("POST", "/command", body=body, headers={"X-24bit7-Key": "wrong",
+                                                                 "Content-Type": "application/json"})
+            r = con.getresponse()
+            assert r.status == 401 and json.loads(r.read())["error"] == "wrong key"
+        finally:
+            con.close()
+
+
 def test_listener_down_is_explained(app, alexa):
     app.voice.stop()
     r = alexa.say("SongsByIntent", "the beatles")

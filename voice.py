@@ -1265,14 +1265,31 @@ class _Handler(BaseHTTPRequestHandler):
             return self._reply(401, {"error": "wrong key"})
         self._reply(200, {"ok": True, "app": "24bit7", "version": engine.VERSION})
 
+    def _drain(self, length):
+        """Reads what's left of a body: refused with it unread, the connection closes under the request and Windows
+        resets it, so the skill hears "connection aborted" instead of the answer (24 Nov 2026). A megabyte at most."""
+        left = min(max(0, length), 1_000_000)
+        while left > 0:
+            got = self.rfile.read(min(left, 65536))
+            if not got:
+                break
+            left -= len(got)
+
     def do_POST(self):
-        if self.path.split("?")[0] != "/command":
-            return self._reply(404, {"error": "not found"})
-        if not self._key_ok():
-            return self._reply(401, {"error": "wrong key"})
         try:
             length = int(self.headers.get("Content-Length") or 0)
-            body = json.loads(self.rfile.read(min(length, 10000)) or b"{}")
+        except ValueError:
+            length = 0
+        if self.path.split("?")[0] != "/command":
+            self._drain(length)
+            return self._reply(404, {"error": "not found"})
+        if not self._key_ok():
+            self._drain(length)
+            return self._reply(401, {"error": "wrong key"})
+        try:
+            raw = self.rfile.read(min(length, 10000))
+            self._drain(length - len(raw))
+            body = json.loads(raw or b"{}")
             if not isinstance(body, dict):
                 raise ValueError
         except ValueError:
