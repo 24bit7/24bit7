@@ -37,7 +37,8 @@ def test_no_phone_says_so_and_this_pc_is_still_there(app, ui, monkeypatch, tmp_p
     win.copy_var.set(True)
     win._copy_toggled()
     ui.pump(0.2)
-    assert list(win.device_cb.cget("values")) == ["This PC"] and win.folder_box.get() == ""
+    assert list(win.device_cb.cget("values")) == ["This PC", "+ Add a Phone Over WiFi..."]
+    assert win.folder_box.get() == ""
     assert not win.rename_link.winfo_ismapped() and win.browse_link.winfo_ismapped()
     win.jriver_var.set(False)
     win.ok()
@@ -69,7 +70,7 @@ def test_ticked_shows_its_lines_and_hands_back_the_choices(app, ui, monkeypatch)
     assert win.ok_button.winfo_rooty() + win.ok_button.winfo_height() <= win.winfo_rooty() + win.winfo_height(), \
         "the window grows to show the lines and its buttons (the first shot cut them off)"
     assert rounded == [win], "and its corners are set again at the new size, or Windows 10 clips it to the old one"
-    assert win.device_var.get() == "Pixel 9a" and win.folder_box.get() == "Music"
+    assert win.device_var.get() == "Pixel 9a (USB)" and win.folder_box.get() == "Music"
     assert win.clear_tick.cget("text") == "Clear Music First" and not win.clear_var.get()
     assert win.free_label.cget("text") == "57 of 117 GB free"
     win.limit_box.insert(0, "32")

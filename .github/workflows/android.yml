@@ -1,0 +1,39 @@
+# The 24bit7 phone app (24 Nov 2026): built and signed here, so the media PC needs no Android tools. Every push to
+# main builds it, so a release finds an APK for its own commit (release.ps1 attaches it); every push to dev too,
+# about three minutes, so a test build is always to hand. The key lives in the repository's secrets.
+name: phone app
+on:
+  push:
+    branches: [main, dev]
+  workflow_dispatch: {}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: The signing key
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE" ]; then
+            echo "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/24bit7.jks"
+            echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/24bit7.jks" >> "$GITHUB_ENV"
+          fi
+      - name: Build
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: gradle assembleRelease --no-daemon
+        working-directory: android
+      - name: Name it
+        run: cp android/app/build/outputs/apk/release/app-release.apk 24bit7-phone.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 24bit7-phone
+          path: 24bit7-phone.apk

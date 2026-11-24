@@ -5,8 +5,9 @@
 #   6. Checks before publishing: gh installed and signed in, release_notes\vX.Y.Z.md
 #      committed, no release with this tag yet, everything committed and pushed.
 #      Any problem stops it here: nothing goes online.
-#   7. Publishes with gh: the zip and its fingerprint (.sha256, for Update Now), the title and the notes file,
-#      then opens the page.
+#      The phone app's APK, built by GitHub for this commit, is fetched too.
+#   7. Publishes with gh: the zip and its fingerprint (.sha256, for Update Now), the phone app's APK, the title
+#      and the notes file, then opens the page.
 #
 # build.bat runs it: powershell -NoProfile -ExecutionPolicy Bypass -File release.ps1 -Version 1.8.0 -Zip releases\...
 
@@ -45,6 +46,35 @@ $unpushed = git rev-list --count "@{u}..HEAD" 2> $null
 if ($LASTEXITCODE -or [int]$unpushed -gt 0) {
     $problems += "Some commits haven't been pushed: run git push."
 }
+# The phone app (24 Nov 2026): GitHub builds and signs it at every push to main (.github\workflows\android.yml),
+# so the run for this very commit is fetched and its APK goes up beside the zip. No APK, no release.
+$apk = $null
+if (-not $problems.Count) {
+    $head = git rev-parse HEAD
+    $run = gh run list --workflow android.yml --commit $head --limit 1 --json databaseId --jq '.[0].databaseId' 2> $null
+    if (-not $run) {
+        gh workflow run android.yml --ref (git rev-parse --abbrev-ref HEAD) *> $null
+        for ($i = 0; $i -lt 12 -and -not $run; $i++) {
+            Start-Sleep -Seconds 5
+            $run = gh run list --workflow android.yml --commit $head --limit 1 --json databaseId --jq '.[0].databaseId' 2> $null
+        }
+    }
+    if ($run) {
+        Write-Host "Waiting for the phone app's build on GitHub..."
+        gh run watch $run --exit-status *> $null
+        if ($LASTEXITCODE -eq 0) {
+            $got = "releases\phone-$Version"
+            if (Test-Path $got) { Remove-Item -Recurse -Force $got }
+            gh run download $run -n 24bit7-phone -D $got *> $null
+            if (Test-Path "$got\24bit7-phone.apk") {
+                $apk = "releases\24bit7-phone-v$Version.apk"
+                Move-Item -Force "$got\24bit7-phone.apk" $apk
+                Remove-Item -Recurse -Force $got
+            }
+        }
+    }
+    if (-not $apk) { $problems += "The phone app's APK couldn't be fetched from GitHub (Actions, phone app)." }
+}
 if ($problems.Count) {
     Write-Host ""
     Write-Host "Not published:"
@@ -58,7 +88,7 @@ if ($problems.Count) {
 $sha = "$Zip.sha256"
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $Zip).Hash.ToLower()
 Set-Content -LiteralPath $sha -Value "$hash  $(Split-Path -Leaf $Zip)" -Encoding Ascii
-gh release create $tag $Zip $sha --title "24bit7 $Version" --notes-file $notes --target (git rev-parse HEAD)
+gh release create $tag $Zip $sha $apk --title "24bit7 $Version" --notes-file $notes --target (git rev-parse HEAD)
 if ($LASTEXITCODE) {
     Write-Host "Publishing didn't go through (see above). Nothing else was changed."
     exit 1

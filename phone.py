@@ -33,6 +33,8 @@ from i18n import t, tn
 
 META_KEY = "copy_devices"     # {device id: {"name", "folder", "limit_gb", "clear"}}
 PC = "pc"                     # This PC: a folder here, for Syncthing and the like (Ben, 24 Nov 2026)
+LINKS_KEY = "copy_links"      # {USB device id: "app:<id>"}: the phone's app, read from Music/.24bit7
+APP_PORT = 47247              # the phone app's port (android/.../TransferService.kt)
 LAST_KEY = "copy_last"        # the device id last copied to
 DEFAULT_FOLDER = "Music"
 SPARE = 200 * 1000 * 1000     # bytes left free on the phone, so it never fills to the brim
@@ -55,25 +57,79 @@ def _set_meta(key, value):
     con.commit()
 
 
+def key_for(device_id):
+    """The key a device's choices and records are kept under: a USB phone with the app on it is its app's."""
+    return _meta(LINKS_KEY, {}).get(device_id, device_id)
+
+
+def is_wifi(device_id):
+    return str(device_id or "").startswith("app:")
+
+
 def settings(device_id, model=""):
     """A device's remembered choices: its name (the phone's own to start), folder, limit (0 is none), Clear First.
     This PC has no folder until one is chosen."""
-    saved = _meta(META_KEY, {}).get(device_id) or {}
+    saved = _meta(META_KEY, {}).get(key_for(device_id)) or {}
     pc = device_id == PC
-    return {"name": t("This PC") if pc else saved.get("name") or model or t("Phone"),
+    return {"name": t("This PC") if pc else saved.get("name") or model or saved.get("model") or t("Phone"),
             "folder": saved.get("folder") or ("" if pc else DEFAULT_FOLDER),
             "limit_gb": float(saved.get("limit_gb") or 0), "clear": bool(saved.get("clear"))}
 
 
 def remember(device_id, **choices):
     every = _meta(META_KEY, {})
-    every[device_id] = dict(every.get(device_id) or {}, **choices)
+    key = key_for(device_id)
+    every[key] = dict(every.get(key) or {}, **choices)
     _set_meta(META_KEY, every)
     _set_meta(LAST_KEY, device_id)
 
 
 def last_device():
     return _meta(LAST_KEY, None)
+
+
+_unlinked = set()   # USB phones looked at this run with no app on them
+
+
+def _link_usb(device_id, model):
+    """
+    A USB phone's key: its app's ("app:...") once Music/.24bit7 has been read off it, the device id until then. The
+    first time the link is found, what was kept under the device id moves to the app's key, so a phone added over
+    WiFi and the same phone plugged in share one name, folder, limit and record (Ben, 24 Nov 2026).
+    """
+    links = _meta(LINKS_KEY, {})
+    if device_id in links:
+        return links[device_id]
+    if device_id in _unlinked:
+        return device_id
+    app_id = ""
+    try:
+        p = WpdPhone(device_id, model)
+        try:
+            music = p.folder(DEFAULT_FOLDER)
+            mark = p.child(music, ".24bit7") if music is not None else None
+            app_id = _decode(p.read(mark)).strip() if mark is not None else ""
+        finally:
+            p.close()
+    except Exception as e:
+        engine.debug(f"Copy Tracks To: couldn't look for the app on {model} ({e})")
+    if not re.fullmatch(r"[0-9a-fA-F-]{8,64}", app_id or ""):
+        _unlinked.add(device_id)
+        return device_id
+    key = "app:" + app_id.lower()
+    links[device_id] = key
+    _set_meta(LINKS_KEY, links)
+    every = _meta(META_KEY, {})
+    old, new = every.pop(device_id, None) or {}, every.get(key) or {}
+    copied = dict(old.get("copied") or {})
+    for folder, lists in (new.get("copied") or {}).items():
+        copied[folder] = dict(copied.get(folder) or {}, **lists)
+    merged = dict(old)
+    merged.update(new)
+    merged["copied"] = copied
+    every[key] = merged
+    _set_meta(META_KEY, every)
+    return key
 
 
 # --- names on the phone -------------------------------------------------------------------------------------
@@ -264,7 +320,7 @@ def _records(phone):
     Kept with the device's choices, so a second save knows what was its own and a song another playlist still
     lists is never taken off.
     """
-    key = getattr(phone, "id", None) or phone.name
+    key = key_for(getattr(phone, "id", None) or phone.name)
     return key, dict((_meta(META_KEY, {}).get(key) or {}).get("copied") or {})
 
 
@@ -488,14 +544,34 @@ def copy_playlist(phone, folder, playlist, tracks, limit_gb=0, clear=False, say=
 # --- where a copy can go --------------------------------------------------------------------------------------
 
 def targets():
-    """[(device id, model)] the Device list offers: the phones plugged in, then This PC."""
-    return devices() + [(PC, t("This PC"))]
+    """
+    [(device id, model)] the Device list offers: the phones plugged in, the phones added over WiFi that aren't
+    plugged in too (one phone is one device: Music/.24bit7 links the two), then This PC.
+    """
+    out, seen = [], set()
+    for device_id, model in devices():
+        out.append((device_id, model))
+        seen.add(_link_usb(device_id, model))
+    for key, entry in _meta(META_KEY, {}).items():
+        if is_wifi(key) and entry.get("code") and key not in seen:
+            out.append((key, entry.get("model") or ""))
+    return out + [(PC, t("This PC"))]
+
+
+def label(device_id, model=""):
+    """How the Device list shows it: "Ben's Phone (USB)", "Jo's Phone (WiFi)", "This PC"."""
+    name = settings(device_id, model)["name"]
+    if device_id == PC:
+        return name
+    return t("{name} (WiFi)", name=name) if is_wifi(device_id) else t("{name} (USB)", name=name)
 
 
 def open_device(device_id, name):
-    """The device to copy to: a phone over USB, or a folder on This PC."""
+    """The device to copy to: a phone over USB or WiFi, or a folder on This PC."""
     if device_id == PC:
         return FolderDevice(name)
+    if is_wifi(device_id):
+        return WifiPhone.find(device_id, name)
     return WpdPhone(device_id, name)
 
 
@@ -590,6 +666,213 @@ class FolderDevice:
                 shutil.rmtree(oid)
             elif os.path.exists(oid):
                 os.remove(oid)
+
+
+# --- a phone over WiFi, through the 24bit7 app on it ------------------------------------------------------------
+
+def _home_networks():
+    """The PC's own home networks, as the first three parts of its addresses ('192.168.0'): private ranges only,
+    so Tailscale's 100.x and the like are never scanned."""
+    import ipaddress
+    import socket
+    found = set()
+    try:
+        names = {socket.gethostname(), ""}
+        addrs = {a[4][0] for n in names for a in socket.getaddrinfo(n, None, socket.AF_INET)}
+    except Exception:
+        addrs = set()
+    try:   # the address the PC would reach the router from, in case the name gives only the loopback
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("192.168.0.1", 9))
+        addrs.add(s.getsockname()[0])
+        s.close()
+    except Exception:
+        pass
+    for a in addrs:
+        try:
+            ip = ipaddress.ip_address(a)
+        except ValueError:
+            continue
+        if ip.is_private and not ip.is_loopback and not ip.is_link_local and not a.startswith("100."):
+            found.add(a.rsplit(".", 1)[0])
+    return sorted(found)
+
+
+def _open_port(host, port=None, timeout=0.4):
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(timeout)
+    try:
+        s.connect((host, port or APP_PORT))
+        return True
+    except OSError:
+        return False
+    finally:
+        s.close()
+
+
+def find_apps(code, timeout=0.4):
+    """
+    Every phone on the home network with the 24bit7 app open that answers to this code: [(address, info)]. The PC
+    can't hear the app announce itself (Windows' firewall keeps that out, 24 Nov 2026), so it tries the app's port
+    across each home network, a few seconds at most, and asks whoever answers.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    hosts = [f"{net}.{i}" for net in _home_networks() for i in range(1, 255)]
+    with ThreadPoolExecutor(64) as pool:
+        open_ = [h for h, ok in zip(hosts, pool.map(lambda h: _open_port(h, timeout=timeout), hosts)) if ok]
+    out = []
+    for h in open_:
+        try:
+            out.append((f"{h}:{APP_PORT}", WifiPhone.info_at(f"{h}:{APP_PORT}", code)))
+        except Exception:
+            continue
+    return out
+
+
+def add_wifi(code):
+    """
+    + Add a Phone Over WiFi: the phone answering to the code, remembered by its app's id with the code and where it
+    was found. (key, model, known): known when it's a phone already kept, by USB or WiFi.
+    """
+    code = (code or "").strip()
+    found = find_apps(code) if re.fullmatch(r"\d{4}", code) else []
+    if not found:
+        return None
+    address, info = found[0]
+    key = "app:" + str(info["id"]).lower()
+    known = key in _meta(META_KEY, {})
+    every = _meta(META_KEY, {})
+    every[key] = dict(every.get(key) or {}, code=code, address=address, model=info.get("name") or "")
+    _set_meta(META_KEY, every)
+    return key, info.get("name") or "", known
+
+
+class WifiPhone:
+    """A phone over WiFi, through the 24bit7 app on it (Ben, 24 Nov 2026). Paths from its shared storage are its
+    ids ('Music/Seether'). Proved on Ben's Pixel 9a the same day: 41 MB in 0.6 s from the wired media PC."""
+
+    def __init__(self, key, name, code, address):
+        self.id, self.name, self.code, self.address = key, name, code, address
+
+    @staticmethod
+    def info_at(address, code, timeout=3):
+        import http.client
+        host, _, port = address.rpartition(":")
+        con = http.client.HTTPConnection(host, int(port), timeout=timeout, blocksize=1 << 16)
+        try:
+            con.request("GET", "/info", headers={"X-24bit7-Code": code})
+            r = con.getresponse()
+            body = r.read()
+            if r.status != 200:
+                raise RuntimeError(f"{r.status}")
+            return json.loads(body)
+        finally:
+            con.close()
+
+    @classmethod
+    def find(cls, key, name):
+        """The phone, at the address it was last found at or, if it's moved, wherever it answers now."""
+        entry = _meta(META_KEY, {}).get(key) or {}
+        code, address = entry.get("code") or "", entry.get("address") or ""
+        if address:
+            try:
+                if "app:" + str(cls.info_at(address, code, timeout=1.5).get("id")).lower() == key:
+                    return cls(key, name, code, address)
+            except Exception:
+                pass
+        for where, info in find_apps(code):
+            if "app:" + str(info.get("id")).lower() == key:
+                remember_quietly(key, address=where)
+                return cls(key, name, code, where)
+        raise RuntimeError(t("{phone} isn't answering. Open 24bit7 on it, on the same WiFi as this PC.", phone=name))
+
+    def close(self):
+        pass
+
+    def _call(self, method, path, rel=None, body=None, length=None, timeout=120):
+        import http.client
+        import urllib.parse
+        host, _, port = self.address.rpartition(":")
+        con = http.client.HTTPConnection(host, int(port), timeout=timeout, blocksize=1 << 16)
+        url = path + ("?path=" + urllib.parse.quote(rel, safe="") if rel is not None else "")
+        headers = {"X-24bit7-Code": self.code}
+        if length is not None:
+            headers["Content-Length"] = str(length)
+        try:
+            con.request(method, url, body=body, headers=headers)
+            r = con.getresponse()
+            data = r.read()
+            if r.status == 404:
+                return None
+            if r.status >= 300:
+                raise RuntimeError(f"{self.name}: {r.status} {data[:200].decode('utf-8', 'replace')}")
+            return data
+        finally:
+            con.close()
+
+    def _json(self, *a, **k):
+        data = self._call(*a, **k)
+        return None if data is None else json.loads(data)
+
+    def free(self):
+        return int(self._json("GET", "/info")["free"])
+
+    def capacity(self):
+        return int(self._json("GET", "/info")["total"])
+
+    def list(self, parent):
+        got = self._json("GET", "/list", parent) or {"entries": []}
+        return [{"id": f"{parent}/{e['name']}" if parent else e["name"], "name": e["name"], "folder": bool(e["dir"]),
+                 "size": None if e["dir"] else int(e["size"])} for e in got["entries"]]
+
+    def child(self, parent, name):
+        return next((e["id"] for e in self.list(parent) if e["name"].lower() == name.lower()), None)
+
+    def folder(self, path, make=False):
+        rel = "/".join(p for p in re.split(r"[\\/]+", path or "") if p)
+        if not rel:
+            return ""
+        if self._call("GET", "/list", rel) is None:
+            if not make:
+                return None
+            self._call("POST", "/mkdir", rel)
+        return rel
+
+    def make(self, parent, name):
+        rel = f"{parent}/{name}" if parent else name
+        self._call("POST", "/mkdir", rel)
+        return rel
+
+    def put(self, parent, path, name, size):
+        rel = f"{parent}/{name}" if parent else name
+        with open(path, "rb") as f:
+            self._call("PUT", "/file", rel, body=f, length=size, timeout=300)
+        return rel
+
+    def put_text(self, parent, name, text):
+        data = text.encode("utf-8")
+        rel = f"{parent}/{name}" if parent else name
+        self._call("PUT", "/file", rel, body=data, length=len(data))
+        return rel
+
+    def read(self, oid):
+        data = self._call("GET", "/file", oid)
+        if data is None:
+            raise RuntimeError(f"{oid} isn't there")
+        return data
+
+    def delete(self, ids):
+        for oid in ids:
+            if oid:   # never the whole phone
+                self._call("DELETE", "/file", oid)
+
+
+def remember_quietly(key, **choices):
+    """Kept for a device without making it the last one used (where a WiFi phone was found)."""
+    every = _meta(META_KEY, {})
+    every[key] = dict(every.get(key) or {}, **choices)
+    _set_meta(META_KEY, every)
 
 
 # --- Windows Portable Devices ----------------------------------------------------------------------------------

@@ -314,7 +314,7 @@ class SavePrompt(tabs.NamePrompt):
         self.device_var = tk.StringVar()
         self.device_cb = ttk.Combobox(lines, textvariable=self.device_var, state="readonly", width=22)
         self.device_cb.grid(row=0, column=1, **grid)
-        self.device_cb.bind("<<ComboboxSelected>>", lambda e: self._device_chosen())
+        self.device_cb.bind("<<ComboboxSelected>>", lambda e: self._device_picked())
         rename = self.rename_link = tk.Label(lines, text=t("Rename"), font=("Segoe UI", 9, "underline"), bg=bg,
                                              fg=PALETTE["button_fg"], cursor="hand2")
         rename.grid(row=0, column=2, sticky="w", padx=(px(8), 0))
@@ -357,21 +357,46 @@ class SavePrompt(tabs.NamePrompt):
             self.copy_lines.pack_forget()
             self._refit()
             return
-        self._ids = [i for i, _ in self._phones]
-        names = [phone.settings(i, model)["name"] for i, model in self._phones]
-        self.device_cb.config(values=names)
-        last = phone.last_device()
-        self.device_cb.current(self._ids.index(last) if last in self._ids else 0)
+        self._fill_devices(phone.last_device())
         self.copy_lines.pack(anchor="w", padx=(self._px(22), 0), before=self.warn)
         self._device_chosen()
         self._refit()
+
+    def _fill_devices(self, want=None):
+        """The Device list: each device by name and how it's reached, then + Add a Phone Over WiFi... (Ben, 24 Nov
+        2026, as drawn). want is a device to choose, matched through its app so USB and WiFi count as one."""
+        import phone
+        self._ids = [i for i, _ in self._phones]
+        self.device_cb.config(values=[phone.label(i, model) for i, model in self._phones] + [t(ADD_WIFI)])
+        keys = [phone.key_for(i) for i in self._ids]
+        pick = phone.key_for(want) if want else None
+        self._chosen = keys.index(pick) if pick in keys else 0
+        self.device_cb.current(self._chosen)
+
+    def _device_picked(self):
+        """A device chosen in the list; the last line adds a phone over WiFi instead."""
+        if self.device_cb.current() < len(self._phones):
+            self._chosen = self.device_cb.current()
+            self._device_chosen()
+            return
+        self.device_cb.current(self._chosen)
+        added = ask_add_wifi(self)
+        try:
+            self.grab_set()
+        except tk.TclError:
+            pass
+        if added:
+            import phone
+            self._phones = phone.targets()
+            self._fill_devices(added)
+            self._device_chosen()
 
     def _refit(self):
         self.refit()
 
     def _device(self):
-        i = max(0, self.device_cb.current())
-        return self._phones[i]
+        i = self.device_cb.current()
+        return self._phones[i if 0 <= i < len(self._phones) else getattr(self, "_chosen", 0)]
 
     def _device_chosen(self):
         """The phone's remembered choices, and its free space read from it."""
@@ -391,19 +416,52 @@ class SavePrompt(tabs.NamePrompt):
             self.rename_link.grid_remove()
         else:
             self.rename_link.grid()
-        try:
+
+        def read():
             p = phone.open_device(device_id, s["name"])
             try:
                 if pc:
                     p.root = s["folder"] if os.path.isdir(s["folder"]) else None
-                free, cap = p.free(), p.capacity()
+                return p.free(), p.capacity()
             finally:
                 p.close()
-            self.free_label.config(text=t("{free} of {size} GB free", free=f"{free / phone.GB:.0f}",
-                                          size=f"{cap / phone.GB:.0f}"))
+
+        def shown(free_cap, e=None):
+            if free_cap:
+                free, cap = free_cap
+                self.free_label.config(text=t("{free} of {size} GB free", free=f"{free / phone.GB:.0f}",
+                                              size=f"{cap / phone.GB:.0f}"))
+            else:
+                self.free_label.config(text="" if pc else
+                                       t("Not answering: open 24bit7 on it.") if phone.is_wifi(device_id) else
+                                       t("Can't read it: is it unlocked?"))
+                engine.debug(f"Copy Tracks To: {e}")
+
+        if phone.is_wifi(device_id):   # finding it may take a few seconds: never hold the window up for it
+            self.free_label.config(text=t("Looking for it on the WiFi..."))
+            news = queue.Queue()
+
+            def work():
+                try:
+                    news.put((read(), None))
+                except Exception as e:
+                    news.put((None, e))
+            threading.Thread(target=work, daemon=True, name="wifi-free").start()
+
+            def poll(asked=device_id):
+                try:
+                    got, e = news.get_nowait()
+                except queue.Empty:
+                    self.after(150, poll)
+                    return
+                if self.winfo_exists() and self._device()[0] == asked:
+                    shown(got, e)
+            self.after(150, poll)
+            return
+        try:
+            shown(read())
         except Exception as e:
-            self.free_label.config(text="" if pc else t("Can't read it: is it unlocked?"))
-            engine.debug(f"Copy Tracks To: {e}")
+            shown(None, e)
 
     def _sync_clear_text(self):
         folder = os.path.basename(self.folder_box.get().strip().rstrip("\\/")) or "Music"
@@ -460,10 +518,7 @@ class SavePrompt(tabs.NamePrompt):
                              initial=phone.settings(device_id, model)["name"])
         if name and name.strip():
             phone.remember(device_id, name=name.strip())
-            names = list(self.device_cb.cget("values"))
-            names[self._ids.index(device_id)] = name.strip()
-            self.device_cb.config(values=names)
-            self.device_var.set(name.strip())
+            self._fill_devices(device_id)
 
     def ok(self):
         """Save: nothing happens until one of the two is ticked and there's a name, each said in amber."""
@@ -594,6 +649,96 @@ class FolderPicker(tabs.PromptWindow):
             return
         self.result = "/".join(path)
         self.destroy()
+
+
+ADD_WIFI = N_("+ Add a Phone Over WiFi...")
+
+
+class AddWifiPrompt(tabs.PromptWindow):
+    """
+    + Add a Phone Over WiFi (Ben, 24 Nov 2026, as drawn): open 24bit7 on the phone, type the code it shows and a
+    name. Add looks for it across the home network on a thread (a few seconds), then remembers it by its app.
+    .result is its device key, or None.
+    """
+
+    ok_text = N_("Add")
+
+    def __init__(self, parent):
+        self._news, self._looking, self._parent = queue.Queue(), False, parent
+        super().__init__(parent, t("Add a Phone Over WiFi"))
+
+    def _body(self, inner, bg, fg):
+        px = self._px
+        tk.Label(inner, text=t("Open 24bit7 on the phone, on the same WiFi as this PC, and type the code it shows."),
+                 font=("Segoe UI", 10), bg=bg, fg=fg, justify="left", wraplength=px(380)).pack(anchor="w")
+        rows = tk.Frame(inner, bg=bg)
+        rows.pack(anchor="w", pady=(px(8), 0))
+        tk.Label(rows, text=t("Code"), font=("Segoe UI", 10), bg=bg, fg=fg).grid(row=0, column=0, sticky="w",
+                                                                                 pady=px(3))
+        self.code_box = RoundedEntry(rows, width=6, font=("Segoe UI", 10))
+        self.code_box.grid(row=0, column=1, sticky="w", pady=px(3))
+        tk.Label(rows, text=t("Name"), font=("Segoe UI", 10), bg=bg, fg=fg).grid(row=1, column=0, sticky="w",
+                                                                                 pady=px(3))
+        self.name_box = RoundedEntry(rows, width=24, font=("Segoe UI", 10))
+        self.name_box.grid(row=1, column=1, sticky="w", pady=px(3))
+        rows.columnconfigure(0, minsize=px(60))
+        self.entry = self.code_box.entry
+        self.note = tk.Label(inner, text="", font=("Segoe UI", 9), bg=bg, fg=PALETTE["help_fg"], justify="left",
+                             wraplength=px(380))
+        self.note.pack(anchor="w", pady=(px(6), 0))
+
+    def ok(self):
+        if self._looking:
+            return
+        code = self.code_box.get().strip()
+        if not re.fullmatch(r"\d{4}", code):
+            self.note.config(text=t("Type the four numbers the phone shows."), fg=PALETTE["amber"])
+            return
+        import phone
+        self._looking = True
+        self.note.config(text=t("Looking for it on the WiFi..."), fg=PALETTE["help_fg"])
+        threading.Thread(target=lambda: self._news.put(phone.add_wifi(code)), daemon=True, name="wifi-add").start()
+        self.after(150, self._found)
+
+    def _found(self):
+        try:
+            got = self._news.get_nowait()
+        except queue.Empty:
+            if self.winfo_exists():
+                self.after(150, self._found)
+            return
+        self._looking = False
+        if not got:
+            self.note.config(text=t("No phone answered to that code. Is 24bit7 open on it, on the same WiFi?"),
+                             fg=PALETTE["amber"])
+            return
+        import phone
+        key, model, known = got
+        name = self.name_box.get().strip()
+        if name or not known:
+            phone.remember_quietly(key, name=name or model)
+        self.result = key
+        self.parent_log(t("Added {phone} over WiFi.", phone=phone.settings(key, model)["name"])
+                        + (" " + t("It's the phone you've used by USB, so it keeps its name, folder and limit.")
+                           if known else ""))
+        self.destroy()
+
+    def parent_log(self, line):
+        app = self._parent
+        while app is not None and not hasattr(app, "log_queue"):
+            app = getattr(app, "master", None)
+        if app is not None:
+            app.log_queue.put(line)
+
+
+def ask_add_wifi(parent):
+    win = AddWifiPrompt(parent)
+    try:
+        win.grab_set()
+    except tk.TclError:
+        pass
+    win.wait_window()
+    return win.result
 
 
 def ask_save(parent, prompt, initial, size, jriver=True, jriver_ok=True, copy=False):
@@ -1929,6 +2074,7 @@ class PlayTab(tk.Frame):
             except Exception as e:
                 self._append_log(t("Problem: couldn't open {folder} ({e}).", folder=copy["folder"], e=e)
                                  if copy["device"] == phone.PC else
+                                 t("Problem: {e}", e=e) if phone.is_wifi(copy["device"]) else
                                  t("Problem: couldn't reach {phone} ({e}). Is it unlocked and set to File Transfer?",
                                    phone=copy["name"], e=e))
                 return
@@ -1963,6 +2109,8 @@ class PlayTab(tk.Frame):
             except Exception as e:
                 say(t("Problem: the copy to {folder} stopped ({e}).", folder=copy["folder"], e=e)
                     if copy["device"] == phone.PC else
+                    t("Problem: the copy to {phone} stopped ({e}). Is 24bit7 still open on it?", phone=copy["name"],
+                      e=e) if phone.is_wifi(copy["device"]) else
                     t("Problem: the copy to {phone} stopped ({e}). Is it still plugged in and unlocked?",
                       phone=copy["name"], e=e))
                 news.put({"state": "failed", "error": str(e)})

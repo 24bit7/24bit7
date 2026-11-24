@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ready">Bereit für 24bit7</string>
+    <string name="code">Code</string>
+    <string name="needs_access">24bit7 braucht Zugriff auf alle Dateien, um Musik in deinen Music-Ordner zu legen.\n\nTippe hier, um ihn zu erlauben.</string>
+    <string name="no_wifi">Nicht im WLAN</string>
+    <string name="keep_open">Lass das offen, während 24bit7 kopiert.</string>
+    <string name="got">%1$s empfangen</string>
+    <string name="deleted">%1$s gelöscht</string>
+    <string name="problem">Problem: %1$s</string>
+    <string name="notification">24bit7 ist bereit zum Kopieren</string>
+    <string name="channel">Kopieren</string>
+</resources>
