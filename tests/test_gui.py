@@ -1057,6 +1057,24 @@ def test_closed_tabs_arrow_covers_no_console_text(ui):
     play._set_tabs_open(False, save=False)
 
 
+def test_console_strip_sits_in_the_band_level_with_the_arrow(ui):
+    """Ben, 24 Nov 2026: Copy, Clear, Query... on the first console line looked disjointed, and covered its end."""
+    play = ui.play
+    play._set_tabs_open(False, save=False)
+    play.report("x" * 400)
+    ui.pump(0.2)
+    play._show_console_strip()
+    ui.pump(0.2)
+    strip, text, arrow = play.console_strip, play.log.frame, play.head_arrow
+    assert strip.winfo_ismapped()
+    assert strip.winfo_rooty() + strip.winfo_height() <= text.winfo_rooty(), "above the text, covering none of it"
+    assert strip.winfo_rooty() >= play.console_box.winfo_rooty(), "inside the console's box"
+    assert abs(strip.winfo_rooty() - arrow.winfo_rooty()) <= 4, "level with the arrow"
+    right = text.winfo_rootx() + text.winfo_width()
+    assert right - 8 <= strip.winfo_rootx() + strip.winfo_width() <= right, "its right edge with the scrollbar's"
+    play.console_strip.place_forget()
+
+
 def test_console_arrow_sits_beside_the_switch(app, ui):
     keys = _review_with_zone(app, ui, _album(app))
     panel, play = ui.play.review_panel, ui.play

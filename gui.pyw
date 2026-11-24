@@ -3743,8 +3743,11 @@ class PlayTab(tk.Frame):
                 pass
 
     def _arrow_band(self, on):
-        """With the tabs closed, the text starts below a band as tall as the arrow, so the arrow covers nothing."""
-        band = self.head_arrow.winfo_reqheight() if on else 0
+        """With the tabs closed, the text starts below a band as tall as the arrow, or as the console strip (Copy,
+        Clear...) that shows in it, so neither covers anything."""
+        strip = getattr(self, "console_strip", None)
+        band = max(self.head_arrow.winfo_reqheight(), strip.winfo_reqheight() + 3 if strip is not None else 0) \
+            if on else 0
         try:
             if self.log.frame.winfo_manager() == "pack":   # ScrolledText: its frame is the packed widget
                 self.log.pack_configure(pady=(band, 0))
@@ -3993,7 +3996,10 @@ class PlayTab(tk.Frame):
                 query.pack(side="left", padx=(0, 4), before=self.console_buttons["Export to Log"])
         else:
             query.pack_forget()
-        self.console_strip.place(in_=self.log, relx=1.0, x=-6, y=6, anchor="ne")
+        # in the band above the text, level with the arrow, its right edge with the scrollbar's (Ben, 24 Nov 2026:
+        # on the first line it looked disjointed, and it covered that line's end)
+        self._arrow_band(True)
+        self.console_strip.place(in_=self.log.frame, relx=1.0, x=-4, y=-1, anchor="se")
         self.console_strip.lift()
 
     def _sync_cancel_strip(self):
