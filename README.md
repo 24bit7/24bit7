@@ -310,7 +310,12 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.41.0
+## What's new in 1.42.0
+
+- **Stack albums and playlists.** On Playlists & Albums, each row of the list has **+ Add**: add as many albums and playlists as you like, and Play, Embellish or Save takes the lot. Play Ordered plays them back to back, each in its own order.
+- **One Save.** Save Playlist and Copy to Phone are now one **Save**, with **As a JRiver Playlist** and **Copy Tracks To** in its window, so one save can do both. It saves what the last playlist played or, once you've picked or stacked something since, what's in the box, without playing it.
+
+### Earlier: 1.41.0
 
 - **Copy to Phone from Playlists & Albums.** Pick an album or playlist and **Copy to Phone** copies it straight to your phone, without playing it or saving anything in JRiver.
 - **Artist and album folders on the phone.** Copied tracks go into artist and album folders, with the playlist's .m3u8 at the top of the folder, and a window shows how the copy is going, with **Stop**. A copy that's stopped or cut off picks up the rest next time.
@@ -396,7 +401,7 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 - **Radio**, a playlist that needs no seed. 24bit7 sorts the artists you play into stations by the sources' genres (Classic Rock, Downtempo and so on), each with pillar artists: your own most played first, then the genre's best that you own. Edit a station's pillars from its page, adding any artist in your library. Each round is Consensus over a few pillars, about an hour, and it carries on from the pillars all evening; an artist that belongs in another station is left out. Stations split and join back, and any station can be a button of its own. Like any playlist it can be moved, deleted or added from a template. Its page sets how many stations there are, renames them, and holds the sources, how many of each artist's top tracks to pick, filters, the Moderator and Deep Cuts, one set for every Radio button. It rests, greyed, until you've played enough.
 - **JRiver Playlists**, a third seed tab: pick one of your JRiver playlists and **Play** it, shuffled or in order, or **Play & Embellish** it, with new tracks woven in from artists the playlist's own artists agree on: **+10%**, **+20%**, **+50%**, **Double**, **Triple** or **Build It Out**, the arrow's choices and the default set under Settings > JRiver Playlists.
-- **Save Playlist** after any build to a JRiver zone saves that zone's Playing Now as a JRiver playlist.
+- **Save** after any build to a JRiver zone saves that zone's Playing Now as a JRiver playlist, copies it to a phone, or both.
 - **Top-Up**, on the More Options row: click it, then a playlist, and the new tracks go into what's left of Playing Now instead of replacing it. Lasts one playlist.
 - **Match Tempo** for Artist Matching and Track Matching: Off, Prefer or Strict, from your BPM tags, half and double time counting.
 - **Radio and Top-Up by voice**: "ask needle drop for radio folk", or "radio" alone to hear your last five stations and pick one; "top up", then any command, adds to what's playing. Paste the skill's new interaction model and code into the Alexa console.

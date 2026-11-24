@@ -980,8 +980,9 @@ def main():
                 clear_search_lines(play)
                 play._stack_toggle_list({"kind": "album", "Name": "Abbey Road", "Artist": "The Beatles"})
                 found = play._playlist_list() or []
-                if found:
-                    play._stack_toggle_list(found[0])
+                road = [p for p in found if p["Name"] == "Road Trip"] or found[:1]
+                if road:
+                    play._stack_toggle_list(road[0])
                 settle(root, 0.3)
                 play.playlist_entry.delete(0, "end")
                 play._fill_playlists()
