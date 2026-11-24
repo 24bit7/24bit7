@@ -116,6 +116,21 @@ def test_tracks_go_in_artist_and_album_folders_with_the_m3u8_at_the_top(app, fil
     assert said.has("Copied to Ben's Phone: 3 tracks in Music, with Jo's Mix.m3u8"), said.text()
 
 
+def test_one_track_is_said_as_one_track(app, files):
+    """Seen on Ben's Pixel over WiFi, 24 Nov 2026: "Copying 1 tracks" and "1 tracks in Music"."""
+    import phone
+    ph = FakePhone()
+    one = files(("Seether", "Broken", 100, "Disclaimer II", 3))
+    said = app.Lines()
+    phone.copy_playlist(ph, "Music", "One", one, say=said)
+    assert said.has("Copying 1 track (1 MB) to Ben's Phone...") and said.has("Copied to Ben's Phone: 1 track in "
+                                                                          "Music, with One.m3u8"), said.text()
+    said = app.Lines()
+    phone.copy_playlist(ph, "Music", "One", one, say=said)
+    assert said.has("Already on Ben's Phone: 1 track in Music, with One.m3u8."), said.text()
+    assert "1 tracks" not in said.text()
+
+
 def test_clear_first_empties_the_folder_but_dot_folders(app, files):
     import phone
     ph = FakePhone()

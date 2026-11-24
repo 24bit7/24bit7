@@ -485,8 +485,8 @@ def copy_playlist(phone, folder, playlist, tracks, limit_gb=0, clear=False, say=
     total = sum(tr["size"] for tr, _, _ in todo)
     count = len(kept) + len(todo)
     if todo:
-        say("  " + t("Copying {count} tracks ({size}) to {phone}...", count=len(todo), size=size_text(total),
-                     phone=phone.name))
+        say("  " + tn("Copying {count} track ({size}) to {phone}...", "Copying {count} tracks ({size}) to {phone}...",
+                      len(todo), size=size_text(total), phone=phone.name))
     done_bytes, done, stopped = 0, 0, False
     for i, (tr, p, already) in enumerate(todo, 1):
         if stop is not None and stop():
@@ -536,11 +536,13 @@ def copy_playlist(phone, folder, playlist, tracks, limit_gb=0, clear=False, say=
         line = t("Stopped: {count} of {total} tracks are on {phone}, with {name}.m3u8. Copying again picks up the "
                  "rest.", count=len(listed), total=count, phone=phone.name, name=own)
     elif todo:
-        line = t("Copied to {phone}: {count} tracks in {folder}, with {name}.m3u8 ({secs} s).", phone=phone.name,
-                 count=len(listed), folder=folder, name=own, secs=secs)
+        line = tn("Copied to {phone}: {count} track in {folder}, with {name}.m3u8 ({secs} s).",
+                  "Copied to {phone}: {count} tracks in {folder}, with {name}.m3u8 ({secs} s).", len(listed),
+                  phone=phone.name, folder=folder, name=own, secs=secs)
     else:   # saved again with nothing new: only the .m3u8 was written
-        line = t("Already on {phone}: {count} tracks in {folder}, with {name}.m3u8.", phone=phone.name,
-                 count=len(listed), folder=folder, name=own)
+        line = tn("Already on {phone}: {count} track in {folder}, with {name}.m3u8.",
+                  "Already on {phone}: {count} tracks in {folder}, with {name}.m3u8.", len(listed),
+                  phone=phone.name, folder=folder, name=own)
     say(line)
     if progress is not None:
         progress({"state": "stopped" if stopped else "done", "done": len(listed), "count": count,
