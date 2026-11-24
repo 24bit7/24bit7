@@ -269,7 +269,8 @@ class SavePrompt(tabs.NamePrompt):
         self._jriver_on, self._jriver_ok, self._copy_on = bool(jriver and jriver_ok), jriver_ok, copy
         self.copy, self.jriver = None, False
         super().__init__(parent, t("Save"), prompt, initial)
-        if self._copy_on and self._phones:
+        import phone
+        if self._copy_on and (len(self._phones) > 1 or phone.last_device() == phone.PC):
             self.copy_var.set(True)
             self._copy_toggled()
 
@@ -292,7 +293,7 @@ class SavePrompt(tabs.NamePrompt):
     def _extra(self, inner, bg, fg):
         import phone
         px = self._px
-        self._phones = phone.devices()
+        self._phones = phone.targets()   # the phones plugged in, then This PC
         self.jriver_var = tk.BooleanVar(value=self._jriver_on)
         jr = self.jriver_tick = ttk.Checkbutton(inner, text=t("As a JRiver Playlist"), variable=self.jriver_var)
         jr.pack(anchor="w", pady=(px(10), 0))
@@ -303,8 +304,7 @@ class SavePrompt(tabs.NamePrompt):
         self.copy_var = tk.BooleanVar(value=False)
         tick = ttk.Checkbutton(inner, text=t("Copy Tracks To"), variable=self.copy_var, command=self._copy_toggled)
         tick.pack(anchor="w", pady=(px(6), 0))
-        if not self._phones:
-            tick.state(["disabled"])
+        if len(self._phones) < 2:   # This PC alone
             tk.Label(inner, text=t("Plug in a phone, unlocked and set to File Transfer, to copy to it."),
                      font=("Segoe UI", 9), bg=bg, fg=PALETTE["help_fg"]).pack(anchor="w", padx=(px(22), 0))
         self.copy_tick = tick
@@ -315,8 +315,8 @@ class SavePrompt(tabs.NamePrompt):
         self.device_cb = ttk.Combobox(lines, textvariable=self.device_var, state="readonly", width=22)
         self.device_cb.grid(row=0, column=1, **grid)
         self.device_cb.bind("<<ComboboxSelected>>", lambda e: self._device_chosen())
-        rename = tk.Label(lines, text=t("Rename"), font=("Segoe UI", 9, "underline"), bg=bg,
-                          fg=PALETTE["button_fg"], cursor="hand2")
+        rename = self.rename_link = tk.Label(lines, text=t("Rename"), font=("Segoe UI", 9, "underline"), bg=bg,
+                                             fg=PALETTE["button_fg"], cursor="hand2")
         rename.grid(row=0, column=2, sticky="w", padx=(px(8), 0))
         rename.bind("<Button-1>", lambda e: self._rename())
         self.free_label = tk.Label(lines, text="", font=("Segoe UI", 9), bg=bg, fg=PALETTE["help_fg"])
@@ -386,29 +386,51 @@ class SavePrompt(tabs.NamePrompt):
         self.clear_var.set(s["clear"])
         self._sync_clear_text()
         self.free_label.config(text="")
+        pc = device_id == phone.PC
+        if pc:
+            self.rename_link.grid_remove()
+        else:
+            self.rename_link.grid()
         try:
-            p = phone.WpdPhone(device_id, s["name"])
+            p = phone.open_device(device_id, s["name"])
             try:
+                if pc:
+                    p.root = s["folder"] if os.path.isdir(s["folder"]) else None
                 free, cap = p.free(), p.capacity()
             finally:
                 p.close()
             self.free_label.config(text=t("{free} of {size} GB free", free=f"{free / phone.GB:.0f}",
                                           size=f"{cap / phone.GB:.0f}"))
         except Exception as e:
-            self.free_label.config(text=t("Can't read it: is it unlocked?"))
+            self.free_label.config(text="" if pc else t("Can't read it: is it unlocked?"))
             engine.debug(f"Copy Tracks To: {e}")
 
     def _sync_clear_text(self):
-        folder = self.folder_box.get().strip() or "Music"
+        folder = os.path.basename(self.folder_box.get().strip().rstrip("\\/")) or "Music"
         self.clear_tick.config(text=t("Clear {folder} First", folder=folder))
 
     def _browse(self):
-        """Browse: the phone's folders, to go into and pick from (Ben, 23 Nov 2026: Jo's music is in Music/Music)."""
+        """Browse: the phone's folders, to go into and pick from (Ben, 23 Nov 2026: Jo's music is in Music/Music);
+        for This PC, Windows' own folder picker."""
         import phone
         device_id, model = self._device()
+        if device_id == phone.PC:
+            from tkinter import filedialog
+            start = self.folder_box.get().strip()
+            chosen = filedialog.askdirectory(parent=self, title=t("Choose a Folder on This PC"),
+                                             initialdir=start if os.path.isdir(start) else None, mustexist=False)
+            try:
+                self.grab_set()
+            except tk.TclError:
+                pass
+            if chosen:
+                self.folder_box.delete(0, "end")
+                self.folder_box.insert(0, os.path.normpath(chosen))
+                self._sync_clear_text()
+            return
         name = phone.settings(device_id, model)["name"]
         try:
-            p = phone.WpdPhone(device_id, name)
+            p = phone.open_device(device_id, name)
         except Exception as e:
             self.free_label.config(text=t("Can't read it: is it unlocked?"))
             engine.debug(f"Copy Tracks To, Browse: {e}")
@@ -463,9 +485,17 @@ class SavePrompt(tabs.NamePrompt):
                 limit = float(self.limit_box.get().strip().replace(",", ".") or 0)
             except ValueError:
                 limit = 0.0
+            if device_id == phone.PC:
+                folder = os.path.normpath(self.folder_box.get().strip()) if self.folder_box.get().strip() else ""
+                problem = phone.pc_folder_problem(folder)
+                if problem:
+                    self.warn.config(text=problem)
+                    self._refit()
+                    return
+            else:
+                folder = self.folder_box.get().strip().strip("/\\") or "Music"
             self.copy = {"device": device_id, "name": phone.settings(device_id, model)["name"],
-                         "folder": self.folder_box.get().strip().strip("/\\") or "Music", "limit_gb": max(0.0, limit),
-                         "clear": bool(self.clear_var.get())}
+                         "folder": folder, "limit_gb": max(0.0, limit), "clear": bool(self.clear_var.get())}
         self.jriver = jriver
         self.result = name
         self.destroy()
@@ -1891,13 +1921,15 @@ class PlayTab(tk.Frame):
         clear = copy["clear"] and not empty
         if clear:
             try:
-                p = phone.WpdPhone(copy["device"], copy["name"])
+                p = phone.open_device(copy["device"], copy["name"])
                 try:
                     folders, files, kept = phone.clear_plan(p, copy["folder"], name, tracks)
                 finally:
                     p.close()
             except Exception as e:
-                self._append_log(t("Problem: couldn't reach {phone} ({e}). Is it unlocked and set to File Transfer?",
+                self._append_log(t("Problem: couldn't open {folder} ({e}).", folder=copy["folder"], e=e)
+                                 if copy["device"] == phone.PC else
+                                 t("Problem: couldn't reach {phone} ({e}). Is it unlocked and set to File Transfer?",
                                    phone=copy["name"], e=e))
                 return
             if folders or files:
@@ -1922,14 +1954,16 @@ class PlayTab(tk.Frame):
         def work():
             phone.com_begin()   # each thread that talks to a phone needs COM of its own
             try:
-                p = phone.WpdPhone(copy["device"], copy["name"])
+                p = phone.open_device(copy["device"], copy["name"])
                 try:
                     phone.copy_playlist(p, copy["folder"], name, tracks, limit_gb=copy["limit_gb"], clear=clear,
                                         say=say, progress=news.put, stop=lambda: win.stopping)
                 finally:
                     p.close()
             except Exception as e:
-                say(t("Problem: the copy to {phone} stopped ({e}). Is it still plugged in and unlocked?",
+                say(t("Problem: the copy to {folder} stopped ({e}).", folder=copy["folder"], e=e)
+                    if copy["device"] == phone.PC else
+                    t("Problem: the copy to {phone} stopped ({e}). Is it still plugged in and unlocked?",
                       phone=copy["name"], e=e))
                 news.put({"state": "failed", "error": str(e)})
             finally:

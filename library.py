@@ -450,6 +450,12 @@ def track_row(key):
         return _by_key.get(str(key))
 
 
+def filenames():
+    """Every track's file in the library held in memory (Copy Tracks To keeps This PC's folder clear of them)."""
+    with _lock:
+        return [r.get("Filename") or "" for r in _by_key.values()]
+
+
 def last_played(key):
     """When JRiver last played this track (Unix seconds), or None if never (or unknown)."""
     with _lock:

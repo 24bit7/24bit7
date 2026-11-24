@@ -17,21 +17,37 @@ def with_phone(monkeypatch, ph):
     import phone
     monkeypatch.setattr(phone, "devices", lambda: [(DEVICE, "Pixel 9a")])
     monkeypatch.setattr(phone, "WpdPhone", lambda device_id, name: ph)
+    return ph
 
 
 def prompt(ui, size=2_100_000_000, **kw):
     return ui.gui.SavePrompt(ui.play, "What's playing in Speakers (30 tracks, 2.1 GB).", "Mix", size, **kw)
 
 
-def test_no_phone_greys_the_tick_and_says_why(app, ui, monkeypatch):
+def test_no_phone_says_so_and_this_pc_is_still_there(app, ui, monkeypatch, tmp_path):
+    """With no phone plugged in, This PC is the one place to copy to (Ben, 24 Nov 2026): no folder until chosen,
+    no Rename, and Save says to choose one with Browse."""
     import phone
     monkeypatch.setattr(phone, "devices", lambda: [])
-    win = prompt(ui)
+    win = prompt(ui, copy=True)
     ui.pump(0.3)
-    assert win.copy_tick.instate(["disabled"])
+    assert not win.copy_tick.instate(["disabled"]) and not win.copy_var.get(), "not ticked for you with only This PC"
     texts = [w.cget("text") for w in win.copy_tick.master.winfo_children() if w.winfo_class() == "Label"]
     assert "Plug in a phone, unlocked and set to File Transfer, to copy to it." in texts
-    win.destroy()
+    win.copy_var.set(True)
+    win._copy_toggled()
+    ui.pump(0.2)
+    assert list(win.device_cb.cget("values")) == ["This PC"] and win.folder_box.get() == ""
+    assert not win.rename_link.winfo_ismapped() and win.browse_link.winfo_ismapped()
+    win.jriver_var.set(False)
+    win.ok()
+    assert win.warn.cget("text") == "Choose a folder on this PC with Browse."
+    sync = tmp_path / "Phone Sync"
+    win.folder_box.insert(0, str(sync))
+    win._sync_clear_text()
+    assert win.clear_tick.cget("text") == "Clear Phone Sync First"
+    win.ok()
+    assert win.copy == {"device": "pc", "name": "This PC", "folder": str(sync), "limit_gb": 0.0, "clear": False}
     assert not ui.errors, ui.errors[0]
 
 

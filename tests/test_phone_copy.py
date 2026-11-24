@@ -190,6 +190,43 @@ def test_other_playlists_lose_songs_no_longer_in_the_folder(app, files):
     assert not said.has("listed") and not said.has("taken off"), "nothing more to amend: " + said.text()
 
 
+def test_this_pc_copies_into_a_folder_the_same_way(app, files, tmp_path):
+    """Ben, 24 Nov 2026: a folder on this PC as a place to copy to, for Syncthing and the like. Plain copies."""
+    import phone
+    pc = phone.open_device(phone.PC, None)
+    assert isinstance(pc, phone.FolderDevice) and pc.name == "This PC"
+    sync = tmp_path / "Phone Sync"
+    a, b = files(("A", "One", 10, "First", 1), ("B", "Two", 20, "Second", 2))
+    said = app.Lines()
+    assert phone.copy_playlist(pc, str(sync), "Mix", [a, b], say=said) == 2
+    assert (sync / "A" / "First" / "01 One.flac").read_bytes() == b"x" * 10
+    assert (sync / "Mix.m3u8").read_text(encoding="utf-8") == ("#EXTM3U\nA/First/01 One.flac\n"
+                                                              "B/Second/02 Two.flac\n")
+    (sync / "Loose").mkdir()
+    (sync / ".stfolder").mkdir()   # Syncthing's own marker stays
+    assert phone.clear_plan(pc, str(sync), "New", [a]) == (2, 1, 1)
+    phone.copy_playlist(pc, str(sync), "New", [a], clear=True, say=app.Lines())
+    assert sorted(x.name for x in sync.iterdir()) == [".stfolder", "A", "New.m3u8"]
+    assert said.has(f"Copied to This PC: 2 tracks in {sync}, with Mix.m3u8"), said.text()
+
+
+def test_this_pc_never_takes_a_drive_or_the_library(app, tmp_path, monkeypatch):
+    import library
+    import phone
+    lib = tmp_path / "Library"
+    monkeypatch.setattr(library, "filenames", lambda: [str(lib / "Doors" / "LA Woman" / "01.flac")])
+    assert phone.pc_folder_problem("") == "Choose a folder on this PC with Browse."
+    assert phone.pc_folder_problem("Music") == "Choose a folder on this PC with Browse.", "never a relative path"
+    assert phone.pc_folder_problem("D:\\") == "That's a whole drive: choose a folder in it."
+    assert phone.pc_folder_problem(str(lib)) == "That folder holds your library's music, so 24bit7 won't copy into it."
+    assert phone.pc_folder_problem(str(tmp_path / "Phone Sync")) == ""
+    pc = phone.FolderDevice()
+    assert pc.folder(str(lib)) is None
+    pc.folder(str(tmp_path / "Phone Sync"), make=True)
+    with pytest.raises(RuntimeError):
+        pc.delete([str(tmp_path / "elsewhere.txt")])
+
+
 def test_a_playlist_saved_empty_comes_off_with_its_own_tracks(app, files):
     import phone
     ph = FakePhone()

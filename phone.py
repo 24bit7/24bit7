@@ -32,6 +32,7 @@ import engine
 from i18n import t, tn
 
 META_KEY = "copy_devices"     # {device id: {"name", "folder", "limit_gb", "clear"}}
+PC = "pc"                     # This PC: a folder here, for Syncthing and the like (Ben, 24 Nov 2026)
 LAST_KEY = "copy_last"        # the device id last copied to
 DEFAULT_FOLDER = "Music"
 SPARE = 200 * 1000 * 1000     # bytes left free on the phone, so it never fills to the brim
@@ -55,9 +56,12 @@ def _set_meta(key, value):
 
 
 def settings(device_id, model=""):
-    """A device's remembered choices: its name (the phone's own to start), folder, limit (0 is none), Clear First."""
+    """A device's remembered choices: its name (the phone's own to start), folder, limit (0 is none), Clear First.
+    This PC has no folder until one is chosen."""
     saved = _meta(META_KEY, {}).get(device_id) or {}
-    return {"name": saved.get("name") or model or t("Phone"), "folder": saved.get("folder") or DEFAULT_FOLDER,
+    pc = device_id == PC
+    return {"name": t("This PC") if pc else saved.get("name") or model or t("Phone"),
+            "folder": saved.get("folder") or ("" if pc else DEFAULT_FOLDER),
             "limit_gb": float(saved.get("limit_gb") or 0), "clear": bool(saved.get("clear"))}
 
 
@@ -479,6 +483,113 @@ def copy_playlist(phone, folder, playlist, tracks, limit_gb=0, clear=False, say=
         progress({"state": "stopped" if stopped else "done", "done": len(listed), "count": count,
                   "bytes": done_bytes, "total": total, "track": "", "line": line, "note": note, "secs": secs})
     return len(listed)
+
+
+# --- where a copy can go --------------------------------------------------------------------------------------
+
+def targets():
+    """[(device id, model)] the Device list offers: the phones plugged in, then This PC."""
+    return devices() + [(PC, t("This PC"))]
+
+
+def open_device(device_id, name):
+    """The device to copy to: a phone over USB, or a folder on This PC."""
+    if device_id == PC:
+        return FolderDevice(name)
+    return WpdPhone(device_id, name)
+
+
+def pc_folder_problem(folder):
+    """
+    Why This PC's folder won't do, or "" (24 Nov 2026): it must be a whole path, not a drive's top, and hold none of
+    the library's own files, since Clear First would take them out.
+    """
+    folder = (folder or "").strip()
+    if not folder or not os.path.isabs(folder):
+        return t("Choose a folder on this PC with Browse.")
+    full = os.path.normcase(os.path.abspath(folder)).rstrip("\\/")
+    if os.path.splitdrive(full)[1] in ("", "\\", "/"):
+        return t("That's a whole drive: choose a folder in it.")
+    import library
+    inside = full + os.sep
+    if any(os.path.normcase(f).startswith(inside) for f in library.filenames() if f):
+        return t("That folder holds your library's music, so 24bit7 won't copy into it.")
+    return ""
+
+
+class FolderDevice:
+    """This PC: a folder here, through the same few methods as a phone, so the copy, the tidy-up and Clear First
+    work alike. Paths are its ids. Nothing outside the chosen folder is ever deleted."""
+
+    def __init__(self, name=None):
+        self.id, self.name, self.root = PC, name or t("This PC"), None
+
+    def close(self):
+        pass
+
+    def free(self):
+        import shutil
+        return shutil.disk_usage(self.root or os.getcwd()).free
+
+    def capacity(self):
+        import shutil
+        return shutil.disk_usage(self.root or os.getcwd()).total
+
+    def list(self, parent):
+        out = []
+        with os.scandir(parent) as found:
+            for e in found:
+                folder = e.is_dir()
+                out.append({"id": e.path, "name": e.name, "folder": folder,
+                            "size": None if folder else e.stat().st_size})
+        return out
+
+    def child(self, parent, name):
+        return next((e["id"] for e in self.list(parent) if e["name"].lower() == name.lower()), None)
+
+    def folder(self, path, make=False):
+        if pc_folder_problem(path):
+            return None
+        path = os.path.abspath(path)
+        if not os.path.isdir(path):
+            if not make:
+                return None
+            os.makedirs(path)
+        self.root = path
+        return path
+
+    def make(self, parent, name):
+        path = os.path.join(parent, name)
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    def put(self, parent, path, name, size):
+        import shutil
+        dest = os.path.join(parent, name)
+        shutil.copyfile(path, dest + ".part")
+        os.replace(dest + ".part", dest)
+        return dest
+
+    def put_text(self, parent, name, text):
+        dest = os.path.join(parent, name)
+        with open(dest, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+        return dest
+
+    def read(self, oid):
+        with open(oid, "rb") as f:
+            return f.read()
+
+    def delete(self, ids):
+        import shutil
+        inside = os.path.normcase(self.root or "") + os.sep
+        for oid in ids:
+            if not self.root or not os.path.normcase(os.path.abspath(oid)).startswith(inside):
+                raise RuntimeError(f"won't delete outside the chosen folder: {oid}")
+            if os.path.isdir(oid):
+                shutil.rmtree(oid)
+            elif os.path.exists(oid):
+                os.remove(oid)
 
 
 # --- Windows Portable Devices ----------------------------------------------------------------------------------
