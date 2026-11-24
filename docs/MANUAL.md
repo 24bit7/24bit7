@@ -140,16 +140,39 @@ Every playlist except Artist's Top Tracks is spread so the same artist never pla
 
 - **Name** names the JRiver playlist and the .m3u8 on the phone alike. After a build one is suggested ("Road Trip (Embellished)", "Downtempo Radio" or "Agnes Obel Mix", say); from the box it's the album's or playlist's name, or the stack's ("Abbey Road and Road Trip").
 - **As a JRiver Playlist** saves it in JRiver, so a chain of Top-Ups, an embellished playlist or an evening of Radio can be kept. It starts ticked after a build and unticked for the box, where a single JRiver playlist can't be saved again (it is one already).
-- **Copy Tracks To** copies the tracks to a phone plugged into the PC by USB (unlocked, and set to File Transfer). It starts ticked for the box and unticked after a build.
+- **Copy Tracks To** copies the tracks to a phone plugged into the PC by USB (unlocked, and set to File Transfer), to a phone over WiFi with the [24bit7 phone app](#the-24bit7-phone-app), or to a folder on this PC. It starts ticked for the box and unticked after a build.
 
 Tick either or both: Save waits until one is ticked and there's a name. With Copy Tracks To ticked, more lines open:
 
-- **Device**: the phones plugged in, with **Rename** to give each a name of your own (Ben's Phone, Jo's Phone), so two of the same model are told apart, and how much space is free.
-- **Folder**: where on the phone, Music to start. **Browse** opens the phone's folders: double-click one to go in, click a name in the path at the top to go back, and **Use This Folder** takes the one selected or the one you're in. It won't take the phone's top level, as Clear First would then empty the whole phone.
-- **Limit**: the most to copy, in GB, blank for none, with the playlist's size beside it. Tracks are copied in playlist order until the limit or the phone's free space is reached, and the console says what didn't fit.
-- **Clear Music First**, in amber: empties that folder before copying, asking once with what it will take out. Folders starting with a dot, which the phone keeps for itself, are left alone.
+- **Device**: the phones plugged in, marked (USB); the phones added over WiFi that aren't plugged in, marked (WiFi); **This PC**; and at the foot, **+ Add a Phone Over WiFi...**. **Rename** gives a phone a name of your own (Ben's Phone, Jo's Phone), so two of the same model are told apart; how much space is free is beside it. With no phone plugged in or added, a line under the tick says how to plug one in.
+- **Folder**: where on the phone, Music to start. **Browse** opens the phone's folders: double-click one to go in, click a name in the path at the top to go back, and **Use This Folder** takes the one selected or the one you're in. It won't take the phone's top level, as Clear First would then empty the whole phone. For This PC, Browse opens Windows' own folder picker, and the folder must be one of its own: never a whole drive, and never one holding your library's music. **Open Folder** opens it in Explorer, on this PC or on a phone by USB (Explorer can't reach a phone over WiFi). **Manage Folder** opens [what's in it](#manage-folder).
+- **Limit**: the most to copy, in GB, blank for none, with the playlist's size beside it. Tracks are copied in playlist order until the limit or the free space is reached, and the console says what didn't fit.
+- **Clear Music First**, in amber: empties that folder before copying, but keeps what the new playlist lists in the same place and at the same size, so only what's missing is copied. It asks once, saying what it will take out and how many tracks it keeps. Folders and files starting with a dot, which the phone keeps for itself, are left alone.
 
-With both ticked, the playlist is saved in JRiver first. The tracks go into artist and album folders in the chosen folder (The Doors, then L.A. Woman), even for one track, with an .m3u8 playlist named after the playlist at the top of the folder. A window shows how it's going: the track being copied, a bar, the tracks and GB done and roughly how long is left. **Stop** finishes the track under way and stops, with what got there listed in the .m3u8. At the end it says Copied, Stopped, or that the phone went away and how many tracks are on it, then **Close**. Closing the window early leaves the copy going, and the console says how it ends. Copy the same playlist again and only the new tracks are copied, so a stopped or cut-off copy picks up where it left off, and any that left the playlist are taken out, unless another playlist copied to that phone lists them. Each phone remembers its own folder, limit and Clear First. A greyed tick means no phone was found. A playlist copied by 1.40.0 into a folder of its own is moved into the artist and album folders the next time it's copied.
+Without Clear First, the other playlists in the folder are checked at every copy: a song no longer in the folder is taken out of the playlist that lists it, and a playlist left with none is taken off. Only lines pointing into the folder are touched, so a playlist made elsewhere keeps its other lines. A playlist emptied in JRiver can still be saved to a phone: its .m3u8 comes off, with the tracks no other playlist there lists.
+
+With both ticked, the playlist is saved in JRiver first. The tracks go into artist and album folders in the chosen folder (The Doors, then L.A. Woman), even for one track, with an .m3u8 playlist named after the playlist at the top of the folder. A window shows how it's going: the track being copied, a bar, the tracks and GB done and roughly how long is left. **Stop** finishes the track under way and stops, with what got there listed in the .m3u8. At the end it says Copied, Stopped, or that the phone went away and how many tracks are on it, then **Close**. Closing the window early leaves the copy going, and the console says how it ends. Copy the same playlist again and only the new tracks are copied, so a stopped or cut-off copy picks up where it left off, and any that left the playlist are taken out, unless another playlist copied to that phone lists them. Each phone remembers its own folder, limit and Clear First. A playlist copied by 1.40.0 into a folder of its own is moved into the artist and album folders the next time it's copied.
+
+#### The 24bit7 phone app
+
+To copy over WiFi, put the 24bit7 phone app on an Android phone: download **24bit7-phone-vX.Y.Z.apk** from the release page on the phone and open it (Android asks once to allow installs from your browser). The app is one screen. The first time it asks for All files access, which it needs to tidy and clear what earlier copies left in Music. Then it shows **Ready for 24bit7**, with a four-digit code.
+
+On the PC, choose **+ Add a Phone Over WiFi...** at the foot of Save's Device list, type the code and a name, and **Add**: 24bit7 looks for the phone on your home network, which takes a few seconds, and lists it as "Ben's Phone (WiFi)". The code means nobody else on the WiFi can write to the phone. Keep the app open while copying: it keeps the screen on, with a quiet notification, as Android stops apps working in the background. If the router gives the phone a new address, 24bit7 finds it again by itself. If it can't, Save says to open the app.
+
+A phone you also plug in by USB is one device: once it has been plugged in after the app was opened, it keeps one name, folder, limit and record of what's been copied, whichever way it's reached. The app follows the phone's language. A new app comes with each release: install it over the old one.
+
+#### Manage Folder
+
+![Manage Folder](images/manage_folder.png)
+
+**Manage Folder**, beside Browse, shows what's in the folder, on a phone by USB or WiFi or on this PC. At the top is how much it holds against the limit, with a bar, and the free space. Then its playlists, then its artists and albums, each with its tracks and size. Click an artist to open its albums, and an album to open its tracks. Each album says which playlists list it, and "in no playlist" in amber says it's only taking up room.
+
+Tick what to take off. The amber line above **Delete** says what will go, so there's no further question: "Deleting OK Computer takes 4 tracks (0.3 GB) off Jo's Phone and out of Indie-Chill and Road Trip."
+
+- A playlist ticked takes its .m3u8 and the songs no other playlist lists.
+- An album, artist or track ticked goes, and comes out of every playlist that lists it. A playlist left with none is taken off.
+
+The console says what went, and the folder is read again. **Open Folder** opens it in Explorer, as in Save.
 
 ### Radio
 

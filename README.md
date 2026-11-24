@@ -310,7 +310,14 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.42.0
+## What's new in 1.43.0
+
+- **Copy to your phone over WiFi.** The new 24bit7 phone app (an APK on the release page) is one screen: open it, and Save's **+ Add a Phone Over WiFi...** finds it by the code it shows, no cable needed. A phone used by USB too stays one device, with one name, folder and limit.
+- **A folder on this PC** as a place to copy to, for Syncthing and the like.
+- **Clear First keeps what the new playlist needs**, so only what's missing is copied. Without it, the other playlists in the folder lose songs no longer there, and a playlist emptied in JRiver comes off the phone when saved.
+- **Open Folder and Manage Folder**, beside Browse: Explorer at the folder, or the folder as its playlists, artists and albums, to tick and delete. Deleting an album takes it out of every playlist that lists it.
+
+### Earlier: 1.42.0
 
 - **Stack albums and playlists.** On Playlists & Albums, each row of the list has **+ Add**: add as many albums and playlists as you like, and Play, Embellish or Save takes the lot. Play Ordered plays them back to back, each in its own order.
 - **One Save.** Save Playlist and Copy to Phone are now one **Save**, with **As a JRiver Playlist** and **Copy Tracks To** in its window, so one save can do both. It saves what the last playlist played or, once you've picked or stacked something since, what's in the box, without playing it.
