@@ -1,8 +1,10 @@
 """
-Copy Tracks To in Save Playlist's pop-up, on screen (Ben, 23 Nov 2026): the tick under the name, off each time,
-greyed with a line saying why when no phone is plugged in; ticked, Device (with Rename and the free space),
-Folder, Limit and Clear Music First show and OK reads Save and Copy; after the save the tracks go to the phone.
-Save Playlist with the tick off is as it was. A fake phone stands in for Windows Portable Devices.
+Save's pop-up, on screen (Save Playlist's Copy Tracks To, Ben, 23 Nov 2026; one Save for JRiver and the phone, 24 Nov
+2026): the name, which names the JRiver playlist and the .m3u8 alike, then As a JRiver Playlist and Copy Tracks To.
+After a build JRiver starts ticked and the phone not; for what's in the Playlists & Albums box the phone starts ticked,
+and a lone JRiver playlist greys the JRiver tick. Copy Tracks To is greyed with a line saying why when no phone is
+plugged in; ticked, Device (with Rename and the free space), Folder, Limit and Clear Music First show. A fake phone
+stands in for Windows Portable Devices.
 """
 
 from test_gui import ui   # noqa: F401  (the GUI fixture)
@@ -17,8 +19,8 @@ def with_phone(monkeypatch, ph):
     monkeypatch.setattr(phone, "WpdPhone", lambda device_id, name: ph)
 
 
-def prompt(ui, size=2_100_000_000):
-    return ui.gui.SavePlaylistPrompt(ui.play, "Save Playlist", "Save ... as a JRiver playlist called:", "Mix", size)
+def prompt(ui, size=2_100_000_000, **kw):
+    return ui.gui.SavePrompt(ui.play, "What's playing in Speakers (30 tracks, 2.1 GB).", "Mix", size, **kw)
 
 
 def test_no_phone_greys_the_tick_and_says_why(app, ui, monkeypatch):
@@ -40,13 +42,14 @@ def test_ticked_shows_its_lines_and_hands_back_the_choices(app, ui, monkeypatch)
     rounded = []
     real = ui.gui.tabs.round_corners
     monkeypatch.setattr(ui.gui.tabs, "round_corners", lambda w, r, **k: rounded.append(w) or real(w, r, **k))
+    assert win.jriver_var.get() and not win.copy_var.get(), "after a build: JRiver ticked, the phone not"
     assert not win.copy_lines.winfo_ismapped(), "hidden until ticked"
-    assert win.ok_button.cget("text") == "OK"
+    assert win.ok_button.cget("text") == "Save"
     win.copy_var.set(True)
     win._copy_toggled()
     ui.pump(0.3)
     assert win.copy_lines.winfo_ismapped()
-    assert win.ok_button.cget("text") == "Save and Copy"
+    assert win.ok_button.cget("text") == "Save", "one Save, whatever is ticked"
     assert win.ok_button.winfo_rooty() + win.ok_button.winfo_height() <= win.winfo_rooty() + win.winfo_height(), \
         "the window grows to show the lines and its buttons (the first shot cut them off)"
     assert rounded == [win], "and its corners are set again at the new size, or Windows 10 clips it to the old one"
@@ -57,7 +60,33 @@ def test_ticked_shows_its_lines_and_hands_back_the_choices(app, ui, monkeypatch)
     win.clear_var.set(True)
     win.ok()
     assert win.copy == {"device": DEVICE, "name": "Pixel 9a", "folder": "Music", "limit_gb": 32.0, "clear": True}
-    assert win.result == "Mix"
+    assert win.result == "Mix" and win.jriver
+    assert not ui.errors, ui.errors[0]
+
+
+def test_the_box_starts_on_the_phone_and_a_playlist_cant_go_to_jriver_again(app, ui, monkeypatch):
+    with_phone(monkeypatch, FakePhone(name="Jo's Phone"))
+    win = prompt(ui, size=800_000_000, jriver=False, jriver_ok=False, copy=True)
+    ui.pump(0.3)
+    assert win.copy_var.get() and win.copy_lines.winfo_ismapped(), "the box: the phone ticked to start"
+    assert win.jriver_tick.instate(["disabled"]) and not win.jriver_var.get()
+    texts = [w.cget("text") for w in win.jriver_tick.master.winfo_children() if w.winfo_class() == "Label"]
+    assert "It's a JRiver playlist already." in texts
+    assert win.ok_button.winfo_rooty() + win.ok_button.winfo_height() <= win.winfo_rooty() + win.winfo_height()
+    win.copy_var.set(False)
+    win._copy_toggled()
+    win.ok()
+    assert win.winfo_exists() and win.result is None, "nothing ticked: Save waits"
+    assert win.warn.cget("text") == "Tick As a JRiver Playlist, Copy Tracks To, or both."
+    win.copy_var.set(True)
+    win._copy_toggled()
+    win.entry.delete(0, "end")
+    win.ok()
+    assert win.winfo_exists() and win.warn.cget("text") == "Give it a name first."
+    win.entry.insert(0, "Abbey Road")
+    win.ok()
+    assert win.result == "Abbey Road" and not win.jriver
+    assert win.copy["name"] == "Pixel 9a" and win.copy["folder"] == "Music", "its model's name until renamed"
     assert not ui.errors, ui.errors[0]
 
 
@@ -70,7 +99,9 @@ def test_save_and_copy_puts_the_tracks_on_the_phone(app, ui, monkeypatch, tmp_pa
     p._end_greeting()
     keys = j.playlists[0]["keys"][:3]
     j.play("Speakers", keys)
-    p._save_zone = engine.zone_id("Speakers")
+    p._show_save(engine.zone_id("Speakers"))
+    ui.pump(0.2)
+    assert p.save_button.winfo_ismapped() and p.save_button.cget("text").endswith("Save")
     files = []
     for n, k in enumerate(keys):
         f = tmp_path / f"{n}.flac"
@@ -78,8 +109,11 @@ def test_save_and_copy_puts_the_tracks_on_the_phone(app, ui, monkeypatch, tmp_pa
         files.append({"key": k, "path": str(f), "artist": "A", "title": f"Song {n}", "size": 100})
     monkeypatch.setattr(phone, "tracks_for", lambda ks: files)
     copy = {"device": DEVICE, "name": "Ben's Phone", "folder": "Music", "limit_gb": 0, "clear": False}
-    monkeypatch.setattr(ui.gui, "ask_save", lambda *a, **k: ("Jo's Mix", copy))
-    p.on_save_playlist()
+    asked = []
+    monkeypatch.setattr(ui.gui, "ask_save", lambda *a, **k: asked.append((a, k)) or ("Jo's Mix", True, copy))
+    p.save_button._command()
+    assert asked[0][1] == {"jriver": True, "jriver_ok": True, "copy": False}, "after a build: JRiver, as it was"
+    assert asked[0][0][1] == "What's playing in Speakers (3 tracks, 1 MB).", asked[0][0][1]
     win = p.copy_window
     ui.pump(until=lambda: win.finished, timeout=10)
     ui.pump(0.3)
@@ -154,19 +188,23 @@ def test_the_pop_up_shows_progress_and_stop_and_a_phone_going_away(app, ui):
     assert not ui.errors, ui.errors[0]
 
 
-def test_copy_to_phone_on_playlists_and_albums_copies_without_playing(app, ui, monkeypatch, tmp_path):
-    """Ben, 23 Nov 2026: "the option to be able to load a playlist without playing it" and copy it to the phone."""
+def test_save_on_playlists_and_albums_copies_the_box_without_playing(app, ui, monkeypatch, tmp_path):
+    """
+    Ben, 23 Nov 2026: "the option to be able to load a playlist without playing it"; 24 Nov: Copy to Phone is Save.
+    The newest wins: a pick after a build saves the box, a build after the pick saves what played.
+    """
+    import engine
     import phone
     from test_jriver_playlists_tab import lists_tab, type_in
     ph = FakePhone(name="Jo's Phone")
     with_phone(monkeypatch, ph)
     j = app.jriver
     p = lists_tab(ui)
-    assert not p.copy_button.winfo_ismapped(), "nothing picked yet"
+    assert not p.save_button.winfo_ismapped(), "nothing picked and nothing built yet"
     road_trip = next(x for x in j.playlists if x["ID"] == "202")
     p._pick_playlist({"ID": "202", "Name": "Road Trip", "Folder": "Mixes", "Type": "Playlist"})
     ui.pump(0.3)
-    assert p.copy_button.winfo_ismapped() and p.copy_button.cget("text") == "Copy to Phone"
+    assert p.save_button.winfo_ismapped() and p.save_button.cget("text") == ui.gui.SAVE_ICON + "  Save"
     asked = []
 
     def tracks_for(keys):
@@ -180,46 +218,34 @@ def test_copy_to_phone_on_playlists_and_albums_copies_without_playing(app, ui, m
     monkeypatch.setattr(phone, "tracks_for", tracks_for)
     prompts = []
     copy = {"device": DEVICE, "name": "Jo's Phone", "folder": "Music/Music", "limit_gb": 0, "clear": False}
-    monkeypatch.setattr(ui.gui, "ask_copy", lambda parent, prompt, size: prompts.append(prompt) or copy)
+    monkeypatch.setattr(ui.gui, "ask_save", lambda parent, prompt, initial, size, **k:
+                        prompts.append((prompt, initial, k)) or (initial, False, copy))
     playlists = len(j.playlists)
-    p.copy_button._command()
+    p.save_button._command()
     ui.pump(until=lambda: p.copy_window.finished, timeout=10)
     ui.pump(0.3)
     p.copy_window.ok()
     assert asked == [road_trip["keys"]], "the playlist's tracks, read from JRiver"
-    assert prompts and prompts[0].startswith(f"Copy the playlist Road Trip ({len(road_trip['keys'])} tracks, "), prompts
+    text, initial, kw = prompts[0]
+    assert text.startswith(f"The playlist Road Trip ({len(road_trip['keys'])} tracks, "), text
+    assert text.endswith("without playing it.") and initial == "Road Trip"
+    assert kw == {"jriver": False, "jriver_ok": False, "copy": True}, "the phone to start; JRiver has it already"
     assert ph.names("Music/Music") == ["A", "Road Trip.m3u8"]
     assert j.zone("Speakers").playlist == [], "nothing played"
     assert len(j.playlists) == playlists, "and no JRiver playlist saved"
+    # a build after the pick: Save saves what played; a pick after that: the box again
+    p._show_save(engine.zone_id("Speakers"))
+    assert p._save_target() == ("build", engine.zone_id("Speakers"))
+    p._pick_playlist({"ID": "202", "Name": "Road Trip", "Folder": "Mixes", "Type": "Playlist"})
+    assert p._save_target()[0] == "box"
     type_in(ui, p, "road")
-    assert not p.copy_button.winfo_ismapped(), "typing again takes it away until one is picked"
+    assert p._save_target()[0] == "build", "typing again: nothing in the box, so what played"
     p._pick_playlist({"ID": "202", "Name": "Road Trip", "Folder": "Mixes", "Type": "Playlist"})
     ui.pump(0.3)
-    assert p.copy_button.winfo_ismapped()
     p.seed_nb.select(p.search_tab)
     ui.pump(0.3)
-    assert not p.copy_button.winfo_ismapped()
-    assert not ui.errors, ui.errors[0]
-
-
-def test_copy_prompt_has_no_name_and_reads_copy(app, ui, monkeypatch):
-    with_phone(monkeypatch, FakePhone(name="Jo's Phone"))
-    win = ui.gui.CopyPrompt(ui.play, "Copy the album Abbey Road by The Beatles (17 tracks, 800 MB) to:", 800_000_000)
-    ui.pump(0.3)
-    assert not win.box.winfo_ismapped() and not win.copy_tick.winfo_ismapped()
-    assert win.copy_lines.winfo_ismapped() and win.ok_button.cget("text") == "Copy"
-    assert win.ok_button.winfo_rooty() + win.ok_button.winfo_height() <= win.winfo_rooty() + win.winfo_height()
-    win.ok()
-    assert win.copy["name"] == "Pixel 9a" and win.copy["folder"] == "Music", "its model's name until renamed"
-    import phone
-    monkeypatch.setattr(phone, "devices", lambda: [])
-    none = ui.gui.CopyPrompt(ui.play, "Copy ...", 1)
-    ui.pump(0.3)
-    texts = [w.cget("text") for w in none.copy_tick.master.winfo_children() if w.winfo_class() == "Label"]
-    assert "Plug in a phone, unlocked and set to File Transfer, to copy to it." in texts
-    none.ok()
-    assert none.winfo_exists() and none.copy is None, "Copy does nothing with no phone"
-    none.destroy()
+    assert p._save_target()[0] == "build", "another tab: the box isn't on screen, so what played"
+    assert p.save_button.winfo_ismapped()
     assert not ui.errors, ui.errors[0]
 
 
@@ -233,18 +259,19 @@ def test_clear_first_asks_and_no_keeps_the_folder(app, ui, monkeypatch, tmp_path
     j, p = app.jriver, ui.play
     keys = j.playlists[0]["keys"][:1]
     j.play("Speakers", keys)
-    p._save_zone = engine.zone_id("Speakers")
+    p._show_save(engine.zone_id("Speakers"))
     f = tmp_path / "a.flac"
     f.write_bytes(b"x")
     monkeypatch.setattr(phone, "tracks_for", lambda ks: [{"key": keys[0], "path": str(f), "artist": "A",
                                                           "title": "B", "size": 1}])
     copy = {"device": DEVICE, "name": "Ben's Phone", "folder": "Music", "limit_gb": 0, "clear": True}
-    monkeypatch.setattr(ui.gui, "ask_save", lambda *a, **k: ("Mix", copy))
-    p.on_save_playlist()   # the fixture answers No to the question
+    monkeypatch.setattr(ui.gui, "ask_save", lambda *a, **k: ("Mix", False, copy))
+    p.on_save()   # the fixture answers No to the question
     ui.pump(until=lambda: p.copy_window.finished, timeout=10)
     ui.pump(0.3)
     p.copy_window.ok()
     asked = [a for n, a in ui.answers if n == "askyesno"]
     assert asked and "Clear Music on Ben's Phone first? It takes out 1 folder and 0 files" in asked[-1][1], asked
     assert "Old Album" in ph.names("Music"), "No: nothing cleared"
+    assert not any(x["Name"] == "Mix" for x in j.playlists), "JRiver unticked: no JRiver playlist"
     assert not ui.errors, ui.errors[0]

@@ -3,7 +3,7 @@ The Play tab's Playlists & Albums tab (Ben, 6 Nov 2026, as JRiver Playlists; alb
 between Now Playing and Search. The Album or Playlist box opens a list (the recent five, then the playlists A to
 Z, narrowed as you type; albums once something is typed, an artist's name listing theirs); Play and Embellish run
 like any build. The row's playlist buttons grey out while it shows (they start from a track or an artist).
-After a build that went to a JRiver zone, Save Playlist appears at the row's top right.
+After a build that went to a JRiver zone, Save appears at the row's top right.
 """
 
 import tkinter as tk
@@ -64,10 +64,11 @@ def test_play_and_embellish_then_save_playlist(app, ui):
     assert len(z) == 15 and [k for k in z if k in road_trip["keys"]] == road_trip["keys"], console(ui)
     assert "Embellish: Road Trip" in console(ui)
     assert all(b._state == "disabled" for b in p.play_buttons), "still on the tab after the build"
-    assert p._save_shown and p.save_button.winfo_manager() == "place", "Save Playlist after a build to a zone"
+    assert p._save_shown and p.save_button.winfo_manager() == "place", "Save after a build to a zone"
+    assert p._save_target()[0] == "build", "the Embellish just played is newer than the pick in the box"
     assert p._save_default == "Road Trip (Embellished)"
     real = ui.gui.ask_save
-    ui.gui.ask_save = lambda parent, title, prompt, initial, size: (initial, None)
+    ui.gui.ask_save = lambda parent, prompt, initial, size, **k: (initial, True, None)
     try:
         p.save_button._command()
     finally:

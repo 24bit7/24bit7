@@ -147,13 +147,14 @@ PLAY_NOTES = {
     "Radio": N_("Plays a station of what you listen to, with no seed: your stations come from your plays and "
                 "the sources' genres. Click Radio for the last station you played; the arrow lists them all. "
                 "Right-click a station to split it or add it as a button."),
-    "Save Playlist": N_("Saves what's in Playing Now in the zone the last playlist went to as a JRiver playlist, so "
-                        "a chain of Top-Ups or an embellished playlist can be kept."),
-    "Copy to Phone": N_("Copies the album or playlist in the box to a phone plugged in, without playing it."),
+    "Save": N_("Saves the last playlist as a JRiver playlist, copies it to a phone plugged in, or both. On "
+               "Playlists & Albums, once you pick or stack something after the last playlist, it saves that "
+               "instead, without playing it."),
     "Go": N_("Plays up to this many songs you own by each artist you added, shuffled with the artists spread out."),
     "Most Played": N_("Only the artist's most played songs, so a one-hit wonder gives just the hit. A song counts "
                       "when it has at least a fifth of the plays of the artist's biggest, by Last.fm's counts."),
 }
+SAVE_ICON = ""   # Windows' Save (a floppy) in Segoe MDL2 Assets, beside the word on Save (24 Nov 2026)
 PLAYLISTS_SHOWN = 15   # rows of the All Playlists part of the list before "type to narrow"
 ALBUMS_SHOWN = 10      # and of the Albums part, once something is typed
 MONTHS = (N_("Jan"), N_("Feb"), N_("Mar"), N_("Apr"), N_("May"), N_("Jun"), N_("Jul"), N_("Aug"), N_("Sep"),
@@ -247,29 +248,61 @@ class ChangeZonePrompt(tabs.PromptWindow):
         self.destroy()
 
 
-class SavePlaylistPrompt(tabs.NamePrompt):
+class SavePrompt(tabs.NamePrompt):
     """
-    Save Playlist's pop-up: the name, as always, and under it Copy Tracks To (Ben, 23 Nov 2026), off each time. Ticked,
-    its lines show: Device (a drop-down of the phones plugged in, by the names you gave them, with Rename and the free
-    space), Folder (Music to start), Limit (GB, blank for none, with the playlist's size) and Clear Music First in amber;
-    OK reads Save and Copy. With no phone plugged in the tick is greyed and a line says why. Device, folder, limit and
-    Clear First are remembered per phone. .copy is None, or what to copy to.
+    Save's pop-up (Ben, 24 Nov 2026: Save Playlist and Copy to Phone as one Save, "because we can save the Playlist to
+    JRiver OR to the phone"). The first line says what's being saved; then the name, which names the JRiver playlist
+    and the .m3u8 on the phone alike; then two ticks, As a JRiver Playlist and Copy Tracks To. Their starting state is
+    the caller's: after a build JRiver is ticked and the phone not, as Save Playlist was; for the box the phone is
+    ticked, as Copy to Phone was; a lone JRiver playlist greys the JRiver tick (it is one already).
+    Copy Tracks To ticked shows its lines: Device (a drop-down of the phones plugged in, by the names you gave them, with
+    Rename and the free space), Folder (Music to start, with Browse), Limit (GB, blank for none, with the size) and Clear
+    Music First in amber. With no phone plugged in that tick is greyed and a line says why. Device, folder, limit and
+    Clear First are remembered per phone. .result is the name or None, .jriver True to save one in JRiver, .copy None
+    or what to copy to.
     """
 
-    copy_ok = N_("Save and Copy")
+    ok_text = N_("Save")
 
-    def __init__(self, parent, title, prompt, initial, size):
+    def __init__(self, parent, prompt, initial, size, jriver=True, jriver_ok=True, copy=False):
         self._size = size   # the playlist's tracks, in bytes
-        self.copy = None
-        super().__init__(parent, title, prompt, initial)
+        self._jriver_on, self._jriver_ok, self._copy_on = bool(jriver and jriver_ok), jriver_ok, copy
+        self.copy, self.jriver = None, False
+        super().__init__(parent, t("Save"), prompt, initial)
+        if self._copy_on and self._phones:
+            self.copy_var.set(True)
+            self._copy_toggled()
+
+    def _body(self, inner, bg, fg):
+        px = self._px
+        tk.Label(inner, text=self._prompt, font=("Segoe UI", 10), bg=bg, fg=fg, anchor="w", justify="left",
+                 wraplength=px(440)).pack(anchor="w", pady=(0, px(8)))
+        row = tk.Frame(inner, bg=bg)
+        row.pack(anchor="w")
+        tk.Label(row, text=t("Name"), font=("Segoe UI", 10), bg=bg, fg=fg).pack(side="left", padx=(0, px(8)))
+        self.box = RoundedEntry(row, width=38, font=("Segoe UI", 10))
+        self.box.pack(side="left")
+        self.entry = self.box.entry
+        if self._initial:
+            self.entry.insert(0, self._initial)
+            self.entry.select_range(0, "end")
+            self.entry.icursor("end")
+        self._extra(inner, bg, fg)
 
     def _extra(self, inner, bg, fg):
         import phone
         px = self._px
         self._phones = phone.devices()
+        self.jriver_var = tk.BooleanVar(value=self._jriver_on)
+        jr = self.jriver_tick = ttk.Checkbutton(inner, text=t("As a JRiver Playlist"), variable=self.jriver_var)
+        jr.pack(anchor="w", pady=(px(10), 0))
+        if not self._jriver_ok:
+            jr.state(["disabled"])
+            tk.Label(inner, text=t("It's a JRiver playlist already."), font=("Segoe UI", 9), bg=bg,
+                     fg=PALETTE["help_fg"]).pack(anchor="w", padx=(px(22), 0))
         self.copy_var = tk.BooleanVar(value=False)
         tick = ttk.Checkbutton(inner, text=t("Copy Tracks To"), variable=self.copy_var, command=self._copy_toggled)
-        tick.pack(anchor="w", pady=(px(10), 0))
+        tick.pack(anchor="w", pady=(px(6), 0))
         if not self._phones:
             tick.state(["disabled"])
             tk.Label(inner, text=t("Plug in a phone, unlocked and set to File Transfer, to copy to it."),
@@ -314,12 +347,14 @@ class SavePlaylistPrompt(tabs.NamePrompt):
         self.clear_tick.grid(row=3, column=0, columnspan=4, sticky="w", pady=(px(6), 0))
         lines.columnconfigure(0, minsize=px(70))
         self._ids = []
+        self.warn = tk.Label(inner, text="", font=("Segoe UI", 9), bg=bg, fg=PALETTE["amber"])
+        self.warn.pack(anchor="w", pady=(px(4), 0))
 
     def _copy_toggled(self):
         import phone
+        self.warn.config(text="")
         if not self.copy_var.get():
             self.copy_lines.pack_forget()
-            self.set_ok_text(t("OK"))
             self._refit()
             return
         self._ids = [i for i, _ in self._phones]
@@ -327,9 +362,8 @@ class SavePlaylistPrompt(tabs.NamePrompt):
         self.device_cb.config(values=names)
         last = phone.last_device()
         self.device_cb.current(self._ids.index(last) if last in self._ids else 0)
-        self.copy_lines.pack(anchor="w", padx=(self._px(22), 0), before=self.ok_button.master)
+        self.copy_lines.pack(anchor="w", padx=(self._px(22), 0), before=self.warn)
         self._device_chosen()
-        self.set_ok_text(t(self.copy_ok))
         self._refit()
 
     def _refit(self):
@@ -410,7 +444,19 @@ class SavePlaylistPrompt(tabs.NamePrompt):
             self.device_var.set(name.strip())
 
     def ok(self):
-        if self.copy_var.get() and self._phones:
+        """Save: nothing happens until one of the two is ticked and there's a name, each said in amber."""
+        jriver = bool(self.jriver_var.get()) and self._jriver_ok
+        copying = bool(self.copy_var.get()) and bool(self._phones)
+        name = self.entry.get().strip()
+        if not jriver and not copying:
+            self.warn.config(text=t("Tick As a JRiver Playlist, Copy Tracks To, or both."))
+            self._refit()
+            return
+        if not name:
+            self.warn.config(text=t("Give it a name first."))
+            self._refit()
+            return
+        if copying:
             import phone
             device_id, model = self._device()
             try:
@@ -420,37 +466,9 @@ class SavePlaylistPrompt(tabs.NamePrompt):
             self.copy = {"device": device_id, "name": phone.settings(device_id, model)["name"],
                          "folder": self.folder_box.get().strip().strip("/\\") or "Music", "limit_gb": max(0.0, limit),
                          "clear": bool(self.clear_var.get())}
-        super().ok()
-
-
-class CopyPrompt(SavePlaylistPrompt):
-    """
-    Copy to Phone, from the Playlists & Albums tab without playing it (Ben, 23 Nov 2026): Save Playlist's pop-up
-    with no name box and no tick, its copy lines shown from the start, and OK reading Copy. Nothing is saved in
-    JRiver. With no phone plugged in it says so and Copy does nothing.
-    """
-
-    copy_ok = N_("Copy")
-
-    def __init__(self, parent, prompt, size):
-        super().__init__(parent, t("Copy to Phone"), prompt, "", size)
-        self.box.pack_forget()
-        self.copy_tick.pack_forget()
-        if self._phones:
-            self.copy_var.set(True)
-            self._copy_toggled()
-        else:
-            self.set_ok_text(t(self.copy_ok))
-            self._refit()
-
-    def _focus_first(self):
-        if self._phones:
-            self.folder_box.entry.focus_set()
-
-    def ok(self):
-        if not self._phones:
-            return
-        super().ok()
+        self.jriver = jriver
+        self.result = name
+        self.destroy()
 
 
 class FolderPicker(tabs.PromptWindow):
@@ -548,26 +566,24 @@ class FolderPicker(tabs.PromptWindow):
         self.destroy()
 
 
-def ask_save(parent, title, prompt, initial, size):
-    """Save Playlist's pop-up, waited on: (the name or None, what to copy to the phone or None)."""
-    win = SavePlaylistPrompt(parent, title, prompt, initial, size)
+def ask_save(parent, prompt, initial, size, jriver=True, jriver_ok=True, copy=False):
+    """Save's pop-up, waited on: (the name or None, True to save it in JRiver, what to copy to the phone or None)."""
+    win = SavePrompt(parent, prompt, initial, size, jriver=jriver, jriver_ok=jriver_ok, copy=copy)
     try:
         win.grab_set()
     except tk.TclError:
         pass
     win.wait_window()
-    return win.result, win.copy
+    return win.result, win.jriver, win.copy
 
 
-def ask_copy(parent, prompt, size):
-    """Copy to Phone's pop-up, waited on: what to copy to, or None."""
-    win = CopyPrompt(parent, prompt, size)
-    try:
-        win.grab_set()
-    except tk.TclError:
-        pass
-    win.wait_window()
-    return win.copy
+def with_keys(item):
+    """An album with its tracks read from the library as it is now; a stack with each of its albums' too."""
+    if embellish.is_stack(item):
+        return dict(item, items=[with_keys(i) for i in item.get("items") or []])
+    if embellish.is_album(item):
+        return dict(item, keys=library.album_keys(item["Name"], item.get("Artist") or ""))
+    return item
 
 
 class CopyProgress(tabs.PromptWindow):
@@ -849,7 +865,7 @@ class PlayTab(tk.Frame):
         self.seed_nb.bind("<<NotebookTabChanged>>", lambda e: (self._sync_seed_buttons(), self._place_output(),
                                                               self.after_idle(self._line_up_lists),
                                                               self._search_tip(self._seed_is_search()),
-                                                              self._sync_copy_button()))
+                                                              self._sync_save_button()))
 
     def _search_tip(self, show):
         """
@@ -1052,6 +1068,8 @@ class PlayTab(tk.Frame):
         self.playlist_entry = RoundedEntry(row, width=30, font=("Segoe UI", 9))
         self.playlist_entry.pack(side="left", padx=(4, LIST_BOX_GAP))
         self._playlist_chosen = None
+        self._list_stack = []      # albums and playlists added with + Add (24 Nov 2026), in the order added
+        self._box_newer = False    # picked or stacked since the last build: Save saves the box, not what played
         self._chosen_text = None   # what the box read when it was picked: an album shows "OK Computer · Radiohead"
         self._playlists_pop = None
         self._playlists_found = None
@@ -1173,9 +1191,10 @@ class PlayTab(tk.Frame):
     def _playlists_typed(self, event):
         if event.keysym in ("Return", "Escape", "Tab"):
             return
-        self._playlist_chosen = None
+        if not self._list_stack:   # with a stack, the box only finds the next one: the stack stays chosen
+            self._playlist_chosen = None
         self._sync_amounts()   # nothing picked now: Embellish's arrow as a playlist's
-        self._sync_copy_button()
+        self._sync_save_button()
         if self._playlists_found is None:
             self._playlists_found = self._playlist_list()
         self._fill_playlists()
@@ -1197,7 +1216,18 @@ class PlayTab(tk.Frame):
         """
         The list under the box: the recent five, then every playlist A to Z, both narrowed by what's typed; once
         something is typed, the albums whose title or artist has it too, each row saying which it is.
+        One list at a time: drawing it lets Tk run what's waiting, which may be another refill (24 Nov 2026, the stack's
+        + Add: the second destroyed the first's window under it).
         """
+        if getattr(self, "_lists_filling", False):
+            return
+        self._lists_filling = True
+        try:
+            self._fill_playlists_now()
+        finally:
+            self._lists_filling = False
+
+    def _fill_playlists_now(self):
         self._close_playlists()
         entry = self.playlist_entry
         bg, fg, muted, line = PALETTE["field_bg"], PALETTE["text"], PALETTE["help_fg"], PALETTE["line"]
@@ -1216,18 +1246,31 @@ class PlayTab(tk.Frame):
             tk.Label(inner, text=text.upper(), font=("Segoe UI", 8), fg=muted, bg=bg).pack(anchor="w", padx=10,
                                                                                          pady=(6, 1))
 
-        def add_row(playlist, tag):
-            r = tabs.PickRow(inner, self._row_text(playlist), fg=fg, bg=bg, fit=True, tag=tag)
+        stacked = {self._item_id(x) for x in self._list_stack}
+
+        def add_row(playlist, tag, pick=True):
+            """A row: its name picks it on its own; + Add at the right stacks it (Remove once it's stacked)."""
+            on = self._item_id(playlist) in stacked
+            r = tabs.PickRow(inner, ("✓ " if on else "") + self._row_text(playlist), fg=fg, bg=bg, fit=True, tag=tag,
+                             action=t("Remove") if on else t("+ Add"),
+                             action_fg=muted if on else PALETTE["go"],
+                             on_action=lambda p=playlist: self._stack_toggle_list(p))
             r.configure(cursor="hand2")
             r.pack(fill="x", padx=3, pady=1)
             r.bind("<Enter>", lambda e, w=r: w.set_chosen(True))
             r.bind("<Leave>", lambda e, w=r: w.set_chosen(False))
-            r.bind("<ButtonPress-1>", lambda e, p=playlist: self._pick_playlist(p))
+            if pick:
+                r.bind("<ButtonPress-1>", lambda e, p=playlist: self._pick_playlist(p))
             pop._rows.append((playlist, r))
 
         def note(text, pady=(0, 6)):
             tk.Label(inner, text=text, fg=muted, bg=bg, font=("Segoe UI", 9)).pack(anchor="w", padx=10, pady=pady)
 
+        if self._list_stack and not typed:   # what's stacked, at the top, until something's typed
+            heading(t("Stacked"))
+            for p in self._list_stack:
+                add_row(p, "", pick=False)
+            tk.Frame(inner, bg=line, height=1).pack(fill="x", pady=4)
         if found is None:
             note(t("JRiver isn't answering, so the playlists can't be listed."), pady=6)
         by_id = {p["ID"]: p for p in found or []}
@@ -1280,7 +1323,8 @@ class PlayTab(tk.Frame):
                 pass
 
     def _close_playlists_if_away(self):
-        """The box lost the keyboard: the list goes, unless the box has it back."""
+        """The box lost the keyboard: the list goes, unless the box has it back. With a stack, the box reads it
+        again ('OK Computer · Radiohead and 2 more'), whatever was typed to find the next one."""
         try:
             if self.focus_get() is self.playlist_entry.entry:
                 return
@@ -1288,28 +1332,110 @@ class PlayTab(tk.Frame):
             pass
         self._close_playlists()
         self._playlists_found = None
+        if self._list_stack:
+            self._show_stack_in_box()
+
+    @staticmethod
+    def _item_id(item):
+        """An album's or playlist's own id, to tell whether it's stacked."""
+        if embellish.is_album(item):
+            return embellish.album_id(item.get("Name"), item.get("Artist"))
+        return f"playlist:{item.get('ID')}"
+
+    def _stack_item(self):
+        """What the stack plays: nothing, the one, or the stack as one item."""
+        if not self._list_stack:
+            return None
+        return self._list_stack[0] if len(self._list_stack) == 1 else embellish.make_stack(self._list_stack)
+
+    def _stack_text(self):
+        """The box with a stack: 'OK Computer · Radiohead', or 'OK Computer · Radiohead and 2 more'."""
+        if not self._list_stack:
+            return ""
+        first = self._box_text(self._list_stack[0])
+        n = len(self._list_stack) - 1
+        return first if not n else t("{name} and {count} more", name=first, count=n)
+
+    def _show_stack_in_box(self):
+        self._playlist_chosen = self._stack_item()
+        self._chosen_text = self._stack_text()
+        self.playlist_entry.delete(0, "end")
+        self.playlist_entry.insert(0, self._chosen_text)
+
+    def _stack_toggle_list(self, item):
+        """
+        + Add or Remove on a row (Ben, 24 Nov 2026, as Search's artists): one console line each with how many are
+        stacked; the box clears for the next name and the list stays open. Play, Embellish and Save then take the
+        lot, and the stack clears after any of them.
+        """
+        n, iid = len(self._list_stack), self._item_id(item)
+        name = embellish.shown_name(item)
+        if any(self._item_id(x) == iid for x in self._list_stack):
+            self._list_stack = [x for x in self._list_stack if self._item_id(x) != iid]
+            self._append_log(t("{name} taken off the stack, now {count} in it.", name=name, count=n - 1) if n > 1
+                             else t("{name} taken off the stack, which is empty now.", name=name))
+        else:
+            self._list_stack.append(item)
+            self._append_log(t("{name} added to the stack. Add more, or click Play, Embellish or Save.", name=name)
+                             if not n else t("{name} added to the stack, now {count} in it.", name=name, count=n + 1))
+        self._playlist_chosen = self._stack_item()
+        self._chosen_text = self._stack_text()
+        self._box_newer = True
+        self.playlist_entry.delete(0, "end")
+        self._sync_amounts()
+        self._sync_save_button()
+        self.playlist_entry.entry.focus_set()
+        if not getattr(self, "_list_fill_due", False):   # one refill however many adds are queued
+            self._list_fill_due = True
+            self.after_idle(self._fill_playlists_due)
+
+    def _fill_playlists_due(self):
+        self._list_fill_due = False
+        self._fill_playlists()
+
+    def _clear_list_stack(self):
+        """After Play, Embellish or Save took the stack: it clears, and so does the box."""
+        if not self._list_stack:
+            return
+        self._list_stack = []
+        self._playlist_chosen, self._chosen_text = None, None
+        self.playlist_entry.delete(0, "end")
+        self._sync_amounts()
+        self._sync_save_button()
 
     def _pick_playlist(self, playlist):
+        if self._list_stack:   # a name clicked: that one on its own, the stack cleared (said, so it's not a mystery)
+            self._append_log(t("{name} picked on its own, so the stack of {count} is cleared.",
+                               name=embellish.shown_name(playlist), count=len(self._list_stack)))
+            self._list_stack = []
         self._playlist_chosen = playlist
         self._chosen_text = self._box_text(playlist)
+        self._box_newer = True
         self.playlist_entry.delete(0, "end")
         self.playlist_entry.insert(0, self._chosen_text)
         self._close_playlists()
         self._playlists_found = None
         self._sync_amounts()   # an album's arrow offers its hits too
-        self._sync_copy_button()
+        self._sync_save_button()
         self.focus_set()   # out of the box, so the list doesn't open again at once
 
     def _pick_first_playlist(self):
         pop = self._playlists_pop
+        if self._list_stack and not self.playlist_entry.get().strip():   # Enter on an empty box: the stack stands
+            self._close_playlists()
+            self._show_stack_in_box()
+            self.focus_set()
+            return
         if pop is not None and pop._rows:
             self._pick_playlist(pop._rows[0][0])
 
     def _chosen_playlist(self):
         """
         The album or playlist in the box: the one picked, or the one whose name was typed in full (an album's
-        title, or 'title · artist'). None after saying why.
+        title, or 'title · artist'). None after saying why. With a stack, the stack, whatever is being typed.
         """
+        if self._list_stack:
+            return self._stack_item()
         typed = self.playlist_entry.get().strip()
         chosen = self._playlist_chosen
         if chosen and self._chosen_text == typed:
@@ -1358,7 +1484,7 @@ class PlayTab(tk.Frame):
         album = embellish.is_album(self._playlist_chosen)
         if which == "order":
             options, names = embellish.ORDERS, embellish.ORDER_NAMES
-            current = embellish.choices()["album_order" if album else "order"]
+            current = embellish.choices()["album_order" if embellish.all_albums(self._playlist_chosen) else "order"]
         else:
             (options, current), names = self._embellish_options(), dict(embellish.AMOUNT_NAMES, **embellish.HIT_NAMES)
         bg, fg, muted, line = PALETTE["field_bg"], PALETTE["text"], PALETTE["help_fg"], PALETTE["line"]
@@ -1394,7 +1520,7 @@ class PlayTab(tk.Frame):
     def _choose(self, which, code):
         self._close_children()
         if which == "order":   # remembered, and played at once, as Embellish's arrow runs (Ben, 23 Nov 2026)
-            embellish.set_choice("album_order" if embellish.is_album(self._playlist_chosen) else "order", code)
+            embellish.set_choice("album_order" if embellish.all_albums(self._playlist_chosen) else "order", code)
             self.on_play_playlist(False)
         else:   # an amount from the arrow: this once, the default stays as Settings has it
             self.on_play_playlist(True, amount=code)
@@ -1409,13 +1535,11 @@ class PlayTab(tk.Frame):
         album = embellish.is_album(playlist)
         chosen = embellish.choices()
         code = amount or (chosen["album_amount"] if album else chosen["amount"])
-        order = chosen["album_order"] if album else chosen["order"]
+        # a stack of albums keeps the albums' order choice (in order to start); with a playlist in it, the playlists'
+        order = chosen["album_order"] if embellish.all_albums(playlist) else chosen["order"]
         top_up = bool(getattr(self, "top_up_armed", False))
-
-        def item():   # an album's tracks are read when it runs, from the library as it is then
-            if not album:
-                return playlist
-            return dict(playlist, keys=library.album_keys(playlist["Name"], playlist.get("Artist") or ""))
+        item = lambda: with_keys(playlist)   # an album's tracks are read when it runs, from the library as it is then
+        self._clear_list_stack()   # the stack goes with this playlist: the box is free for the next
         if embellish_it:
             # the order is the amount's own (Settings > Playlists & Albums): Play's arrow is Play's alone (10 Nov 2026)
             target = lambda: embellish.embellish(item(), None, code, self.report)
@@ -1626,102 +1750,114 @@ class PlayTab(tk.Frame):
                        name=buttons.get(made["id"])["name"]))
 
     def _show_save(self, zone):
+        """After a build to a JRiver zone (zone), or as a build starts (None). A build is newer than the box."""
         self._save_zone = zone
-        shown = zone is not None
-        if shown != bool(getattr(self, "_save_shown", False)):
-            self._save_shown = shown
-            if not shown:
-                self.save_button.place_forget()
-            self._flow_buttons()
+        self._box_newer = False
+        self._flow_buttons()
 
-    def _copy_wanted(self):
-        """Copy to Phone shows on the Playlists & Albums tab while an album or playlist is picked in the box."""
-        return bool(getattr(self, "playlists_tab", None) is not None and self._seed_is_playlists()
-                    and getattr(self, "_playlist_chosen", None))
-
-    def _sync_copy_button(self):
-        if hasattr(self, "copy_button") and self._copy_wanted() != self._copy_shown:
-            self._flow_buttons()
-
-    def on_copy_to_phone(self):
+    def _save_target(self):
         """
-        Copy to Phone (Ben, 23 Nov 2026: "the option to be able to load a playlist without playing it"): the album's
-        or playlist's tracks to a phone, as Save Playlist's Copy Tracks To does, without playing it or saving a
-        JRiver playlist.
+        What Save saves, the newest winning (Ben, 24 Nov 2026): ("box", item) while Playlists & Albums is open with
+        something picked or stacked since the last build, or nothing has been built; ("build", zone) after a build
+        to a JRiver zone; None when there's nothing to save.
         """
-        playlist = self._chosen_playlist()
-        if playlist is None:
-            return
-        album = embellish.is_album(playlist)
-        name = playlist.get("Name") or t("playlist")
-        title = t("Copy to Phone")
-        if album:
-            keys = [str(k) for k in library.album_keys(name, playlist.get("Artist") or "")]
-        else:
-            import saved_playlists
-            try:
-                keys = saved_playlists.playlist_keys(str(playlist.get("ID")))
-            except Exception as e:
-                messagebox.showinfo(title, t("Couldn't read {name} from JRiver ({e}).", name=name, e=e), parent=self)
-                return
-        if not keys:
-            messagebox.showinfo(title, t("{name} has no tracks, so there's nothing to copy.",
-                                         name=embellish.shown_name(playlist)), parent=self)
-            return
-        import phone
-        tracks = phone.tracks_for(keys)
-        size = sum(tr["size"] for tr in tracks)
-        count = tn("{count} track", "{count} tracks", len(keys))
-        prompt = (t("Copy the album {name} ({tracks}, {size}) to:", name=embellish.shown_name(playlist),
-                    tracks=count, size=phone.size_text(size)) if album
-                  else t("Copy the playlist {name} ({tracks}, {size}) to:", name=name, tracks=count,
-                         size=phone.size_text(size)))
-        copy = ask_copy(self, prompt, size)
-        if copy:
-            self._copy_to_phone(copy, name, tracks)
-
-    def on_save_playlist(self):
+        box = (getattr(self, "playlists_tab", None) is not None and self._seed_is_playlists()
+               and getattr(self, "_playlist_chosen", None))
         zone = getattr(self, "_save_zone", None)
-        if zone is None or self.running:
+        if box and (getattr(self, "_box_newer", False) or zone is None):
+            return "box", self._playlist_chosen
+        if zone is not None:
+            return "build", zone
+        return None
+
+    def _sync_save_button(self):
+        if hasattr(self, "save_button") and (self._save_target() is not None) != bool(self._save_shown):
+            self._flow_buttons()
+
+    def on_save(self):
+        """Save: what the last build played, or what's in the Playlists & Albums box, whichever is newer."""
+        target = self._save_target()
+        if target is None or self.running:
             return
+        if target[0] == "build":
+            self._save_build(target[1])
+        else:
+            self._save_box(target[1])
+
+    def _save_build(self, zone):
+        """What's in Playing Now in the zone the last build went to: in JRiver to start, as Save Playlist was."""
         label = engine.zone_label(zone)
         try:
             keys = [str(r.get("Key")) for r in engine.playing_now_rows(zone) if r.get("Key")]
         except Exception:
             keys = []
         if not keys:
-            messagebox.showinfo(t("Save Playlist"), t("Playing Now in {zone} is empty, so there's nothing to save.",
-                                                      zone=label), parent=self)
+            messagebox.showinfo(t("Save"), t("Playing Now in {zone} is empty, so there's nothing to save.",
+                                             zone=label), parent=self)
             return
         import phone
         tracks = phone.tracks_for(keys)   # for Copy Tracks To: the files, and the playlist's size
-        name, copy = ask_save(self, t("Save Playlist"),
-                              t("Save what's in Playing Now in {zone} ({tracks}) as a JRiver playlist called:",
-                                zone=label, tracks=tn("{count} track", "{count} tracks", len(keys))),
-                              getattr(self, "_save_default", "") or "", sum(tr["size"] for tr in tracks))
+        size = sum(tr["size"] for tr in tracks)
+        prompt = t("What's playing in {zone} ({tracks}, {size}).", zone=label,
+                   tracks=tn("{count} track", "{count} tracks", len(keys)), size=phone.size_text(size))
+        self._save(keys, tracks, prompt, getattr(self, "_save_default", "") or "", size, jriver=True, copy=False)
+
+    def _save_box(self, item):
+        """
+        The album, playlist or stack in the box, without playing it: to the phone to start, as Copy to Phone was
+        (Ben, 23 Nov 2026: "the option to be able to load a playlist without playing it"). A lone JRiver playlist
+        can't be saved in JRiver again; an album or a stack can.
+        """
+        problems = []
+        name, keys = embellish.read_keys(with_keys(item), problems.append)
+        if keys is None:
+            messagebox.showinfo(t("Save"), problems[0] if problems else
+                                t("{name} has no tracks, so there's nothing to save.", name=name), parent=self)
+            return
+        import phone
+        tracks = phone.tracks_for(keys)
+        size = sum(tr["size"] for tr in tracks)
+        count, size_text = tn("{count} track", "{count} tracks", len(keys)), phone.size_text(size)
+        if embellish.is_stack(item):
+            prompt = t("{name} ({tracks}, {size}), without playing them.", name=name, tracks=count, size=size_text)
+        elif embellish.is_album(item):
+            prompt = t("The album {name} ({tracks}, {size}), without playing it.", name=name, tracks=count,
+                       size=size_text)
+        else:
+            prompt = t("The playlist {name} ({tracks}, {size}), without playing it.", name=name, tracks=count,
+                       size=size_text)
+        lone_playlist = not embellish.is_stack(item) and not embellish.is_album(item)
+        if self._save(keys, tracks, prompt, item.get("Name") or name, size, jriver=False, jriver_ok=not lone_playlist,
+                      copy=True):
+            self._clear_list_stack()
+
+    def _save(self, keys, tracks, prompt, initial, size, jriver=True, jriver_ok=True, copy=False):
+        """The pop-up, then the JRiver playlist and the copy as ticked. True once something was saved."""
+        name, in_jriver, to_phone = ask_save(self, prompt, initial, size, jriver=jriver, jriver_ok=jriver_ok, copy=copy)
         name = (name or "").strip()
-        if not name:
-            return
-        import saved_playlists
-        try:
-            taken = any(p["Name"].lower() == name.lower() and p.get("Type") == "Playlist"
-                        and p.get("Folder") == saved_playlists.ROOT for p in saved_playlists.scan())
-        except Exception:
-            taken = False
-        if taken and not messagebox.askyesno(t("Save Playlist"),
-                                             t('There\'s already a JRiver playlist called "{name}". Replace it?', name=name),
-                                             parent=self):
-            return
-        try:
-            engine.review_save(keys, name)
-        except Exception as e:
-            self._append_log(str(e) if str(e).startswith(("Problem", t("Problem")))
-                             else t("Problem: the playlist wasn't saved ({e}).", e=e))
-            return
-        self._append_log(t('Saved {tracks} as the JRiver playlist "{name}".',
-                           tracks=tn("{count} track", "{count} tracks", len(keys)), name=name))
-        if copy:
-            self._copy_to_phone(copy, name, tracks)
+        if not name or not (in_jriver or to_phone):
+            return False
+        if in_jriver:
+            import saved_playlists
+            try:
+                taken = any(p["Name"].lower() == name.lower() and p.get("Type") == "Playlist"
+                            and p.get("Folder") == saved_playlists.ROOT for p in saved_playlists.scan())
+            except Exception:
+                taken = False
+            if taken and not messagebox.askyesno(t("Save"), t('There\'s already a JRiver playlist called "{name}". '
+                                                              'Replace it?', name=name), parent=self):
+                return False
+            try:
+                engine.review_save(keys, name)
+            except Exception as e:
+                self._append_log(str(e) if str(e).startswith(("Problem", t("Problem")))
+                                 else t("Problem: the playlist wasn't saved ({e}).", e=e))
+                return False
+            self._append_log(t('Saved {tracks} as the JRiver playlist "{name}".',
+                               tracks=tn("{count} track", "{count} tracks", len(keys)), name=name))
+        if to_phone:
+            self._copy_to_phone(to_phone, name, tracks)
+        return True
 
     def _copy_to_phone(self, copy, name, tracks):
         """
@@ -1997,16 +2133,15 @@ class PlayTab(tk.Frame):
         self.add_button._name = "+"
         for w in (self.add_button, self.add_button._label):
             w.bind("<Button-3>", lambda e: self._button_menu(e, None))
-        # Save Playlist: shows after a build that went to a JRiver zone, at the row's top right
-        self.save_button = FlatButton(frame, text=t("Save Playlist"), command=self.on_save_playlist, width=14, height=2,
-                                      quiet=True)
-        Tooltip(self.save_button, t(PLAY_NOTES["Save Playlist"]), when=self.help_on, wrap=self.note_wrap)
+        # Save, at the row's top right (Ben, 24 Nov 2026: Save Playlist and Copy to Phone as one): after a build that
+        # went to a JRiver zone, or once something's picked or stacked on Playlists & Albums. Windows' own Save icon
+        # (Segoe MDL2 Assets' E74E, which Tk finds by itself) beside the word, not alone: the notes are off to start
+        save_text = SAVE_ICON + "  " + t("Save")
+        self.save_button = FlatButton(frame, text=save_text, command=self.on_save, width=10, height=2, quiet=True,
+                                      fits=(save_text,))
+        self.save_button._name = "Save"
+        Tooltip(self.save_button, t(PLAY_NOTES["Save"]), when=self.help_on, wrap=self.note_wrap)
         self._save_shown, self._save_zone = False, None
-        # Copy to Phone: on the Playlists & Albums tab once one is picked, left of Save Playlist (Ben, 23 Nov 2026)
-        self.copy_button = FlatButton(frame, text=t("Copy to Phone"), command=self.on_copy_to_phone, width=14,
-                                      height=2, quiet=True, fits=(t("Copy to Phone"),))   # the German is longer
-        Tooltip(self.copy_button, t(PLAY_NOTES["Copy to Phone"]), when=self.help_on, wrap=self.note_wrap)
-        self._copy_shown = False
         self._draw_buttons()
         frame.bind("<Configure>", lambda e: self._flow_buttons())
 
@@ -2217,19 +2352,14 @@ class PlayTab(tk.Frame):
         row = self.button_row
         avail = max(row.winfo_width(), 1) - 2 * 16
         right = max(row.winfo_width(), 1) - 16
-        self._copy_shown = self._copy_wanted()
-        # the row's top right is Save Playlist's, with Copy to Phone to its left
-        for b, shown in ((getattr(self, "save_button", None), getattr(self, "_save_shown", False)),
-                         (getattr(self, "copy_button", None), self._copy_shown)):
-            if b is None:
-                continue
-            if not shown:
+        b = getattr(self, "save_button", None)   # the row's top right is Save's
+        if b is not None:
+            self._save_shown = self._save_target() is not None
+            if self._save_shown:
+                b.place(x=right - b._size[0], y=4)
+                avail -= b._size[0] + BUTTON_GAP
+            else:
                 b.place_forget()
-                continue
-            right -= b._size[0]
-            b.place(x=right, y=4)
-            right -= BUTTON_GAP
-            avail -= b._size[0] + BUTTON_GAP
         x = y = 0
         height = 0
         for b in self.play_buttons + [self.more_button, self.add_button]:

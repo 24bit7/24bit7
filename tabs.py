@@ -1612,14 +1612,18 @@ class PickRow(tk.Canvas):
     """
 
     def __init__(self, master, text, fg=None, bg=None, left=None, chosen=False, indent=0, fold=None, on_fold=None,
-                 tag="", fit=False, edge=None, font=None, tag_font=None, fold_space=False):
+                 tag="", fit=False, edge=None, font=None, tag_font=None, fold_space=False, action="",
+                 on_action=None, action_fg=None):
         """indent: pixels in from the left (a child row). fold: None, "open" or "closed" (a parent's arrow,
         on_fold called when clicked). tag: small text at the right ("default"). fit: ask for just the width
         the text and tag need, with five spaces between them (a drop-down sized to its rows); otherwise the
         row takes the width its list gives it. edge: the outline's colour when chosen (the accent if None).
         font, tag_font: the text's and the tag's (Segoe UI 10 and 8 unless given; Settings gives its named fonts).
         fold_space: a row with no arrow keeps the arrow's room, so its text lines up with rows that have one
-        (Radio's station list, 7 Nov 2026)."""
+        (Radio's station list, 7 Nov 2026).
+        action: a strip at the right at the row's full height ("+ Add", "Remove"), on_action called when it's
+        clicked, the rest of the row being the row's own click (Playlists & Albums' stack, 24 Nov 2026: a target
+        as big as the row is tall, after Radio's arrow proved too small to hit); action_fg its text colour."""
         bg = bg or master.cget("bg")
         super().__init__(master, bg=bg, bd=0, highlightthickness=0)
         try:
@@ -1664,10 +1668,26 @@ class PickRow(tk.Canvas):
         self._text_id = self.create_text(x + px(4), self._h // 2, text=text, anchor="w", font=self._font, fill=self._fg)
         self._tag_id = self.create_text(0, self._h // 2, text=tag, anchor="e", font=self._tag_font,
                                         fill=PALETTE["button_fg"])
+        self._act_w, self._act_box, self._act_id, self._act_pressed = 0, None, None, False
+        self._act_fg = action_fg or PALETTE["button_fg"]
+        if action:
+            self._act_w = tkfont.Font(root=self, font=self._tag_font).measure(action) + px(24)
+            self._act_box = self.create_rectangle(0, 0, 0, 0, fill=bg, outline=bg)
+            self._act_id = self.create_text(0, self._h // 2, text=action, anchor="center", font=self._tag_font,
+                                            fill=self._act_fg)
+            if on_action is not None:
+                self._on_action = on_action
+                strip = f"PickRowAction{id(self)}"   # ahead of the row's own bindings, as the fold strip is
+                self.bind_class(strip, "<Button-1>", self._action_press)
+                self.bind_class(strip, "<ButtonRelease-1>", self._action_release)
+                self.bind_class(strip, "<Motion>", lambda e: self._light_action(self.action_at(e.x)))
+                self.bind_class(strip, "<Leave>", lambda e: self._light_action(False))
+                self.bindtags((strip,) + self.bindtags())
         if fit:
             text_w = tkfont.Font(root=self, font=self._font).measure(text + " " * 5)
             tag_w = tkfont.Font(root=self, font=self._tag_font).measure(tag) if tag else 0
-            self.configure(width=x + px(4) + text_w + tag_w + px(14))   # a little over: drawn text runs wider than measured
+            # a little over: drawn text runs wider than measured
+            self.configure(width=x + px(4) + text_w + tag_w + px(14) + self._act_w)
         self.bind("<Configure>", lambda e: self._redraw(e.width))
 
     @property
@@ -1720,12 +1740,50 @@ class PickRow(tk.Canvas):
         except tk.TclError:
             pass
 
+    @property
+    def action(self):
+        return self.itemcget(self._act_id, "text") if self._act_id is not None else ""
+
+    def action_at(self, x):
+        """True when a point is in the action strip at the row's right."""
+        w = self.winfo_width()
+        return self._act_id is not None and w - self._act_w <= x <= w
+
+    def _action_press(self, e):
+        if not self.action_at(e.x):
+            return None
+        self._act_pressed = True
+        return "break"
+
+    def _action_release(self, e):
+        if not self._act_pressed:
+            return None
+        self._act_pressed = False
+        if self.action_at(e.x):
+            self._on_action()
+        return "break"
+
+    def _light_action(self, lit):
+        """The strip filled in the hover colour, its text in the accent, while the mouse is in it."""
+        if self._act_box is None:
+            return
+        try:
+            self.itemconfig(self._act_box, fill=PALETTE["button_hover"] if lit else self._bg,
+                            outline=PALETTE["button_outline"] if lit else self._bg)
+            self.itemconfig(self._act_id, fill=PALETTE["button_fg"] if lit else self._act_fg)
+        except tk.TclError:
+            pass
+
     def _redraw(self, width=None):
         w = width or self.winfo_width()
         if w <= 1:
             return
         edge = (self._edge or PALETTE["button_fg"]) if self._chosen else self._bg
-        self.coords(self._tag_id, w - self._px(10), self._h // 2)
+        self.coords(self._tag_id, w - self._px(10) - self._act_w, self._h // 2)
+        if self._act_id is not None:
+            p = self._px(3)
+            self.coords(self._act_box, w - self._act_w + p, p, w - p, self._h - p)
+            self.coords(self._act_id, w - self._act_w // 2, self._h // 2)
         self._shape = rounded_shape(self, w, self._h, self._px(CORNER), self._bg, edge, self._px(2))
         if self._shape_id is None:
             self._shape_id = self.create_image(0, 0, image=self._shape, anchor="nw")

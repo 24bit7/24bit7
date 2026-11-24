@@ -92,6 +92,27 @@ def is_album(item):
     return isinstance(item, dict) and item.get("kind") == "album"
 
 
+def is_stack(item):
+    """Several albums and playlists added on Playlists & Albums (Ben, 24 Nov 2026): {"kind": "stack", "Name",
+    "items": [album or playlist, ...]}, each album carrying its "keys" once it runs. Played as one list."""
+    return isinstance(item, dict) and item.get("kind") == "stack"
+
+
+def make_stack(items):
+    """The stack as one item, named 'OK Computer, Rumours and Indie-Chill' (or '... and 3 more')."""
+    import stack
+    items = list(items)
+    return {"kind": "stack", "Name": stack.names_text([i.get("Name") or "" for i in items]), "Artist": "",
+            "items": items}
+
+
+def all_albums(item):
+    """An album, or a stack of nothing but albums: Play's arrow keeps the album's order choice for it."""
+    if is_stack(item):
+        return bool(item.get("items")) and all(is_album(i) for i in item["items"])
+    return is_album(item)
+
+
 def album_id(name, artist):
     return f"album:{artist}|{name}"
 
@@ -104,8 +125,12 @@ def recent():
 
 
 def note_recent(playlist, how):
-    """Puts a playlist at the top of the recent five. how: "played" or "embellished"."""
+    """Puts a playlist at the top of the recent five. how: "played" or "embellished". A stack: each of its own."""
     from datetime import datetime
+    if is_stack(playlist):
+        for item in reversed(playlist.get("items") or []):   # the first added ends up at the top
+            note_recent(item, how)
+        return
     album = is_album(playlist)
     pid = album_id(playlist.get("Name"), playlist.get("Artist")) if album else str(playlist.get("ID"))
     items = [x for x in recent() if str(x.get("id")) != pid]
@@ -592,13 +617,25 @@ def say_result(name, new, stats, report, removed=0):
 
 
 def shown_name(item):
-    """'OK Computer by Radiohead' for an album, the playlist's name for a playlist."""
+    """'OK Computer by Radiohead' for an album, the playlist's name for a playlist, the stack's names for a stack."""
+    if is_stack(item):
+        return item.get("Name") or t("playlist")
     if is_album(item):
         return t("{album} by {artist}", album=item.get("Name") or "", artist=item.get("Artist") or "")
     return item.get("Name") or t("playlist")
 
 
 def _read(playlist, report):
+    if is_stack(playlist):   # each in turn, in the order added, each in its own order; a track twice, once
+        name = shown_name(playlist)
+        keys = []
+        for item in playlist.get("items") or []:
+            _name, got = _read(item, report)
+            keys += [k for k in got or [] if k not in keys]
+        if not keys:
+            report(t("Problem: none of {name} has tracks to play.", name=name))
+            return name, None
+        return name, keys
     if is_album(playlist):   # an album: its tracks in disc and track order, read from the library when picked
         name = shown_name(playlist)
         keys = [str(k) for k in playlist.get("keys") or []]
@@ -617,6 +654,11 @@ def _read(playlist, report):
         report(t("Problem: {name} is empty in JRiver, so there's nothing to play.", name=name))
         return name, None
     return name, keys
+
+
+def read_keys(item, report):
+    """(name, keys or None having said why): an album's, a playlist's or a stack's tracks, for Save."""
+    return _read(item, report)
 
 
 def _play_nonstop(item, report):
@@ -668,6 +710,8 @@ def embellish(playlist, order, amount, report):
         return
     artists = len(_artists(keys))
     amount = OLD_AMOUNTS.get(amount, amount)
+    if amount in HITS and is_stack(playlist):   # their hits are a lone album's; a stack takes the amounts
+        amount = amounts()["default"]
     if amount in HITS:
         return hits(playlist, amount, report)
     report(tn("Embellish: {name}, {tracks} by {count} artist, {amount}.",

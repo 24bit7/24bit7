@@ -48,7 +48,7 @@ SHOTS = [
     ("save_playlist_copy", ["Play", "Now Playing"], ["gui.pyw", "phone.py", "tabs.py"], "copy_to_phone"),
     ("play_search", ["Play", "Search"], ["gui.pyw", "stack.py", "tabs.py"], "search_stack"),
     ("play_jriver_playlists", ["Play", "Playlists & Albums"], ["gui.pyw", "embellish.py", "tabs.py"], "playlists_list"),
-    ("play_copy_to_phone", ["Play", "Playlists & Albums"], ["gui.pyw", "tabs.py"], "copy_to_phone_button"),
+    ("play_stack", ["Play", "Playlists & Albums"], ["gui.pyw", "embellish.py", "tabs.py"], "playlists_stack"),
     ("play_radio", ["Play", "Now Playing"], ["gui.pyw", "radio.py", "tabs.py"], "radio_list"),
     ("play_review", ["Play", "Now Playing"], ["gui.pyw", "review_gui.py"], "review"),
     ("ai_playlist_create", ["Play", "Now Playing"], ["ai_dialog.py"], "ai_create"),
@@ -974,10 +974,18 @@ def main():
                 settle(root, 0.3)
                 play._open_playlists()
                 popup = play._playlists_pop
-            elif action == "copy_to_phone_button":   # an album picked, Copy to Phone at the row's top right (1.41.0)
+            elif action == "playlists_stack":   # an album and a playlist stacked, the list open, Save at the right (1.42.0)
                 play._show_more(False, save=False)
+                play._close_playlists_if_away = lambda: None   # the shot takes the keyboard from the box
                 clear_search_lines(play)
-                play._pick_playlist({"kind": "album", "Name": "Abbey Road", "Artist": "The Beatles"})
+                play._stack_toggle_list({"kind": "album", "Name": "Abbey Road", "Artist": "The Beatles"})
+                found = play._playlist_list() or []
+                if found:
+                    play._stack_toggle_list(found[0])
+                settle(root, 0.3)
+                play.playlist_entry.delete(0, "end")
+                play._fill_playlists()
+                popup = play._playlists_pop
             elif action == "search_stack":   # two artists added, Go showing, a third typed with the list open (1.40.0)
                 import library
                 play._show_more(False, save=False)
@@ -1021,7 +1029,7 @@ def main():
             elif action in ("ai_create", "ai_steer"):
                 play._show_more(False, save=False)
                 dialog = open_ai_window(gui, root, play, "steer" if action == "ai_steer" else "create")
-            elif action == "copy_to_phone":   # Save Playlist with Copy Tracks To ticked, a stand-in phone (1.40.0)
+            elif action == "copy_to_phone":   # Save with Copy Tracks To ticked, a stand-in phone (1.40.0; one Save 1.42.0)
                 import phone
 
                 class DemoPhone:
@@ -1040,14 +1048,11 @@ def main():
                 phone.WpdPhone = lambda device_id, name: DemoPhone()
                 phone.remember(demo_id, name="Jo's Phone", folder="Music", limit_gb=32, clear=True)
                 play._show_more(False, save=False)
-                dialog = gui.SavePlaylistPrompt(
-                    play, gui.t("Save Playlist"),
-                    gui.t("Save what's in Playing Now in {zone} ({tracks}) as a JRiver playlist called:",
-                          zone="Speakers", tracks=gui.tn("{count} track", "{count} tracks", 30)),
-                    "Road Trip (Embellished)", int(2.1 * phone.GB))
+                dialog = gui.SavePrompt(
+                    play, gui.t("What's playing in {zone} ({tracks}, {size}).", zone="Speakers",
+                                tracks=gui.tn("{count} track", "{count} tracks", 30), size=phone.size_text(int(2.1 * phone.GB))),
+                    "Road Trip (Embellished)", int(2.1 * phone.GB), jriver=True, copy=True)
                 settle(root, 0.3)
-                dialog.copy_var.set(True)
-                dialog._copy_toggled()
             elif action == "change_zone":   # Change Zone's pop-up from the Speakers, Multiroom among the choices (1.40.0)
                 import voice
                 play._show_more(False, save=False)
