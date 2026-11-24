@@ -13,9 +13,13 @@ Proved on Ben's Pixel 9a on 23 Nov 2026: a folder made, files written (37 MB a s
 no prompt. Everything below WpdPhone works against any object with the same few methods, so the tests use a fake.
 
 Rules:
-- Clear First empties the chosen folder (asked once, with the count), leaving dot folders like .thumbnails be.
+- Clear First empties the chosen folder (asked once, with the count), leaving dot folders like .thumbnails be,
+  but keeps what the new playlist lists at the same place and size, so nothing is copied back (24 Nov 2026).
 - Saving the same playlist again copies only what's new, and takes out what's left the playlist unless another
-  playlist copied to that folder still lists it (what each put there is kept with the device's choices).
+  playlist copied to that folder still lists it (what each put there is kept with the device's choices). A
+  playlist saved empty comes off, its .m3u8 with it.
+- Without Clear First, every other playlist file in the folder is checked: a song no longer there comes out of
+  its list, and a playlist left with none goes.
 - The limit and the phone's free space (less a margin) are filled in playlist order; what doesn't fit is said.
 """
 
@@ -130,13 +134,124 @@ def size_text(n):
     return t("{gb} GB", gb=f"{n / GB:.1f}") if n >= GB / 10 else t("{mb} MB", mb=max(1, round(n / 1e6)))
 
 
-def clear_count(phone, folder):
-    """What Clear First would take out of the folder: (folders, files), dot folders and files left out."""
-    parent = phone.folder(folder, make=False)
-    if parent is None:
-        return 0, 0
-    kept = [e for e in phone.list(parent) if not e["name"].startswith(".")]
-    return sum(1 for e in kept if e["folder"]), sum(1 for e in kept if not e["folder"])
+def _wanted(playlist, tracks):
+    """{path.lower(): size} of what the playlist puts in the folder, and the folders those paths run through."""
+    wanted = {p.lower(): tr["size"] for tr, p in zip(tracks, file_names(tracks))}
+    through = {p.rsplit("/", i)[0] for p in wanted for i in range(1, p.count("/") + 1)}
+    return wanted, through
+
+
+def _clear_plan(dirs, wanted, through, skip):
+    """
+    What Clear First takes out (Ben, 24 Nov 2026: a clear never deletes what the new playlist is about to copy
+    back): (folders taken out whole, [(folder, file entry)] taken out one by one, how many tracks stay). A folder
+    holding nothing the playlist wants goes in one; a file the playlist lists at the same place and size stays.
+    Dot folders and files (.thumbnails, .24bit7) are never touched, and skip (the playlist's own .m3u8, written
+    again anyway) isn't counted.
+    """
+    whole, files, kept = [], [], 0
+
+    def visit(rel):
+        nonlocal kept
+        dirs._list(rel)
+        for low, real in sorted(dirs.names[rel].items()):
+            if real.startswith("."):
+                continue
+            child = f"{rel}/{real}" if rel else real
+            dirs.ids.setdefault(child, dirs.kids[rel][low])
+            if child.lower() in through:
+                visit(child)
+            else:
+                whole.append(child)
+        for low, e in sorted(dirs.files[rel].items()):
+            path = f"{rel}/{e['name']}".lower() if rel else low
+            if e["name"].startswith(".") or path == skip:
+                continue
+            if path in wanted and e.get("size") in (None, wanted[path]):
+                kept += 1
+            else:
+                files.append((rel, e))
+    visit("")
+    return whole, files, kept
+
+
+def clear_plan(phone, folder, playlist, tracks):
+    """What Clear First would do to the folder, for the question asked once: (folders, files, tracks kept)."""
+    root = phone.folder(folder, make=False)
+    if root is None:
+        return 0, 0, 0
+    wanted, through = _wanted(playlist, tracks)
+    whole, files, kept = _clear_plan(_Dirs(phone, root), wanted, through, safe_name(playlist).lower() + ".m3u8")
+    return len(whole), len(files), kept
+
+
+def _exists(dirs, rel):
+    d, _, name = rel.rpartition("/")
+    return name.lower() in dirs.listing(d)
+
+
+def _decode(data):
+    try:
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return data.decode("latin-1")
+
+
+def _tidy_playlists(phone, dirs, root, mine, skip, say):
+    """
+    Every other playlist file at the top of the folder, checked against what's there (Ben, 24 Nov 2026): a song
+    no longer in the folder comes out of its list, and a playlist left with none goes. 24bit7's own are read from
+    what it kept; any other is read off the phone, and only lines that name a file in the folder are judged (a
+    line with a drive, a web address or a path above the folder stays as it is). Returns how many were changed.
+    """
+    changed = 0
+    for low, e in sorted(dirs.listing("").items()):
+        if low == skip or low.startswith(".") or not low.endswith((".m3u8", ".m3u")):
+            continue
+        recorded = mine.get(low)
+        if recorded is not None:
+            keep = [p for p in recorded if _exists(dirs, p)]
+            gone, left = len(recorded) - len(keep), len(keep)
+            text = m3u8_text(keep)
+        else:
+            try:
+                lines = _decode(phone.read(e["id"])).splitlines()
+            except Exception as err:
+                engine.debug(f"Copy Tracks To: couldn't read {e['name']} ({err})")
+                continue
+            out, pending, gone, left = [], [], 0, 0
+            for line in lines:
+                s = line.strip()
+                if not s or s.startswith("#"):
+                    pending.append(line)
+                    continue
+                rel = s.replace("\\", "/")
+                while rel.startswith("./"):
+                    rel = rel[2:]
+                if ":" in rel or rel.startswith(("/", "../")) or _exists(dirs, rel):
+                    out += pending + [line]
+                    left += 1
+                else:
+                    out += [p for p in pending if not p.strip().upper().startswith("#EXTINF")]
+                    gone += 1
+                pending = []
+            out += pending
+            text = "\n".join(out) + "\n"
+        if not gone:
+            continue
+        changed += 1
+        phone.delete([e["id"]])
+        dirs.files[""].pop(low, None)
+        if not left:
+            mine.pop(low, None)
+            say("  " + t("{name} had none of its songs left in the folder, so it was taken off.", name=e["name"]))
+            continue
+        phone.put_text(root, e["name"], text)
+        if recorded is not None:
+            mine[low] = keep
+        say("  " + tn("{name} listed {count} song no longer in the folder: taken out of it.",
+                      "{name} listed {count} songs no longer in the folder: taken out of it.", gone, name=e["name"]))
+    return changed
 
 
 def _records(phone):
@@ -159,13 +274,14 @@ class _Dirs:
     """The folders under the chosen one, by path from it ('Godsmack/Awake'), each listed once, made when needed."""
 
     def __init__(self, phone, root):
-        self.phone, self.ids, self.kids, self.files = phone, {"": root}, {}, {}
+        self.phone, self.ids, self.kids, self.files, self.names = phone, {"": root}, {}, {}, {}
 
     def _list(self, rel):
         if rel not in self.kids:
             fid = self.ids.get(rel)
             entries = self.phone.list(fid) if fid else []
             self.kids[rel] = {e["name"].lower(): e["id"] for e in entries if e["folder"]}
+            self.names[rel] = {e["name"].lower(): e["name"] for e in entries if e["folder"]}
             self.files[rel] = {e["name"].lower(): e for e in entries if not e["folder"]}
         return self.kids[rel]
 
@@ -180,7 +296,8 @@ class _Dirs:
         if found is None and make:
             found = self.phone.make(parent, name)
             self.kids[parent_rel][name.lower()] = found
-            self.kids[rel], self.files[rel] = {}, {}
+            self.names[parent_rel][name.lower()] = name
+            self.kids[rel], self.files[rel], self.names[rel] = {}, {}, {}
         if found is not None:
             self.ids[rel] = found
         return found
@@ -195,10 +312,13 @@ class _Dirs:
     def forget(self, rel):
         parent_rel, _, name = rel.rpartition("/")
         self.kids.get(parent_rel, {}).pop(name.lower(), None)
-        for d in [d for d in self.ids if d == rel or d.startswith(rel + "/")]:
+        self.names.get(parent_rel, {}).pop(name.lower(), None)
+        for d in [d for d in set(self.ids) | set(self.kids) if d == rel or d.lower().startswith(rel.lower() + "/")
+                  or d.lower() == rel.lower()]:
             self.ids.pop(d, None)
             self.kids.pop(d, None)
             self.files.pop(d, None)
+            self.names.pop(d, None)
 
     def drop_if_empty(self, rel):
         """An album or artist folder left with nothing in it goes too (its parent next, up to the chosen folder)."""
@@ -224,16 +344,32 @@ def copy_playlist(phone, folder, playlist, tracks, limit_gb=0, clear=False, say=
     device, copied = _records(phone)
     fkey = re.sub(r"[\\/]+", "/", folder or "").strip("/").lower()
     mine = dict(copied.get(fkey) or {})
-    if clear:
-        gone = [e for e in phone.list(root) if not e["name"].startswith(".")]
-        if gone:
-            phone.delete([e["id"] for e in gone])
-            say("  " + t("Cleared {folder} on {phone}: {count} folders and files taken out.", folder=folder,
-                         phone=phone.name, count=len(gone)))
-        mine = {}
     dirs = _Dirs(phone, root)
     m3u = safe_name(playlist) + ".m3u8"
     pkey = m3u.lower()
+    if clear:
+        wanted, through = _wanted(playlist, tracks)
+        whole, loose, held = _clear_plan(dirs, wanted, through, pkey)
+        ids = [dirs.get(rel) for rel in whole] + [e["id"] for _rel, e in loose]
+        if ids:
+            phone.delete([i for i in ids if i is not None])
+        for rel in whole:
+            dirs.forget(rel)
+        for rel, e in loose:
+            dirs.files[rel].pop(e["name"].lower(), None)
+        for rel in sorted({rel for rel, _e in loose if rel}, key=lambda d: -d.count("/")):
+            dirs.drop_if_empty(rel)
+        if whole or loose:
+            folders = tn("{count} folder", "{count} folders", len(whole))
+            files = tn("{count} file", "{count} files", len(loose))
+            say("  " + (tn("Cleared {folder} on {phone}: {folders} and {files} taken out, {count} track already "
+                           "there kept.",
+                           "Cleared {folder} on {phone}: {folders} and {files} taken out, {count} tracks already "
+                           "there kept.", held, folder=folder, phone=phone.name, folders=folders, files=files)
+                        if held else
+                        t("Cleared {folder} on {phone}: {folders} and {files} taken out.", folder=folder,
+                          phone=phone.name, folders=folders, files=files)))
+        mine = {}
     # 1.40.0 put a playlist in a folder of its own, its .m3u8 inside: that goes, the tracks now in artists' folders
     own = safe_name(playlist)
     old = dirs.get(own)
@@ -297,6 +433,7 @@ def copy_playlist(phone, folder, playlist, tracks, limit_gb=0, clear=False, say=
         if already is not None:   # a different size: a newer file of the same track
             phone.delete([already["id"]])
         phone.put(parent, tr["path"], name, tr["size"])
+        dirs.listing(d)[name.lower()] = {"id": None, "name": name, "folder": False, "size": tr["size"]}
         kept.add(p)
         done_bytes += tr["size"]
         done = i
@@ -306,8 +443,13 @@ def copy_playlist(phone, folder, playlist, tracks, limit_gb=0, clear=False, say=
     old_m3u = dirs.listing("").get(pkey)
     if old_m3u is not None:
         phone.delete([old_m3u["id"]])
-    phone.put_text(root, m3u, m3u8_text(listed))
-    mine[pkey] = listed
+    if tracks:
+        phone.put_text(root, m3u, m3u8_text(listed))
+        mine[pkey] = listed
+    else:   # a playlist emptied in JRiver and saved again: it comes off (Ben, 24 Nov 2026)
+        mine.pop(pkey, None)
+    if not clear:
+        _tidy_playlists(phone, dirs, root, mine, pkey, say)
     copied[fkey] = mine
     _keep_records(device, copied)
     note = ""
@@ -321,7 +463,9 @@ def copy_playlist(phone, folder, playlist, tracks, limit_gb=0, clear=False, say=
                    len(left_out), size=what))
         say("  " + note)
     secs = round(time.time() - started)
-    if stopped:
+    if not tracks:
+        line = t("Took {name}.m3u8 off {phone}: the playlist is empty now.", name=own, phone=phone.name)
+    elif stopped:
         line = t("Stopped: {count} of {total} tracks are on {phone}, with {name}.m3u8. Copying again picks up the "
                  "rest.", count=len(listed), total=count, phone=phone.name, name=own)
     elif todo:
@@ -556,6 +700,24 @@ class WpdPhone:
     def put_text(self, parent, name, text):
         data = text.encode("utf-8")
         self._write(parent, name, len(data), lambda n: (data[i:i + n] for i in range(0, len(data), n)))
+
+    def read(self, oid):
+        """A file's bytes (a playlist file, for the tidy-up), through the default resource's stream."""
+        import ctypes
+        from ctypes import POINTER, byref, c_ulong
+        comtypes, _cc, port, _types = self._lib
+        best, stream = c_ulong(0), POINTER(port.IStream)()
+        key = self._key("{E81E79BE-34F0-41BF-B53F-F1A06AE87842}", 0)   # WPD_RESOURCE_DEFAULT
+        self._content.Transfer()._IPortableDeviceResources__com_GetStream(oid, byref(key), 0, byref(best),
+                                                                          byref(stream))
+        out, n = bytearray(), max(best.value, 64 * 1024)
+        while True:
+            buf = (ctypes.c_ubyte * n)()
+            got = c_ulong(0)
+            stream._ISequentialStream__com_RemoteRead(buf, n, byref(got))
+            if not got.value:
+                return bytes(out)
+            out += bytes(buf[:got.value])
 
     def delete(self, ids):
         """Gone, folders with all they hold (recursively, with no prompt on the phone)."""

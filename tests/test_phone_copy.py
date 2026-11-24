@@ -62,6 +62,10 @@ class FakePhone:
     def put_text(self, parent, name, text):
         return self._add(parent, name, False, len(text.encode()), text)
 
+    def read(self, oid):
+        data = self.items[oid]["data"]
+        return data if isinstance(data, bytes) else data.encode("utf-8")
+
     def delete(self, ids):
         for oid in ids:
             for kid in [i for i, e in self.items.items() if e["parent"] == oid]:
@@ -121,10 +125,81 @@ def test_clear_first_empties_the_folder_but_dot_folders(app, files):
     old = ph.make(music, "Old Album")
     ph.put_text(old, "01.flac", "x")
     ph.put_text(music, "loose.mp3", "x")
-    assert phone.clear_count(ph, "Music") == (1, 1), "asked once, with the count; .thumbnails isn't counted"
-    phone.copy_playlist(ph, "Music", "New", files(("A", "One", 10)), clear=True, say=app.Lines())
+    new = files(("A", "One", 10))
+    assert phone.clear_plan(ph, "Music", "New", new) == (1, 1, 0), \
+        "asked once, with the count; .thumbnails isn't counted"
+    phone.copy_playlist(ph, "Music", "New", new, clear=True, say=app.Lines())
     assert ph.names("Music") == [".thumbnails", "A", "New.m3u8"]
     assert ph.names("Music/.thumbnails") == ["a.jpg"]
+
+
+def test_clear_first_keeps_what_the_new_playlist_lists(app, files):
+    """Ben, 24 Nov 2026: "During a clear and add new, we should check we're not deleting something that already
+    exists from the new playlist". Same place and size stays and isn't copied again; the rest goes."""
+    import phone
+    ph = FakePhone()
+    a, b, c, d = files(("A", "One", 10, "First", 1), ("A", "Two", 20, "First", 2), ("B", "Three", 30, "Second", 3),
+                       ("C", "Four", 40, "Third", 4))
+    phone.copy_playlist(ph, "Music", "Old", [a, b, c], say=app.Lines())
+    music = ph.folder("Music")
+    ph.put_text(ph.folder("Music/A"), ".24bit7", "id")   # dot files stay anywhere
+    ph.put_text(music, "Other.m3u8", "#EXTM3U\nB/Second/03 Three.flac\n")
+    assert phone.clear_plan(ph, "Music", "New", [a, d]) == (1, 3, 1), \
+        "B's folder whole; Two, Old.m3u8 and Other.m3u8 one by one; One kept"
+    ph.writes.clear()
+    said = app.Lines()
+    phone.copy_playlist(ph, "Music", "New", [a, d], clear=True, say=said)
+    assert ph.writes == ["04 Four.flac"], "One was there already, so only Four is copied"
+    assert ph.names("Music") == ["A", "C", "New.m3u8"]
+    assert ph.names("Music/A") == [".24bit7", "First"] and ph.names("Music/A/First") == ["01 One.flac"]
+    assert said.has("Cleared Music on Ben's Phone: 1 folder and 3 files taken out, 1 track already there kept."), \
+        said.text()
+
+
+def test_clear_first_replaces_a_file_of_another_size(app, files):
+    import phone
+    ph = FakePhone()
+    a, = files(("A", "One", 10, "First", 1))
+    ph.put_text(ph.folder("Music/A/First", make=True), "01 One.flac", "short")
+    ph.writes.clear()
+    phone.copy_playlist(ph, "Music", "New", [a], clear=True, say=app.Lines())
+    assert ph.writes == ["01 One.flac"] and ph.names("Music/A/First") == ["01 One.flac"]
+
+
+def test_other_playlists_lose_songs_no_longer_in_the_folder(app, files):
+    """Ben, 24 Nov 2026: review the playlists already in the folder and amend any whose songs have gone."""
+    import phone
+    ph = FakePhone()
+    a, b, c = files(("A", "One", 10, "First", 1), ("B", "Two", 20, "Second", 2), ("C", "Three", 30, "Third", 3))
+    phone.copy_playlist(ph, "Music", "Mine", [a, b], say=app.Lines())
+    music = ph.folder("Music")
+    ph.put_text(music, "Hand.m3u8", "#EXTM3U\n#EXTINF:200,B - Two\nB\\Second\\02 Two.flac\n#EXTINF:100,Gone\n"
+                                    "Lost/Song.flac\nD:\\Music\\Elsewhere.flac\n")
+    ph.put_text(music, "Empty.m3u", "#EXTM3U\nNothing/Here.mp3\n")
+    ph.delete([ph.child(ph.folder("Music/A/First"), "01 One.flac")])   # deleted by hand on the phone
+    said = app.Lines()
+    phone.copy_playlist(ph, "Music", "New", [c], say=said)
+    assert ph.text("Music", "Mine.m3u8") == "#EXTM3U\nB/Second/02 Two.flac\n"
+    assert ph.text("Music", "Hand.m3u8") == ("#EXTM3U\n#EXTINF:200,B - Two\nB\\Second\\02 Two.flac\n"
+                                            "D:\\Music\\Elsewhere.flac\n"), "a drive's path is left as it is"
+    assert "Empty.m3u" not in ph.names("Music")
+    assert said.has("Mine.m3u8 listed 1 song no longer in the folder: taken out of it."), said.text()
+    assert said.has("Empty.m3u had none of its songs left in the folder, so it was taken off."), said.text()
+    said = app.Lines()
+    phone.copy_playlist(ph, "Music", "New", [c], say=said)
+    assert not said.has("listed") and not said.has("taken off"), "nothing more to amend: " + said.text()
+
+
+def test_a_playlist_saved_empty_comes_off_with_its_own_tracks(app, files):
+    import phone
+    ph = FakePhone()
+    a, b = files(("A", "One", 10, "First", 1), ("B", "Two", 20, "Second", 2))
+    phone.copy_playlist(ph, "Music", "Mix", [a, b], say=app.Lines())
+    phone.copy_playlist(ph, "Music", "Other", [b], say=app.Lines())
+    said = app.Lines()
+    assert phone.copy_playlist(ph, "Music", "Mix", [], say=said) == 0
+    assert ph.names("Music") == ["B", "Other.m3u8"], "One goes; Two stays for Other"
+    assert said.has("Took Mix.m3u8 off Ben's Phone: the playlist is empty now."), said.text()
 
 
 def test_without_clear_first_the_rest_of_the_folder_stays(app, files):

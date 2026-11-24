@@ -1809,6 +1809,17 @@ class PlayTab(tk.Frame):
         can't be saved in JRiver again; an album or a stack can.
         """
         problems = []
+        lone_playlist = not embellish.is_stack(item) and not embellish.is_album(item)
+        if lone_playlist and self._empty_in_jriver(item):
+            # emptied in JRiver: saved to the phone, it comes off there (Ben, 24 Nov 2026)
+            name = item.get("Name") or ""
+            name, _in_jriver, to_phone = ask_save(
+                self, t("The playlist {name} is empty in JRiver. Saved to a phone, it comes off there, with the "
+                        "tracks no other playlist on it lists.", name=name), name, 0, jriver=False, jriver_ok=False,
+                copy=True)
+            if (name or "").strip() and to_phone:
+                self._copy_to_phone(to_phone, name.strip(), [], empty=True)
+            return
         name, keys = embellish.read_keys(with_keys(item), problems.append)
         if keys is None:
             messagebox.showinfo(t("Save"), problems[0] if problems else
@@ -1826,10 +1837,17 @@ class PlayTab(tk.Frame):
         else:
             prompt = t("The playlist {name} ({tracks}, {size}), without playing it.", name=name, tracks=count,
                        size=size_text)
-        lone_playlist = not embellish.is_stack(item) and not embellish.is_album(item)
         if self._save(keys, tracks, prompt, item.get("Name") or name, size, jriver=False, jriver_ok=not lone_playlist,
                       copy=True):
             self._clear_list_stack()
+
+    @staticmethod
+    def _empty_in_jriver(item):
+        import saved_playlists
+        try:
+            return saved_playlists.playlist_keys(str(item.get("ID"))) == []
+        except Exception:
+            return False
 
     def _save(self, keys, tracks, prompt, initial, size, jriver=True, jriver_ok=True, copy=False):
         """The pop-up, then the JRiver playlist and the copy as ticked. True once something was saved."""
@@ -1859,7 +1877,7 @@ class PlayTab(tk.Frame):
             self._copy_to_phone(to_phone, name, tracks)
         return True
 
-    def _copy_to_phone(self, copy, name, tracks):
+    def _copy_to_phone(self, copy, name, tracks, empty=False):
         """
         Copy Tracks To, after the save (Ben, 23 Nov 2026): Clear First asked once with the count, then the copy on a
         thread, saying its progress in the console. The phone's choices are remembered for next time.
@@ -1867,15 +1885,15 @@ class PlayTab(tk.Frame):
         import phone
         phone.remember(copy["device"], name=copy["name"], folder=copy["folder"], limit_gb=copy["limit_gb"],
                        clear=copy["clear"])
-        if not tracks:
+        if not tracks and not empty:
             self._append_log(t("Problem: none of the tracks' files could be found, so nothing was copied."))
             return
-        clear = copy["clear"]
+        clear = copy["clear"] and not empty
         if clear:
             try:
                 p = phone.WpdPhone(copy["device"], copy["name"])
                 try:
-                    folders, files = phone.clear_count(p, copy["folder"])
+                    folders, files, kept = phone.clear_plan(p, copy["folder"], name, tracks)
                 finally:
                     p.close()
             except Exception as e:
@@ -1883,10 +1901,17 @@ class PlayTab(tk.Frame):
                                    phone=copy["name"], e=e))
                 return
             if folders or files:
-                ask = t("Clear {folder} on {phone} first? It takes out {folders} and {files} there (dot folders such "
-                        "as .thumbnails stay). This can't be undone.", folder=copy["folder"], phone=copy["name"],
-                        folders=tn("{count} folder", "{count} folders", folders),
-                        files=tn("{count} file", "{count} files", files))
+                what = dict(folder=copy["folder"], phone=copy["name"],
+                            folders=tn("{count} folder", "{count} folders", folders),
+                            files=tn("{count} file", "{count} files", files))
+                ask = (tn("Clear {folder} on {phone} first? It takes out {folders} and {files} there, and keeps the "
+                          "{count} track this playlist already has (dot folders such as .thumbnails stay too). This "
+                          "can't be undone.",
+                          "Clear {folder} on {phone} first? It takes out {folders} and {files} there, and keeps the "
+                          "{count} tracks this playlist already has (dot folders such as .thumbnails stay too). This "
+                          "can't be undone.", kept, **what) if kept else
+                       t("Clear {folder} on {phone} first? It takes out {folders} and {files} there (dot folders such "
+                         "as .thumbnails stay). This can't be undone.", **what))
                 if not messagebox.askyesno(t("Copy Tracks To"), ask, parent=self):
                     clear = False
         say = self.log_queue.put

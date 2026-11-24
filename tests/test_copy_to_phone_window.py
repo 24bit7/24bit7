@@ -133,6 +133,36 @@ def test_save_and_copy_puts_the_tracks_on_the_phone(app, ui, monkeypatch, tmp_pa
     assert not ui.errors, ui.errors[0]
 
 
+def test_a_playlist_emptied_in_jriver_comes_off_the_phone(app, ui, monkeypatch, tmp_path):
+    """Ben, 24 Nov 2026: a playlist with all its tracks removed is taken off the phone when saved there."""
+    import phone
+    from test_jriver_playlists_tab import lists_tab
+    ph = FakePhone(name="Ben's Phone")
+    with_phone(monkeypatch, ph)
+    f = tmp_path / "one.flac"
+    f.write_bytes(b"x" * 100)
+    phone.copy_playlist(ph, "Music", "Emptied", [{"key": "1", "path": str(f), "artist": "A", "title": "One",
+                                                   "size": 100}], say=lambda line: None)
+    assert ph.names("Music") == ["A", "Emptied.m3u8"]
+    emptied = {"ID": "909", "Name": "Emptied", "Folder": "Mixes", "Type": "Playlist", "keys": []}
+    app.jriver.playlists.append(emptied)
+    p = lists_tab(ui)
+    p._playlist_chosen, p._box_newer = {k: v for k, v in emptied.items() if k != "keys"}, True
+    copy = {"device": DEVICE, "name": "Ben's Phone", "folder": "Music", "limit_gb": 0, "clear": True}
+    asked = []
+    monkeypatch.setattr(ui.gui, "ask_save", lambda *a, **k: asked.append((a, k)) or ("Emptied", False, copy))
+    p.on_save()
+    assert asked[0][0][1].startswith("The playlist Emptied is empty in JRiver."), asked[0][0][1]
+    assert asked[0][1] == {"jriver": False, "jriver_ok": False, "copy": True}
+    win = p.copy_window
+    ui.pump(until=lambda: win.finished, timeout=10)
+    ui.pump(0.3)
+    assert ph.names("Music") == [], "its .m3u8 and its own track went; Clear First is never asked for an empty one"
+    assert "Took Emptied.m3u8 off Ben's Phone: the playlist is empty now." in p.log.get("1.0", "end")
+    win.ok()
+    assert not ui.errors, ui.errors[0]
+
+
 def test_browse_goes_into_folders_and_hands_back_the_path(app, ui, monkeypatch):
     """Ben, 23 Nov 2026: "I can't see how to navigate to or choose the right folder" (Jo's is Music/Music)."""
     ph = FakePhone(name="Jo's Phone")
