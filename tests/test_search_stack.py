@@ -1,6 +1,6 @@
 """
 The Search tab's stack on screen (Ben, 23 Nov 2026): the Artist box lists your artists as you type, each with
-+ Add; Go, how many each and Most Played appear after the Track box, in the gap before Output, once someone is
++ Add; Go, how many each and Select From Hits appear after the Track box, in the gap before Output, once someone is
 added; Go plays to Output and clears the stack.
 """
 
@@ -33,7 +33,7 @@ def test_add_shows_go_and_go_plays_and_clears(app, ui):
     row_right = p.stack_row.winfo_rootx() + p.stack_row.winfo_width()
     assert row_right <= p.output_box.winfo_rootx(), (row_right, p.output_box.winfo_rootx())
     assert abs(p.stack_go.winfo_rooty() - p.search_track.winfo_rooty()) <= 12, "level with the boxes"
-    assert p.stack_count.get() == "5" and p.stack_most.get() is True
+    assert p.stack_count.get() == "5" and p.stack_most.get() == "down"
     # with nothing typed, the list is what's been added, each with Remove
     p._fill_artists()
     ui.pump(0.2)

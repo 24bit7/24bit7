@@ -723,9 +723,9 @@ class ProfilePage:
                 out[f"INNER_CIRCLE_{g}_FALLBACK_MIN"] = v[f"INNER_CIRCLE_{g}_FALLBACK_MIN"].get().strip() or "10"
         if "FALLBACK_SPOKEN" in v:
             out["FALLBACK_SPOKEN"] = "1" if v["FALLBACK_SPOKEN"].get() else "0"
-        for key in ("ADAPTIVE_ARTISTS", "ADAPTIVE_TOP"):   # Most Played
+        for key in ("ADAPTIVE_ARTISTS", "ADAPTIVE_TOP"):   # Select From Hits: off, down or both
             if key in v:
-                out[key] = "1" if v[key].get() else "0"
+                out[key] = engine.hits_mode(v[key].get())
         for group in engine.TEMPO_GROUPS:   # Match Tempo: off, prefer or strict
             if f"MATCH_TEMPO_{group.upper()}" in v:
                 out[f"MATCH_TEMPO_{group.upper()}"] = v[f"MATCH_TEMPO_{group.upper()}"].get()
@@ -928,7 +928,6 @@ def table_colours():
 # The ? beside each Number of tracks
 LIMIT_HELP = N_("Ticked, the playlist stops at this many tracks, picked at random from everything found. Unticked, every track found goes in: Number of artists times Tracks per artist selection, plus the seed artist's, so the playlist can run long, and Drift doesn't run as there's no target to fall short of. When Non-stop adds more, it keeps to this number.\nTo switch the random pick off altogether, set Tracks per artist selection to the same as Number of artist's top tracks (say 5 of 5) and untick this.")
 TEMPO_CHOICES = [("off", N_("Off")), ("prefer", N_("Prefer")), ("strict", N_("Strict"))]   # Match Tempo (5 Nov 2026)
-ADAPTIVE_HELP = N_("Only the artist's most played songs, so a one-hit wonder gives just the hit. A song counts when it has at least a fifth of the plays of the artist's biggest, by Last.fm's counts.")   # Most Played (Ben's note, 23 Nov 2026)
 TEMPO_HELP = N_("Uses your files' BPM tags to keep the playlist near the seed track's tempo. Half and double time "
                 "count as a match.\nPrefer: where there's a choice, such as which of an artist's top tracks to "
                 "pick, the closest tempos go first. Nothing is left out.\nStrict: only tracks within ten per cent "
@@ -4765,6 +4764,7 @@ class SettingsTab(tk.Frame):
             row.grid(row=where["r"], column=0, columnspan=6, sticky="w", padx=(14, 0), pady=(2, 2))
             where["r"] += 1
             boxes = {}
+            made = []        # (part, widget, var) in order, for Select From Hits' wording
             pending = None   # a tick waiting for the box it greys
 
             def env_var(skey, key, default, as_bool=False):
@@ -4790,7 +4790,9 @@ class SettingsTab(tk.Frame):
                 return v
             for part in parts:
                 if isinstance(part, str):
-                    tk.Label(row, text=part).pack(side="left", padx=(0, 4))
+                    word = tk.Label(row, text=part)
+                    word.pack(side="left", padx=(0, 4))
+                    made.append((part, word, None))
                     continue
                 if part[0] == "tick":
                     _kind, key, default = part
@@ -4816,6 +4818,7 @@ class SettingsTab(tk.Frame):
                     sb = tk.Spinbox(row, from_=lo, to=hi, textvariable=var, width=3)
                 sb.pack(side="left", padx=(0, 4))
                 boxes[key] = sb
+                made.append((part, sb, var))
                 if pending is not None:
                     def follow(sb=sb, var=pending):
                         sb.config(state="normal" if var.get() else "disabled")
@@ -4823,6 +4826,12 @@ class SettingsTab(tk.Frame):
                     follow()
                     pending = None
             tabs.flow(row, within=box)   # the sentence wraps like a paragraph when the page is narrower than it
+            top_words = t("of each artist's top")
+            for i, (part, word, _var) in enumerate(made):   # "pick [5] of each artist's top [7] tracks": Select
+                if part == top_words and 0 < i < len(made) - 2:   # From Hits rewords it (25 Nov 2026)
+                    p.hit_lines = [h for h in getattr(p, "hit_lines", []) if h["row"].winfo_exists()]
+                    p.hit_lines.append({"row": row, "top": word, "pool": made[i + 1][1], "tracks": made[i + 2][1],
+                                        "pick": made[i - 1][2]})
             return boxes
 
         def review_block(group, lines):
@@ -4868,15 +4877,73 @@ class SettingsTab(tk.Frame):
         def adaptive(key="ADAPTIVE_ARTISTS"):
             """Most Played (Ben, 12 Nov 2026, as Use Adaptive Selections; renamed 23 Nov): the pick shrinks to an
             artist's widely played songs. On by default for Similar Artists and Radio; off for Artist's Top Tracks
-            (ADAPTIVE_TOP), where Top N is then up to N of them."""
+            (ADAPTIVE_TOP), where Top N is then up to N of them.
+            Select From Hits since 25 Nov 2026: a click-through (Off, ↓, ↕) at the end of the first Playlist
+            Selection sentence, which it rewords, with every other "of each artist's top" line on the page:
+            "pick [5] of each artist's hits, fewer if they have fewer, up to 8 if they have plenty." Artist's Top
+            Tracks, with no such sentence, has it on a row of its own."""
             default = engine.ADAPTIVE_PICK if key == "ADAPTIVE_ARTISTS" else engine.ADAPTIVE_TOP
-            p.vars[key] = tk.BooleanVar(value=p.env.get(key, "1" if default else "0") in ("1", "true", "yes"))
-            row = tk.Frame(where["box"])
-            tick = ttk.Checkbutton(row, text=t("Most Played"), variable=p.vars[key], command=p.save)
-            tick.pack(side="left")
-            help_mark(row, t(ADAPTIVE_HELP), on=tick).pack(side="left", padx=(8, 0))
-            p.adaptive_tick = tick
-            place(row, pady=(8, 0))
+            var = p.vars[key] = tk.StringVar(value=engine.hits_mode(p.env.get(key, default)))
+            lines = [h for h in getattr(p, "hit_lines", []) if h["row"].winfo_exists()]
+            if key == "ADAPTIVE_ARTISTS" and lines:
+                host = lines[0]["row"]
+                button = tabs.hits_button(host, var, command=p.save)
+                button.place(x=0, y=0)
+                button.bind("<Configure>", lambda e, r=host: r.reflow(), add="+")
+            else:
+                host = tk.Frame(where["box"])
+                button = tabs.hits_button(host, var, command=p.save)
+                button.pack(side="left")
+                place(host, pady=(8, 0))
+            help_mark(host, t(tabs.HITS_NOTE), on=button)
+            p.adaptive_tick = button
+            if key != "ADAPTIVE_ARTISTS":
+                return
+
+            def reword(*_a):
+                """Each line's words for the setting, the pool's box and "tracks" hidden while it's on."""
+                value = var.get()
+                for h in [h for h in getattr(p, "hit_lines", []) if h["row"].winfo_exists()]:
+                    try:
+                        pick = int(h["pick"].get()) if h["pick"] is not None else 0
+                    except (ValueError, tk.TclError):
+                        pick = 0
+                    if value == "off":
+                        h["top"].config(text=t("of each artist's top"))
+                    elif value == "down":
+                        h["top"].config(text=t("of each artist's hits, fewer if they have fewer."))
+                    else:
+                        h["top"].config(text=t("of each artist's hits, fewer if they have fewer, up to {count} if "
+                                               "they have plenty.", count=engine.hits_cap(max(pick, 1), "both")))
+                    for w in (h["pool"], h["tracks"]):
+                        if value == "off" and not w.winfo_manager():
+                            w.place(x=0, y=0)
+                        elif value != "off" and w.winfo_manager():
+                            w.place_forget()
+                    if h["pick"] is not None and not h.get("traced"):
+                        h["traced"] = True
+                        h["pick"].trace_add("write", reword)
+                    if hasattr(h["row"], "reflow"):
+                        h["row"].reflow()
+            var.trace_add("write", reword)
+            pending = {"id": None}
+
+            def later():
+                pending["id"] = None
+                try:
+                    reword()
+                except tk.TclError:
+                    pass   # the page went before the window updated
+            pending["id"] = button.after_idle(later)   # once the page's other lines (Review Mode's) are built
+
+            def gone(_e):
+                if pending["id"]:
+                    try:
+                        button.after_cancel(pending["id"])
+                    except tk.TclError:
+                        pass
+                    pending["id"] = None
+            button.bind("<Destroy>", gone, add="+")
 
         def recent(group):
             """Skip tracks played in the last [n] days (1 by default), with its ?."""

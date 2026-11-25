@@ -151,8 +151,7 @@ PLAY_NOTES = {
                "Playlists & Albums, once you pick or stack something after the last playlist, it saves that "
                "instead, without playing it."),
     "Go": N_("Plays up to this many songs you own by each artist you added, shuffled with the artists spread out."),
-    "Most Played": N_("Only the artist's most played songs, so a one-hit wonder gives just the hit. A song counts "
-                      "when it has at least a fifth of the plays of the artist's biggest, by Last.fm's counts."),
+    "Select From Hits": tabs.HITS_NOTE,
 }
 SAVE_ICON = ""   # Windows' Save (a floppy) in Segoe MDL2 Assets, beside the word on Save (24 Nov 2026)
 PLAYLISTS_SHOWN = 15   # rows of the All Playlists part of the list before "type to narrow"
@@ -1466,13 +1465,12 @@ class PlayTab(tk.Frame):
         count.pack(side="left", padx=(8, 4))
         count.bind("<<ComboboxSelected>>", lambda e: stack.set_choice("count", int(self.stack_count.get())))
         tk.Label(row, text=t("each"), font=("Segoe UI", 9)).pack(side="left", padx=(0, 10))
-        self.stack_most = tk.BooleanVar(value=chosen["most_played"])
-        most = self.stack_most_tick = ttk.Checkbutton(
-            row, text=t("Most Played"), variable=self.stack_most,
-            command=lambda: stack.set_choice("most_played", "1" if self.stack_most.get() else "0"))
+        self.stack_most = tk.StringVar(value=chosen["most_played"])
+        most = self.stack_most_tick = tabs.hits_button(
+            row, self.stack_most, command=lambda: stack.set_choice("most_played", self.stack_most.get()))
         most.pack(side="left")
         on, wrap = self.help_on, self.note_wrap
-        for widget, name in ((self.stack_go, "Go"), (count, "Go"), (most, "Most Played")):
+        for widget, name in ((self.stack_go, "Go"), (count, "Go"), (most, "Select From Hits")):
             Tooltip(widget, t(PLAY_NOTES[name]), when=on, wrap=wrap)
         self.extra_list_buttons = getattr(self, "extra_list_buttons", []) + [self.stack_go]
         entry = self.search_artist.entry
@@ -1599,7 +1597,7 @@ class PlayTab(tk.Frame):
             count = int(self.stack_count.get())
         except ValueError:
             count = stack.DEFAULT_COUNT
-        most_played = bool(self.stack_most.get())
+        most_played = self.stack_most.get()
         self._close_artists()
         self._sync_stack_row()
         top_up = bool(getattr(self, "top_up_armed", False))

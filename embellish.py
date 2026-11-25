@@ -483,12 +483,14 @@ def find(keys, name, amount, report, spare=0, session_id=None):
                 report("  " + t("{artist}...", artist=artist))
                 if not top:
                     report("    " + t("No top tracks returned for {artist}.", artist=artist))
-                # Most Played (12 Nov 2026): a one-hit wonder gives its hit, not the rest
-                titles, each = engine.adaptive_cut(artist, [title for title, _ in top], cap or len(top), report)
+                # Select From Hits (25 Nov 2026): the artist's hits, a one-hit wonder giving its hit
+                titles, each, used = engine.select_from_hits(artist, [title for title, _ in top], cap or len(top),
+                                                             report)
                 most = cap
-                if len(titles) < len(top):
-                    top = top[:len(titles)]
-                    most = each if cap else None
+                if used:
+                    by = dict(top)
+                    top = [(title, by.get(title) or ["Last.fm"]) for title in titles]
+                    most = each
                 owned = []
                 for title, sources in top:
                     key = library.find_track_key(artist, title)
@@ -499,6 +501,8 @@ def find(keys, name, amount, report, spare=0, session_id=None):
                     key = played.pick(key) if key and str(key) not in have else None
                     if key and str(key) not in have and str(key) not in owned:
                         owned.append(str(key))
+                    if used and most and len(owned) >= most:   # enough of the hits: the rest aren't looked up
+                        break
                 picks[artist] = owned[:most] if most else owned
             before = len(new)
             while any(picks.values()) and (want is None or len(new) < want):

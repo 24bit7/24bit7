@@ -984,21 +984,20 @@ def _owned_top(artist, have, played, limit, pool=None, seen=None, report=None):
     out = []
     top, _label = engine.blended_top_tracks(artist, limit=max(limit, pool or 0, engine.TRACKS_PER_ARTIST_POOL))
     if pool and report is not None:
-        titles, cut = engine.adaptive_cut(artist, [title for title, _ in top[:pool]], limit, report)
-        if len(titles) < len(top[:pool]):
-            top, pool, limit = top[:len(titles)], len(titles), cut
-            if not top:
-                return []
+        titles, cut, used = engine.select_from_hits(artist, [title for title, _ in top[:pool]], limit, report)
+        if used:   # Select From Hits (25 Nov 2026): the hits, shuffled, walked until enough are found
+            by = dict(top)
             owned = []
-            for title, sources in top:
+            for title in titles:
+                if len(owned) >= cut:
+                    break
                 key = library.find_track_key(artist, title)
                 if seen is not None:
-                    seen(title, bool(key), sources)
+                    seen(title, bool(key), by.get(title) or ["Last.fm"])
                 key = played.pick(key) if key and str(key) not in have else None
                 if key and str(key) not in have and str(key) not in owned:
                     owned.append(str(key))
-            random.shuffle(owned)
-            return owned[:limit]
+            return owned
     if pool:
         owned = []
         for title, sources in top[:pool]:

@@ -27,7 +27,7 @@ def artist_of(k):
     return library.track_row(k).get("Artist") or ""
 
 
-def go(app, artists, count=3, most_played=False):
+def go(app, artists, count=3, most_played="off"):
     import stack
     r = app.Lines()
     n = stack.build(artists, count, most_played, r)
@@ -49,11 +49,11 @@ def test_most_played_gives_a_one_hit_wonder_its_hit(app):
     import library
     (a, titles), (b, _) = owned(app, 2)
     app.web.plays[a] = [10000] + [300] * (len(titles) - 1)
-    r, n, sent = go(app, [a, b], count=5, most_played=True)
+    r, n, sent = go(app, [a, b], count=5, most_played="down")
     theirs = [k for k in sent if a.lower() in artist_of(k).lower()]
     assert [library.track_row(k)["Name"] for k in theirs] == [titles[0]], r.text()
     assert r.has(f"  {a}: 1 track."), r.text()
-    assert r.has("Most Played."), "the first line says it's on"
+    assert r.has("each, from their hits."), "the first line says it's on"
 
 
 def test_without_most_played_the_one_hit_wonder_gives_the_number(app):
@@ -84,10 +84,12 @@ def test_artists_spread(app):
 
 def test_choices_are_remembered(app):
     import stack
-    assert stack.choices() == {"count": 5, "most_played": True}, "five each and Most Played to start"
+    assert stack.choices() == {"count": 5, "most_played": "down"}, "five each and Select From Hits down to start"
     stack.set_choice("count", 8)
-    stack.set_choice("most_played", "0")
-    assert stack.choices() == {"count": 8, "most_played": False}
+    stack.set_choice("most_played", "both")
+    assert stack.choices() == {"count": 8, "most_played": "both"}
+    stack.set_choice("most_played", "0")   # as 1.43 kept it
+    assert stack.choices()["most_played"] == "off"
 
 
 def test_discover_seed_says_search(app):

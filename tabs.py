@@ -14,7 +14,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import ttk
 
-from i18n import t
+from i18n import t, N_
 
 PALETTE = {
     "tab_selected_bg": None,        # the selected tab takes the window's own colour (None)...
@@ -2060,3 +2060,18 @@ def ask_name(parent, title, prompt, initial=""):
         pass
     win.wait_window()
     return win.result
+
+
+# --- Select From Hits (Ben, 25 Nov 2026; a tick called Most Played until then) ----------------------------------
+
+HITS_LABELS = {"off": N_("Select From Hits: Off"), "down": N_("Select From Hits ↓"), "both": N_("Select From Hits ↕")}
+HITS_NOTE = N_("Picks at random from the artist's hits, so each build is different. A hit has at least a fifth of "
+               "the plays of the artist's biggest song on Last.fm, so the Beatles have dozens and a one-hit wonder "
+               "has one. ↓ gives fewer songs when an artist has fewer hits. ↕ also gives up to half as many again "
+               "when they have plenty.")
+
+
+def hits_button(parent, variable, command=None):
+    """Select From Hits as a click-through: Off, ↓ and ↕ (engine.HITS_MODES), variable holding off, down or both."""
+    return ClickThrough(parent, "Select From Hits", variable, ["off", "down", "both"], command=command,
+                        plain=("off",), labels=HITS_LABELS, lit={"down": PALETTE["go"], "both": PALETTE["go"]})

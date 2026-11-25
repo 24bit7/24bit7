@@ -5,11 +5,12 @@ Ben was making playlists for Jo's phone, a few songs from each of a list of arti
 an artist with four worth having. On the Search tab the Artist box lists the library's artists as you type,
 each with Add; the artists added are the stack. Go plays up to the chosen number (five to start) of each one's
 top tracks that you own, shuffled with the artists spread, to Output like any build, so Save Playlist keeps it.
-With Most Played ticked (to start) an artist gives only their widely played songs, so a one-hit wonder gives
-the hit. The number and the tick are remembered; the stack clears after Go.
+With Select From Hits on (down, to start) an artist's songs come at random from their hits, so a one-hit wonder
+gives the hit; both also gives up to half as many again for an artist with plenty (25 Nov 2026; Most Played, a
+tick, until then). The number and the choice are remembered; the stack clears after Go.
 
-Each artist walks down the sources' list until it has enough you own: Most Played's hits only while that's
-ticked, else the sources' top songs to POOL deep. The Main Filter applies, as for Artist's Top Tracks; Skip
+Each artist walks down its pool until it has enough you own: the hits, shuffled, while Select From Hits is on,
+else the sources' top songs to POOL deep. The Main Filter applies, as for Artist's Top Tracks; Skip
 Played doesn't (it's a list you chose). Nothing here plays on by itself: Non-stop is left out, as for an album.
 """
 
@@ -19,7 +20,7 @@ import random
 import engine
 from i18n import t, tn
 
-CHOICE_KEY = "search_stack"   # {"count": n, "most_played": "1" or "0"}
+CHOICE_KEY = "search_stack"   # {"count": n, "most_played": "off", "down" or "both" (1.43's "1"/"0" read too)}
 COUNTS = list(range(1, 21))
 DEFAULT_COUNT = 5
 POOL = 30     # how far down the sources' list an artist is read without Most Played
@@ -48,7 +49,7 @@ def choices():
     except (TypeError, ValueError):
         count = DEFAULT_COUNT
     count = count if count in COUNTS else DEFAULT_COUNT
-    return {"count": count, "most_played": str(saved.get("most_played", "1")) == "1"}
+    return {"count": count, "most_played": engine.hits_mode(saved.get("most_played", "down"))}
 
 
 def set_choice(key, value):
@@ -72,8 +73,8 @@ def _artist_tracks(artist, count, most_played, played, session_id, report):
         report("  " + t("Problem: no source returned top tracks for {artist}.", artist=artist))
         return []
     names = [title for title, _by in found]
-    if most_played:
-        names, _pick = engine.adaptive_cut(artist, names, count, report, indent="  ", on=True)
+    names, count, _used = engine.select_from_hits(artist, names, count, report, indent="  ",
+                                                  mode=engine.hits_mode(most_played))
     by = dict(found)
     keys = []
     for title in names:
@@ -93,7 +94,10 @@ def build(artists, count, most_played, report=print):
     if not artists:
         return 0
     label = names_text(artists)
-    report(t("Search: {names}, up to {count} each, Most Played.", names=label, count=count) if most_played else
+    mode = engine.hits_mode(most_played)
+    report(t("Search: {names}, up to {count} each, from their hits.", names=label, count=count) if mode == "down" else
+           t("Search: {names}, up to {count} each from their hits, more for artists with plenty.", names=label,
+             count=count) if mode == "both" else
            t("Search: {names}, up to {count} each.", names=label, count=count))
     session_id = engine.session_start(MODE, {"Artist": "", "Name": label})
     # the Main Filter and Hidden Tracks as Artist's Top Tracks has them; never Skip Played (a list you chose)
