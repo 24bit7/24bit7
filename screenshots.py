@@ -46,7 +46,7 @@ SHOTS = [
     ("play_more_options", ["Play", "Now Playing"], ["gui.pyw", "mix_gui.py", "tabs.py"], "more_open"),
     ("play_change_zone", ["Play", "Now Playing"], ["gui.pyw", "voice.py"], "change_zone"),
     ("save_playlist_copy", ["Play", "Now Playing"], ["gui.pyw", "phone.py", "tabs.py"], "copy_to_phone"),
-    ("manage_folder", ["Play", "Now Playing"], ["gui.pyw", "phone.py", "tabs.py"], "manage_folder"),
+    ("devices", ["Play"], ["devices_gui.py", "gui.pyw", "phone.py", "tabs.py"], "devices"),
     ("play_search", ["Play", "Search"], ["gui.pyw", "stack.py", "tabs.py"], "search_stack"),
     ("play_jriver_playlists", ["Play", "Playlists & Albums"], ["gui.pyw", "embellish.py", "tabs.py"], "playlists_list"),
     ("play_stack", ["Play", "Playlists & Albums"], ["gui.pyw", "embellish.py", "tabs.py"], "playlists_stack"),
@@ -930,6 +930,7 @@ def main():
         settle(root, 1.5)   # Now Playing's first read happens just after the window appears
         for name, path, _deps, action in shots:
             page = go_to(root, path, gui.TabbedPane)
+            devices_tab = None
             tabs = hasattr(play, "_set_tabs_open")   # the console's tabs (1.11.0 and later)
             if tabs and play.tabs_open and action not in ("tabs_kitchen", "tabs_log"):
                 play._set_tabs_open(False, save=False)
@@ -1055,8 +1056,9 @@ def main():
                                 tracks=gui.tn("{count} track", "{count} tracks", 30), size=phone.size_text(int(2.1 * phone.GB))),
                     "Road Trip (Embellished)", int(2.1 * phone.GB), jriver=True, copy=True)
                 settle(root, 0.3)
-            elif action == "manage_folder":   # Manage Folder on a stand-in phone, an album ticked (1.43.0)
-                dialog = open_manage_folder(gui, root, play, temp)
+            elif action == "devices":   # the Devices tab on a stand-in phone, an album ticked (1.44.0)
+                play._show_more(False, save=False)
+                devices_tab = open_devices_tab(gui, root, nb, play, temp)
             elif action == "change_zone":   # Change Zone's pop-up from the Speakers, Multiroom among the choices (1.40.0)
                 import voice
                 play._show_more(False, save=False)
@@ -1066,7 +1068,13 @@ def main():
             if popup is not None:   # a drop-down list, kept above the window while it's grabbed
                 popup.attributes("-topmost", True)
                 settle(root, 0.3)
-            image = grab_window(dialog) if dialog else capture(root, page, popup)
+            if devices_tab is not None:   # the whole window as it is: its lists aren't a page to stitch
+                image = grab(root)
+                nb.select(play)
+                nb.remove(devices_tab)   # the shots after it keep three tabs
+                devices_tab = None
+            else:
+                image = grab_window(dialog) if dialog else capture(root, page, popup)
             if popup is not None:
                 try:
                     popup.destroy()
@@ -1090,9 +1098,12 @@ def main():
         print(f"Commit them with:  git add docs/{IMAGES}; git commit -m \"Manual screenshots\"")
 
 
-def open_manage_folder(gui, root, play, temp):
-    """Manage Folder over a stand-in phone: a folder of small files whose sizes are given, three playlists, an
-    album in no playlist, Radiohead and Pink Floyd open and OK Computer ticked, as Ben agreed the drawing."""
+def open_devices_tab(gui, root, nb, play, temp):
+    """
+    The Devices tab (1.44.0, as Ben agreed the drawing) over a stand-in phone: Albums holding three artists, an album
+    in no playlist, Playlists holding three flat playlists; Radiohead and Indie-Chill open and OK Computer ticked, so
+    the amber line shows; Ben's Phone over WiFi beside it, not answering. Returns the tab, to be taken away after.
+    """
     import phone
     base = os.path.join(temp, "demo-phone")
     mb = 10 ** 6
@@ -1105,20 +1116,27 @@ def open_manage_folder(gui, root, play, temp):
               "Pink Floyd/Wish You Were Here": [("01 Shine On You Crazy Diamond.flac", 310),
                                                 ("04 Wish You Were Here.flac", 128)]}
     sizes = {}
-    for album, tracks in albums.items():
-        os.makedirs(os.path.join(base, "Music", *album.split("/")), exist_ok=True)
-        for name, size in tracks:
-            path = os.path.join(base, "Music", *album.split("/"), name)
-            open(path, "wb").close()
-            sizes[os.path.normcase(path)] = size * mb
 
-    def m3u(name, *picks):
-        with open(os.path.join(base, "Music", name + ".m3u8"), "w", encoding="utf-8") as f:
-            f.write("#EXTM3U\n" + "".join(f"{a}/{albums[a][i][0]}\n" for a, i in picks))
-    ok, rain, doors = "Radiohead/OK Computer", "Radiohead/In Rainbows", "The Doors/L.A. Woman"
-    m3u("Indie-Chill", (ok, 0), (ok, 1), (ok, 2), (rain, 0), (rain, 2))
-    m3u("Road Trip", (ok, 3), (rain, 1), (doors, 1), (doors, 2))
-    m3u("L.A. Woman", (doors, 0), (doors, 1), (doors, 2))
+    def make(folder, name, size):
+        os.makedirs(folder, exist_ok=True)
+        path = os.path.join(folder, name)
+        open(path, "wb").close()
+        sizes[os.path.normcase(path)] = size * mb
+    for album, tracks in albums.items():
+        for name, size in tracks:
+            make(os.path.join(base, "Music", "Albums", *album.split("/")), name, size)
+    lists = os.path.join(base, "Music", "Playlists")
+
+    def m3u(name, *songs):
+        for artist, title, size in songs:
+            make(lists, f"{artist} - {title}.flac", size)
+        with open(os.path.join(lists, name + ".m3u8"), "w", encoding="utf-8") as f:
+            f.write("#EXTM3U\n" + "".join(f"{a} - {s}.flac\n" for a, s, _n in songs))
+    m3u("Indie-Chill", ("Radiohead", "Airbag", 74), ("Bon Iver", "Holocene", 88), ("Fleet Foxes", "Mykonos", 81),
+        ("The National", "Bloodbuzz Ohio", 79))
+    m3u("Road Trip", ("Radiohead", "Airbag", 74), ("The Doors", "Roadhouse Blues", 96),
+        ("Tom Petty", "Runnin' Down A Dream", 85))
+    m3u("Jo's Mix", ("Florence + The Machine", "Dog Days Are Over", 92), ("Bon Iver", "Holocene", 88))
     demo_id = "\\\\?\\usb#vid_18d1&pid_4ee1#demo#{6ac27878}"
 
     class DemoPhone(phone.FolderDevice):
@@ -1146,16 +1164,22 @@ def open_manage_folder(gui, root, play, temp):
         def capacity(self):
             return 117 * phone.GB
     phone.open_device = lambda device_id, name: DemoPhone()
-    play._show_more(False, save=False)
-    win = gui.ManageFolder(play, demo_id, "Jo's Phone", "Music", 30.0, model="Pixel 9a")
+    phone.remember_quietly(demo_id, name="Jo's Phone", folder="Music", limit_gb=30, model="Pixel 9a")
+    phone.remember_quietly("app:demo-ben", name="Ben's Phone", code="0000", model="Pixel 9a")
+    phone.remember(demo_id, name="Jo's Phone")
+    phone.known = lambda: [(demo_id, "Pixel 9a", "usb", True), ("app:demo-ben", "Pixel 9a", "wifi", False)]
+    phone.arrange = lambda *a, **k: None   # the demo folder is laid out already
+    tab = gui.attach_devices(root, nb, play, watch=False)
+    nb.select(tab)
+    tab.shown()
     end = time.time() + 10
-    while win.contents is None and time.time() < end:
+    while demo_id not in tab.contents and time.time() < end:
         settle(root, 0.1)
-    win._fold("Radiohead")
-    win._fold("Pink Floyd")
-    win._toggle(("dir", ok), True)
-    settle(root, 0.3)
-    return win
+    tab._fold(("dir", "Albums/Radiohead"))
+    tab._fold(("pl", "indie-chill.m3u8"))
+    tab._toggle(("dir", "Albums/Radiohead/OK Computer"), True)
+    settle(root, 0.5)
+    return tab
 
 
 if __name__ == "__main__":

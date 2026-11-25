@@ -555,6 +555,61 @@ def album_list():
         return list(_albums)
 
 
+def find_items(typed, limit=6):
+    """
+    The Devices tab's library box (Ben, 25 Nov 2026): what you own with the typed text in its name, as the Search
+    tab's Artist box finds artists. {"artists": [name], "albums": [(album, album artist)], "tracks": [(title,
+    artist, key)]}, each A to Z and at most limit long. Empty until the library's first read.
+    """
+    typed = (typed or "").strip().lower()
+    out = {"artists": [], "albums": [], "tracks": []}
+    if len(typed) < 2:
+        return out
+    with _lock:
+        artists, albums, tracks = list(_artists.values()), list(_albums), _tracks
+    out["artists"] = sorted((a for a in artists if typed in a.lower()), key=str.lower)[:limit]
+    out["albums"] = sorted((a for a in albums if typed in a[0].lower()),
+                           key=lambda a: (a[0].lower(), a[1].lower()))[:limit]
+    found = []
+    for row in tracks:
+        name = row.get("Name") or ""
+        if typed in name.lower():
+            found.append((name, row.get("Artist") or "", str(row.get("Key"))))
+            if len(found) > limit * 20:
+                break
+    seen, songs = set(), []
+    for name, artist, key in sorted(found, key=lambda f: (f[0].lower(), f[1].lower())):
+        if (name.lower(), artist.lower()) not in seen:
+            seen.add((name.lower(), artist.lower()))
+            songs.append((name, artist, key))
+    out["tracks"] = songs[:limit]
+    return out
+
+
+def artist_keys(artist):
+    """Every track where the artist is the album artist or one of the artists, album by album, in track order: an
+    album of theirs whole, and their own tracks on anyone else's."""
+    ensure_loaded()
+    low = (artist or "").strip().lower()
+
+    def theirs(row):
+        return low in [a.strip().lower() for a in (row.get("Artist") or "").split(";")]
+    with _lock:
+        albums = dict(_albums)
+        loose = [row for row in _tracks if not (row.get("Album") or "").strip() and theirs(row)]
+    out = []
+    for (album, by), rows in sorted(albums.items(), key=lambda a: a[0][0].lower()):
+        pick = rows if by.lower() == low else [r for r in rows if theirs(r)]
+        out += [str(r["Key"]) for r in sorted(pick, key=track_order)]
+    return out + [str(r["Key"]) for r in loose]
+
+
+def album_counts():
+    """{(album, album artist): how many tracks}, for the Devices tab's "2 of 10 tracks"."""
+    with _lock:
+        return {k: len(rows) for k, rows in _albums.items()}
+
+
 def album_keys(album, artist):
     """An album's tracks in disc and track order, or [] if it isn't in the library now."""
     ensure_loaded()

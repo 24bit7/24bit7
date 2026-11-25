@@ -1,8 +1,9 @@
 """
-Copy Tracks To (Ben, 23 Nov 2026): Save Playlist's tracks copied to a phone, into a folder named after the
-playlist with an .m3u8 beside them. Clear First empties the chosen folder but dot folders; a second save copies
-only what's new and takes out what left the playlist; the limit and the phone's free space are filled in playlist
-order. Against a fake phone: the real one (Windows Portable Devices) was proved by hand on Ben's Pixel 9a.
+Copy Tracks To (Ben, 23 Nov 2026): Save's tracks copied to a phone. Since 25 Nov 2026 the chosen folder holds
+Albums (artist and album folders, added from the Devices tab) and Playlists (flat, each .m3u8 beside its songs);
+Clear Playlists First clears Playlists only; a second save copies only what's new and takes out what left the
+playlist; the limit and the phone's free space are filled in playlist order; what was there before 1.44 is sorted
+into the two once. Against a fake phone: the real one (Windows Portable Devices) was proved by hand on Ben's Pixel 9a.
 """
 
 import itertools
@@ -99,21 +100,21 @@ def files(tmp_path):
     return make
 
 
-def test_tracks_go_in_artist_and_album_folders_with_the_m3u8_at_the_top(app, files):
-    """Ben, 23 Nov 2026: "keep the band/album folder structure, even though we might only have one track in a folder"."""
+def test_playlists_are_flat_in_playlists_with_the_m3u8_beside_them(app, files):
+    """Ben, 25 Nov 2026: Music/Playlists is flat, "just drop all the songs in there"; Albums keeps the folders."""
     import phone
     ph = FakePhone()
     tracks = files(("The Doors", "Riders On The Storm", 300, "L.A. Woman", 10),
                    ("The Doors", "L.A. Woman", 200, "L.A. Woman", 6), ("Seether", "Broken", 100, "Disclaimer II", 3))
     said = app.Lines()
     assert phone.copy_playlist(ph, "Music", "Jo's Mix", tracks, say=said) == 3
-    assert ph.names("Music") == ["Jo's Mix.m3u8", "Seether", "The Doors"]
-    assert ph.names("Music/The Doors/L.A. Woman") == ["06 L.A. Woman.flac", "10 Riders On The Storm.flac"]
-    assert ph.names("Music/Seether/Disclaimer II") == ["03 Broken.flac"]
-    assert ph.text("Music", "Jo's Mix.m3u8") == ("#EXTM3U\nThe Doors/L.A. Woman/10 Riders On The Storm.flac\n"
-                                                "The Doors/L.A. Woman/06 L.A. Woman.flac\n"
-                                                "Seether/Disclaimer II/03 Broken.flac\n"), "in playlist order"
-    assert said.has("Copied to Ben's Phone: 3 tracks in Music, with Jo's Mix.m3u8"), said.text()
+    assert ph.names("Music") == ["Playlists"]
+    assert ph.names("Music/Playlists") == ["Jo's Mix.m3u8", "Seether - Broken.flac", "The Doors - L.A. Woman.flac",
+                                           "The Doors - Riders On The Storm.flac"]
+    assert ph.text("Music/Playlists", "Jo's Mix.m3u8") == ("#EXTM3U\nThe Doors - Riders On The Storm.flac\n"
+                                                          "The Doors - L.A. Woman.flac\nSeether - Broken.flac\n")
+    assert said.has("Copying 3 tracks (1 MB) into Music/Playlists on Ben's Phone..."), said.text()
+    assert said.has("Copied to Ben's Phone: 3 tracks in Music/Playlists, with Jo's Mix.m3u8"), said.text()
 
 
 def test_one_track_is_said_as_one_track(app, files):
@@ -123,62 +124,46 @@ def test_one_track_is_said_as_one_track(app, files):
     one = files(("Seether", "Broken", 100, "Disclaimer II", 3))
     said = app.Lines()
     phone.copy_playlist(ph, "Music", "One", one, say=said)
-    assert said.has("Copying 1 track (1 MB) to Ben's Phone...") and said.has("Copied to Ben's Phone: 1 track in "
-                                                                          "Music, with One.m3u8"), said.text()
+    assert said.has("Copying 1 track (1 MB) into Music/Playlists on Ben's Phone...") and \
+        said.has("Copied to Ben's Phone: 1 track in Music/Playlists, with One.m3u8"), said.text()
     said = app.Lines()
     phone.copy_playlist(ph, "Music", "One", one, say=said)
-    assert said.has("Already on Ben's Phone: 1 track in Music, with One.m3u8."), said.text()
+    assert said.has("Already on Ben's Phone: 1 track in Music/Playlists, with One.m3u8."), said.text()
     assert "1 tracks" not in said.text()
 
 
-def test_clear_first_empties_the_folder_but_dot_folders(app, files):
+def test_clear_playlists_first_leaves_albums_alone(app, files):
+    """Ben, 25 Nov 2026: "if I select clear when I'm adding a playlist, then it just clears Music/Playlists and
+    leaves albums alone", with notes in the console."""
     import phone
     ph = FakePhone()
-    music = ph.folder("Music", make=True)
-    thumbs = ph.make(music, ".thumbnails")
-    ph.put_text(thumbs, "a.jpg", "x")
-    old = ph.make(music, "Old Album")
-    ph.put_text(old, "01.flac", "x")
-    ph.put_text(music, "loose.mp3", "x")
-    new = files(("A", "One", 10))
-    assert phone.clear_plan(ph, "Music", "New", new) == (1, 1, 0), \
-        "asked once, with the count; .thumbnails isn't counted"
-    phone.copy_playlist(ph, "Music", "New", new, clear=True, say=app.Lines())
-    assert ph.names("Music") == [".thumbnails", "A", "New.m3u8"]
-    assert ph.names("Music/.thumbnails") == ["a.jpg"]
-
-
-def test_clear_first_keeps_what_the_new_playlist_lists(app, files):
-    """Ben, 24 Nov 2026: "During a clear and add new, we should check we're not deleting something that already
-    exists from the new playlist". Same place and size stays and isn't copied again; the rest goes."""
-    import phone
-    ph = FakePhone()
-    a, b, c, d = files(("A", "One", 10, "First", 1), ("A", "Two", 20, "First", 2), ("B", "Three", 30, "Second", 3),
-                       ("C", "Four", 40, "Third", 4))
-    phone.copy_playlist(ph, "Music", "Old", [a, b, c], say=app.Lines())
-    music = ph.folder("Music")
-    ph.put_text(ph.folder("Music/A"), ".24bit7", "id")   # dot files stay anywhere
-    ph.put_text(music, "Other.m3u8", "#EXTM3U\nB/Second/03 Three.flac\n")
-    assert phone.clear_plan(ph, "Music", "New", [a, d]) == (1, 3, 1), \
-        "B's folder whole; Two, Old.m3u8 and Other.m3u8 one by one; One kept"
+    a, b, c, d = files(("A", "One", 10, "First", 1), ("B", "Two", 20, "Second", 2), ("C", "Three", 30, "Third", 3),
+                       ("D", "Four", 40, "Fourth", 4))
+    phone.add_albums(ph, "Music", [c, d], say=app.Lines())
+    phone.copy_playlist(ph, "Music", "Road Trip", [a, b], say=app.Lines())
+    phone.copy_playlist(ph, "Music", "Indie-Chill", [b], say=app.Lines())
+    assert phone.clear_plan(ph, "Music", "New", [b]) == (0, 3, 1), "One and two playlists go; Two is kept"
     ph.writes.clear()
     said = app.Lines()
-    phone.copy_playlist(ph, "Music", "New", [a, d], clear=True, say=said)
-    assert ph.writes == ["04 Four.flac"], "One was there already, so only Four is copied"
-    assert ph.names("Music") == ["A", "C", "New.m3u8"]
-    assert ph.names("Music/A") == [".24bit7", "First"] and ph.names("Music/A/First") == ["01 One.flac"]
-    assert said.has("Cleared Music on Ben's Phone: 1 folder and 3 files taken out, 1 track already there kept."), \
-        said.text()
+    phone.copy_playlist(ph, "Music", "New", [b, c], clear=True, say=said)
+    assert ph.writes == ["C - Three.flac"], "Two was there; Three is copied again though Albums holds it"
+    assert ph.names("Music/Playlists") == ["B - Two.flac", "C - Three.flac", "New.m3u8"]
+    assert ph.names("Music/Albums") == ["C", "D"] and ph.names("Music/Albums/C/Third") == ["03 Three.flac"]
+    assert said.has("Cleared Playlists on Ben's Phone: Indie-Chill and Road Trip, 1 track (1 MB). "
+                    "Your 2 albums left alone."), said.text()
+    assert said.has("1 already there, kept."), said.text()
 
 
-def test_clear_first_replaces_a_file_of_another_size(app, files):
+def test_clear_first_keeps_dot_files_and_replaces_a_file_of_another_size(app, files):
     import phone
     ph = FakePhone()
     a, = files(("A", "One", 10, "First", 1))
-    ph.put_text(ph.folder("Music/A/First", make=True), "01 One.flac", "short")
+    lists = ph.folder("Music/Playlists", make=True)
+    ph.put_text(lists, ".nomedia", "")
+    ph.put_text(lists, "A - One.flac", "short")
     ph.writes.clear()
     phone.copy_playlist(ph, "Music", "New", [a], clear=True, say=app.Lines())
-    assert ph.writes == ["01 One.flac"] and ph.names("Music/A/First") == ["01 One.flac"]
+    assert ph.writes == ["A - One.flac"] and ph.names("Music/Playlists") == [".nomedia", "A - One.flac", "New.m3u8"]
 
 
 def test_other_playlists_lose_songs_no_longer_in_the_folder(app, files):
@@ -186,18 +171,20 @@ def test_other_playlists_lose_songs_no_longer_in_the_folder(app, files):
     import phone
     ph = FakePhone()
     a, b, c = files(("A", "One", 10, "First", 1), ("B", "Two", 20, "Second", 2), ("C", "Three", 30, "Third", 3))
+    phone.add_albums(ph, "Music", [b], say=app.Lines())
     phone.copy_playlist(ph, "Music", "Mine", [a, b], say=app.Lines())
-    music = ph.folder("Music")
-    ph.put_text(music, "Hand.m3u8", "#EXTM3U\n#EXTINF:200,B - Two\nB\\Second\\02 Two.flac\n#EXTINF:100,Gone\n"
-                                    "Lost/Song.flac\nD:\\Music\\Elsewhere.flac\n")
-    ph.put_text(music, "Empty.m3u", "#EXTM3U\nNothing/Here.mp3\n")
-    ph.delete([ph.child(ph.folder("Music/A/First"), "01 One.flac")])   # deleted by hand on the phone
+    lists = ph.folder("Music/Playlists")
+    ph.put_text(lists, "Hand.m3u8", "#EXTM3U\n#EXTINF:200,B - Two\n..\\Albums\\B\\Second\\02 Two.flac\n"
+                                    "#EXTINF:100,Gone\n../Albums/Lost/Song.flac\nD:\\Music\\Elsewhere.flac\n")
+    ph.put_text(lists, "Empty.m3u", "#EXTM3U\n../Albums/Nothing/Here.mp3\n")
+    ph.delete([ph.child(lists, "A - One.flac")])   # deleted by hand on the phone
     said = app.Lines()
     phone.copy_playlist(ph, "Music", "New", [c], say=said)
-    assert ph.text("Music", "Mine.m3u8") == "#EXTM3U\nB/Second/02 Two.flac\n"
-    assert ph.text("Music", "Hand.m3u8") == ("#EXTM3U\n#EXTINF:200,B - Two\nB\\Second\\02 Two.flac\n"
-                                            "D:\\Music\\Elsewhere.flac\n"), "a drive's path is left as it is"
-    assert "Empty.m3u" not in ph.names("Music")
+    assert ph.text("Music/Playlists", "Mine.m3u8") == "#EXTM3U\nB - Two.flac\n"
+    assert ph.text("Music/Playlists", "Hand.m3u8") == ("#EXTM3U\n#EXTINF:200,B - Two\n..\\Albums\\B\\Second\\02 "
+                                                      "Two.flac\nD:\\Music\\Elsewhere.flac\n"), \
+        "a line into Albums is judged too; a drive's path is left as it is"
+    assert "Empty.m3u" not in ph.names("Music/Playlists")
     assert said.has("Mine.m3u8 listed 1 song no longer in the folder: taken out of it."), said.text()
     assert said.has("Empty.m3u had none of its songs left in the folder, so it was taken off."), said.text()
     said = app.Lines()
@@ -214,15 +201,15 @@ def test_this_pc_copies_into_a_folder_the_same_way(app, files, tmp_path):
     a, b = files(("A", "One", 10, "First", 1), ("B", "Two", 20, "Second", 2))
     said = app.Lines()
     assert phone.copy_playlist(pc, str(sync), "Mix", [a, b], say=said) == 2
-    assert (sync / "A" / "First" / "01 One.flac").read_bytes() == b"x" * 10
-    assert (sync / "Mix.m3u8").read_text(encoding="utf-8") == ("#EXTM3U\nA/First/01 One.flac\n"
-                                                              "B/Second/02 Two.flac\n")
-    (sync / "Loose").mkdir()
+    assert (sync / "Playlists" / "A - One.flac").read_bytes() == b"x" * 10
+    assert (sync / "Playlists" / "Mix.m3u8").read_text(encoding="utf-8") == "#EXTM3U\nA - One.flac\nB - Two.flac\n"
+    (sync / "Playlists" / "Loose").mkdir()
     (sync / ".stfolder").mkdir()   # Syncthing's own marker stays
-    assert phone.clear_plan(pc, str(sync), "New", [a]) == (2, 1, 1)
+    assert phone.clear_plan(pc, str(sync), "New", [a]) == (1, 2, 1)
     phone.copy_playlist(pc, str(sync), "New", [a], clear=True, say=app.Lines())
-    assert sorted(x.name for x in sync.iterdir()) == [".stfolder", "A", "New.m3u8"]
-    assert said.has(f"Copied to This PC: 2 tracks in {sync}, with Mix.m3u8"), said.text()
+    assert sorted(x.name for x in sync.iterdir()) == [".stfolder", "Playlists"]
+    assert sorted(x.name for x in (sync / "Playlists").iterdir()) == ["A - One.flac", "New.m3u8"]
+    assert said.has(f"Copied to This PC: 2 tracks in {sync}/Playlists, with Mix.m3u8"), said.text()
 
 
 def test_this_pc_never_takes_a_drive_or_the_library(app, tmp_path, monkeypatch):
@@ -250,17 +237,19 @@ def test_a_playlist_saved_empty_comes_off_with_its_own_tracks(app, files):
     phone.copy_playlist(ph, "Music", "Other", [b], say=app.Lines())
     said = app.Lines()
     assert phone.copy_playlist(ph, "Music", "Mix", [], say=said) == 0
-    assert ph.names("Music") == ["B", "Other.m3u8"], "One goes; Two stays for Other"
+    assert ph.names("Music/Playlists") == ["B - Two.flac", "Other.m3u8"], "One goes; Two stays for Other"
     assert said.has("Took Mix.m3u8 off Ben's Phone: the playlist is empty now."), said.text()
 
 
 def test_without_clear_first_the_rest_of_the_folder_stays(app, files):
     import phone
     ph = FakePhone()
-    music = ph.folder("Music", make=True)
-    ph.make(music, "Old Album")
+    phone.add_albums(ph, "Music", files(("B", "Two", 10, "Second", 2)), say=app.Lines())
+    lists = ph.folder("Music/Playlists", make=True)
+    ph.put_text(lists, "Z - Old.flac", "x")
     phone.copy_playlist(ph, "Music", "New", files(("A", "One", 10)), say=app.Lines())
-    assert ph.names("Music") == ["A", "New.m3u8", "Old Album"]
+    assert ph.names("Music/Playlists") == ["A - One.flac", "New.m3u8", "Z - Old.flac"]
+    assert ph.names("Music/Albums/B/Second") == ["02 Two.flac"]
 
 
 def test_a_second_save_copies_only_whats_new_and_takes_out_what_left(app, files):
@@ -271,13 +260,14 @@ def test_a_second_save_copies_only_whats_new_and_takes_out_what_left(app, files)
     ph.writes.clear()
     said = app.Lines()
     phone.copy_playlist(ph, "Music", "Mix", [b, c], say=said)
-    assert ph.writes == ["03 Three.flac"], "only the new one"
-    assert ph.names("Music") == ["B", "C", "Mix.m3u8"], "A's folders went with its only track"
+    assert ph.writes == ["C - Three.flac"], "only the new one"
+    assert ph.names("Music/Playlists") == ["B - Two.flac", "C - Three.flac", "Mix.m3u8"]
     assert said.has("Took out 1 track no longer in the playlist."), said.text()
     ph.writes.clear()
     said = app.Lines()
     phone.copy_playlist(ph, "Music", "Mix", [b, c], say=said)
-    assert ph.writes == [] and said.has("Already on Ben's Phone: 2 tracks in Music, with Mix.m3u8."), said.text()
+    assert ph.writes == [] and said.has("Already on Ben's Phone: 2 tracks in Music/Playlists, with Mix.m3u8."), \
+        said.text()
 
 
 def test_a_song_another_playlist_lists_stays_and_is_copied_once(app, files):
@@ -287,26 +277,90 @@ def test_a_song_another_playlist_lists_stays_and_is_copied_once(app, files):
     phone.copy_playlist(ph, "Music", "Mix", [a, b], say=app.Lines())
     ph.writes.clear()
     phone.copy_playlist(ph, "Music", "Other", [b, c], say=app.Lines())
-    assert ph.writes == ["03 Three.flac"], "Two is on the phone already, from Mix"
+    assert ph.writes == ["C - Three.flac"], "Two is on the phone already, from Mix"
     said = app.Lines()
     phone.copy_playlist(ph, "Music", "Mix", [a], say=said)
-    assert ph.names("Music/B/Second") == ["02 Two.flac"], "Other still lists it"
+    assert "B - Two.flac" in ph.names("Music/Playlists"), "Other still lists it"
     assert not said.has("Took out"), said.text()
 
 
-def test_a_playlist_in_a_folder_of_its_own_from_1_40_moves_to_the_new_folders(app, files):
+def old_layout(app, ph, files):
+    """Music as 1.41 to 1.43 left it: Jo's Mix copied by 24bit7 into artist and album folders with its .m3u8 at
+    the top, an album copied by hand, a playlist of the phone's own and a loose track."""
+    import phone
+    music = ph.folder("Music", make=True)
+    ph.put_text(ph.make(music, ".thumbnails"), "a.jpg", "x")
+    for path in ("The Doors/L.A. Woman/10 Riders On The Storm.flac", "Seether/Disclaimer II/03 Broken.flac",
+                 "Seether/Karma And Effect/01 Because Of Me.flac", "Godsmack/Awake/01 Sick Of Life.flac"):
+        d, _, name = path.rpartition("/")
+        ph.put_text(ph.folder("Music/" + d, make=True), name, "x" * 5)
+    ph.put_text(music, "Jo's Mix.m3u8", "#EXTM3U\nThe Doors/L.A. Woman/10 Riders On The Storm.flac\n"
+                                        "Seether/Disclaimer II/03 Broken.flac\n")
+    ph.put_text(music, "Gym.m3u", "#EXTM3U\nGodsmack/Awake/01 Sick Of Life.flac\nSeether/Disclaimer II/03 Broken.flac\n")
+    ph.put_text(music, "Loose.mp3", "x")
+    every = phone._meta(phone.META_KEY, {})
+    every[phone.key_for(ph.name)] = {"copied": {"music": {"jo's mix.m3u8": [
+        "The Doors/L.A. Woman/10 Riders On The Storm.flac", "Seether/Disclaimer II/03 Broken.flac"]}}}
+    phone._set_meta(phone.META_KEY, every)
+
+
+def test_the_folder_is_sorted_into_albums_and_playlists_once(app, files):
+    """Ben, 25 Nov 2026 (agreed with the mock-up): what 24bit7's records say it copied for playlists goes into
+    Playlists, every other artist folder into Albums, said in the console, no question asked."""
     import phone
     ph = FakePhone()
-    music = ph.folder("Music", make=True)
-    own = ph.make(music, "Mix")
-    ph.put_text(own, "A - One.flac", "x")
-    ph.put_text(own, "Mix.m3u8", "#EXTM3U\nA - One.flac\n")
-    keep = ph.make(music, "Godsmack")   # an artist's folder isn't taken for an old playlist folder
-    ph.put_text(keep, "x.flac", "x")
+    old_layout(app, ph, files)
     said = app.Lines()
-    phone.copy_playlist(ph, "Music", "Mix", files(("A", "One", 10)), say=said)
-    assert ph.names("Music") == ["A", "Godsmack", "Mix.m3u8"]
-    assert said.has("Mix had a folder of its own from before"), said.text()
+    phone.copy_playlist(ph, "Music", "New", files(("A", "One", 10)), say=said)
+    assert ph.names("Music") == [".thumbnails", "Albums", "Playlists"]
+    assert ph.names("Music/Albums") == ["Godsmack", "Loose.mp3", "Seether"], "The Doors' only track was Jo's Mix's"
+    assert ph.names("Music/Albums/Seether") == ["Karma And Effect"], "Disclaimer II held only Jo's Mix's song"
+    assert ph.names("Music/Playlists") == ["A - One.flac", "Gym.m3u", "Jo's Mix.m3u8", "New.m3u8",
+                                           "Seether - Broken.flac", "The Doors - Riders On The Storm.flac"]
+    assert ph.text("Music/Playlists", "Jo's Mix.m3u8") == ("#EXTM3U\nThe Doors - Riders On The Storm.flac\n"
+                                                          "Seether - Broken.flac\n")
+    assert ph.text("Music/Playlists", "Gym.m3u") == ("#EXTM3U\n../Albums/Godsmack/Awake/01 Sick Of Life.flac\n"
+                                                    "Seether - Broken.flac\n"), "the phone's own, pointed anew"
+    assert said.has("Sorting Music on Ben's Phone into Albums and Playlists, once..."), said.text()
+    assert said.has("Sorted Music on Ben's Phone: 2 folders into Albums and 2 playlists into Playlists."), \
+        said.text()
+    folder = phone.Folder(ph, "Music")
+    assert [p["name"] for p in folder.playlists] == ["Gym", "Jo's Mix", "New"]
+    gym = next(p for p in folder.playlists if p["name"] == "Gym")
+    assert gym["paths"] == ["albums/godsmack/awake/01 sick of life.flac", "playlists/seether - broken.flac"]
+    ph.put_text(ph.folder("Music"), "Later", "x")   # put there by hand later: left where it is
+    said = app.Lines()
+    phone.copy_playlist(ph, "Music", "New", files(("A", "One", 10)), say=said)
+    assert not said.has("Sort"), "once only: " + said.text()
+    assert "Later" in ph.names("Music")
+
+
+def test_this_pc_is_sorted_by_moving_not_copying(app, files, tmp_path):
+    import phone
+    pc = phone.FolderDevice()
+    sync = tmp_path / "Sync"
+    (sync / "Seether" / "Disclaimer II").mkdir(parents=True)
+    (sync / "Seether" / "Disclaimer II" / "03 Broken.flac").write_bytes(b"x")
+    (sync / "Albums" / "Seether" / "Karma").mkdir(parents=True)
+    phone.add_albums(pc, str(sync), files(("A", "One", 10, "First", 1)), say=app.Lines())
+    assert sorted(x.name for x in (sync / "Albums" / "Seether").iterdir()) == ["Disclaimer II", "Karma"], "merged"
+    assert (sync / "Albums" / "A" / "First" / "01 One.flac").exists()
+    assert sorted(x.name for x in sync.iterdir()) == ["Albums"]
+
+
+def test_adding_an_album_copies_into_albums_and_says_so(app, files):
+    """The Devices tab's Add (Ben, 25 Nov 2026): straight into Albums, artist and album folders, no playlist."""
+    import phone
+    ph = FakePhone()
+    tracks = files(("The Doors", "L.A. Woman", 20, "L.A. Woman", 6), ("The Doors", "Riders", 30, "L.A. Woman", 10))
+    said, seen = app.Lines(), []
+    assert phone.add_albums(ph, "Music", tracks, say=said, progress=seen.append, what="L.A. Woman") == 2
+    assert ph.names("Music/Albums/The Doors/L.A. Woman") == ["06 L.A. Woman.flac", "10 Riders.flac"]
+    assert said.has("Added L.A. Woman to Music/Albums on Ben's Phone (1 MB"), said.text()
+    assert seen[-1]["state"] == "done" and seen[-1]["done"] == 2
+    said = app.Lines()
+    phone.add_albums(ph, "Music", tracks, say=said, what="L.A. Woman")
+    assert said.has("L.A. Woman is already on Ben's Phone."), said.text()
 
 
 def test_the_limit_is_filled_in_playlist_order_and_whats_left_is_said(app, files, monkeypatch):
@@ -316,9 +370,9 @@ def test_the_limit_is_filled_in_playlist_order_and_whats_left_is_said(app, files
     tracks = files(("A", "One", 60), ("B", "Two", 60), ("C", "Three", 30))
     said = app.Lines()
     assert phone.copy_playlist(ph, "Music", "Mix", tracks, limit_gb=1, say=said) == 2
-    assert ph.names("Music") == ["A", "C", "Mix.m3u8"], "Two didn't fit, Three did"
+    assert ph.names("Music/Playlists") == ["A - One.flac", "C - Three.flac", "Mix.m3u8"], "Two didn't fit, Three did"
     assert said.has("Note: 1 track"), said.text()
-    assert "Two" not in ph.text("Music", "Mix.m3u8")
+    assert "Two" not in ph.text("Music/Playlists", "Mix.m3u8")
 
 
 def test_the_phones_free_space_is_a_limit_too(app, files, monkeypatch):
@@ -340,11 +394,12 @@ def test_progress_is_told_and_stop_stops_with_what_is_there_listed(app, files):
     assert [(e["state"], e["done"], e["track"]) for e in seen[:3]] == [
         ("copying", 0, "A - One"), ("copying", 1, "B - Two"), ("copying", 2, "C - Three")]
     assert seen[-1]["state"] == "done" and seen[-1]["done"] == 3 and seen[-1]["total"] == 60
-    assert seen[-1]["line"].startswith("Copied to Ben's Phone: 3 tracks in Music")
+    assert seen[-1]["line"].startswith("Copied to Ben's Phone: 3 tracks in Music/Playlists")
     ph2, seen = FakePhone(), []
     n = phone.copy_playlist(ph2, "Music", "Mix", tracks, say=app.Lines(), progress=seen.append,
                             stop=lambda: len(ph2.writes) >= 1)
-    assert n == 1 and ph2.text("Music", "Mix.m3u8") == "#EXTM3U\nA/One.flac\n", "the .m3u8 lists what got there"
+    assert n == 1 and ph2.text("Music/Playlists", "Mix.m3u8") == "#EXTM3U\nA - One.flac\n", \
+        "the .m3u8 lists what got there"
     assert seen[-1]["state"] == "stopped"
     assert seen[-1]["line"] == "Stopped: 1 of 3 tracks are on Ben's Phone, with Mix.m3u8. Copying again picks up the rest."
 
@@ -359,6 +414,9 @@ def test_names_are_safe_and_two_alike_get_a_number(app, files):
     various = dict(tracks[0], artist="Someone", album_artist="Various Artists", album="Now 1", number=7, disc=1)
     assert phone.file_names([various]) == ["Various Artists/Now 1/07 T.N.T.flac"], "by album artist, as filed"
     assert phone.safe_name('What? "Now" ...') == "What_ _Now_"
+    assert phone.playlist_names(tracks) == ["AC_DC - T.N.T.flac", "Sigur Rós - Intro.flac",
+                                            "Sigur Rós - Intro (2).flac", "AC_DC - Disc Two.flac"], \
+        "Playlists is flat: Artist - Title"
 
 
 def test_only_phones_are_offered_never_a_drive():

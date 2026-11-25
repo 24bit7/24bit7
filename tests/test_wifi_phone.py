@@ -137,10 +137,26 @@ def test_add_finds_the_phone_by_its_code_and_the_copy_goes_over_wifi(app, phone_
     said = app.Lines()
     assert phone.copy_playlist(ph, "Music", "Jo's Mix", [track], say=said) == 1
     music = tmp_path / "storage" / "Music"
-    assert (music / "Seether" / "Disclaimer II" / "03 Broken.flac").read_bytes() == b"x" * 300_000
-    assert (music / "Jo's Mix.m3u8").read_text() == "#EXTM3U\nSeether/Disclaimer II/03 Broken.flac\n"
+    assert (music / "Playlists" / "Seether - Broken.flac").read_bytes() == b"x" * 300_000
+    assert (music / "Playlists" / "Jo's Mix.m3u8").read_text() == "#EXTM3U\nSeether - Broken.flac\n"
     phone.copy_playlist(ph, "Music", "Jo's Mix", [], say=said)
-    assert sorted(os.listdir(music)) == [], "the tidy-up and an emptied playlist work over WiFi too"
+    assert sorted(os.listdir(music / "Playlists")) == [], "the tidy-up and an emptied playlist work over WiFi too"
+    phone.add_albums(ph, "Music", [track], say=said)
+    assert (music / "Albums" / "Seether" / "Disclaimer II" / "03 Broken.flac").exists()
+
+
+def test_the_old_layout_is_sorted_over_wifi_by_copying(app, phone_app, tmp_path):
+    """The app has no move, so sorting what 1.43 left reads each file back and writes it in its new place."""
+    import phone
+    key, model, _known = phone.add_wifi("4659")
+    music = tmp_path / "storage" / "Music"
+    (music / "Godsmack" / "Awake").mkdir(parents=True)
+    (music / "Godsmack" / "Awake" / "01 Sick Of Life.flac").write_bytes(b"y" * 1000)
+    ph = phone.open_device(key, "Ben's Phone")
+    said = app.Lines()
+    phone.arrange(ph, "Music", say=said)
+    assert (music / "Albums" / "Godsmack" / "Awake" / "01 Sick Of Life.flac").read_bytes() == b"y" * 1000
+    assert sorted(os.listdir(music)) == ["Albums"], said.text()
 
 
 def test_add_looks_twice_for_a_phone_slow_to_answer(app, phone_app, monkeypatch):

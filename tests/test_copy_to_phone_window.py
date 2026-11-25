@@ -3,7 +3,7 @@ Save's pop-up, on screen (Save Playlist's Copy Tracks To, Ben, 23 Nov 2026; one 
 2026): the name, which names the JRiver playlist and the .m3u8 alike, then As a JRiver Playlist and Copy Tracks To.
 After a build JRiver starts ticked and the phone not; for what's in the Playlists & Albums box the phone starts ticked,
 and a lone JRiver playlist greys the JRiver tick. Copy Tracks To is greyed with a line saying why when no phone is
-plugged in; ticked, Device (with Rename and the free space), Folder, Limit and Clear Music First show. A fake phone
+plugged in; ticked, Device (with Rename and the free space), Folder, Limit and Clear Playlists First show. A fake phone
 stands in for Windows Portable Devices.
 """
 
@@ -46,7 +46,7 @@ def test_no_phone_says_so_and_this_pc_is_still_there(app, ui, monkeypatch, tmp_p
     sync = tmp_path / "Phone Sync"
     win.folder_box.insert(0, str(sync))
     win._sync_clear_text()
-    assert win.clear_tick.cget("text") == "Clear Phone Sync First"
+    assert win.clear_note.cget("text") == "Takes off the playlists already on This PC. Your albums stay."
     win.ok()
     assert win.copy == {"device": "pc", "name": "This PC", "folder": str(sync), "limit_gb": 0.0, "clear": False}
     assert not ui.errors, ui.errors[0]
@@ -71,7 +71,7 @@ def test_ticked_shows_its_lines_and_hands_back_the_choices(app, ui, monkeypatch)
         "the window grows to show the lines and its buttons (the first shot cut them off)"
     assert rounded == [win], "and its corners are set again at the new size, or Windows 10 clips it to the old one"
     assert win.device_var.get() == "Pixel 9a (USB)" and win.folder_box.get() == "Music"
-    assert win.clear_tick.cget("text") == "Clear Music First" and not win.clear_var.get()
+    assert win.clear_tick.cget("text") == "Clear Playlists First" and not win.clear_var.get()
     assert win.free_label.cget("text") == "57 of 117 GB free"
     win.limit_box.insert(0, "32")
     win.clear_var.set(True)
@@ -134,14 +134,14 @@ def test_save_and_copy_puts_the_tracks_on_the_phone(app, ui, monkeypatch, tmp_pa
     win = p.copy_window
     ui.pump(until=lambda: win.finished, timeout=10)
     ui.pump(0.3)
-    assert ph.names("Music") == ["A", "Jo's Mix.m3u8"]
-    assert ph.names("Music/A") == ["Song 0.flac", "Song 1.flac", "Song 2.flac"]
+    assert ph.names("Music") == ["Playlists"], "a playlist goes into Playlists (Ben, 25 Nov 2026)"
+    assert ph.names("Music/Playlists") == ["A - Song 0.flac", "A - Song 1.flac", "A - Song 2.flac", "Jo's Mix.m3u8"]
     assert any(x["Name"] == "Jo's Mix" for x in j.playlists), "saved in JRiver first, as always"
     log = p.log.get("1.0", "end")
-    assert "Copying to Ben's Phone..." in log and "Copied to Ben's Phone: 3 tracks in Music" in log, log
+    assert "Copying to Ben's Phone..." in log and "Copied to Ben's Phone: 3 tracks in Music/Playlists" in log, log
     # the pop-up: how it went, and Close
     assert win.heading.cget("text") == "Copied to Ben's Phone"
-    assert win.track.cget("text").startswith("Copied to Ben's Phone: 3 tracks in Music, with Jo's Mix.m3u8")
+    assert win.track.cget("text").startswith("Copied to Ben's Phone: 3 tracks in Music/Playlists, with Jo's Mix.m3u8")
     assert win.ok_button.cget("text") == "Close" and not win.cancel_button.winfo_ismapped()
     assert win.ok_button.winfo_rooty() + win.ok_button.winfo_height() <= win.winfo_rooty() + win.winfo_height()
     win.ok()
@@ -160,7 +160,7 @@ def test_a_playlist_emptied_in_jriver_comes_off_the_phone(app, ui, monkeypatch, 
     f.write_bytes(b"x" * 100)
     phone.copy_playlist(ph, "Music", "Emptied", [{"key": "1", "path": str(f), "artist": "A", "title": "One",
                                                    "size": 100}], say=lambda line: None)
-    assert ph.names("Music") == ["A", "Emptied.m3u8"]
+    assert ph.names("Music/Playlists") == ["A - One.flac", "Emptied.m3u8"]
     emptied = {"ID": "909", "Name": "Emptied", "Folder": "Mixes", "Type": "Playlist", "keys": []}
     app.jriver.playlists.append(emptied)
     p = lists_tab(ui)
@@ -174,7 +174,8 @@ def test_a_playlist_emptied_in_jriver_comes_off_the_phone(app, ui, monkeypatch, 
     win = p.copy_window
     ui.pump(until=lambda: win.finished, timeout=10)
     ui.pump(0.3)
-    assert ph.names("Music") == [], "its .m3u8 and its own track went; Clear First is never asked for an empty one"
+    assert ph.names("Music/Playlists") == [], \
+        "its .m3u8 and its own track went; Clear First is never asked for an empty one"
     assert "Took Emptied.m3u8 off Ben's Phone: the playlist is empty now." in p.log.get("1.0", "end")
     win.ok()
     assert not ui.errors, ui.errors[0]
@@ -277,7 +278,7 @@ def test_save_on_playlists_and_albums_copies_the_box_without_playing(app, ui, mo
     assert text.startswith(f"The playlist Road Trip ({len(road_trip['keys'])} tracks, "), text
     assert text.endswith("without playing it.") and initial == "Road Trip"
     assert kw == {"jriver": False, "jriver_ok": False, "copy": True}, "the phone to start; JRiver has it already"
-    assert ph.names("Music/Music") == ["A", "Road Trip.m3u8"]
+    assert ph.names("Music/Music/Playlists") == ["A - Song 0.flac", "A - Song 1.flac", "Road Trip.m3u8"]
     assert j.zone("Speakers").playlist == [], "nothing played"
     assert len(j.playlists) == playlists, "and no JRiver playlist saved"
     # a build after the pick: Save saves what played; a pick after that: the box again
@@ -300,9 +301,11 @@ def test_clear_first_asks_and_no_keeps_the_folder(app, ui, monkeypatch, tmp_path
     import engine
     import phone
     ph = FakePhone(name="Ben's Phone")
-    music = ph.folder("Music", make=True)
-    ph.make(music, "Old Album")
     with_phone(monkeypatch, ph)
+    old = tmp_path / "old.flac"
+    old.write_bytes(b"x")
+    phone.copy_playlist(ph, "Music", "Old", [{"key": "9", "path": str(old), "artist": "B", "title": "Old Song",
+                                              "size": 1}], say=lambda line: None)
     j, p = app.jriver, ui.play
     keys = j.playlists[0]["keys"][:1]
     j.play("Speakers", keys)
@@ -318,7 +321,9 @@ def test_clear_first_asks_and_no_keeps_the_folder(app, ui, monkeypatch, tmp_path
     ui.pump(0.3)
     p.copy_window.ok()
     asked = [a for n, a in ui.answers if n == "askyesno"]
-    assert asked and "Clear Music on Ben's Phone first? It takes out 1 folder and 0 files" in asked[-1][1], asked
-    assert "Old Album" in ph.names("Music"), "No: nothing cleared"
+    assert asked and asked[-1][1].startswith("Clear Playlists on Ben's Phone first? It takes off the playlists there "
+                                             "and their songs ("), asked
+    assert "Your albums stay." in asked[-1][1]
+    assert "Old.m3u8" in ph.names("Music/Playlists"), "No: nothing cleared"
     assert not any(x["Name"] == "Mix" for x in j.playlists), "JRiver unticked: no JRiver playlist"
     assert not ui.errors, ui.errors[0]

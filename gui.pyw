@@ -255,15 +255,17 @@ class SavePrompt(tabs.NamePrompt):
     the caller's: after a build JRiver is ticked and the phone not, as Save Playlist was; for the box the phone is
     ticked, as Copy to Phone was; a lone JRiver playlist greys the JRiver tick (it is one already).
     Copy Tracks To ticked shows its lines: Device (a drop-down of the phones plugged in, by the names you gave them, with
-    Rename and the free space), Folder (Music to start, with Browse), Limit (GB, blank for none, with the size) and Clear
-    Music First in amber. With no phone plugged in that tick is greyed and a line says why. Device, folder, limit and
-    Clear First are remembered per phone. .result is the name or None, .jriver True to save one in JRiver, .copy None
-    or what to copy to.
+    Rename and the free space), Folder (Music to start, with Browse, Open Folder and Open Devices), Limit (GB, blank for
+    none, with the size) and Clear Playlists First in amber, which clears the folder's Playlists only (Ben, 25 Nov 2026:
+    "it just clears Music/Playlists and leaves albums alone"). With no phone plugged in that tick is greyed and a line
+    says why. Device, folder, limit and Clear First are remembered per phone. .result is the name or None, .jriver True
+    to save one in JRiver, .copy None or what to copy to.
     """
 
     ok_text = N_("Save")
 
     def __init__(self, parent, prompt, initial, size, jriver=True, jriver_ok=True, copy=False):
+        self._opener = parent   # the Play tab, for Open Devices (the window itself hangs off the main window)
         self._size = size   # the playlist's tracks, in bytes
         self._jriver_on, self._jriver_ok, self._copy_on = bool(jriver and jriver_ok), jriver_ok, copy
         self.copy, self.jriver = None, False
@@ -328,7 +330,7 @@ class SavePrompt(tabs.NamePrompt):
         links.grid(row=1, column=2, columnspan=2, sticky="w", padx=(px(8), 0))
         for col, (attr, text, command) in enumerate((("browse_link", N_("Browse"), self._browse),
                                                      ("open_link", N_("Open Folder"), self._open_folder),
-                                                     ("manage_link", N_("Manage Folder"), self._manage_folder))):
+                                                     ("devices_link", N_("Open Devices"), self._open_devices))):
             link = tk.Label(links, text=t(text), font=("Segoe UI", 9, "underline"), bg=bg, fg=PALETTE["button_fg"],
                             cursor="hand2")
             link.grid(row=0, column=col, sticky="w", padx=(px(10) if col else 0, 0))
@@ -348,8 +350,10 @@ class SavePrompt(tabs.NamePrompt):
             ttk.Style(self).configure(style, foreground=PALETTE["amber"])
         except tk.TclError:
             style = "TCheckbutton"
-        self.clear_tick = ttk.Checkbutton(lines, text="", variable=self.clear_var, style=style)
+        self.clear_tick = ttk.Checkbutton(lines, text=t("Clear Playlists First"), variable=self.clear_var, style=style)
         self.clear_tick.grid(row=3, column=0, columnspan=4, sticky="w", pady=(px(6), 0))
+        self.clear_note = tk.Label(lines, text="", font=("Segoe UI", 9), bg=bg, fg=PALETTE["help_fg"])
+        self.clear_note.grid(row=4, column=0, columnspan=4, sticky="w", padx=(px(22), 0))
         lines.columnconfigure(0, minsize=px(70))
         self._ids = []
         self.warn = tk.Label(inner, text="", font=("Segoe UI", 9), bg=bg, fg=PALETTE["amber"])
@@ -473,8 +477,10 @@ class SavePrompt(tabs.NamePrompt):
             shown(None, e)
 
     def _sync_clear_text(self):
-        folder = os.path.basename(self.folder_box.get().strip().rstrip("\\/")) or "Music"
-        self.clear_tick.config(text=t("Clear {folder} First", folder=folder))
+        import phone
+        device_id, model = self._device()
+        self.clear_note.config(text=t("Takes off the playlists already on {phone}. Your albums stay.",
+                                      phone=phone.settings(device_id, model)["name"]))
 
     def _browse(self):
         """Browse: the phone's folders, to go into and pick from (Ben, 23 Nov 2026: Jo's music is in Music/Music);
@@ -549,38 +555,17 @@ class SavePrompt(tabs.NamePrompt):
                       t("Couldn't open {folder} on it in Explorer. Is it unlocked and set to File Transfer?",
                         folder=folder))
 
-    def _manage_folder(self):
-        """Manage Folder (Ben, 24 Nov 2026, as drawn): what's in the folder, to tick and delete."""
-        import phone
-        device_id, model = self._device()
-        folder = self._box_folder()
-        self.warn.config(text="")
-        if device_id == phone.PC and phone.pc_folder_problem(folder):
-            self._say(phone.pc_folder_problem(folder))
-            return
-        s = phone.settings(device_id, model)
-        try:
-            limit = float(self.limit_box.get().strip().replace(",", ".") or 0)
-        except ValueError:
-            limit = 0.0
-        win = ManageFolder(self, device_id, s["name"], folder, limit, model=model)
-        try:
-            win.grab_set()
-        except tk.TclError:
-            pass
-        win.wait_window()
-        try:
-            self.grab_set()
-        except tk.TclError:
-            pass
-        if win.changed:   # the free space, read again, keeping what's typed
-            typed, limit_text, clear = self.folder_box.get(), self.limit_box.get(), self.clear_var.get()
-            self._device_chosen()
-            for box, text in ((self.folder_box, typed), (self.limit_box, limit_text)):
-                box.delete(0, "end")
-                box.insert(0, text)
-            self.clear_var.set(clear)
-            self._sync_clear_text()
+    def _open_devices(self):
+        """Open Devices (Ben, 25 Nov 2026, in place of Manage Folder): Save closes and the Devices tab shows the
+        device, where its albums and playlists can be ticked and deleted."""
+        device_id, _model = self._device()
+        app = self._opener
+        while app is not None and not hasattr(app, "open_devices"):
+            app = getattr(app, "master", None)
+        self.result = None
+        self.destroy()
+        if app is not None and app.open_devices is not None:
+            app.open_devices(device_id)
 
     def _rename(self):
         import phone
@@ -720,311 +705,6 @@ class FolderPicker(tabs.PromptWindow):
             return
         self.result = "/".join(path)
         self.destroy()
-
-
-class ManageFolder(tabs.PromptWindow):
-    """
-    Manage Folder (Ben, 24 Nov 2026, as drawn; "the interface is 24bit7", so it's here, not in the phone app): the
-    folder copied to, on a phone by USB or WiFi or on This PC. At the top, what it holds against the limit and the
-    free space; then its playlists, then its artists and albums, each with its tracks and size, an album opening to
-    its tracks and saying which playlists list it ("in no playlist" in amber). Tick and Delete: the amber line above
-    Delete says what goes, so there's no further question. A playlist ticked takes its file and the songs no other
-    playlist lists; an album or artist ticked goes whole and comes out of every playlist listing it. The folder is
-    read and changed on a thread (a phone takes a few seconds), its news handed over through a queue.
-    """
-
-    ok_text = N_("Delete")
-    LIST_WIDTH, LIST_HEIGHT = 560, 340
-
-    def __init__(self, parent, device_id, name, folder, limit_gb=0.0, model=""):
-        import phone
-        self._device_id, self._phone_name, self._folder, self._limit = device_id, name, folder, limit_gb or 0.0
-        self._model = model
-        self.contents, self.ticked, self.opened, self.changed, self.busy = None, set(), set(), False, True
-        self._news, self._poll, self._parent = queue.Queue(), None, parent
-        super().__init__(parent, t("Manage Folder · {phone} · {folder}", phone=name,
-                                   folder=os.path.basename(folder.rstrip("\\/")) or folder
-                                   if device_id == phone.PC else folder))
-        self.unbind("<Return>")
-        buttons = self.ok_button.master
-        buttons.pack_configure(anchor="w", fill="x")
-        for b in (self.cancel_button, self.ok_button):
-            b.pack_forget()
-        self.ok_button.config(fg=PALETTE["red"])
-        self.cancel_button.config(text=t("Close"))
-        self.cancel_button.pack(side="right")
-        self.ok_button.pack(side="right", padx=(0, self._px(8)))
-        if not phone.is_wifi(device_id):
-            bg = self._colours[0]
-            self.open_button = self._button(buttons, t("Open Folder"), self._open_folder, bg, self._colours[2])
-            self.open_button.pack(side="left")
-        self.bind("<Destroy>", self._gone, add="+")
-        self._work(None)
-
-    def _body(self, inner, bg, fg):
-        px = self._px
-        self._bg, self._fg = bg, fg
-        top = tk.Frame(inner, bg=bg)
-        top.pack(fill="x")
-        self.used_label = tk.Label(top, text="", font=("Segoe UI", 9), bg=bg, fg=PALETTE["help_fg"])
-        self.used_label.pack(side="left")
-        self.free_label = tk.Label(top, text="", font=("Segoe UI", 9), bg=bg, fg=PALETTE["help_fg"])
-        self.free_label.pack(side="right")
-        self.bar = tk.Canvas(inner, width=px(self.LIST_WIDTH), height=px(6), bg=PALETTE["line"],
-                             highlightthickness=0, bd=0)
-        frame = self._list_frame = tk.Frame(inner, bg=PALETTE["line"], padx=px(1), pady=px(1))
-        frame.pack(fill="x", pady=(px(10), 0))
-        field = bg   # the window's own: ttk's ticks are drawn on it
-        self.canvas = tk.Canvas(frame, width=px(self.LIST_WIDTH), height=px(self.LIST_HEIGHT), bg=field,
-                                highlightthickness=0, bd=0)
-        bar = ttk.Scrollbar(frame, orient="vertical", command=self.canvas.yview)
-        self.canvas.configure(yscrollcommand=bar.set)
-        bar.pack(side="right", fill="y")
-        self.canvas.pack(side="left", fill="both", expand=True)
-        self.rows = tk.Frame(self.canvas, bg=field)
-        self._rows_id = self.canvas.create_window(0, 0, window=self.rows, anchor="nw")
-        self.rows.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-        self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfigure(self._rows_id, width=e.width))
-        self.bind("<MouseWheel>", self._wheel)
-        self.note = tk.Label(inner, text=t("Reading the folder..."), font=("Segoe UI", 9), bg=bg,
-                             fg=PALETTE["help_fg"], anchor="w", justify="left", wraplength=px(self.LIST_WIDTH))
-        self.note.pack(anchor="w", fill="x", pady=(px(8), 0))
-
-    def _wheel(self, event):
-        self.canvas.yview_scroll(int(-event.delta / 120), "units")
-
-    def _gone(self, event):
-        if event.widget is self and self._poll:
-            try:
-                self.after_cancel(self._poll)
-            except tk.TclError:
-                pass
-            self._poll = None
-
-    # --- reading and deleting, on a thread ------------------------------------------------------------------------
-
-    def _work(self, ticks):
-        """Reads the folder, deleting what ticks says first if given ({"playlists", "folders", "files"})."""
-        import phone
-        self.busy = True
-        say = self._log
-
-        def work():
-            phone.com_begin()
-            try:
-                p = phone.open_device(self._device_id, self._phone_name)
-                try:
-                    if ticks:
-                        f = phone.Folder(p, self._folder)
-                        f.delete(f.plan(**ticks), say=say)
-                    f = phone.Folder(p, self._folder)
-                    try:
-                        free = p.free()
-                    except Exception:
-                        free = None
-                    self._news.put((f, free, None))
-                finally:
-                    p.close()
-            except Exception as e:
-                self._news.put((None, None, e))
-            finally:
-                phone.com_end()
-        threading.Thread(target=work, daemon=True, name="manage-folder").start()
-        self._poll = self.after(100, self._read_news)
-
-    def _read_news(self):
-        self._poll = None
-        try:
-            got, free, e = self._news.get_nowait()
-        except queue.Empty:
-            self._poll = self.after(100, self._read_news)
-            return
-        self.busy = False
-        if e is not None:
-            import phone
-            engine.debug(f"Manage Folder: {e}")
-            self.note.config(text=t("Problem: {e}", e=e) if phone.is_wifi(self._device_id) else
-                             t("Couldn't read {folder} ({e}).", folder=self._folder, e=e), fg=PALETTE["red"])
-            return
-        self.contents = got
-        self.ticked = {k for k in self.ticked if self._exists(k)}
-        self._header(free)
-        self.draw()
-
-    def _log(self, line):
-        app = self._parent
-        while app is not None and not hasattr(app, "log_queue"):
-            app = getattr(app, "master", None)
-        if app is not None:
-            app.log_queue.put(line)
-
-    def _header(self, free):
-        import phone
-        px = self._px
-        used = self.contents.size
-        self.used_label.config(text=t("{used} used of your {limit} GB limit", used=phone.size_text(used),
-                                      limit=f"{self._limit:g}") if self._limit else
-                               t("{used} in {folder}", used=phone.size_text(used), folder=self._folder))
-        self.free_label.config(text=t("{free} free on {phone}", free=phone.size_text(free), phone=self._phone_name)
-                               if free is not None else "")
-        self.bar.delete("all")
-        if self._limit:
-            share = used / (self._limit * phone.GB)
-            self.bar.create_rectangle(0, 0, int(px(self.LIST_WIDTH) * min(1.0, share)), px(6), width=0,
-                                      fill=PALETTE["go"] if share <= 1 else PALETTE["amber"])
-            self.bar.pack(before=self._list_frame, anchor="w", pady=(px(6), 0))
-        else:
-            self.bar.pack_forget()
-
-    # --- the list ---------------------------------------------------------------------------------------------
-
-    def _exists(self, key):
-        kind, rel = key
-        c = self.contents
-        return (rel in {pl["low"] for pl in c.playlists} if kind == "pl" else
-                rel.lower() in c.folders if kind == "dir" else rel.lower() in c.files)
-
-    def _covered(self, rel):
-        """Ticked through a folder above it."""
-        low = rel.lower()
-        return any(kind == "dir" and low.startswith(r.lower() + "/") for kind, r in self.ticked)
-
-    def draw(self):
-        """The rows, built again from what's read, ticked and opened (a few hundred at most)."""
-        import phone
-        px = self._px
-        for w in self.rows.winfo_children():
-            w.destroy()
-        c = self.contents
-        if not c.playlists and not c.files:
-            self.note.config(text=t("There's nothing in {folder} yet.", folder=self._folder), fg=PALETTE["help_fg"])
-            self.refit()
-            return
-        field = self.rows.cget("bg")
-        self._row = 0
-        self.row_keys, self.tick_for = [], {}
-        self.rows.columnconfigure(1, weight=1)
-
-        def heading(text):
-            tk.Label(self.rows, text=text.upper(), font=("Segoe UI", 8), bg=field, fg=PALETTE["help_fg"],
-                     anchor="w").grid(row=self._row, column=0, columnspan=4, sticky="w", padx=px(10),
-                                      pady=(px(8), px(2)))
-            self._row += 1
-
-        def row(key, name, depth, tracks, size, note="", note_fg=None, fold=None):
-            covered = self._covered(key[1]) if key[0] != "pl" else False
-            # no Tk variable: one freed on the worker's thread would upset Tk, so the tick keeps its own state
-            name_var = f"manage_folder_tick_{self._row}"
-            self.tk.globalsetvar(name_var, "1" if covered or key in self.ticked else "0")
-            tick = ttk.Checkbutton(self.rows, variable=name_var)
-            tick.configure(command=lambda: self._toggle(key, tick.instate(["selected"])))
-            if covered:
-                tick.state(["disabled"])
-            self.tick_for[key] = tick
-            tick.grid(row=self._row, column=0, sticky="w", padx=(px(8), 0))
-            cell = tk.Frame(self.rows, bg=field)
-            cell.grid(row=self._row, column=1, sticky="w", padx=(px(18 * depth), 0), pady=px(1))
-            if fold is not None:   # the fold box Radio's stations have, the same control
-                tabs.FoldBox(cell, fold, lambda: self._fold(key[1])).pack(side="left")
-            else:
-                tk.Frame(cell, bg=field, width=px(26) if key[0] != "pl" else px(4)).pack(side="left")
-            name_label = tk.Label(cell, text=name, font=("Segoe UI", 10), bg=field, fg=self._fg, anchor="w")
-            name_label.pack(side="left")
-            if fold is not None:
-                name_label.bind("<Button-1>", lambda e: self._fold(key[1]))
-                name_label.config(cursor="hand2")
-            if note:
-                tk.Label(cell, text=note, font=("Segoe UI", 9), bg=field, fg=note_fg or PALETTE["help_fg"]
-                         ).pack(side="left", padx=(px(8), 0))
-            tk.Label(self.rows, text=tn("{count} track", "{count} tracks", tracks) if tracks else "",
-                     font=("Segoe UI", 9), bg=field, fg=PALETTE["help_fg"]).grid(row=self._row, column=2, sticky="e",
-                                                                                 padx=px(8))
-            tk.Label(self.rows, text=phone.size_text(size), font=("Segoe UI", 9), bg=field, fg=PALETTE["help_fg"]
-                     ).grid(row=self._row, column=3, sticky="e", padx=(0, px(10)))
-            self.row_keys.append(key)
-            self._row += 1
-
-        def lists_note(node):
-            if not node["tracks"]:
-                return "", None
-            if not node["lists"]:
-                return t("in no playlist"), PALETTE["amber"]
-            return t("in {lists}", lists=phone.names_text(node["lists"])), None
-
-        if c.playlists:
-            heading(t("Playlists"))
-            for pl in c.playlists:
-                row(("pl", pl["low"]), pl["name"], 0, pl["tracks"], pl["size"],
-                    note="." + pl["low"].rsplit(".", 1)[1])
-
-        def walk(nodes, depth):
-            for n in nodes:
-                note, fg = lists_note(n)
-                if n["kind"] == "file":
-                    row(("file", n["rel"]), n["name"], depth, 0, n["size"], note, fg)
-                    continue
-                is_open = n["rel"].lower() in self.opened
-                row(("dir", n["rel"]), n["name"], depth, n["tracks"], n["size"], note if depth else "", fg,
-                    fold=is_open)
-                if is_open:
-                    walk(n["children"], depth + 1)
-        tree = c.tree()
-        if tree:
-            heading(t("Artists and Albums"))
-            walk(tree, 0)
-        self._sync_note()
-        self.refit()
-
-    def _toggle(self, key, on):
-        (self.ticked.add if on else self.ticked.discard)(key)
-        if on and key[0] == "dir":   # what's inside goes with it: no need to tick it as well
-            inside = key[1].lower() + "/"
-            self.ticked = {k for k in self.ticked if k[0] == "pl" or not k[1].lower().startswith(inside)}
-        self.draw()
-
-    def _fold(self, rel):
-        low = rel.lower()
-        (self.opened.discard if low in self.opened else self.opened.add)(low)
-        self.draw()
-
-    def ticks(self):
-        """What's ticked, as Folder.plan takes it."""
-        return {"playlists": [r for k, r in self.ticked if k == "pl"],
-                "folders": [r for k, r in self.ticked if k == "dir"],
-                "files": [r for k, r in self.ticked if k == "file"]}
-
-    def _what(self):
-        """How the amber line names what's ticked: its name, two or three by name, more by count."""
-        c = self.contents
-        names = {pl["low"]: pl["name"] for pl in c.playlists}
-        shown = sorted((names[r] if k == "pl" else r.rpartition("/")[2]) for k, r in self.ticked)
-        import phone
-        return phone.names_text(shown) if len(shown) <= 3 else t("the {count} ticked", count=len(shown))
-
-    def _sync_note(self):
-        c = self.contents
-        text = c.plan_text(c.plan(**self.ticks()), self._what()) if self.ticked else ""
-        self.note.config(text=text or t("Tick what to take off, then Delete."),
-                         fg=PALETTE["amber"] if text else PALETTE["help_fg"])
-
-    def _open_folder(self):
-        import phone
-        try:
-            phone.open_in_explorer(self._device_id, self._model, self._folder)
-        except Exception as e:
-            engine.debug(f"Open Folder: {e}")
-
-    def ok(self):
-        """Delete: what the amber line said, then the folder read again."""
-        if self.busy or self.contents is None:
-            return
-        if not self.ticked:
-            self.note.config(text=t("Tick what to take off, then Delete."), fg=PALETTE["amber"])
-            return
-        ticks = self.ticks()
-        self.ticked, self.changed = set(), True
-        self.note.config(text=t("Deleting..."), fg=PALETTE["help_fg"])
-        self._work(ticks)
 
 
 ADD_WIFI = N_("+ Add a Phone Over WiFi...")
@@ -1266,6 +946,8 @@ class PlayTab(tk.Frame):
         root.bind("<<RadioRecount>>", lambda e: self.on_radio_analyse(False), add="+")   # Radio's page: a new count
         root.bind("<<EmbellishAmounts>>", lambda e: self._sync_amounts(), add="+")   # Settings > JRiver Playlists
         self.log_queue = queue.Queue()
+        self.open_devices = None    # Save's Open Devices: the Devices tab at a device (attach_devices)
+        self.devices_known = None   # called once a copy has gone to a device, so the Devices tab shows
         engine.OUTPUT_HOOK = self.log_queue.put
         # Multiroom: the follower's child process, its lines in the console as "Multiroom: ..."
         self.multiroom = multiroom_link.Link(say=self.log_queue.put,
@@ -2454,17 +2136,15 @@ class PlayTab(tk.Frame):
                                    phone=copy["name"], e=e))
                 return
             if folders or files:
-                what = dict(folder=copy["folder"], phone=copy["name"],
-                            folders=tn("{count} folder", "{count} folders", folders),
-                            files=tn("{count} file", "{count} files", files))
-                ask = (tn("Clear {folder} on {phone} first? It takes out {folders} and {files} there, and keeps the "
-                          "{count} track this playlist already has (dot folders such as .thumbnails stay too). This "
+                what = dict(phone=copy["name"], files=tn("{count} file", "{count} files", folders + files))
+                ask = (tn("Clear Playlists on {phone} first? It takes off the playlists there and their songs "
+                          "({files}), and keeps the {count} track this playlist already has. Your albums stay. This "
                           "can't be undone.",
-                          "Clear {folder} on {phone} first? It takes out {folders} and {files} there, and keeps the "
-                          "{count} tracks this playlist already has (dot folders such as .thumbnails stay too). This "
+                          "Clear Playlists on {phone} first? It takes off the playlists there and their songs "
+                          "({files}), and keeps the {count} tracks this playlist already has. Your albums stay. This "
                           "can't be undone.", kept, **what) if kept else
-                       t("Clear {folder} on {phone} first? It takes out {folders} and {files} there (dot folders such "
-                         "as .thumbnails stay). This can't be undone.", **what))
+                       t("Clear Playlists on {phone} first? It takes off the playlists there and their songs "
+                         "({files}). Your albums stay. This can't be undone.", **what))
                 if not messagebox.askyesno(t("Copy Tracks To"), ask, parent=self):
                     clear = False
         say = self.log_queue.put
@@ -2492,6 +2172,8 @@ class PlayTab(tk.Frame):
             finally:
                 phone.com_end()
         threading.Thread(target=work, daemon=True, name="copy-to-phone").start()
+        if self.devices_known is not None:
+            self.devices_known()
 
     def _fill_zone_list(self):
         engine.refresh_settings_if_changed()
@@ -5232,6 +4914,61 @@ def note_window_state(root, memo, save):
         save(zoomed)
 
 
+def attach_devices(root, nb, play, placed=None, watch=True):
+    """
+    The Devices tab (Ben, 25 Nov 2026, as drawn): added after Settings once 24bit7 knows a device, a phone it has
+    copied to or added over WiFi, or a phone plugged in (looked for now and then until one is), and kept from then
+    on. No setting. Save's Open Devices brings it forward at a device. Returns the tab (not yet added, perhaps).
+    """
+    import devices_gui
+    import phone
+    tab = devices_gui.DevicesTab(nb, log=play.log_queue.put, add_wifi=ask_add_wifi)
+    shown = {"on": False}
+
+    def known():
+        if shown["on"]:
+            return
+        shown["on"] = True
+        nb.add(tab, text=t("Devices"))
+        if placed is not None:
+            root.after(50, placed)
+
+    def open_at(device_id):
+        known()
+        tab.show_device(device_id)
+        if nb.select() == str(tab):
+            tab.shown()
+        else:
+            nb.select(tab)
+
+    play.devices_known, play.open_devices = known, open_at
+    tab.known = known
+    if phone.any_known():
+        known()
+    elif watch:   # a phone plugged in that 24bit7 hasn't met: looked for once a minute until there is one
+        found = queue.Queue()
+
+        def look():
+            phone.com_begin()
+            try:
+                while not shown["on"]:
+                    if phone.devices():
+                        found.put(True)
+                        return
+                    time.sleep(60)
+            finally:
+                phone.com_end()
+        threading.Thread(target=look, daemon=True, name="devices-watch").start()
+
+        def check():
+            if not found.empty():
+                known()
+            elif not shown["on"]:
+                root.after(2000, check)
+        root.after(2000, check)
+    return tab
+
+
 def window_title():
     """The taskbar's and Alt+Tab's name for the window: '24bit7 Dev' for a dev copy (Ben, 11 Nov 2026)."""
     return f"24bit7{' Dev' if engine.dev_copy() else ''}  v{engine.VERSION}"
@@ -5301,8 +5038,12 @@ def main():
         except Exception as e:
             root.after(13000, lambda e=e: play.report(t("Note: the built-in title bar couldn't be set up ({e}), so the Windows one is used.", e=e)))
 
+    devices = attach_devices(root, nb, play, placed=place_donate)
+
     def on_tab_changed(event):
-        if nb.select() == str(discover):
+        if nb.select() == str(devices):
+            devices.shown()
+        elif nb.select() == str(discover):
             discover.ensure_loaded()
         elif nb.select() == str(play):
             play.sync_moderator()
