@@ -31,7 +31,7 @@ def app_dir():
 
 
 APP_DIR = app_dir()
-VERSION = "1.43.0"
+VERSION = "1.44.0"
 
 
 def git_branch(folder):

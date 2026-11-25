@@ -310,7 +310,15 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.43.0
+## What's new in 1.44.0
+
+- **A Devices tab**, after Settings, once 24bit7 knows a phone or a folder. Every device with a green or grey dot for whether it's answering, Rename and Forget, how much is on it against your limit, and two lists side by side: Albums and Playlists. Tick and Delete, with an amber line saying what goes first. A box over Albums adds an artist, album or track you own straight to the phone.
+- **Albums and Playlists on the phone.** Save copies a playlist into Music/Playlists, each song named "Artist - Title"; albums you add go into Music/Albums. **Clear Playlists First** clears Playlists only, so your albums stay. What older copies left is sorted into the two once, the first time.
+- **Select From Hits**, in place of Most Played: an artist's songs are picked at random from their hits, so each build is different. Off, ↓ (fewer for an artist with fewer hits) or ↕ (up to half as many again for one with plenty).
+- **+ Add a Phone Over WiFi looks twice** before saying no phone answered.
+- A wrong key in the Alexa skill is explained, rather than heard as 24bit7 not answering; copying one track says "1 track".
+
+### Earlier: 1.43.0
 
 - **Copy to your phone over WiFi.** The new 24bit7 phone app (an APK on the release page) is one screen: open it, and Save's **+ Add a Phone Over WiFi...** finds it by the code it shows, no cable needed. A phone used by USB too stays one device, with one name, folder and limit.
 - **A folder on this PC** as a place to copy to, for Syncthing and the like.
