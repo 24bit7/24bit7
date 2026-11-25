@@ -484,6 +484,9 @@ def _move(phone, dirs, src_dir, e, dst_dir, name):
     """One file to another folder under the chosen one: the device's own move where it has one (This PC), else
     read, written again and the old one deleted (a phone: the app and Windows' portable devices have no move)."""
     parent = dirs.get(dst_dir, make=True)
+    hook = getattr(dirs, "on_move", None)
+    if hook is not None:
+        hook()
     if hasattr(phone, "move"):
         phone.move(e["id"], parent, name)
     else:
@@ -544,13 +547,15 @@ def _arranged(phone, folder):
     return _fkey(folder) in (entry.get("arranged") or [])
 
 
-def arrange(phone, folder, say=print):
+def arrange(phone, folder, say=print, progress=None):
     """
     Once per device and folder (Ben, 25 Nov 2026): the folder as it was before 1.44 sorted into Albums and
     Playlists. What 24bit7's records say it copied for playlists goes into Playlists, one flat folder ('Artist -
     Title.flac'), the playlists rewritten to match; any other playlist file goes there too, its lines now pointing
     into Albums; every other folder at the top (artists, albums) and loose track goes into Albums. Nothing is
-    deleted but folders left empty. Returns how many files moved.
+    deleted but folders left empty. Returns how many files moved. progress, if given, is called with (files moved,
+    files to move) as each file goes, where files go one at a time (a phone over WiFi: read and written again,
+    which took Jo's 84 files about half an hour, 25 Nov 2026), so the Devices tab can say how far it's got.
     """
     device = key_for(getattr(phone, "id", None) or phone.name)
     every = _meta(META_KEY, {})
@@ -571,6 +576,15 @@ def arrange(phone, folder, say=print):
         if tops or loose or old:
             say("  " + t("Sorting {folder} on {phone} into Albums and Playlists, once...", folder=folder,
                          phone=phone.name))
+            if progress is not None and not hasattr(phone, "move"):
+                count = sum(1 for p in Folder(phone, folder).files if p.split("/")[0] not in keep)
+                done = [0]
+
+                def moved_one():
+                    done[0] += 1
+                    progress(min(done[0], count), count)
+                dirs.on_move = moved_one
+                progress(0, count)
         if dirs.get(PLAYLISTS) is not None:
             dirs._list(PLAYLISTS)
         taken_names = set(dirs.listing(PLAYLISTS)) if dirs.get(PLAYLISTS) is not None else set()

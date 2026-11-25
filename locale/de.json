@@ -2182,5 +2182,6 @@
   "Type Its Code": "Code eingeben",
   "The four-digit code on {phone}'s screen, with the 24bit7 app open:": "Der vierstellige Code auf dem Bildschirm von {phone}, bei geöffneter 24bit7-App:",
   "Looking for {phone}...": "Suche {phone}...",
-  "No phone answered to that code. Check the 24bit7 app is open on it, on the same WiFi as this PC.": "Kein Handy hat auf diesen Code geantwortet. Prüfe, ob die 24bit7-App darauf offen ist, im selben WLAN wie dieser PC."
+  "No phone answered to that code. Check the 24bit7 app is open on it, on the same WiFi as this PC.": "Kein Handy hat auf diesen Code geantwortet. Prüfe, ob die 24bit7-App darauf offen ist, im selben WLAN wie dieser PC.",
+  "Sorting {folder} on {phone} into Albums and Playlists, once: {done} of {count} files moved. Keep the 24bit7 app open on it.": "{folder} auf {phone} wird einmalig in Albums und Playlists sortiert: {done} von {count} Dateien verschoben. Lass die 24bit7-App darauf offen."
 }

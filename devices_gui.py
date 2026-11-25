@@ -212,7 +212,8 @@ class DevicesTab(tk.Frame):
         self.tick_for = {}            # the row's key: its tick, as last drawn
         self.adding = {}              # artist folder (lower): [done, count] while an add runs
         self.busy = False
-        self._due = False   # the chips and page wait for the first read of a device (one draw, not two)
+        self._due = False   # the page waits for the first read of a device (one draw, not two)
+        self.sorting = {}   # device id: (files moved, files to move) while the one-off sort runs (phone.arrange)
         self._jobs, self._news = queue.Queue(), queue.Queue()
         self._poll = None
         self._worker = None
@@ -389,7 +390,8 @@ class DevicesTab(tk.Frame):
                                      progress=lambda n: self._news.put(("adding", device_id, folder_key, n)))
                 self._news.put(("added", device_id, folder_key))
             elif kind == "read" and (device_id != phone.PC or p.root):
-                phone.arrange(p, s["folder"], say=say)   # what 1.43 left, sorted the first time it's opened
+                phone.arrange(p, s["folder"], say=say,   # what 1.43 left, sorted the first time it's opened
+                              progress=lambda done, count: self._news.put(("sorting", device_id, done, count)))
             f = phone.Folder(p, s["folder"])
             try:
                 free = p.free()
@@ -433,10 +435,11 @@ class DevicesTab(tk.Frame):
             # the same devices: nothing redrawn; a device not read yet waits for its read (or its "away"), so the
             # first open draws once rather than an empty page and then the lists (Ben, 25 Nov 2026: "jittery")
             if (self.devices, self.answering, self.current) != before:
-                if first:
-                    self._due = True   # drawn with the read
+                self._chips()   # every device at once, a new one included (Jo's Phone, 25 Nov 2026)
+                if first and self._on_screen is None and not self.albums.rows.winfo_children():
+                    self._due = True   # nothing on the page yet: it's drawn with the read
+                    self.status.config(text=self._reading(self.current), fg=PALETTE["help_fg"])
                 else:
-                    self._chips()
                     self.draw()
         elif kind == "read":
             _, device_id, f, free = news
@@ -444,6 +447,7 @@ class DevicesTab(tk.Frame):
                     and device_id == self.current and self._on_screen == (device_id, _looks(f), True))
             was = self.answering.get(device_id)
             self.answering[device_id], self.contents[device_id], self.free[device_id] = True, f, free
+            self.sorting.pop(device_id, None)
             self.problem.pop(device_id, None)
             if device_id == self.current:
                 self.ticked = {k for k in self.ticked if self._exists(k)}
@@ -458,6 +462,7 @@ class DevicesTab(tk.Frame):
             _, device_id, why = news
             changed = self.answering.get(device_id) is not False or self.problem.get(device_id) != why
             self.answering[device_id], self.problem[device_id] = False, why
+            self.sorting.pop(device_id, None)
             if changed or self._due:
                 self._due = False
                 self._chips()
@@ -491,11 +496,19 @@ class DevicesTab(tk.Frame):
                 self._log(t("{phone} is answering again.", phone=phone.settings(key, "")["name"]))
             self.current = key
             self._job("scan")
+        elif kind == "sorting":
+            _, device_id, done, count = news
+            self.sorting[device_id] = (done, count)
+            if device_id == self.current:
+                self.status.config(text=self._reading(device_id), fg=PALETTE["help_fg"])
         elif kind == "failed":
             device_id = news[1]
             self._log(t("Problem: {e}", e=news[2]))
             if device_id is not None:
                 self.problem[device_id] = news[2]
+                self.sorting.pop(device_id, None)
+            self._due = False
+            self._chips()   # a read that failed still shows every device
             self.draw()
 
     # --- what's shown --------------------------------------------------------------------------------------
@@ -710,9 +723,8 @@ class DevicesTab(tk.Frame):
             self.status.config(text=t("{phone} isn't answering. Open the 24bit7 app on it.", phone=s["name"])
                                if kind == "wifi" else t("{phone} isn't plugged in.", phone=s["name"]),
                                fg=PALETTE["amber"])
-        elif f is None:
-            self.status.config(text=t("Reading {folder} on {phone}...", folder=s["folder"], phone=s["name"]),
-                               fg=PALETTE["help_fg"])
+        elif f is None or device in self.sorting:
+            self.status.config(text=self._reading(device), fg=PALETTE["help_fg"])
         else:
             self.status.config(text="")
         if f is None:
@@ -730,6 +742,16 @@ class DevicesTab(tk.Frame):
         self._draw_lists(f, live)
         self._on_screen = (device, _looks(f), live)
         self._sync_note()
+
+    def _reading(self, device):
+        """The line while a device is read: or, the first time a folder from before 1.44 is opened, sorted, with how
+        far it's got (a phone over WiFi moves each file by copying it, which takes a while)."""
+        s, _model = self._settings(device)
+        if device in self.sorting:
+            done, count = self.sorting[device]
+            return t("Sorting {folder} on {phone} into Albums and Playlists, once: {done} of {count} files moved. "
+                     "Keep the 24bit7 app open on it.", folder=s["folder"], phone=s["name"], done=done, count=count)
+        return t("Reading {folder} on {phone}...", folder=s["folder"], phone=s["name"])
 
     def _show_meter(self, device, f):
         s, _model = self._settings(device)

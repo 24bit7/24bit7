@@ -393,3 +393,45 @@ def test_search_now_skips_a_search_this_fresh(app):
     p._search, p.searched = False, time.monotonic() - 31
     p.search_now(older_than=30)
     assert p._search is True
+
+
+def test_a_phone_just_added_shows_at_once_and_its_sort_is_counted(app, ui, files, monkeypatch):
+    """
+    Ben, 25 Nov 2026: Jo's phone was added, "the dialogue box goes away and it only shows my phone". Its first read
+    was sorting her old folder over WiFi, and the tab waited for it without a word. Now its chip shows at once, the
+    sort says how far it's got, and a read that fails still shows every device.
+    """
+    import threading
+    import phone
+    ph = _phone(app, files)
+    phone.remember_quietly(BEN, name=BEN)
+    phone.remember_quietly("app:jo", name="Jo's Phone", code="6575", model="Pixel 9a")
+    devices = [(BEN, "Pixel 9a", "usb", True)]
+    tab = _tab(ui, monkeypatch, ph, devices)
+    _settled(ui, tab)
+    release = threading.Event()
+
+    def opening(device_id, name):
+        if device_id == BEN:
+            return ph
+        release.wait(20)   # Jo's read still out
+        raise RuntimeError("Jo's Phone isn't answering. Open 24bit7 on it, on the same WiFi as this PC.")
+    monkeypatch.setattr(phone, "open_device", opening)
+    later = devices + [("app:jo", "Pixel 9a", "wifi", None)]
+    monkeypatch.setattr(phone, "known", lambda: list(later))   # a fresh list each look, as the real one gives
+    tab.current = "app:jo"
+    tab._job("scan")
+    ui.pump(until=lambda: "Jo's Phone" in _texts(tab.chips), timeout=10)
+    assert "Jo's Phone" in _texts(tab.chips) and BEN in _texts(tab.chips), "her chip before her read is back"
+    tab._take(("sorting", "app:jo", 31, 84))
+    assert tab.status.cget("text") == ("Sorting Music on Jo's Phone into Albums and Playlists, once: 31 of 84 files "
+                                       "moved. Keep the 24bit7 app open on it.")
+    tab.draw()
+    assert "31 of 84" in tab.status.cget("text"), "a redraw keeps the count"
+    release.set()
+    _settled(ui, tab)
+    assert "Jo's Phone" in _texts(tab.chips) and "app:jo" not in tab.sorting
+    assert tab.status.cget("text") == "Jo's Phone isn't answering. Open the 24bit7 app on it."
+    tab._take(("failed", "app:jo", "boom"))
+    assert "Jo's Phone" in _texts(tab.chips) and BEN in _texts(tab.chips), "a failed read keeps every chip"
+    assert not ui.errors, ui.errors[0]
