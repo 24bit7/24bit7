@@ -472,7 +472,7 @@ Die Version, die du verwendest, Links zu diesem Handbuch, GitHub und den Version
 
 ![Der Geräte-Tab](images/de/devices.png)
 
-Der Tab **Geräte** erscheint hinter Einstellungen, sobald 24bit7 ein Handy oder einen Ordner kennt: einen, auf den du kopiert hast, ein Handy über WLAN oder eines per USB angeschlossen. Es gibt keine Einstellung dafür, und er bleibt von da an.
+Der Tab **Geräte** erscheint hinter Einstellungen, solange ein Handy antwortet: eines per USB angeschlossen oder eines über WLAN mit geöffneter 24bit7-App. 24bit7 schaut jede halbe Minute nach. Antwortet keines, verschwindet der Tab, aber nie, während du darauf bist: Er wartet, bis du ihn verlässt. **Geräte öffnen** bei Speichern holt ihn für ein Handy, das nicht antwortet, oder für einen Ordner auf diesem PC. Es gibt keine Einstellung dafür.
 
 Oben steht jedes Gerät, das 24bit7 kennt, mit einem grünen Punkt für eines, das gerade antwortet, und einem grauen für eines, das es nicht tut: Ein nicht angeschlossenes Handy sagt das, und ein Handy über WLAN, das nicht zu finden ist, sagt "nicht gefunden". Klick auf eines, um es zu zeigen. **+ Handy über WLAN hinzufügen...** steht daneben, wie bei Speichern. Darunter der Ordner des Geräts mit **Umbenennen** und **Vergessen**. Vergessen nimmt das Gerät aus der Liste von 24bit7, mit Namen, Ordner, Grenze und dem Wissen, was kopiert wurde, und rührt auf dem Handy nichts an. Dann, wie viel der Ordner gegenüber deiner Grenze belegt, mit einem Balken, und der freie Platz.
 

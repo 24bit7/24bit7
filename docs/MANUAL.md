@@ -469,7 +469,7 @@ The version you're running, links to this manual, GitHub and the release notes, 
 
 ![The Devices tab](images/devices.png)
 
-The **Devices** tab appears after Settings once 24bit7 knows a phone or a folder: one you've copied to, added over WiFi, or plugged in by USB. There's no setting for it, and it stays from then on.
+The **Devices** tab appears after Settings while a phone answers: one plugged in by USB, or one added over WiFi with the 24bit7 app open on it. 24bit7 looks every half minute. When none answers the tab goes, though never while you're on it: it waits until you leave. **Open Devices** in Save brings it up for a phone that isn't answering, or for a folder on this PC. There's no setting for it.
 
 At the top is every device 24bit7 knows, with a green dot for one answering now and a grey one for one that isn't: a phone that isn't plugged in says so, and a phone over WiFi that can't be found says "not found". Click one to show it. **+ Add a Phone Over WiFi...** is beside them, as in Save. Under them is the device's folder, with **Rename** and **Forget**. Forget takes the device off 24bit7's list, with its name, folder, limit and record of what's been copied, and touches nothing on the phone. Then how much the folder holds against your limit, with a bar, and the free space.
 

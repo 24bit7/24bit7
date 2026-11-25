@@ -312,7 +312,7 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ## What's new in 1.44.0
 
-- **A Devices tab**, after Settings, once 24bit7 knows a phone or a folder. Every device with a green or grey dot for whether it's answering, Rename and Forget, how much is on it against your limit, and two lists side by side: Albums and Playlists. Tick and Delete, with an amber line saying what goes first. A box over Albums adds an artist, album or track you own straight to the phone.
+- **A Devices tab**, after Settings, while a phone answers (plugged in by USB, or with the 24bit7 app open on the WiFi; since 1.44.1). Every device with a green or grey dot for whether it's answering, Rename and Forget, how much is on it against your limit, and two lists side by side: Albums and Playlists. Tick and Delete, with an amber line saying what goes first. A box over Albums adds an artist, album or track you own straight to the phone.
 - **Albums and Playlists on the phone.** Save copies a playlist into Music/Playlists, each song named "Artist - Title"; albums you add go into Music/Albums. **Clear Playlists First** clears Playlists only, so your albums stay. What older copies left is sorted into the two once, the first time.
 - **Select From Hits**, in place of Most Played: an artist's songs are picked at random from their hits, so each build is different. Off, ↓ (fewer for an artist with fewer hits) or ↕ (up to half as many again for one with plenty).
 - **+ Add a Phone Over WiFi looks twice** before saying no phone answered.
