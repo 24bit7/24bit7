@@ -17,6 +17,7 @@ back through a queue the tab reads; the window is never touched from the thread.
 import os
 import queue
 import threading
+import time
 import tkinter as tk
 from tkinter import ttk
 
@@ -29,6 +30,7 @@ from tabs import PALETTE, FlatButton, RoundedEntry
 
 SHOWN = 6   # suggestions of each kind under the library box
 WATCH_EVERY = 30   # seconds between looks for a phone answering (phone.present)
+SEARCH_EVERY = 300   # seconds between looks across the whole home network (a phone given a new address)
 
 
 class Presence:
@@ -43,6 +45,7 @@ class Presence:
     def __init__(self, nb, tab, placed=None):
         self.nb, self.tab, self.placed = nb, tab, placed
         self.on = False
+        self.asking = []       # phones the last look couldn't tell (phone.asking)
         self.waiting = False   # nothing answers, but the tab is showing: it goes once you leave it
         self._wake = None
         self._stop = threading.Event()   # the window's gone: the looking stops
@@ -57,9 +60,14 @@ class Presence:
         self.nb.add(self.tab, text=t("Devices"))
         self._placed()
 
-    def answered(self, ids):
-        """The latest look: the ids of the phones answering."""
-        if ids:
+    def answered(self, ids, asking=()):
+        """The latest look: the ids of the phones answering, and the phones it needs to ask about (phone.asking),
+        which bring the tab up too, as the question is on it. With Settings > Other > Devices Off, nothing brings it
+        up by itself (engine.DEVICES_TAB)."""
+        self.asking = list(asking)
+        if hasattr(self.tab, "set_asking"):
+            self.tab.set_asking(self.asking)
+        if (ids or asking) and engine.DEVICES_TAB:
             self.show()
         elif self.on:
             if self.nb.select() == str(self.tab):
@@ -80,16 +88,22 @@ class Presence:
         if self.placed is not None:
             self.tab.after(50, self.placed)
 
-    def watch(self, every=WATCH_EVERY):
-        """The looking, on a thread of its own (a WiFi phone takes a second or so to answer, or not)."""
+    def watch(self, every=WATCH_EVERY, search_every=SEARCH_EVERY):
+        """The looking, on a thread of its own (a WiFi phone takes a second or so to answer, or not). The whole home
+        network is searched on the first look and then every search_every seconds (phone.present's search)."""
         found, self._wake = queue.Queue(), threading.Event()
 
         def look():
             phone.com_begin()
+            searched = None
             try:
                 while not self._stop.is_set():
+                    due = searched is None or time.monotonic() - searched >= search_every
                     try:
-                        found.put(phone.present())
+                        ids = phone.present(search=True) if due else phone.present()
+                        if due:
+                            searched = time.monotonic()
+                        found.put((ids, phone.asking()))
                     except Exception as e:
                         engine.debug(f"Devices: couldn't look for phones ({e})")
                     self._wake.wait(every)
@@ -105,7 +119,7 @@ class Presence:
             while not found.empty():
                 latest = found.get_nowait()
             if latest is not None:
-                self.answered(latest)
+                self.answered(*latest)
             self.tab.after(1000 if every >= 1 else 100, check)
         self.tab.after(500 if every >= 1 else 50, check)
 
@@ -193,6 +207,8 @@ class DevicesTab(tk.Frame):
         self._counts = {}
         self._on_screen = None        # (device id, _looks of the folder, live) the lists were last drawn from, so a
                                       # read again that finds the same leaves the rows alone (no jitter on a click)
+        self.asking = []              # phone.asking(): the phones to ask about
+        self.ask_problem = {}         # address: why the code given didn't do
         self._build()
         self.bind("<Destroy>", self._gone, add="+")
 
@@ -207,6 +223,8 @@ class DevicesTab(tk.Frame):
         outer.pack(fill="both", expand=True, padx=px(16), pady=px(12))
         self.chips = tk.Frame(outer, bg=bg)
         self.chips.pack(anchor="w", fill="x")
+        self.ask_box = tk.Frame(outer, bg=bg)   # the phones 24bit7 can't tell, one question each (set_asking)
+        self.ask_box.pack(anchor="w", fill="x")
         info = tk.Frame(outer, bg=bg)
         info.pack(anchor="w", fill="x", pady=(px(10), 0))
         tk.Label(info, text=t("Folder"), font=("Segoe UI", 10), bg=bg, fg=fg).pack(side="left")
@@ -319,6 +337,10 @@ class DevicesTab(tk.Frame):
         if kind == "scan":
             self._news.put(("devices", phone.known()))
             return
+        if kind == "claim":
+            _, address, code, as_key = job
+            self._news.put(("claimed", address, phone.claim(address, code, as_key=as_key), as_key))
+            return
         device_id = job[1]
         s, _model = self._settings(device_id)
         say = self._log
@@ -416,6 +438,26 @@ class DevicesTab(tk.Frame):
                 self.draw()
         elif kind == "added":
             self.adding.pop(news[2], None)
+        elif kind == "claimed":
+            _, address, key, as_key = news
+            if key is None:
+                self.ask_problem[address] = t("That code isn't right. It's the four digits on the phone's screen.")
+                self._ask_rows()
+                return
+            self.ask_problem.pop(address, None)
+            self.asking = [a for a in self.asking if a["address"] != address]
+            self._ask_rows()
+            if as_key is None:
+                model = phone.settings(key, "")["name"]
+                name = tabs.ask_name(self, t("New Phone"), t("A name for this phone, so you can tell it from others:"),
+                                     initial=model)
+                if name and name.strip():
+                    phone.remember_quietly(key, name=name.strip())
+                self._log(t("Added {phone}.", phone=phone.settings(key, "")["name"]))
+            else:
+                self._log(t("{phone} is answering again.", phone=phone.settings(key, "")["name"]))
+            self.current = key
+            self._job("scan")
         elif kind == "failed":
             device_id = news[1]
             self._log(t("Problem: {e}", e=news[2]))
@@ -463,6 +505,56 @@ class DevicesTab(tk.Frame):
                 w.bind("<Button-1>", lambda e, d=device_id: self.pick(d))
         if self._add_wifi is not None:
             self._link(self.chips, t("+ Add a Phone Over WiFi..."), self._add).pack(side="left", padx=(px(4), 0))
+
+    def set_asking(self, items):
+        """The latest look's phones to ask about (phone.asking). Redrawn only when they change, so a code half
+        typed isn't wiped by the next look."""
+        if [a["address"] for a in items] == [a["address"] for a in self.asking]:
+            return
+        self.asking = [dict(a) for a in items]
+        self._ask_rows()
+
+    def _ask_rows(self):
+        """
+        A line per phone 24bit7 can't tell (Ben, 25 Nov 2026): a phone it keeps answering with a new code, or one
+        it has never seen (reset, a new phone, or one never added), with which phone it is and the code shown on it.
+        """
+        px = self._px
+        for w in self.ask_box.winfo_children():
+            w.destroy()
+        kept = phone.kept_phones()
+        for a in self.asking:
+            row = tk.Frame(self.ask_box, bg=self._bg)
+            row.pack(anchor="w", fill="x", pady=(px(10), 0))
+            if a["known"]:
+                name = phone.settings(a["key"], a["model"])["name"]
+                text = t("{phone} has a new code. Type the code shown on the phone.", phone=name)
+            elif a["model"]:
+                text = t("A phone with the 24bit7 app is answering ({model}). Which is it?", model=a["model"])
+            else:
+                text = t("A phone with the 24bit7 app is answering. Which is it?")
+            tk.Label(row, text=text, font=("Segoe UI", 10), bg=self._bg, fg=PALETTE["amber"]).pack(side="left")
+            keys = [None]
+            if not a["known"]:
+                names = [n for _k, n in kept] + [t("A New Phone")]
+                keys = [k for k, _n in kept] + [None]
+                var = row.var = tk.StringVar(row, value=names[0])   # kept: a variable let go empties the box
+                pick = ttk.Combobox(row, textvariable=var, values=names, state="readonly",
+                                    width=max(len(n) for n in names) + 1, font=("Segoe UI", 10))
+                pick.pack(side="left", padx=(px(8), 0))
+            tk.Label(row, text=t("Code"), font=("Segoe UI", 10), bg=self._bg, fg=self._fg
+                     ).pack(side="left", padx=(px(12), px(6)))
+            box = RoundedEntry(row, width=6, font=("Segoe UI", 10))
+            box.pack(side="left")
+
+            def go(a=a, box=box, pick=None if a["known"] else pick, keys=keys):
+                as_key = a["key"] if a["known"] else keys[pick.current()] if pick.current() >= 0 else None
+                self._job("claim", a["address"], box.get().strip(), as_key)
+            box.bind("<Return>", lambda e, go=go: go())
+            FlatButton(row, text=t("OK"), command=go, quiet=True).pack(side="left", padx=(px(8), 0))
+            if a["address"] in self.ask_problem:
+                tk.Label(row, text=self.ask_problem[a["address"]], font=("Segoe UI", 9), bg=self._bg,
+                         fg=PALETTE["red"]).pack(side="left", padx=(px(10), 0))
 
     def pick(self, device_id):
         if device_id == self.current:

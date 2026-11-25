@@ -4918,7 +4918,8 @@ def attach_devices(root, nb, play, placed=None, watch=True):
     """
     The Devices tab (Ben, 25 Nov 2026, as drawn): after Settings while a phone answers, plugged in over USB or with
     the 24bit7 app open on the WiFi (devices_gui.Presence, looking every half minute), and gone again when none
-    does, once you've left it. No setting. Save's Open Devices brings it forward at a device, answering or not.
+    does, once you've left it. Settings > Other > Devices Off keeps it from coming up by itself. Save's Open Devices
+    brings it forward at a device, answering or not; + Add a Device in Settings brings it forward too.
     watch=False (tests and shots): nothing is looked for, tab.presence.show() puts it in. Returns the tab.
     """
     import devices_gui
@@ -4933,7 +4934,15 @@ def attach_devices(root, nb, play, placed=None, watch=True):
         else:
             nb.select(tab)
 
-    play.devices_known, play.open_devices = presence.poke, open_at
+    def show_tab():
+        """Settings > Other > + Add a Device: the tab, whatever answers, and you're taken to it."""
+        presence.show()
+        if nb.select() == str(tab):
+            tab.shown()
+        else:
+            nb.select(tab)
+
+    play.devices_known, play.open_devices, play.show_devices = presence.poke, open_at, show_tab
     if watch:
         presence.watch()
     return tab

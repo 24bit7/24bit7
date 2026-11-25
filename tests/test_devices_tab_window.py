@@ -72,7 +72,7 @@ def test_the_tab_shows_only_while_a_phone_answers(app, ui, monkeypatch):
     p.answered([])
     assert tab not in ui.nb._pages, "not on it: gone straight away"
     answering = {"ids": ["usb-1"]}
-    monkeypatch.setattr(phone, "present", lambda: list(answering["ids"]))
+    monkeypatch.setattr(phone, "present", lambda search=False: list(answering["ids"]))
     p.watch(every=0.2)
     try:
         ui.pump(until=lambda: tab in ui.nb._pages, timeout=10)
@@ -209,4 +209,93 @@ def test_save_opens_devices_at_the_phone(app, ui, monkeypatch):
     assert not save.winfo_exists() and save.result is None
     assert tab in ui.nb._pages and ui.nb.select() == str(tab), "the tab added and brought forward"
     assert tab.current == "app:1"
+    assert not ui.errors, ui.errors[0]
+
+
+def test_a_phone_to_ask_about_brings_the_tab_up_with_its_question(app, ui, monkeypatch):
+    """
+    Ben, 25 Nov 2026 ("were you previously Ben's Phone?"): a phone 24bit7 can't tell brings the tab up with a line
+    asking which phone it is and its code. A wrong code says so and changes nothing; the right one takes the line
+    away and the phone is shown. With Settings > Other > Devices Off nothing brings the tab up by itself.
+    """
+    import engine
+    import phone
+    devices = []
+    monkeypatch.setattr(phone, "known", lambda: list(devices))
+    monkeypatch.setattr(phone, "open_device", lambda device_id, name: (_ for _ in ()).throw(RuntimeError("away")))
+    phone.remember_quietly("app:old", name=BEN, model="Pixel 9a", code="1111")
+    claims = []
+
+    def claim(address, code, as_key=None, name=None):
+        claims.append((address, code, as_key))
+        if code != "2222":
+            return None
+        devices.append(("app:new", "Pixel 9a", "wifi", None))
+        return "app:new"
+    monkeypatch.setattr(phone, "claim", claim)
+    ui.play._end_greeting()
+    tab = ui.gui.attach_devices(ui.root, ui.nb, ui.play, watch=False)
+    p = tab.presence
+    ask = [{"address": "10.0.0.9:47247", "key": "app:new", "model": "Pixel 9a", "known": False}]
+    monkeypatch.setattr(engine, "DEVICES_TAB", False)
+    p.answered([], ask)
+    assert tab not in ui.nb._pages, "Devices Off: nothing brings the tab up by itself"
+    monkeypatch.setattr(engine, "DEVICES_TAB", True)
+    p.answered([], ask)
+    assert tab in ui.nb._pages, "a phone to ask about brings it up, as the question is on it"
+    ui.nb.select(tab)
+    ui.pump(0.3)
+    texts = _texts(tab.ask_box)
+    assert "A phone with the 24bit7 app is answering (Pixel 9a). Which is it?" in texts, texts
+    import tkinter.ttk as ttk
+    from tabs import RoundedEntry
+
+    def find(widget, kind):
+        for w in widget.winfo_children():
+            if isinstance(w, kind):
+                return w
+            got = find(w, kind)
+            if got is not None:
+                return got
+    pick = find(tab.ask_box, ttk.Combobox)
+    assert list(pick.cget("values")) == [BEN, "A New Phone"] and pick.get() == BEN
+    box = find(tab.ask_box, RoundedEntry)
+    box.insert(0, "1234")
+    box.entry.focus_force()   # a generated key goes to the focus widget
+    ui.pump(0.2)
+    box.entry.event_generate("<Return>")
+    _settled(ui, tab)
+    assert claims == [("10.0.0.9:47247", "1234", "app:old")]
+    assert "That code isn't right. It's the four digits on the phone's screen." in _texts(tab.ask_box)
+    box = find(tab.ask_box, RoundedEntry)
+    box.insert(0, "2222")
+    box.entry.focus_force()   # a generated key goes to the focus widget
+    ui.pump(0.2)
+    box.entry.event_generate("<Return>")
+    _settled(ui, tab)
+    assert _texts(tab.ask_box) == [], "answered: the line goes"
+    assert tab.current == "app:new"
+    assert not ui.errors, ui.errors[0]
+
+
+def test_add_a_device_in_settings_opens_the_tab(app, ui, monkeypatch):
+    """Ben, 25 Nov 2026: somewhere to add a phone before a playlist has gone to one. Settings > Other > Devices'
+    + Add a Device shows the tab and takes you there, whatever answers; its switch is saved as DEVICES_TAB."""
+    import engine
+    import phone
+    monkeypatch.setattr(phone, "known", lambda: [])
+    ui.play._end_greeting()
+    tab = ui.gui.attach_devices(ui.root, ui.nb, ui.play, watch=False)
+    s = ui.play.settings
+    assert tab not in ui.nb._pages
+    s._add_device()
+    ui.pump(0.3)
+    assert tab in ui.nb._pages and ui.nb.select() == str(tab)
+    s.vars["DEVICES_TAB"].set("Off")
+    s._devices_changed()
+    assert engine.DEVICES_TAB is False
+    assert "DEVICES_TAB=off" in open(engine.ENV_FILE, encoding="utf-8").read()
+    s.vars["DEVICES_TAB"].set("On")
+    s._devices_changed()
+    assert engine.DEVICES_TAB is True
     assert not ui.errors, ui.errors[0]

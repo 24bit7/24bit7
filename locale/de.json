@@ -2164,5 +2164,16 @@
   "Sorted {folder} on {phone}.": "{folder} auf {phone} sortiert.",
   "Cleared Playlists on {phone}: {what}.": "Playlists auf {phone} geleert: {what}.",
   "Your {count} album left alone.": "Dein {count} Album bleibt.",
-  "Your {count} albums left alone.": "Deine {count} Alben bleiben."
+  "Your {count} albums left alone.": "Deine {count} Alben bleiben.",
+  "OK": "OK",
+  "+ Add a Device...": "+ Gerät hinzufügen...",
+  "New Phone": "Neues Handy",
+  "A New Phone": "Ein neues Handy",
+  "Added {phone}.": "{phone} hinzugefügt.",
+  "{phone} is answering again.": "{phone} antwortet wieder.",
+  "{phone} has a new code. Type the code shown on the phone.": "{phone} hat einen neuen Code. Gib den Code ein, der auf dem Handy steht.",
+  "A phone with the 24bit7 app is answering ({model}). Which is it?": "Ein Handy mit der 24bit7-App antwortet ({model}). Welches ist es?",
+  "A phone with the 24bit7 app is answering. Which is it?": "Ein Handy mit der 24bit7-App antwortet. Welches ist es?",
+  "That code isn't right. It's the four digits on the phone's screen.": "Der Code stimmt nicht. Es sind die vier Ziffern auf dem Bildschirm des Handys.",
+  "On, a Devices tab shows after Settings while a phone answers: plugged in by USB, or with the 24bit7 app open on the WiFi. Off, it never comes up by itself, so a phone charging by USB doesn't bring it up; Save's Copy Tracks To still works. Add a Device opens the tab, where you can add a phone over WiFi.": "An: Nach Einstellungen erscheint ein Tab Geräte, solange ein Handy antwortet: per USB angeschlossen oder mit geöffneter 24bit7-App im WLAN. Aus: Er erscheint nie von selbst, ein Handy, das per USB lädt, holt ihn also nicht hervor; „Titel kopieren auf“ beim Speichern geht weiter. Gerät hinzufügen öffnet den Tab, dort kannst du ein Handy über WLAN hinzufügen."
 }

@@ -651,7 +651,7 @@ def load_settings():
     global LISTEN_SITES, CUSTOM_SITES, PLAYLIST_SITES, EXTRA_OUTPUTS, TIDAL_OPEN
     global SKIP_LONG_CLOSERS, LONG_CLOSER_MINUTES
     global SIMILAR_ARTIST_TRACK_COUNT, SIMILAR_ARTIST_TRACK_LIMIT, DRIFT, DEEP_CUTS
-    global JRIVER_RESTORE
+    global JRIVER_RESTORE, DEVICES_TAB
     global AI_MODERATOR, MODERATOR_WARNED, SKIP_PLAYED, MATCH_TEMPO, ADAPTIVE_PICK, ADAPTIVE_TOP
     global NONSTOP, NONSTOP_USING, NONSTOP_RESEED, NONSTOP_TOP_REST, NONSTOP_TOP_REST_COUNT, NONSTOP_VIBE
     global NONSTOP_BY, LONG_CLOSERS, AI_MODERATOR_BY, RUN_AFTER, INNER_CIRCLE
@@ -667,6 +667,9 @@ def load_settings():
     JRIVER_BASE = f"http://{JRIVER_HOST}/MCWS/v1"
     restore = (os.getenv("JRIVER_RESTORE") or "start").strip().lower()
     JRIVER_RESTORE = restore if restore in ("off", "start", "restart") else "start"
+    # Settings > Other > Devices (Ben, 25 Nov 2026): On, the Devices tab shows while a phone answers; Off, never
+    # by itself (a phone charging by USB doesn't bring it up), though Save's Copy Tracks To still works
+    DEVICES_TAB = (os.getenv("DEVICES_TAB") or "on").strip().lower() != "off"
     LASTFM_KEY = (os.getenv("LASTFM_API_KEY") or "").strip() or BUILTIN_LASTFM_KEY   # the user's own key wins
     LISTENBRAINZ_TOKEN = os.getenv("LISTENBRAINZ_TOKEN")
     DISCOGS_TOKEN = os.getenv("DISCOGS_TOKEN")

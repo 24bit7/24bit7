@@ -109,7 +109,7 @@ def _link_usb(device_id, model):
         try:
             music = p.folder(DEFAULT_FOLDER)
             mark = p.child(music, ".24bit7") if music is not None else None
-            app_id = _decode(p.read(mark)).strip() if mark is not None else ""
+            app_id = (_decode(p.read(mark)).strip().splitlines() or [""])[0].strip() if mark is not None else ""
         finally:
             p.close()
     except Exception as e:
@@ -1180,23 +1180,154 @@ def any_known():
     return any(isinstance(e, dict) and (k != PC or e.get("folder")) for k, e in _meta(META_KEY, {}).items())
 
 
-def present(timeout=1.5):
+def present(timeout=1.5, search=False):
     """
     The phones answering now, so the Devices tab shows only then (Ben, 25 Nov 2026: "when 24bit7 detects an open
     phone", USB counting too): every phone plugged in over USB, and every phone added over WiFi whose app answers at
-    the address it was last found at. Only that address is tried (a whole-network look every half minute would be a
-    lot of knocking on doors); Save finds a phone that has moved, and remembers where. This PC never counts.
+    the address it was last found at. With search, the whole home network is looked at as well (the Devices look
+    does it when it starts and every five minutes: knocking on every door each half minute would be a lot), so a
+    phone the router gave a new address is found and the address kept (Ben's Pixel went from .248 to .97, 25 Nov
+    2026), and a phone 24bit7 can't tell is put on asking(). This PC never counts.
     """
     out = [device_id for device_id, _model in devices()]
+    answered = set()
     for key, entry in _meta(META_KEY, {}).items():
         if not (is_wifi(key) and isinstance(entry, dict) and entry.get("code") and entry.get("address")):
             continue
         try:
             if "app:" + str(WifiPhone.info_at(entry["address"], entry["code"], timeout=timeout).get("id")).lower() == key:
                 out.append(key)
+                answered.add(entry["address"])
         except Exception:
             continue
+    if search:
+        found, asks = search_network(skip=answered)
+        for key, address in found:
+            remember_quietly(key, address=address)
+            if key not in out:
+                out.append(key)
+        _asking[:] = asks
+    else:
+        _asking[:] = [a for a in _asking if a["address"] not in answered]
     return out
+
+
+_asking = []   # the last search's phones 24bit7 couldn't tell (asking)
+
+
+def asking():
+    """
+    The phones with the 24bit7 app answering that 24bit7 can't tell (Ben, 25 Nov 2026): [{address, key, model,
+    known}]. known: the id is a phone 24bit7 keeps, but the code it has no longer works (the app was reinstalled
+    without Music/.24bit7 to read it back from). Not known: a phone it has never seen, or one that was reset; key is
+    None for an older app that won't say who it is without the code. The Devices tab asks about each.
+    """
+    return [dict(a) for a in _asking]
+
+
+def hello(address, timeout=1.5):
+    """Who the app at this address is, without the code ({id, name}), or None: an older app (before /hello) or no
+    answer. Only the id and the phone's model: nothing on the phone is read without the code."""
+    import http.client
+    host, _, port = address.rpartition(":")
+    con = http.client.HTTPConnection(host, int(port), timeout=timeout)
+    try:
+        con.request("GET", "/hello")
+        r = con.getresponse()
+        body = r.read()
+        return json.loads(body) if r.status == 200 else None
+    except Exception:
+        return None
+    finally:
+        con.close()
+
+
+def search_network(skip=(), timeout=0.4):
+    """
+    Every phone with the 24bit7 app answering on the home network: ([(key, address)] for those that answer to the
+    code 24bit7 keeps, the asking() list for the rest). One quick pass (a background look, so no slower second pass
+    as + Add has). Addresses in skip have answered already.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    codes = {k: e["code"] for k, e in _meta(META_KEY, {}).items()
+             if is_wifi(k) and isinstance(e, dict) and e.get("code")}
+    hosts = [f"{net}.{i}" for net in _home_networks() for i in range(1, 255)]
+    with ThreadPoolExecutor(64) as pool:
+        open_ = [h for h, ok in zip(hosts, pool.map(lambda h: _open_port(h, timeout=timeout), hosts)) if ok]
+    found, asks = [], []
+    for h in open_:
+        address = f"{h}:{APP_PORT}"
+        if address in skip:
+            continue
+        me = hello(address)
+        if me and me.get("id"):
+            key = "app:" + str(me["id"]).lower()
+            if key in codes and _answers(address, codes[key]) == key:
+                found.append((key, address))
+            else:
+                asks.append({"address": address, "key": key, "model": me.get("name") or "", "known": key in codes})
+            continue
+        for key, code in codes.items():   # an older app: only a code 24bit7 keeps tells who it is
+            if _answers(address, code) == key:
+                found.append((key, address))
+                break
+        else:
+            asks.append({"address": address, "key": None, "model": "", "known": False})
+    return found, asks
+
+
+def kept_phones():
+    """The phones 24bit7 keeps, for the Devices tab's "which is it?": [(key, name)], one per name (a phone kept by
+    USB and by WiFi under the same name is offered once, as the WiFi one)."""
+    out = {}
+    for key, entry in _meta(META_KEY, {}).items():
+        if key == PC or not isinstance(entry, dict):
+            continue
+        name = settings(key, entry.get("model") or "")["name"]
+        if name not in out or is_wifi(key):
+            out[name] = key
+    return [(key, name) for name, key in out.items()]
+
+
+def _answers(address, code):
+    """The key of the app at this address if it takes the code, else None."""
+    try:
+        return "app:" + str(WifiPhone.info_at(address, code, timeout=1.5).get("id")).lower()
+    except Exception:
+        return None
+
+
+def claim(address, code, as_key=None, name=None):
+    """
+    The answer to the Devices tab's question: the phone at this address, with the code shown on it, is as_key (a
+    phone 24bit7 keeps) or, with no as_key, a new one called name. Its name, folder, limit and records move to the
+    id it answers with, and the USB link follows. The phone's key, or None when the code isn't right.
+    """
+    code = (code or "").strip()
+    if not re.fullmatch(r"\d{4}", code):
+        return None
+    try:
+        info = WifiPhone.info_at(address, code, timeout=3)
+    except Exception:
+        return None
+    key = "app:" + str(info.get("id")).lower()
+    every = _meta(META_KEY, {})
+    entry = dict(every.get(key) or {})
+    if as_key and as_key != key:
+        entry = dict(entry, **(every.pop(as_key, None) or {}))
+        links = {u: key if a == as_key else a for u, a in _meta(LINKS_KEY, {}).items()}
+        if not is_wifi(as_key):
+            links[as_key] = key   # a phone kept by USB only: plugged in again, it's this one
+        _set_meta(LINKS_KEY, links)
+        if last_device() == as_key:
+            _set_meta(LAST_KEY, key)
+    entry.update(code=code, address=address, model=info.get("name") or entry.get("model") or "")
+    if name and not as_key:
+        entry["name"] = name
+    every[key] = entry
+    _set_meta(META_KEY, every)
+    _asking[:] = [a for a in _asking if a["address"] != address]
+    return key
 
 
 def forget(device_id):

@@ -18,8 +18,9 @@ import pytest
 class FakeApp:
     """What android/app/src/main/java/.../TransferService.kt answers, over a folder standing in for the phone."""
 
-    def __init__(self, root, code="4659", app_id="0f8e1c2a-1111-2222-3333-444455556666"):
+    def __init__(self, root, code="4659", app_id="0f8e1c2a-1111-2222-3333-444455556666", hello=True):
         self.root, self.code, self.app_id = str(root), code, app_id
+        self.hello = hello   # /hello, without the code (the app from 25 Nov 2026); False: an older app
         app = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -46,9 +47,11 @@ class FakeApp:
                 return True
 
             def do_GET(self):
+                route = urllib.parse.urlparse(self.path).path
+                if route == "/hello" and app.hello:
+                    return self._reply(200, {"id": app.app_id, "name": "Pixel 9a", "version": 2})
                 if not self._ok():
                     return
-                route = urllib.parse.urlparse(self.path).path
                 if route == "/info":
                     return self._reply(200, {"id": app.app_id, "name": "Pixel 9a", "free": 64 * 10 ** 9,
                                              "total": 117 * 10 ** 9, "version": 1})
@@ -218,3 +221,99 @@ def test_the_same_phone_by_usb_and_wifi_is_one_device(app, phone_app, monkeypatc
     monkeypatch.setattr(phone, "devices", lambda: [])
     assert (key, "Pixel 9a") in phone.targets(), "unplugged: there by WiFi"
     assert phone.label(key) == "Ben's Phone (WiFi)"
+
+
+def test_a_phone_given_a_new_address_brings_the_tab_up_again(app, phone_app):
+    """
+    Ben, 25 Nov 2026: his Pixel answered at .97 while 24bit7 had it at .248, so the Devices tab never came up (the
+    half-minute look tries only the last address). The search across the network finds it by its id and keeps
+    where it is now; without it, a moved phone isn't there.
+    """
+    import phone
+    key, _model, _known = phone.add_wifi("4659")
+    phone.remember_quietly(key, address="127.0.0.1:1")   # the router gave it another address
+    assert phone.present() == [], "the quick look knocks only where it was"
+    assert phone.present(search=True) == [key], "the search finds it"
+    assert phone._meta(phone.META_KEY, {})[key]["address"] == phone_app.address, "and keeps where it is now"
+    assert phone.asking() == []
+    assert phone.present() == [key], "so the next quick look finds it too"
+
+
+def test_an_older_app_that_moved_is_still_found_by_its_code(app, phone_app):
+    """An app from before /hello can't say who it is without the code, so the codes 24bit7 keeps are tried."""
+    import phone
+    phone_app.hello = False
+    key, _model, _known = phone.add_wifi("4659")
+    phone.remember_quietly(key, address="127.0.0.1:1")
+    assert phone.present(search=True) == [key] and phone.asking() == []
+
+
+def test_a_known_phone_with_a_new_code_is_asked_about(app, phone_app):
+    """
+    Ben, 25 Nov 2026 ("were you previously Ben's Phone?"): a phone whose app was reinstalled without Music/.24bit7
+    to read back keeps its id (from the file) but has a new code. 24bit7 knows it from /hello and asks for the code;
+    the right one puts it back, the wrong one changes nothing.
+    """
+    import phone
+    key, _model, _known = phone.add_wifi("4659")
+    phone.remember(key, name="Ben's Phone", folder="Music/Ben")
+    phone_app.code = "7777"
+    assert phone.present(search=True) == []
+    ask = phone.asking()
+    assert ask == [{"address": phone_app.address, "key": key, "model": "Pixel 9a", "known": True}]
+    assert phone.claim(phone_app.address, "1234", as_key=key) is None, "the wrong code changes nothing"
+    assert phone._meta(phone.META_KEY, {})[key]["code"] == "4659"
+    assert phone.claim(phone_app.address, "7777", as_key=key) == key
+    assert phone.asking() == []
+    assert phone.settings(key)["name"] == "Ben's Phone" and phone.present() == [key]
+
+
+def test_an_unknown_phone_is_asked_which_it_is_and_takes_over_the_old_one(app, phone_app, monkeypatch):
+    """
+    A phone reset or replaced has a new id and code. 24bit7 asks which phone it is; the answer moves the old
+    phone's name, folder, limit, records and USB link to the new id. "A New Phone" keeps it as one of its own.
+    """
+    import phone
+    phone.remember_quietly("app:old-id", name="Ben's Phone", folder="Music/Ben", limit_gb=30.0, code="1111",
+                           address="127.0.0.1:1", model="Pixel 9a")
+    phone.remember("app:old-id")
+    phone._set_meta(phone.LINKS_KEY, {"usb-ben": "app:old-id"})
+    phone.remember_quietly("usb-jo", name="Jo's Phone", model="Pixel 9a")
+    assert phone.present(search=True) == []
+    assert phone.asking() == [{"address": phone_app.address, "key": "app:" + phone_app.app_id, "model": "Pixel 9a",
+                               "known": False}]
+    assert sorted(n for _k, n in phone.kept_phones()) == ["Ben's Phone", "Jo's Phone"]
+    key = phone.claim(phone_app.address, "4659", as_key="app:old-id")
+    assert key == "app:" + phone_app.app_id
+    every = phone._meta(phone.META_KEY, {})
+    assert "app:old-id" not in every
+    s = phone.settings(key)
+    assert (s["name"], s["folder"], s["limit_gb"]) == ("Ben's Phone", "Music/Ben", 30.0)
+    assert every[key]["code"] == "4659" and every[key]["address"] == phone_app.address
+    assert phone._meta(phone.LINKS_KEY, {}) == {"usb-ben": key}, "plugged in by USB, it's still this phone"
+    assert phone.last_device() == key
+    assert phone.present() == [key]
+
+
+def test_a_new_phone_is_kept_as_its_own(app, phone_app):
+    import phone
+    phone.present(search=True)
+    key = phone.claim(phone_app.address, "4659", name="Jo's Phone")
+    assert phone.settings(key)["name"] == "Jo's Phone" and phone.asking() == []
+    assert phone.present() == [key]
+
+
+def test_the_app_reads_its_id_and_code_back_after_a_reinstall():
+    """
+    The app keeps its id and code in Music/.24bit7 and reads them back when its own storage is empty (a reinstall),
+    and says who it is on /hello before the code is asked for. No Android here, so the source is read: the order
+    matters (the /hello answer must come before the code check, and installId must look at the file first).
+    """
+    src = open(os.path.join(os.path.dirname(__file__), "..", "android", "app", "src", "main", "java", "io", "github",
+                            "twentyfourbit7", "transfer", "TransferService.kt"), encoding="utf-8").read()
+    assert src.index('path == "/hello"') < src.index('headers["x-24bit7-code"] != code(this)')
+    hello = src[src.index('path == "/hello"'):src.index('headers["x-24bit7-code"] != code(this)')]
+    assert "installId" in hello and "free" not in hello, "only the id and model without the code"
+    assert "marked(0)" in src[src.index("fun installId"):src.index("fun ensureIdentity")]
+    assert "marked(1)" in src[src.index("fun code"):src.index("fun installId")]
+    assert r'installId(c) + "\n" + code(c)' in src, "the file holds the id, then the code"

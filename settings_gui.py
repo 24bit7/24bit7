@@ -1380,6 +1380,20 @@ class SettingsTab(tk.Frame):
 
     # --- persistence -------------------------------------------------------
 
+    def _devices_changed(self):
+        """Settings > Other > Devices: saved, and the Devices look follows straight away (its next look)."""
+        engine.DEVICES_TAB = self.vars["DEVICES_TAB"].get() != "Off"
+        self._save()
+        poke = getattr(getattr(self, "play", None), "devices_known", None)
+        if poke is not None:
+            poke()
+
+    def _add_device(self):
+        """Settings > Other > + Add a Device: the Devices tab shown and brought forward (gui.attach_devices)."""
+        show = getattr(getattr(self, "play", None), "show_devices", None)
+        if show is not None:
+            show()
+
     def _restore_changed(self, save=True):
         """Restore JRiver's line under its drop-down; Restart If Hung's spells out the risk to the library."""
         code = option_code(RESTORE_OPTIONS, self.vars["JRIVER_RESTORE"].get())
@@ -1397,6 +1411,8 @@ class SettingsTab(tk.Frame):
         updates = {}
         if "JRIVER_RESTORE" in self.vars:
             updates["JRIVER_RESTORE"] = option_code(RESTORE_OPTIONS, self.vars["JRIVER_RESTORE"].get())
+        if "DEVICES_TAB" in self.vars:
+            updates["DEVICES_TAB"] = "off" if self.vars["DEVICES_TAB"].get() in ("Off", t("Off")) else "on"
         updates["CACHE_KEEP"] = option_code(CACHE_KEEP_OPTIONS, self.vars["CACHE_KEEP"].get())
         updates["CACHE_DAYS"] = None   # replaced by Keep Cache For
         updates["CREDITS_SCOPE"] = option_code(CREDITS_SCOPE_OPTIONS, self.vars["CREDITS_SCOPE"].get())
@@ -6320,6 +6336,23 @@ class SettingsTab(tk.Frame):
                         "credits of its own, under its number and title, then the album's. Track credits "
                         "include album credits marked for that track, such as a drummer on tracks 2 to 4. "
                         "Show First picks which list comes first.")).pack(side="left", padx=(8, 0))
+
+        # Devices (Ben, 25 Nov 2026, as drawn): whether the Devices tab comes up by itself, and a way to it to add a
+        # phone before anything has been saved to one
+        tk.Label(box, text=t("Devices"), anchor="w").grid(row=8, column=0, sticky="w", pady=4)
+        cell = tk.Frame(box)
+        cell.grid(row=8, column=1, columnspan=2, sticky="w", padx=(12, 0), pady=4)
+        self.vars["DEVICES_TAB"] = tk.StringVar(value=N_("On") if engine.DEVICES_TAB else N_("Off"))
+        devices_cb = TCombobox(cell, textvariable=self.vars["DEVICES_TAB"], values=[N_("On"), N_("Off")],
+                               state="readonly", width=8)
+        devices_cb.pack(side="left")
+        devices_cb.bind("<<ComboboxSelected>>", lambda e: (devices_cb.selection_clear(), self._devices_changed()))
+        FlatButton(cell, text=t("+ Add a Device..."), command=self._add_device, quiet=True).pack(side="left",
+                                                                                                padx=(12, 0))
+        help_mark(cell, t("On, a Devices tab shows after Settings while a phone answers: plugged in by USB, or with "
+                          "the 24bit7 app open on the WiFi. Off, it never comes up by itself, so a phone charging "
+                          "by USB doesn't bring it up; Save's Copy Tracks To still works. Add a Device opens the "
+                          "tab, where you can add a phone over WiFi.")).pack(side="left", padx=(8, 0))
 
         self._build_sources_section(tab)
         self._build_additional_outputs(tab)

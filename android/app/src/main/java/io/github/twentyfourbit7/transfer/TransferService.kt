@@ -126,8 +126,13 @@ class TransferService : Service() {
                     val i = l.indexOf(':')
                     if (i > 0) l.substring(0, i).trim().lowercase() to l.substring(i + 1).trim() else null
                 }.toMap()
-                if (headers["x-24bit7-code"] != code(this)) return reply(out, 401, JSONObject().put("error", "wrong code"))
                 val path = target.substringBefore('?')
+                // Who this is, without the code: only the id and the model, so 24bit7 can tell a phone that moved or
+                // was reinstalled from one it has never seen. Nothing on the phone is read without the code.
+                if (method == "GET" && path == "/hello") {
+                    return reply(out, 200, JSONObject().put("id", installId(this)).put("name", Build.MODEL).put("version", VERSION))
+                }
+                if (headers["x-24bit7-code"] != code(this)) return reply(out, 401, JSONObject().put("error", "wrong code"))
                 val query = target.substringAfter('?', "").split('&').filter { it.contains('=') }.associate {
                     URLDecoder.decode(it.substringBefore('='), "UTF-8") to URLDecoder.decode(it.substringAfter('='), "UTF-8")
                 }
@@ -227,7 +232,7 @@ class TransferService : Service() {
 
     companion object {
         const val PORT = 47247
-        const val VERSION = 1          // the conversation 24bit7 and the app share
+        const val VERSION = 2          // the conversation 24bit7 and the app share (2: /hello, 25 Nov 2026)
         const val NOTE_ID = 1
         const val CHANNEL = "copy"
         val REASONS = mapOf(200 to "OK", 201 to "Created", 400 to "Bad Request", 401 to "Unauthorized",
@@ -237,24 +242,39 @@ class TransferService : Service() {
 
         private fun prefs(c: Context) = c.getSharedPreferences("transfer", Context.MODE_PRIVATE)
 
-        /** The four digits 24bit7 asks for once, kept for good. */
-        fun code(c: Context): String = prefs(c).getString("code", null)
-            ?: (1000 + SecureRandom().nextInt(9000)).toString().also { prefs(c).edit().putString("code", it).apply() }
+        private fun mark() = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), ".24bit7")
 
-        fun installId(c: Context): String = prefs(c).getString("id", null)
-            ?: UUID.randomUUID().toString().also { prefs(c).edit().putString("id", it).apply() }
+        /** Music/.24bit7's lines: the id, then the code (an app before 25 Nov 2026 wrote the id alone). */
+        private fun marked(n: Int): String? = try {
+            mark().takeIf { it.isFile }?.readLines()?.map { it.trim() }?.getOrNull(n)?.takeIf { it.isNotEmpty() }
+        } catch (_: Exception) { null }
 
         /**
-         * Music/.24bit7 holds this install's id, so 24bit7 knows the phone plugged in by USB is the one it reaches
-         * over WiFi: one name, folder and limit for both.
+         * The four digits 24bit7 asks for once, kept for good: read back from Music/.24bit7 after a reinstall, so
+         * 24bit7 doesn't have to ask again (Ben, 25 Nov 2026). An app on the phone that can read Music can already
+         * write to it, so the file gives nothing away the code guards (others on the WiFi).
+         */
+        fun code(c: Context): String = prefs(c).getString("code", null)
+            ?: (marked(1)?.takeIf { Regex("\\d{4}").matches(it) } ?: (1000 + SecureRandom().nextInt(9000)).toString())
+                .also { prefs(c).edit().putString("code", it).apply() }
+
+        /** This phone's id for 24bit7, read back from Music/.24bit7 after a reinstall so it stays the same phone. */
+        fun installId(c: Context): String = prefs(c).getString("id", null)
+            ?: (marked(0)?.takeIf { Regex("[0-9a-fA-F-]{8,64}").matches(it) } ?: UUID.randomUUID().toString())
+                .also { prefs(c).edit().putString("id", it).apply() }
+
+        /**
+         * Music/.24bit7 holds this install's id and code, so 24bit7 knows the phone plugged in by USB is the one it
+         * reaches over WiFi (one name, folder and limit for both), and a reinstall is still the same phone. Only
+         * called once All files access is given, so an id from before is always read before a new one is made.
          */
         fun ensureIdentity(c: Context) {
             try {
-                val f = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), ".24bit7")
-                val id = installId(c)
-                if (!f.isFile || f.readText().trim() != id) {
+                val f = mark()
+                val text = installId(c) + "\n" + code(c) + "\n"
+                if (!f.isFile || f.readText() != text) {
                     f.parentFile?.mkdirs()
-                    f.writeText(id + "\n")
+                    f.writeText(text)
                 }
             } catch (_: Exception) {
             }
