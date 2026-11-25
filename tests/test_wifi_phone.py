@@ -317,3 +317,65 @@ def test_the_app_reads_its_id_and_code_back_after_a_reinstall():
     assert "marked(0)" in src[src.index("fun installId"):src.index("fun ensureIdentity")]
     assert "marked(1)" in src[src.index("fun code"):src.index("fun installId")]
     assert r'installId(c) + "\n" + code(c)' in src, "the file holds the id, then the code"
+
+
+def test_forget_while_a_search_is_out_doesnt_bring_the_phone_back(app, phone_app, monkeypatch):
+    """
+    Ben, 25 Nov 2026: Forget "just doesn't work sometimes", and Forget then Add didn't help. A search already out
+    when Forget was clicked wrote the phone's address back afterwards, which made the record again without its code
+    (a "Pixel 9a" with nothing to type a code into). What a look learns is now kept only for a phone still on the
+    list, so a forgotten phone that answers is asked about as a new one.
+    """
+    import phone
+    key, _model, _known = phone.add_wifi("4659")
+    phone.remember_quietly(key, address="127.0.0.1:1")   # moved, so only the search finds it
+    real = phone.search_network
+
+    def forgotten_midway(*a, **k):
+        out = real(*a, **k)
+        phone.forget(key)   # clicked while the search was out
+        return out
+    monkeypatch.setattr(phone, "search_network", forgotten_midway)
+    assert phone.present(search=True) == []
+    assert key not in phone._meta(phone.META_KEY, {}), "not put back by the search"
+    monkeypatch.setattr(phone, "search_network", real)
+    phone.present(search=True)
+    assert phone.asking() == [{"address": phone_app.address, "key": key, "model": "Pixel 9a", "known": False}]
+    assert key not in phone._meta(phone.META_KEY, {})
+    assert phone.claim(phone_app.address, "4659", name="Ben's Phone") == key, "and added again from the question"
+    assert phone.present() == [key]
+
+
+def test_a_forgotten_phone_isnt_put_back_by_finding_it(app, phone_app):
+    """The other background writer: opening a phone that moved keeps where it's found, but not for one forgotten
+    in the meantime."""
+    import phone
+    key, _model, _known = phone.add_wifi("4659")
+    entry = phone._meta(phone.META_KEY, {})[key]
+    phone.forget(key)
+    phone._touch(key, address=phone_app.address)
+    assert key not in phone._meta(phone.META_KEY, {})
+    phone.remember_quietly(key, **dict(entry, address="127.0.0.1:1"))
+    phone.open_device(key, "Ben's Phone")
+    assert phone._meta(phone.META_KEY, {})[key]["address"] == phone_app.address, "kept while it's on the list"
+
+
+def test_type_its_code_reconnects_a_phone_that_lost_its_code(app, phone_app):
+    """
+    Ben, 25 Nov 2026: his phone was kept with its name but no code or address (from the write above), so it showed
+    "not found" with no way in. Any WiFi phone not answering now has Type Its Code...: the code on the phone's
+    screen finds it and puts it back, name and records kept. A wrong code changes nothing.
+    """
+    import phone
+    key = "app:" + phone_app.app_id
+    phone.remember_quietly(key, name="Ben's Phone", folder="Music/Ben")
+    assert (key, "", "wifi", False) in phone.known(), "a WiFi phone, not answering"
+    phone.present(search=True)
+    assert phone.asking()[0]["known"] is True, "and the search asks about it by name"
+    assert phone.reconnect(key, "1234") is None
+    assert phone.reconnect(key, "12") is None
+    assert phone._meta(phone.META_KEY, {})[key].get("code") is None
+    assert phone.reconnect(key, "4659") == key
+    s = phone._meta(phone.META_KEY, {})[key]
+    assert (s["name"], s["folder"], s["code"], s["address"]) == ("Ben's Phone", "Music/Ben", "4659", phone_app.address)
+    assert phone.present() == [key] and phone.asking() == []

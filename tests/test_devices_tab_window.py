@@ -299,3 +299,97 @@ def test_add_a_device_in_settings_opens_the_tab(app, ui, monkeypatch):
     s._devices_changed()
     assert engine.DEVICES_TAB is True
     assert not ui.errors, ui.errors[0]
+
+
+def test_the_first_open_draws_the_folder_once(app, ui, files, monkeypatch):
+    """Ben, 25 Nov 2026: "jittery when it loaded the first time". The devices' answer drew an empty page and the
+    folder's read drew it again; a device not read yet now waits for its read, so the page is drawn once."""
+    import devices_gui
+    import phone
+    ph = _phone(app, files)
+    phone.remember_quietly(BEN, name=BEN)
+    draws = []
+    real = devices_gui.DevicesTab.draw
+
+    def counted(self):
+        draws.append(self.current)
+        return real(self)
+    monkeypatch.setattr(devices_gui.DevicesTab, "draw", counted)
+    tab = _tab(ui, monkeypatch, ph, [(BEN, "Pixel 9a", "usb", True)])
+    _settled(ui, tab)
+    assert tab.albums.rows.winfo_children(), "the folder is drawn"
+    assert draws.count(BEN) == 1, draws
+
+
+def test_type_its_code_reconnects_a_phone_not_answering(app, ui, monkeypatch):
+    """
+    Ben, 25 Nov 2026: his phone showed "not found" with "no way to enter the code". A WiFi phone not answering has
+    Type Its Code... beside Rename and Forget; the code reconnects the same phone, name kept. Not for one answering.
+    """
+    import phone
+    import tabs
+    phone.remember_quietly("app:ben", name=BEN, model="Pixel 9a")
+    devices = [("app:ben", "Pixel 9a", "wifi", False)]
+    tab = _tab(ui, monkeypatch, None, devices, device="app:ben")
+    monkeypatch.setattr(phone, "known", lambda: list(devices))
+    assert tab.code_link.winfo_ismapped() and tab.code_link.cget("text") == "Type Its Code..."
+    asked = []
+    monkeypatch.setattr(tabs, "ask_name", lambda *a, **k: "1234")
+    monkeypatch.setattr(phone, "reconnect", lambda key, code: asked.append((key, code)) or None)
+    tab._type_code()
+    _settled(ui, tab)
+    assert asked == [("app:ben", "1234")]
+    assert "No phone answered to that code" in tab.problem["app:ben"]
+    monkeypatch.setattr(tabs, "ask_name", lambda *a, **k: "4659")
+
+    def found(key, code):
+        asked.append((key, code))
+        devices[:] = [("app:ben", "Pixel 9a", "wifi", True)]
+        return key
+    monkeypatch.setattr(phone, "reconnect", found)
+    monkeypatch.setattr(phone, "open_device", lambda device_id, name: _ReadOnly())
+    tab._type_code()
+    _settled(ui, tab)
+    assert asked[-1] == ("app:ben", "4659")
+    assert tab.answering.get("app:ben") is True and not tab.code_link.winfo_ismapped()
+    assert not ui.errors, ui.errors[0]
+
+
+class _ReadOnly:
+    """A phone with an empty Music folder, for the read after it answers again."""
+    def __new__(cls):
+        from test_phone_copy import FakePhone
+        ph = FakePhone()
+        ph.folder("Music", make=True)
+        return ph
+
+
+def test_forget_and_opening_the_tab_search_the_network(app, ui, monkeypatch):
+    """Ben, 25 Nov 2026: after Forget, a phone still answering waited up to five minutes to be asked about. Forget
+    searches the network at once; opening the tab does too, unless it was searched in the last half minute."""
+    import devices_gui
+    import phone
+    calls = []
+    monkeypatch.setattr(devices_gui.Presence, "search_now", lambda self, older_than=0: calls.append(older_than))
+    phone.remember_quietly("app:jo", name="Jo's Phone", code="1234", model="Pixel 9a")
+    tab = _tab(ui, monkeypatch, None, [("app:jo", "Pixel 9a", "wifi", None)], device="app:jo")
+    assert calls == [devices_gui.SEARCH_FRESH], "opening the tab"
+    monkeypatch.setattr(phone, "known", lambda: [])
+    tab._forget()
+    _settled(ui, tab)
+    assert calls[-1] == 0 and "app:jo" not in phone._meta(phone.META_KEY, {})
+    assert not ui.errors, ui.errors[0]
+
+
+def test_search_now_skips_a_search_this_fresh(app):
+    import time
+    import devices_gui
+    p = devices_gui.Presence.__new__(devices_gui.Presence)
+    p._wake, p._search, p.searched = None, False, time.monotonic()
+    p.search_now(older_than=30)
+    assert p._search is False, "searched a moment ago"
+    p.search_now()
+    assert p._search is True, "Forget: always"
+    p._search, p.searched = False, time.monotonic() - 31
+    p.search_now(older_than=30)
+    assert p._search is True

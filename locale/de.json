@@ -2177,5 +2177,10 @@
   "# Tracks": "# Titel",
   "Stack Settings": "Sammel-Einstellungen",
   "How many songs you own from each artist you added, from one to twenty.": "Wie viele deiner Titel von jedem hinzugefügten Künstler, von eins bis zwanzig.",
-  "Plays the songs you own by each artist you added, up to # Tracks each, shuffled with the artists spread out.": "Spielt deine Titel von jedem hinzugefügten Künstler, bis zu # Titel je Künstler, gemischt und mit den Künstlern verteilt."
+  "Plays the songs you own by each artist you added, up to # Tracks each, shuffled with the artists spread out.": "Spielt deine Titel von jedem hinzugefügten Künstler, bis zu # Titel je Künstler, gemischt und mit den Künstlern verteilt.",
+  "Type Its Code...": "Code eingeben...",
+  "Type Its Code": "Code eingeben",
+  "The four-digit code on {phone}'s screen, with the 24bit7 app open:": "Der vierstellige Code auf dem Bildschirm von {phone}, bei geöffneter 24bit7-App:",
+  "Looking for {phone}...": "Suche {phone}...",
+  "No phone answered to that code. Check the 24bit7 app is open on it, on the same WiFi as this PC.": "Kein Handy hat auf diesen Code geantwortet. Prüfe, ob die 24bit7-App darauf offen ist, im selben WLAN wie dieser PC."
 }

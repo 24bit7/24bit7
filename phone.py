@@ -656,6 +656,8 @@ def arrange(phone, folder, say=print):
                           what=names_text(parts)) if parts else
                         t("Sorted {folder} on {phone}.", folder=folder, phone=phone.name)))
     every = _meta(META_KEY, {})
+    if device not in every and getattr(phone, "id", None) is not None and is_wifi(device):
+        return moved   # forgotten while it was being sorted: not put back
     entry = dict(every.get(device) or {})
     entry["copied"] = copied
     entry["arranged"] = sorted(set(entry.get("arranged") or []) | {fkey})
@@ -1167,8 +1169,9 @@ def known():
     for key, entry in every.items():
         if key in seen or key == PC or not isinstance(entry, dict):
             continue
-        wifi = is_wifi(key) and bool(entry.get("code"))
-        out.append((key, entry.get("model") or "", "wifi" if wifi else "usb", None if wifi else False))
+        wifi = is_wifi(key)   # one kept without its code is still a WiFi phone: Type Its Code... reconnects it
+        out.append((key, entry.get("model") or "", "wifi" if wifi else "usb",
+                    None if wifi and entry.get("code") else False))
     if (every.get(PC) or {}).get("folder"):
         out.append((PC, t("This PC"), "pc", True))
     return out
@@ -1202,8 +1205,11 @@ def present(timeout=1.5, search=False):
             continue
     if search:
         found, asks = search_network(skip=answered)
+        kept = _meta(META_KEY, {})
         for key, address in found:
-            remember_quietly(key, address=address)
+            if key not in kept:
+                continue   # forgotten while the search was out (Forget, on the Devices tab)
+            _touch(key, address=address)
             if key not in out:
                 out.append(key)
         _asking[:] = asks
@@ -1249,8 +1255,8 @@ def search_network(skip=(), timeout=0.4):
     as + Add has). Addresses in skip have answered already.
     """
     from concurrent.futures import ThreadPoolExecutor
-    codes = {k: e["code"] for k, e in _meta(META_KEY, {}).items()
-             if is_wifi(k) and isinstance(e, dict) and e.get("code")}
+    every = _meta(META_KEY, {})
+    codes = {k: e["code"] for k, e in every.items() if is_wifi(k) and isinstance(e, dict) and e.get("code")}
     hosts = [f"{net}.{i}" for net in _home_networks() for i in range(1, 255)]
     with ThreadPoolExecutor(64) as pool:
         open_ = [h for h, ok in zip(hosts, pool.map(lambda h: _open_port(h, timeout=timeout), hosts)) if ok]
@@ -1265,7 +1271,7 @@ def search_network(skip=(), timeout=0.4):
             if key in codes and _answers(address, codes[key]) == key:
                 found.append((key, address))
             else:
-                asks.append({"address": address, "key": key, "model": me.get("name") or "", "known": key in codes})
+                asks.append({"address": address, "key": key, "model": me.get("name") or "", "known": key in every})
             continue
         for key, code in codes.items():   # an older app: only a code 24bit7 keeps tells who it is
             if _answers(address, code) == key:
@@ -1274,6 +1280,20 @@ def search_network(skip=(), timeout=0.4):
         else:
             asks.append({"address": address, "key": None, "model": "", "known": False})
     return found, asks
+
+
+def reconnect(key, code):
+    """
+    Type Its Code... (Ben, 25 Nov 2026): a WiFi phone that isn't answering, given the code on its screen. It's looked
+    for across the home network and, once it answers to the code, kept as this phone (its name, folder, limit and
+    records stay; a reset phone with a new id takes them over). The key, or None if no phone answered to the code.
+    """
+    code = (code or "").strip()
+    found = find_apps(code) if re.fullmatch(r"\d{4}", code) else []
+    if not found:
+        return None
+    mine = [a for a, info in found if "app:" + str(info.get("id")).lower() == key]
+    return claim((mine or [found[0][0]])[0], code, as_key=key)
 
 
 def kept_phones():
@@ -1614,7 +1634,7 @@ class WifiPhone:
                 pass
         for where, info in find_apps(code):
             if "app:" + str(info.get("id")).lower() == key:
-                remember_quietly(key, address=where)
+                _touch(key, address=where)
                 return cls(key, name, code, where)
         raise RuntimeError(t("{phone} isn't answering. Open 24bit7 on it, on the same WiFi as this PC.", phone=name))
 
@@ -1704,6 +1724,18 @@ def remember_quietly(key, **choices):
     every = _meta(META_KEY, {})
     every[key] = dict(every.get(key) or {}, **choices)
     _set_meta(META_KEY, every)
+
+
+def _touch(key, **choices):
+    """
+    What a look in the background learned (where a phone answers now), kept only for a device still on the list.
+    A look that finishes just after Forget never puts the phone back as a half-made record, which looked like
+    Forget not working and left a phone with no code to give (Ben, 25 Nov 2026).
+    """
+    every = _meta(META_KEY, {})
+    if key in every:
+        every[key] = dict(every[key], **choices)
+        _set_meta(META_KEY, every)
 
 
 # --- Windows Portable Devices ----------------------------------------------------------------------------------

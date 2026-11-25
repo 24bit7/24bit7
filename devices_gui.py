@@ -31,6 +31,7 @@ from tabs import PALETTE, FlatButton, RoundedEntry
 SHOWN = 6   # suggestions of each kind under the library box
 WATCH_EVERY = 30   # seconds between looks for a phone answering (phone.present)
 SEARCH_EVERY = 300   # seconds between looks across the whole home network (a phone given a new address)
+SEARCH_FRESH = 30    # opening the tab searches the network again unless it was searched this recently
 
 
 class Presence:
@@ -48,6 +49,8 @@ class Presence:
         self.asking = []       # phones the last look couldn't tell (phone.asking)
         self.waiting = False   # nothing answers, but the tab is showing: it goes once you leave it
         self._wake = None
+        self._search = False    # search_now: the next look searches the whole network
+        self.searched = None    # when the network was last searched (time.monotonic), None before the first
         self._stop = threading.Event()   # the window's gone: the looking stops
         nb.bind("<<NotebookTabChanged>>", lambda e: self.left(), add="+")
         tab.bind("<Destroy>", lambda e: self._stop.set() if e.widget is tab else None, add="+")
@@ -95,14 +98,15 @@ class Presence:
 
         def look():
             phone.com_begin()
-            searched = None
             try:
                 while not self._stop.is_set():
-                    due = searched is None or time.monotonic() - searched >= search_every
+                    due = (self._search or self.searched is None
+                           or time.monotonic() - self.searched >= search_every)
+                    self._search = False
                     try:
                         ids = phone.present(search=True) if due else phone.present()
                         if due:
-                            searched = time.monotonic()
+                            self.searched = time.monotonic()
                         found.put((ids, phone.asking()))
                     except Exception as e:
                         engine.debug(f"Devices: couldn't look for phones ({e})")
@@ -127,6 +131,14 @@ class Presence:
         """Look now (a copy has just gone to a phone)."""
         if self._wake is not None:
             self._wake.set()
+
+    def search_now(self, older_than=0):
+        """Search the whole network now, not at the next five-minute mark (Ben, 25 Nov 2026: after Forget, a phone
+        still answering waited up to five minutes to be asked about). older_than: only if the last search is older."""
+        if self.searched is not None and time.monotonic() - self.searched < older_than:
+            return
+        self._search = True
+        self.poke()
 
     def stop(self):
         self._stop.set()
@@ -200,6 +212,7 @@ class DevicesTab(tk.Frame):
         self.tick_for = {}            # the row's key: its tick, as last drawn
         self.adding = {}              # artist folder (lower): [done, count] while an add runs
         self.busy = False
+        self._due = False   # the chips and page wait for the first read of a device (one draw, not two)
         self._jobs, self._news = queue.Queue(), queue.Queue()
         self._poll = None
         self._worker = None
@@ -234,6 +247,9 @@ class DevicesTab(tk.Frame):
         self.rename_link.pack(side="left")
         self.forget_link = self._link(info, t("Forget"), self._forget)
         self.forget_link.pack(side="left", padx=(px(12), 0))
+        # a WiFi phone that isn't answering: its code typed again reconnects it (Ben, 25 Nov 2026: Forget and add
+        # again was the only way, and Forget is the wrong tool for it)
+        self.code_link = self._link(info, t("Type Its Code..."), self._type_code)
         self.meter_label = tk.Label(outer, text="", font=("Segoe UI", 9), bg=bg, fg=PALETTE["help_fg"], anchor="w")
         self.meter_label.pack(anchor="w", pady=(px(8), 0))
         self.bar = tk.Canvas(outer, height=px(6), bg=PALETTE["line"], highlightthickness=0, bd=0)
@@ -337,6 +353,13 @@ class DevicesTab(tk.Frame):
         if kind == "scan":
             self._news.put(("devices", phone.known()))
             return
+        if kind == "reconnect":
+            _, device_id, code = job
+            key = phone.reconnect(phone.key_for(device_id), code)
+            self._news.put(("claimed", None, key, device_id) if key else
+                           ("failed", device_id, t("No phone answered to that code. Check the 24bit7 app is open "
+                                                   "on it, on the same WiFi as this PC.")))
+            return
         if kind == "claim":
             _, address, code, as_key = job
             self._news.put(("claimed", address, phone.claim(address, code, as_key=as_key), as_key))
@@ -406,9 +429,15 @@ class DevicesTab(tk.Frame):
                     self.answering[d] = here
             if self.current is not None:
                 self._job("read", self.current)
-            if (self.devices, self.answering, self.current) != before:   # the same devices: nothing redrawn
-                self._chips()
-                self.draw()
+            first = self.current is not None and self.current not in self.contents
+            # the same devices: nothing redrawn; a device not read yet waits for its read (or its "away"), so the
+            # first open draws once rather than an empty page and then the lists (Ben, 25 Nov 2026: "jittery")
+            if (self.devices, self.answering, self.current) != before:
+                if first:
+                    self._due = True   # drawn with the read
+                else:
+                    self._chips()
+                    self.draw()
         elif kind == "read":
             _, device_id, f, free = news
             same = (self.answering.get(device_id) is True and device_id not in self.problem
@@ -421,14 +450,16 @@ class DevicesTab(tk.Frame):
             if same:   # read again and nothing has changed (the tab clicked): only the free space can have moved
                 self._show_meter(device_id, f)
                 return
-            if was is not True:
+            if was is not True or self._due:
+                self._due = False
                 self._chips()
             self.draw()
         elif kind == "away":
             _, device_id, why = news
             changed = self.answering.get(device_id) is not False or self.problem.get(device_id) != why
             self.answering[device_id], self.problem[device_id] = False, why
-            if changed:
+            if changed or self._due:
+                self._due = False
                 self._chips()
                 self.draw()
         elif kind == "adding":
@@ -440,12 +471,14 @@ class DevicesTab(tk.Frame):
             self.adding.pop(news[2], None)
         elif kind == "claimed":
             _, address, key, as_key = news
-            if key is None:
+            if key is None and address is not None:
                 self.ask_problem[address] = t("That code isn't right. It's the four digits on the phone's screen.")
                 self._ask_rows()
                 return
             self.ask_problem.pop(address, None)
             self.asking = [a for a in self.asking if a["address"] != address]
+            self.answering.pop(as_key, None)
+            self.problem.pop(as_key, None)
             self._ask_rows()
             if as_key is None:
                 model = phone.settings(key, "")["name"]
@@ -468,8 +501,12 @@ class DevicesTab(tk.Frame):
     # --- what's shown --------------------------------------------------------------------------------------
 
     def shown(self):
-        """The tab brought forward: the devices looked for again, and the one chosen read again."""
+        """The tab brought forward: the devices looked for again, and the one chosen read again; the network searched
+        too, unless it was in the last SEARCH_FRESH seconds."""
         self._job("scan")
+        presence = getattr(self, "presence", None)
+        if presence is not None:
+            presence.search_now(older_than=SEARCH_FRESH)
 
     def show_device(self, device_id):
         """Save's Open Devices: the device to show when the tab comes forward (shown() reads it)."""
@@ -589,8 +626,26 @@ class DevicesTab(tk.Frame):
         phone.forget(self.current)
         self._log(t("Forgot {phone}. Nothing on it was touched.", phone=s["name"]))
         self.contents.pop(self.current, None)
+        self.answering.pop(self.current, None)
         self.current = None
         self._job("scan")
+        self._search_soon()   # a phone still answering is asked about straight away, not in five minutes
+
+    def _search_soon(self):
+        presence = getattr(self, "presence", None)
+        if presence is not None:
+            presence.search_now()
+
+    def _type_code(self):
+        """Type Its Code...: the code on the phone's screen, and the phone looked for and reconnected."""
+        if self.current is None:
+            return
+        s, _model = self._settings(self.current)
+        code = tabs.ask_name(self, t("Type Its Code"),
+                             t("The four-digit code on {phone}'s screen, with the 24bit7 app open:", phone=s["name"]))
+        if code and code.strip():
+            self.status.config(text=t("Looking for {phone}...", phone=s["name"]), fg=PALETTE["help_fg"])
+            self._job("reconnect", self.current, code.strip())
 
     def _open_folder(self):
         if self.current is None:
@@ -624,6 +679,7 @@ class DevicesTab(tk.Frame):
         self.tick_for = {}
         if device is None:
             self._on_screen = None
+            self.code_link.pack_forget()
             self.folder_label.config(text="")
             self.meter_label.config(text="")
             self.status.config(text=t("Plug in a phone, unlocked and set to File Transfer, or add one over WiFi."),
@@ -639,6 +695,11 @@ class DevicesTab(tk.Frame):
             self.rename_link.pack_forget()
         elif not self.rename_link.winfo_manager():
             self.rename_link.pack(side="left", before=self.forget_link)
+        if kind == "wifi" and self.answering.get(device) is False:
+            if not self.code_link.winfo_manager():
+                self.code_link.pack(side="left", padx=(self._px(12), 0))
+        else:
+            self.code_link.pack_forget()
         if kind == "wifi" or self.answering.get(device) is False:
             self.open_button.pack_forget()
         elif not self.open_button.winfo_manager():
