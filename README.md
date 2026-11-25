@@ -310,7 +310,14 @@ All settings live in a `.env` file next to the app. The Settings tab is the inte
 
 ---
 
-## What's new in 1.44.0
+## What's new in 1.45.0
+
+- **A phone that moves is found again.** When the router gives a phone a new address, 24bit7 finds it across your home network (when it starts and every five minutes), so the Devices tab comes up as it should. Update the phone app too: it now keeps who it is and its code through a reinstall.
+- **"Which phone is it?"** A phone with the 24bit7 app that 24bit7 can't tell (a new code, a reset or a new phone) brings up the Devices tab with a line asking which of your phones it is, and its code. It takes over that phone's name, folder and limit.
+- **Devices in Settings > Other**: On or Off, so a phone charging by USB needn't bring the tab up, and **+ Add a Device...**, to add a phone before anything has been copied to it.
+- **Search's stack settings**: **# Tracks** is a box you type in (one to twenty), then Select From Hits, then Go, under a **Stack Settings** heading. Enter with nothing typed no longer pops up "Type an artist first."
+
+### Earlier: 1.44.0
 
 - **A Devices tab**, after Settings, while a phone answers (plugged in by USB, or with the 24bit7 app open on the WiFi; since 1.44.1). Every device with a green or grey dot for whether it's answering, Rename and Forget, how much is on it against your limit, and two lists side by side: Albums and Playlists. Tick and Delete, with an amber line saying what goes first. A box over Albums adds an artist, album or track you own straight to the phone.
 - **Albums and Playlists on the phone.** Save copies a playlist into Music/Playlists, each song named "Artist - Title"; albums you add go into Music/Albums. **Clear Playlists First** clears Playlists only, so your albums stay. What older copies left is sorted into the two once, the first time.

@@ -1948,9 +1948,7 @@
   "Let the build finish first, then update.": "Lass die Playlist erst fertig werden, dann aktualisiere.",
   "Update from {old} to {new}?\n\n24bit7 closes, updates and starts again, in about a minute. JRiver keeps playing, but Alexa and Non-stop pause until 24bit7 is back.\n\nYour settings, history and profiles come with you. The old copy is kept beside it as {backup}.": "Von {old} auf {new} aktualisieren?\n\n24bit7 schließt sich, aktualisiert sich und startet wieder, in etwa einer Minute. JRiver spielt weiter, aber Alexa und Non-stop pausieren, bis 24bit7 wieder da ist.\n\nDeine Einstellungen, dein Verlauf und deine Profile kommen mit. Die alte Kopie bleibt daneben als {backup} erhalten.",
   "Search: {names}": "Suche: {names}",
-  "Plays up to this many songs you own by each artist you added, shuffled with the artists spread out.": "Spielt bis zu so viele deiner Titel von jedem hinzugefügten Künstler, gemischt und mit den Künstlern verteilt.",
   "Go": "Los",
-  "each": "je",
   "Added": "Hinzugefügt",
   "{names} and {count} more": "{names} und {count} weitere",
   "{names} and {last}": "{names} und {last}",
@@ -2175,5 +2173,9 @@
   "A phone with the 24bit7 app is answering ({model}). Which is it?": "Ein Handy mit der 24bit7-App antwortet ({model}). Welches ist es?",
   "A phone with the 24bit7 app is answering. Which is it?": "Ein Handy mit der 24bit7-App antwortet. Welches ist es?",
   "That code isn't right. It's the four digits on the phone's screen.": "Der Code stimmt nicht. Es sind die vier Ziffern auf dem Bildschirm des Handys.",
-  "On, a Devices tab shows after Settings while a phone answers: plugged in by USB, or with the 24bit7 app open on the WiFi. Off, it never comes up by itself, so a phone charging by USB doesn't bring it up; Save's Copy Tracks To still works. Add a Device opens the tab, where you can add a phone over WiFi.": "An: Nach Einstellungen erscheint ein Tab Geräte, solange ein Handy antwortet: per USB angeschlossen oder mit geöffneter 24bit7-App im WLAN. Aus: Er erscheint nie von selbst, ein Handy, das per USB lädt, holt ihn also nicht hervor; „Titel kopieren auf“ beim Speichern geht weiter. Gerät hinzufügen öffnet den Tab, dort kannst du ein Handy über WLAN hinzufügen."
+  "On, a Devices tab shows after Settings while a phone answers: plugged in by USB, or with the 24bit7 app open on the WiFi. Off, it never comes up by itself, so a phone charging by USB doesn't bring it up; Save's Copy Tracks To still works. Add a Device opens the tab, where you can add a phone over WiFi.": "An: Nach Einstellungen erscheint ein Tab Geräte, solange ein Handy antwortet: per USB angeschlossen oder mit geöffneter 24bit7-App im WLAN. Aus: Er erscheint nie von selbst, ein Handy, das per USB lädt, holt ihn also nicht hervor; „Titel kopieren auf“ beim Speichern geht weiter. Gerät hinzufügen öffnet den Tab, dort kannst du ein Handy über WLAN hinzufügen.",
+  "# Tracks": "# Titel",
+  "Stack Settings": "Sammel-Einstellungen",
+  "How many songs you own from each artist you added, from one to twenty.": "Wie viele deiner Titel von jedem hinzugefügten Künstler, von eins bis zwanzig.",
+  "Plays the songs you own by each artist you added, up to # Tracks each, shuffled with the artists spread out.": "Spielt deine Titel von jedem hinzugefügten Künstler, bis zu # Titel je Künstler, gemischt und mit den Künstlern verteilt."
 }

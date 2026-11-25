@@ -150,7 +150,9 @@ PLAY_NOTES = {
     "Save": N_("Saves the last playlist as a JRiver playlist, copies it to a phone plugged in, or both. On "
                "Playlists & Albums, once you pick or stack something after the last playlist, it saves that "
                "instead, without playing it."),
-    "Go": N_("Plays up to this many songs you own by each artist you added, shuffled with the artists spread out."),
+    "Go": N_("Plays the songs you own by each artist you added, up to # Tracks each, shuffled with the artists "
+             "spread out."),
+    "# Tracks": N_("How many songs you own from each artist you added, from one to twenty."),
     "Select From Hits": tabs.HITS_NOTE,
 }
 SAVE_ICON = ""   # Windows' Save (a floppy) in Segoe MDL2 Assets, beside the word on Save (24 Nov 2026)
@@ -1091,8 +1093,8 @@ class PlayTab(tk.Frame):
         self.search_track.pack(side="left", padx=(4, 0))
         # The line that sat under the boxes is said in the console while Search is open (Ben, 23 Nov 2026), so
         # the boxes sit centred in the panel as Playlists & Albums' do
-        for entry in (self.search_artist, self.search_track):
-            entry.bind("<Return>", lambda e: self.on_similar())
+        for entry in (self.search_artist, self.search_track):   # Enter with both boxes empty does nothing (Ben,
+            entry.bind("<Return>", lambda e: self._search_typed() and self.on_similar())   # 25 Nov 2026)
         self._build_stack_row(fields)
         self._search_tip_line = None
         self.seed_nb.bind("<<NotebookTabChanged>>", lambda e: (self._sync_seed_buttons(), self._place_output(),
@@ -1129,30 +1131,40 @@ class PlayTab(tk.Frame):
 
     # --- Stacking artists on Search (Ben, 23 Nov 2026): a few songs from each of several artists, then Go ---
 
+    def _search_typed(self):
+        """Whether anything is typed in the Artist or Track box."""
+        return bool(self.search_artist.get().strip() or self.search_track.get().strip())
+
     def _build_stack_row(self, fields):
         """
-        The Artist box lists your artists as you type, each with + Add; Go, how many each and Most Played sit
-        after the Track box, in the gap before Output, once something has been added.
+        The Artist box lists your artists as you type, each with + Add; # Tracks, Select From Hits and Go sit after
+        the Track box, in the gap before Output, once something has been added, under a STACK SETTINGS heading in
+        the accent green that sits in the gap above them, so nothing moves (Ben, 25 Nov 2026, as drawn).
         """
         import stack
         self._stack, self._artists_pop = [], None
         chosen = stack.choices()
         row = self.stack_row = tk.Frame(fields)
-        self.stack_go = FlatButton(row, text=t("Go"), command=self.on_stack_go, width=6, height=1, quiet=True)
-        self.stack_go.config(armed=PALETTE["go"])
-        self.stack_go.pack(side="left")
+        tk.Label(row, text=t("# Tracks"), font=("Segoe UI", 10)).pack(side="left")
+        self._stack_count_good = chosen["count"]
         self.stack_count = tk.StringVar(value=str(chosen["count"]))
-        count = self.stack_count_cb = ttk.Combobox(row, textvariable=self.stack_count, state="readonly", width=3,
-                                                   values=[str(n) for n in stack.COUNTS])
-        count.pack(side="left", padx=(8, 4))
-        count.bind("<<ComboboxSelected>>", lambda e: stack.set_choice("count", int(self.stack_count.get())))
-        tk.Label(row, text=t("each"), font=("Segoe UI", 9)).pack(side="left", padx=(0, 10))
+        count = self.stack_count_box = RoundedEntry(row, width=3, font=("Segoe UI", 9), textvariable=self.stack_count)
+        count.pack(side="left", padx=(4, 12))
+        digits = count.entry.register(lambda typed: typed == "" or (typed.isdigit() and len(typed) <= 2))
+        count.entry.config(validate="key", validatecommand=(digits, "%P"))
+        count.entry.bind("<FocusOut>", lambda e: self._stack_count_done(), add="+")
+        count.entry.bind("<Return>", lambda e: self._stack_count_done(), add="+")
         self.stack_most = tk.StringVar(value=chosen["most_played"])
         most = self.stack_most_tick = tabs.hits_button(
             row, self.stack_most, command=lambda: stack.set_choice("most_played", self.stack_most.get()))
         most.pack(side="left")
+        self.stack_go = FlatButton(row, text=t("Go"), command=self.on_stack_go, width=6, height=1, quiet=True)
+        self.stack_go.config(armed=PALETTE["go"])
+        self.stack_go.pack(side="left", padx=(12, 0))
+        self.stack_heading = tk.Label(fields.master, text=t("Stack Settings").upper(), fg=PALETTE["go"],
+                                      font=("Segoe UI", 8, "bold"))
         on, wrap = self.help_on, self.note_wrap
-        for widget, name in ((self.stack_go, "Go"), (count, "Go"), (most, "Select From Hits")):
+        for widget, name in ((self.stack_go, "Go"), (count, "# Tracks"), (most, "Select From Hits")):
             Tooltip(widget, t(PLAY_NOTES[name]), when=on, wrap=wrap)
         self.extra_list_buttons = getattr(self, "extra_list_buttons", []) + [self.stack_go]
         entry = self.search_artist.entry
@@ -1161,12 +1173,23 @@ class PlayTab(tk.Frame):
         entry.bind("<Escape>", lambda e: self._close_artists(), add="+")
         entry.bind("<FocusOut>", lambda e: self.after(200, self._close_artists_if_away), add="+")
 
+    def _stack_count_done(self):
+        """# Tracks left or Enter pressed: a number from 1 to 20 is kept, anything else goes back to the last."""
+        import stack
+        typed = self.stack_count.get().strip()
+        if typed.isdigit() and stack.COUNTS[0] <= int(typed) <= stack.COUNTS[-1]:
+            self._stack_count_good = int(typed)
+            stack.set_choice("count", self._stack_count_good)
+        self.stack_count.set(str(self._stack_count_good))
+
     def _sync_stack_row(self):
-        """Go and its choices show only while something is stacked."""
+        """# Tracks, Select From Hits and Go show only while something is stacked, with their heading above."""
         if self._stack and not self.stack_row.winfo_manager():
             self.stack_row.pack(side="left", padx=(LIST_BOX_GAP, 0))
+            self.stack_heading.place(in_=self.stack_row, x=0, y=-2, anchor="sw")
         elif not self._stack and self.stack_row.winfo_manager():
             self.stack_row.pack_forget()
+            self.stack_heading.place_forget()
         self.after_idle(self._place_output)
 
     def _artists_typed(self, event):
@@ -1274,11 +1297,9 @@ class PlayTab(tk.Frame):
         import stack
         if self.running or not self._stack:
             return
+        self._stack_count_done()
         artists, self._stack = list(self._stack), []
-        try:
-            count = int(self.stack_count.get())
-        except ValueError:
-            count = stack.DEFAULT_COUNT
+        count = self._stack_count_good
         most_played = self.stack_most.get()
         self._close_artists()
         self._sync_stack_row()

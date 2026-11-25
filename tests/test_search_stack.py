@@ -75,3 +75,65 @@ def test_one_line_each_with_the_count_and_remove_takes_go_away_again(app, ui):
     assert f"{first} taken off the stack, which is empty now." in p.log.get("1.0", "end")
     p._close_artists()
     assert not ui.errors, ui.errors[0]
+
+
+def test_the_stack_row_as_drawn_and_enter_on_empty_boxes_does_nothing(app, ui, monkeypatch):
+    """
+    Ben, 25 Nov 2026, as drawn: Enter in the Artist or Track box with both empty raised "Type an artist first.",
+    which looked like an error, and now does nothing. # Tracks is a box like Artist and Track taking 1 to 20 (a
+    letter isn't taken, 0 or 21 goes back to the last good number); the order is # Tracks, Select From Hits, Go;
+    STACK SETTINGS in the accent green sits above them, showing and going with them, and nothing else moves.
+    """
+    import library
+    import stack
+    from tkinter import messagebox
+    from tabs import PALETTE
+    library.load()
+    p = ui.play
+    p._end_greeting()
+    p.seed_nb.select(p.search_tab)
+    ui.pump(0.4)
+    asked = []
+    monkeypatch.setattr(messagebox, "showinfo", lambda *a, **k: asked.append(a))
+    builds = []
+    monkeypatch.setattr(p, "on_similar", lambda: builds.append(1))
+    for box in (p.search_artist, p.search_track):
+        box.entry.focus_force()
+        ui.pump(0.1)
+        box.entry.event_generate("<Return>")
+        ui.pump(0.1)
+    assert asked == [] and builds == [], "empty boxes: Enter does nothing"
+    p.search_artist.insert(0, "Seether")
+    p.search_artist.entry.focus_force()
+    ui.pump(0.1)
+    p.search_artist.entry.event_generate("<Return>")
+    ui.pump(0.1)
+    assert builds == [1], "something typed: Enter builds as before"
+    p.search_artist.delete(0, "end")
+    before = (p.search_artist.winfo_rooty(), p.search_track.winfo_rootx())
+    name = library.artist_list()[0]
+    p._stack_toggle(name)
+    ui.pump(0.4)
+    assert (p.search_artist.winfo_rooty(), p.search_track.winfo_rootx()) == before, "nothing moves"
+    assert p.stack_heading.winfo_ismapped() and p.stack_heading.cget("text") == "STACK SETTINGS"
+    assert p.stack_heading.cget("fg") == PALETTE["go"]
+    box, most, go = p.stack_count_box, p.stack_most_tick, p.stack_go
+    assert box.winfo_rootx() < most.winfo_rootx() < go.winfo_rootx(), "# Tracks, Select From Hits, then Go"
+    assert p.stack_heading.winfo_rooty() + p.stack_heading.winfo_height() <= box.winfo_rooty() + 2, "above them"
+    assert abs(p.stack_heading.winfo_rootx() - p.stack_row.winfo_rootx()) <= 2, "over the boxes, from their left"
+    labels = [w.cget("text") for w in p.stack_row.winfo_children() if w.winfo_class() == "Label"]
+    assert "# Tracks" in labels and "each" not in labels
+    entry = box.entry
+    entry.delete(0, "end")
+    entry.insert(0, "x")
+    assert box.get() == "", "letters aren't taken"
+    for typed, kept in (("12", "12"), ("0", "12"), ("21", "12"), ("", "12"), ("20", "20"), ("1", "1")):
+        entry.delete(0, "end")
+        entry.insert(0, typed)
+        p._stack_count_done()
+        assert p.stack_count.get() == kept, (typed, p.stack_count.get())
+    assert stack.choices()["count"] == 1, "remembered"
+    p._stack_toggle(name)
+    ui.pump(0.3)
+    assert not p.stack_row.winfo_ismapped() and not p.stack_heading.winfo_ismapped(), "the heading goes too"
+    assert not ui.errors, ui.errors[0]
