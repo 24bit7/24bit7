@@ -1534,7 +1534,12 @@ def _run_mix(button, cfgs, report, seed_info, extra_filters, options):
             else:
                 for key in ("theme", "count", "if_short", "prompt", "check"):
                     opts.pop(key, None)
-            _run_one(button, cfg["kind"], settings, cfg.get("filters") or [], report, seed_info, None, extra_filters, opts)
+            engine.HOSTS_PLAYED = bool(i) and cfgs[0]["kind"] == "top"
+            try:
+                _run_one(button, cfg["kind"], settings, cfg.get("filters") or [], report, seed_info, None,
+                         extra_filters, opts)
+            finally:
+                engine.HOSTS_PLAYED = False
         by_config = {}
         for i, keys in engine.COMBINE_TRACE:
             by_config.setdefault(i, []).extend(keys)

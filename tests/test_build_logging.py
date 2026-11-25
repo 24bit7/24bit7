@@ -40,6 +40,9 @@ def test_embellish_says_each_agreeing_artist_and_its_tracks(app):
 
 def test_embellish_logs_every_track_it_looks_up_for_discover(app):
     import embellish
+    # Select From Hits picks at random from the hits (1.44.0), and the miss isn't always among the Kinks' picks;
+    # what's logged is what this test is about, so it's off.
+    app.set_env(ADAPTIVE_ARTISTS="off")
     embellish.embellish(ROAD_TRIP, None, "p50", app.Lines())
     got = logged(app, "embellish")
     assert got, "the session was empty"

@@ -330,6 +330,7 @@ def say_update_outcome(report=print):
 INNER_CIRCLE = {"artists": (False, 3, 2, False, 10), "tracks": (False, 3, 2, False, 10)}
 COMBINE_TRACE = None   # while a playlist of two or more configs builds: [(config index, keys sent)]; see buttons.run
 COMBINE_INDEX = 0      # which config is building
+HOSTS_PLAYED = False   # a later config of a mix whose first is Artist's Top Tracks: the seed artist's own are played
 
 PROFILE_KEYS = {
     "sources": ["SIMILAR_SOURCES", "SIMILAR_MIN_AGREEMENT", "LISTENBRAINZ_ALGORITHM", "SIMILAR_TRACK_SOURCES",
@@ -8039,8 +8040,12 @@ def create_similar_playlist(report=print, seed_info=None, topup=False, playing_n
         return got, checked
 
     # --- Seed artist(s): own top tracks, excluding the playing track and anything in Playing Now ---
-    prefetch_top_tracks(seeds, pool + 1)   # quietly; one more than the pool, as the playing track is left out
-    for seed in seeds:
+    # Artist + Guests and the like: the first config already played the seed artist's top tracks, so the
+    # guests are other artists (with Select From Hits the seed's pick is random, and would add a host song).
+    hosts_played = HOSTS_PLAYED and sample is None
+    if not hosts_played:
+        prefetch_top_tracks(seeds, pool + 1)   # quietly; one more than the pool, as the playing track is left out
+    for seed in ([] if hosts_played else seeds):
         report("  " + t("Seed artist: {seed}...", seed=seed))
         found = []
         pick_top_tracks_for_artist(seed, session_id, ["seed"], report=report,

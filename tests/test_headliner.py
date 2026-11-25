@@ -47,6 +47,30 @@ def test_headliner_puts_a_guest_after_every_two_hosts(app):
     assert r.has("Mix: alternating, 2 from config 1, 1 from config 2."), r.text()
 
 
+def test_the_guests_never_add_a_host_song(app, monkeypatch):
+    """
+    Select From Hits picks an artist's songs at random from their hits (25 Nov 2026), and the guests' config
+    picked one of the seed artist's own too: a hit outside the hosts' top six came in as a seventh Beatles
+    song, and the build of 1.44.0 stopped on it. The guests are other artists, so the seed is left out.
+    Here the Beatles' hits come seventh first, so the seed's pick is always one the hosts didn't play; the
+    guests' hits stay biggest first.
+    """
+    app.set_env(**QUIET)
+    import buttons
+    e = app.engine
+
+    def shuffle(items):
+        if "Come Together" in items:
+            items[:] = items[6:] + items[:6]
+    monkeypatch.setattr(e.random, "shuffle", shuffle)
+    monkeypatch.setattr(e.random, "sample", lambda names, n: list(names)[:n])
+    r = app.Lines()
+    buttons.run(headliner(app), report=r, seed_info=seed(app, "The Beatles"))
+    titles = app.jriver.titles("Speakers")
+    assert sum(artist_of(tt) == "The Beatles" for tt in titles) == 6, titles
+    assert len(titles) == 11, (titles, r.text())
+
+
 def test_headliner_carries_on_alone_when_guests_run_short(app, monkeypatch):
     app.set_env(**QUIET)
     import buttons

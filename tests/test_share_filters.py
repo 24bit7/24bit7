@@ -7,8 +7,9 @@ Other field: a rule on any JRiver field by name, read into the library copy alon
 """
 
 # The fake world's Kiwi tracks: each artist's third track on (not the seed's). A plain build takes each artist's
-# top two only, so it never has one; the share finds them through artists deeper in the similar list.
-SETUP = dict(SIMILAR_ARTIST_TRACK_COUNT="6", SIMILAR_ARTIST_TRACK_LIMIT="1", TRACKS_PER_ARTIST_POOL="2",
+# top two only, so it never has one; the share finds them through artists deeper in the similar list. Select From
+# Hits is off: it picks at random from the hits (1.44.0), which reach past the top two, and these tests count on them.
+SETUP = dict(ADAPTIVE_ARTISTS="off",SIMILAR_ARTIST_TRACK_COUNT="6", SIMILAR_ARTIST_TRACK_LIMIT="1", TRACKS_PER_ARTIST_POOL="2",
              TRACKS_PER_ARTIST_PICK="2", SKIP_PLAYED_ARTISTS="0", DRIFT_ARTISTS="0",
              SIMILAR_SOURCES="lastfm", SIMILAR_MIN_AGREEMENT="1")
 
