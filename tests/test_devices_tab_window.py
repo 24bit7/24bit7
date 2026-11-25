@@ -32,11 +32,80 @@ def _tab(ui, monkeypatch, ph, known, device=BEN):
                         (_ for _ in ()).throw(RuntimeError("not answering")))
     ui.play._end_greeting()
     tab = ui.gui.attach_devices(ui.root, ui.nb, ui.play, watch=False)
+    tab.presence.show()
     ui.nb.select(tab)
     tab.shown()
     ui.pump(until=lambda: device in tab.contents or tab.answering.get(device) is False, timeout=15)
     ui.pump(0.3)
     return tab
+
+
+def _settled(ui, tab):
+    """Every job the tab's worker had done and its news read (the worker waits a moment before it ends)."""
+    ui.pump(until=lambda: tab._poll is None and tab._jobs.empty(), timeout=15)
+    ui.pump(0.2)
+
+
+def test_the_tab_shows_only_while_a_phone_answers(app, ui, monkeypatch):
+    """
+    Ben, 25 Nov 2026: the Devices tab only "when 24bit7 detects an open phone", a phone plugged in over USB too.
+    It comes and goes with what answers, but never from under you: on it, it waits until you leave. Kept, not
+    destroyed, so it comes back as it was. Then the looking itself, on its thread.
+    """
+    import phone
+    monkeypatch.setattr(phone, "known", lambda: [])
+    ui.play._end_greeting()
+    tab = ui.gui.attach_devices(ui.root, ui.nb, ui.play, watch=False)
+    p = tab.presence
+    assert tab not in ui.nb._pages, "nothing answering: no tab"
+    p.answered(["usb-1"])
+    assert tab in ui.nb._pages
+    ui.nb.select(tab)
+    ui.pump(0.2)
+    p.answered([])
+    assert tab in ui.nb._pages and ui.nb.select() == str(tab), "not from under you"
+    ui.nb.select(ui.play)
+    ui.pump(0.2)
+    assert tab not in ui.nb._pages and tab.winfo_exists(), "gone once you left it, the page kept"
+    p.answered(["app:jo"])
+    assert tab in ui.nb._pages
+    p.answered([])
+    assert tab not in ui.nb._pages, "not on it: gone straight away"
+    answering = {"ids": ["usb-1"]}
+    monkeypatch.setattr(phone, "present", lambda: list(answering["ids"]))
+    p.watch(every=0.2)
+    try:
+        ui.pump(until=lambda: tab in ui.nb._pages, timeout=10)
+        assert tab in ui.nb._pages, "the looking found the phone"
+        answering["ids"] = []
+        ui.pump(until=lambda: tab not in ui.nb._pages, timeout=10)
+        assert tab not in ui.nb._pages, "and saw it go"
+    finally:
+        p.stop()
+    assert not ui.errors, ui.errors[0]
+
+
+def test_clicking_the_tab_again_leaves_the_rows_alone(app, ui, files, monkeypatch):
+    """
+    Ben, 25 Nov 2026: clicking the tab was "a bit jittery". Each click looked for the devices again and read the
+    folder again, and each answer rebuilt the chips and every row, twice. Now what finds the same leaves them be.
+    """
+    import phone
+    ph = _phone(app, files)
+    phone.remember_quietly(BEN, name=BEN)
+    tab = _tab(ui, monkeypatch, ph, [(BEN, "Pixel 9a", "usb", True)])
+    _settled(ui, tab)
+    rows, chips = tab.albums.rows.winfo_children(), tab.chips.winfo_children()
+    lists = tab.lists.rows.winfo_children()
+    assert rows and chips and lists
+    ui.nb.select(ui.play)
+    ui.pump(0.2)
+    ui.nb.select(tab)
+    tab.shown()
+    _settled(ui, tab)
+    assert tab.albums.rows.winfo_children() == rows and all(w.winfo_exists() for w in rows), "the same rows"
+    assert tab.lists.rows.winfo_children() == lists and tab.chips.winfo_children() == chips
+    assert not ui.errors, ui.errors[0]
 
 
 def test_the_tab_lists_ticks_and_deletes(app, ui, files, monkeypatch):

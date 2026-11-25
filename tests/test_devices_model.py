@@ -40,6 +40,36 @@ def test_forget_takes_the_usb_link_with_it(app, monkeypatch):
     assert not phone.any_known()
 
 
+def test_present_is_the_phones_answering_now(app, monkeypatch):
+    """
+    The Devices tab shows only while a phone answers (Ben, 25 Nov 2026: "when 24bit7 detects an open phone", USB
+    counting too). A WiFi phone is asked at the address it was last found at, and must answer with its own id;
+    one not answering, one added without an address, and This PC's folder never count.
+    """
+    import phone
+    monkeypatch.setattr(phone, "devices", lambda: [("usb-1", "Pixel 9a")])
+    phone.remember(phone.PC, folder="C:\\Phone Sync")
+    phone.remember_quietly("app:jo", name="Jo's Phone", code="1234", address="10.0.0.5:47247")
+    phone.remember_quietly("app:ben", name="Ben's Phone", code="5678", address="10.0.0.6:47247")
+    phone.remember_quietly("app:old", name="Old Phone", code="9999")
+    phone.remember_quietly("app:moved", name="Moved Phone", code="4321", address="10.0.0.7:47247")
+    asked = []
+
+    def info_at(address, code, timeout=3):
+        asked.append(address)
+        if address == "10.0.0.5:47247" and code == "1234":
+            return {"id": "JO"}
+        if address == "10.0.0.7:47247":
+            return {"id": "someone-else"}   # another phone took the address
+        raise OSError("no answer")
+    monkeypatch.setattr(phone.WifiPhone, "info_at", staticmethod(info_at))
+    assert phone.present() == ["usb-1", "app:jo"]
+    assert sorted(asked) == ["10.0.0.5:47247", "10.0.0.6:47247", "10.0.0.7:47247"], "only the last addresses"
+    monkeypatch.setattr(phone, "devices", lambda: [])
+    monkeypatch.setattr(phone.WifiPhone, "info_at", staticmethod(lambda *a, **k: (_ for _ in ()).throw(OSError())))
+    assert phone.present() == [], "nothing answering: This PC's folder alone doesn't bring the tab up"
+
+
 def test_the_library_box_finds_artists_albums_and_tracks(app):
     app.library.load()
     lib = app.library

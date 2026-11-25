@@ -475,8 +475,9 @@ class TabbedPane(tk.Frame):
                 self.even_out()
             self._evening = self.after_idle(run)
 
-    def remove(self, page):
-        """Takes a page and its tab away (Settings drops a device's tab when it goes)."""
+    def remove(self, page, keep=False):
+        """Takes a page and its tab away (Settings drops a device's tab when it goes). keep: the page itself is
+        kept, to be added again (the Devices tab, while no phone answers)."""
         if page not in self._pages:
             return
         i = self._pages.index(page)
@@ -487,7 +488,8 @@ class TabbedPane(tk.Frame):
             self._current = None
             if self._pages:
                 self.select(self._pages[0])
-        page.destroy()
+        if not keep:
+            page.destroy()
 
     def rename(self, page, text):
         """Changes a page's tab text (a device renamed under Voice Commands)."""

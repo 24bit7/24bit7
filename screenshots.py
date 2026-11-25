@@ -621,7 +621,7 @@ def build_window(gui):
             discover.ensure_loaded()
         elif nb.select() == str(play):
             play.sync_moderator()
-    nb.bind("<<NotebookTabChanged>>", on_tab_changed)
+    nb.bind("<<NotebookTabChanged>>", on_tab_changed, add="+")
 
     # The console: no greeting, just the demo build
     play._greeting_active = False
@@ -1170,6 +1170,7 @@ def open_devices_tab(gui, root, nb, play, temp):
     phone.known = lambda: [(demo_id, "Pixel 9a", "usb", True), ("app:demo-ben", "Pixel 9a", "wifi", False)]
     phone.arrange = lambda *a, **k: None   # the demo folder is laid out already
     tab = gui.attach_devices(root, nb, play, watch=False)
+    tab.presence.show()
     nb.select(tab)
     tab.shown()
     end = time.time() + 10

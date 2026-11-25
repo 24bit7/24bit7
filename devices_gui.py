@@ -1,6 +1,7 @@
 """
-The Devices tab (Ben, 25 Nov 2026, as drawn: mockups/devices_and_hits.html). It appears after Settings once
-24bit7 knows a device (a phone plugged in or added over WiFi, or a folder on this PC) and stays; no setting.
+The Devices tab (Ben, 25 Nov 2026, as drawn: mockups/devices_and_hits.html). It appears after Settings while a
+phone answers, plugged in over USB or with the 24bit7 app open on the WiFi, and goes once none does (Presence);
+no setting. A read again that finds the folder as it was leaves the rows alone, so clicking the tab doesn't jitter.
 
 At the top, every device 24bit7 knows, a green dot for one answering now and a grey one for one that isn't, then
 + Add a Phone Over WiFi. Under it the chosen device's folder, Rename and Forget (which never touches the phone),
@@ -27,6 +28,101 @@ from i18n import t, tn
 from tabs import PALETTE, FlatButton, RoundedEntry
 
 SHOWN = 6   # suggestions of each kind under the library box
+WATCH_EVERY = 30   # seconds between looks for a phone answering (phone.present)
+
+
+class Presence:
+    """
+    Whether the Devices tab is in the strip (Ben, 25 Nov 2026: only "when 24bit7 detects an open phone", a phone
+    plugged in over USB counting too). A thread asks phone.present() every WATCH_EVERY seconds; the tab is added
+    while a phone answers and taken away when none does, but never from under you: while you're on it, it waits
+    until you leave. Save's Open Devices shows it whatever answers (show). The page is kept, not destroyed, so
+    what it last read is there when it comes back.
+    """
+
+    def __init__(self, nb, tab, placed=None):
+        self.nb, self.tab, self.placed = nb, tab, placed
+        self.on = False
+        self.waiting = False   # nothing answers, but the tab is showing: it goes once you leave it
+        self._wake = None
+        self._stop = threading.Event()   # the window's gone: the looking stops
+        nb.bind("<<NotebookTabChanged>>", lambda e: self.left(), add="+")
+        tab.bind("<Destroy>", lambda e: self._stop.set() if e.widget is tab else None, add="+")
+
+    def show(self):
+        self.waiting = False
+        if self.on:
+            return
+        self.on = True
+        self.nb.add(self.tab, text=t("Devices"))
+        self._placed()
+
+    def answered(self, ids):
+        """The latest look: the ids of the phones answering."""
+        if ids:
+            self.show()
+        elif self.on:
+            if self.nb.select() == str(self.tab):
+                self.waiting = True
+            else:
+                self._hide()
+
+    def left(self):
+        if self.waiting and self.nb.select() != str(self.tab):
+            self._hide()
+
+    def _hide(self):
+        self.waiting = self.on = False
+        self.nb.remove(self.tab, keep=True)
+        self._placed()
+
+    def _placed(self):
+        if self.placed is not None:
+            self.tab.after(50, self.placed)
+
+    def watch(self, every=WATCH_EVERY):
+        """The looking, on a thread of its own (a WiFi phone takes a second or so to answer, or not)."""
+        found, self._wake = queue.Queue(), threading.Event()
+
+        def look():
+            phone.com_begin()
+            try:
+                while not self._stop.is_set():
+                    try:
+                        found.put(phone.present())
+                    except Exception as e:
+                        engine.debug(f"Devices: couldn't look for phones ({e})")
+                    self._wake.wait(every)
+                    self._wake.clear()
+            finally:
+                phone.com_end()
+        threading.Thread(target=look, daemon=True, name="devices-watch").start()
+
+        def check():
+            if self._stop.is_set():
+                return
+            latest = None
+            while not found.empty():
+                latest = found.get_nowait()
+            if latest is not None:
+                self.answered(latest)
+            self.tab.after(1000 if every >= 1 else 100, check)
+        self.tab.after(500 if every >= 1 else 50, check)
+
+    def poke(self):
+        """Look now (a copy has just gone to a phone)."""
+        if self._wake is not None:
+            self._wake.set()
+
+    def stop(self):
+        self._stop.set()
+        self.poke()
+
+
+def _looks(f):
+    """What a folder's lists are drawn from: its files and sizes, and each playlist's songs."""
+    return (f.folder, tuple(sorted((k, v["size"]) for k, v in f.files.items())),
+            tuple((pl["low"], tuple(pl["paths"])) for pl in f.playlists))
 
 
 def _scale(widget):
@@ -95,6 +191,8 @@ class DevicesTab(tk.Frame):
         self._worker = None
         self._pop = None
         self._counts = {}
+        self._on_screen = None        # (device id, _looks of the folder, live) the lists were last drawn from, so a
+                                      # read again that finds the same leaves the rows alone (no jitter on a click)
         self._build()
         self.bind("<Destroy>", self._gone, add="+")
 
@@ -273,6 +371,7 @@ class DevicesTab(tk.Frame):
     def _take(self, news):
         kind = news[0]
         if kind == "devices":
+            before = (list(self.devices), dict(self.answering), self.current)
             self.devices = news[1]
             ids = [d for d, *_ in self.devices]
             if self.current not in ids:
@@ -283,23 +382,33 @@ class DevicesTab(tk.Frame):
             for d, _m, _k, here in self.devices:
                 if here is not None:
                     self.answering[d] = here
-            self._chips()
             if self.current is not None:
                 self._job("read", self.current)
-            self.draw()
+            if (self.devices, self.answering, self.current) != before:   # the same devices: nothing redrawn
+                self._chips()
+                self.draw()
         elif kind == "read":
             _, device_id, f, free = news
+            same = (self.answering.get(device_id) is True and device_id not in self.problem
+                    and device_id == self.current and self._on_screen == (device_id, _looks(f), True))
+            was = self.answering.get(device_id)
             self.answering[device_id], self.contents[device_id], self.free[device_id] = True, f, free
             self.problem.pop(device_id, None)
             if device_id == self.current:
                 self.ticked = {k for k in self.ticked if self._exists(k)}
-            self._chips()
+            if same:   # read again and nothing has changed (the tab clicked): only the free space can have moved
+                self._show_meter(device_id, f)
+                return
+            if was is not True:
+                self._chips()
             self.draw()
         elif kind == "away":
             _, device_id, why = news
+            changed = self.answering.get(device_id) is not False or self.problem.get(device_id) != why
             self.answering[device_id], self.problem[device_id] = False, why
-            self._chips()
-            self.draw()
+            if changed:
+                self._chips()
+                self.draw()
         elif kind == "adding":
             _, device_id, folder_key, n = news
             self.adding[folder_key] = [n.get("done", 0), n.get("count", 0)]
@@ -422,6 +531,7 @@ class DevicesTab(tk.Frame):
         device = self.current
         self.tick_for = {}
         if device is None:
+            self._on_screen = None
             self.folder_label.config(text="")
             self.meter_label.config(text="")
             self.status.config(text=t("Plug in a phone, unlocked and set to File Transfer, or add one over WiFi."),
@@ -453,6 +563,7 @@ class DevicesTab(tk.Frame):
         else:
             self.status.config(text="")
         if f is None:
+            self._on_screen = None
             self.meter_label.config(text="")
             self.albums.clear()
             self.lists.clear()
@@ -460,17 +571,23 @@ class DevicesTab(tk.Frame):
             self.lists_head.config(text="")
             self._sync_note()
             return
+        self._show_meter(device, f)
+        live = on is not False
+        self._draw_albums(f, live)
+        self._draw_lists(f, live)
+        self._on_screen = (device, _looks(f), live)
+        self._sync_note()
+
+    def _show_meter(self, device, f):
+        s, _model = self._settings(device)
         used = phone.size_text(f.size)
         text = (t("{used} used of your {limit} GB limit", used=used, limit=f"{s['limit_gb']:g}") if s["limit_gb"]
                 else t("{used} in {folder}", used=used, folder=s["folder"]))
         if self.free.get(device) is not None:
             text += " · " + t("{free} free on {phone}", free=phone.size_text(self.free[device]), phone=s["name"])
-        self.meter_label.config(text=text)
+        if self.meter_label.cget("text") != text:
+            self.meter_label.config(text=text)
         self._meter()
-        live = on is not False
-        self._draw_albums(f, live)
-        self._draw_lists(f, live)
-        self._sync_note()
 
     def _row(self, lst, key, name, depth, count_text, size, note="", note_fg=None, fold=None, live=True):
         px = self._px

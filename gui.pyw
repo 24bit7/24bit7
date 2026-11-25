@@ -4916,56 +4916,26 @@ def note_window_state(root, memo, save):
 
 def attach_devices(root, nb, play, placed=None, watch=True):
     """
-    The Devices tab (Ben, 25 Nov 2026, as drawn): added after Settings once 24bit7 knows a device, a phone it has
-    copied to or added over WiFi, or a phone plugged in (looked for now and then until one is), and kept from then
-    on. No setting. Save's Open Devices brings it forward at a device. Returns the tab (not yet added, perhaps).
+    The Devices tab (Ben, 25 Nov 2026, as drawn): after Settings while a phone answers, plugged in over USB or with
+    the 24bit7 app open on the WiFi (devices_gui.Presence, looking every half minute), and gone again when none
+    does, once you've left it. No setting. Save's Open Devices brings it forward at a device, answering or not.
+    watch=False (tests and shots): nothing is looked for, tab.presence.show() puts it in. Returns the tab.
     """
     import devices_gui
-    import phone
     tab = devices_gui.DevicesTab(nb, log=play.log_queue.put, add_wifi=ask_add_wifi)
-    shown = {"on": False}
-
-    def known():
-        if shown["on"]:
-            return
-        shown["on"] = True
-        nb.add(tab, text=t("Devices"))
-        if placed is not None:
-            root.after(50, placed)
+    presence = tab.presence = devices_gui.Presence(nb, tab, placed=placed)
 
     def open_at(device_id):
-        known()
+        presence.show()
         tab.show_device(device_id)
         if nb.select() == str(tab):
             tab.shown()
         else:
             nb.select(tab)
 
-    play.devices_known, play.open_devices = known, open_at
-    tab.known = known
-    if phone.any_known():
-        known()
-    elif watch:   # a phone plugged in that 24bit7 hasn't met: looked for once a minute until there is one
-        found = queue.Queue()
-
-        def look():
-            phone.com_begin()
-            try:
-                while not shown["on"]:
-                    if phone.devices():
-                        found.put(True)
-                        return
-                    time.sleep(60)
-            finally:
-                phone.com_end()
-        threading.Thread(target=look, daemon=True, name="devices-watch").start()
-
-        def check():
-            if not found.empty():
-                known()
-            elif not shown["on"]:
-                root.after(2000, check)
-        root.after(2000, check)
+    play.devices_known, play.open_devices = presence.poke, open_at
+    if watch:
+        presence.watch()
     return tab
 
 
@@ -5047,7 +5017,7 @@ def main():
             discover.ensure_loaded()
         elif nb.select() == str(play):
             play.sync_moderator()
-    nb.bind("<<NotebookTabChanged>>", on_tab_changed)
+    nb.bind("<<NotebookTabChanged>>", on_tab_changed, add="+")   # beside the Devices tab's own (Presence)
 
     # Fresh install: engine just created a starter .env, so open on Settings
     # and say hello once. Never shown again after that.

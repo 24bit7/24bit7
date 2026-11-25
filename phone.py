@@ -1180,6 +1180,25 @@ def any_known():
     return any(isinstance(e, dict) and (k != PC or e.get("folder")) for k, e in _meta(META_KEY, {}).items())
 
 
+def present(timeout=1.5):
+    """
+    The phones answering now, so the Devices tab shows only then (Ben, 25 Nov 2026: "when 24bit7 detects an open
+    phone", USB counting too): every phone plugged in over USB, and every phone added over WiFi whose app answers at
+    the address it was last found at. Only that address is tried (a whole-network look every half minute would be a
+    lot of knocking on doors); Save finds a phone that has moved, and remembers where. This PC never counts.
+    """
+    out = [device_id for device_id, _model in devices()]
+    for key, entry in _meta(META_KEY, {}).items():
+        if not (is_wifi(key) and isinstance(entry, dict) and entry.get("code") and entry.get("address")):
+            continue
+        try:
+            if "app:" + str(WifiPhone.info_at(entry["address"], entry["code"], timeout=timeout).get("id")).lower() == key:
+                out.append(key)
+        except Exception:
+            continue
+    return out
+
+
 def forget(device_id):
     """Forget (the Devices tab): the device out of 24bit7's list, with its name, folder, limit and records.
     Nothing on the phone is touched."""
