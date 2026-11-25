@@ -143,6 +143,26 @@ def test_add_finds_the_phone_by_its_code_and_the_copy_goes_over_wifi(app, phone_
     assert sorted(os.listdir(music)) == [], "the tidy-up and an emptied playlist work over WiFi too"
 
 
+def test_add_looks_twice_for_a_phone_slow_to_answer(app, phone_app, monkeypatch):
+    """Ben, 24 Nov 2026: Jo's first Add said no phone answered, the second moments later found her Pixel. A phone
+    that answers only within the second, longer wait is found by one Add."""
+    import phone
+    waits = []
+
+    def slow(host, port=None, timeout=0.4):
+        waits.append(timeout)
+        return host == "127.0.0.1" and timeout >= 1.0
+    monkeypatch.setattr(phone, "_open_port", slow)
+    key, model, _known = phone.add_wifi("4659")
+    assert key == "app:" + phone_app.app_id and model == "Pixel 9a"
+    assert sorted(set(waits)) == [0.4, phone.SLOW_SCAN], "a quick look, then a slower one"
+    waits.clear()
+    monkeypatch.setattr(phone, "_open_port", lambda host, port=None, timeout=0.4: waits.append(timeout) or
+                        host == "127.0.0.1")
+    phone.add_wifi("4659")
+    assert set(waits) == {0.4}, "found at the first look: no second"
+
+
 def test_a_phone_that_moved_is_found_again(app, phone_app):
     import phone
     key, _model, _known = phone.add_wifi("4659")

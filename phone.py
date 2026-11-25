@@ -946,22 +946,30 @@ def _open_port(host, port=None, timeout=0.4):
         s.close()
 
 
-def find_apps(code, timeout=0.4):
+SLOW_SCAN = 1.5   # the second look's wait per address (Ben, 24 Nov 2026: Jo's first Add found nothing, the second did)
+
+
+def find_apps(code, timeout=0.4, again=SLOW_SCAN):
     """
     Every phone on the home network with the 24bit7 app open that answers to this code: [(address, info)]. The PC
     can't hear the app announce itself (Windows' firewall keeps that out, 24 Nov 2026), so it tries the app's port
-    across each home network, a few seconds at most, and asks whoever answers.
+    across each home network, a few seconds at most, and asks whoever answers. If none does, it looks once more,
+    waiting longer at each address (again), so a phone slow to answer the first time is still found; that costs a
+    few seconds only on a miss.
     """
     from concurrent.futures import ThreadPoolExecutor
     hosts = [f"{net}.{i}" for net in _home_networks() for i in range(1, 255)]
-    with ThreadPoolExecutor(64) as pool:
-        open_ = [h for h, ok in zip(hosts, pool.map(lambda h: _open_port(h, timeout=timeout), hosts)) if ok]
     out = []
-    for h in open_:
-        try:
-            out.append((f"{h}:{APP_PORT}", WifiPhone.info_at(f"{h}:{APP_PORT}", code)))
-        except Exception:
-            continue
+    for wait in [timeout] + ([again] if again and again > timeout else []):
+        with ThreadPoolExecutor(64) as pool:
+            open_ = [h for h, ok in zip(hosts, pool.map(lambda h: _open_port(h, timeout=wait), hosts)) if ok]
+        for h in open_:
+            try:
+                out.append((f"{h}:{APP_PORT}", WifiPhone.info_at(f"{h}:{APP_PORT}", code)))
+            except Exception:
+                continue
+        if out:
+            break
     return out
 
 
