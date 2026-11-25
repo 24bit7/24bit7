@@ -42,7 +42,8 @@ def test_the_standard_playlist_has_both_seed_lines_and_the_review_tick(app, ui):
     page, p = option_pair(ui)
     texts = texts_in(page)
     for text in ("Playlist Selection", "When Seed is Current Track", "When Seed is Playing Now", "Limit To", "tracks, from",
-                 "artists, pick", "of each artist's top", "artists from Playing Now, take", "Review Mode uses the same settings"):
+                 "artists, pick", "of each artist's hits, fewer if they have fewer.",   # Select From Hits on ↓ (1.44.0)
+                 "artists from Playing Now, take", "Review Mode uses the same settings"):
         assert text in texts, text
     assert not {"SEED", "REVIEW MODE", "Mirror Playing Now", "Artists sampled from Playing Now"} & set(texts), "the columns are gone"
     assert set(p.seed_boxes) == {"current", "pn", "review_current", "review_pn"}
