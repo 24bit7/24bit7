@@ -38,7 +38,10 @@ def test_artist_matching_names_the_artist_and_the_seeds_own(app, monkeypatch):
     assert "Seed artist" in whys or any(x["artist"] != "The Beatles" for x in rows), r.text()
     other = next(x for x in rows if x["artist"] != "The Beatles" and x["why"])
     import fakes   # the sources may name an artist as they know it (The Jimi Hendrix Experience), which Found By quotes
-    said = {other["artist"], fakes.SOURCE_NAME.get(other["artist"], other["artist"])}
+    # or by the album artist, where the track's own tag is split ("Angus Stone;Julia Stone" on an Angus & Julia
+    # Stone album): the artist was picked at random, so this failed only now and then (1.37.2, and 26 Nov 2026)
+    album_artist = app.jriver.by_key[other["key"]]["Album Artist (auto)"]
+    said = {name for a in (other["artist"], album_artist) for name in (a, fakes.SOURCE_NAME.get(a, a))}
     assert other["why_more"] in {f"{other['why']} named {name} as like The Beatles - Here Comes The Sun." for name in said},         other["why_more"]
     own = [x for x in rows if x["why"] == "Seed artist"]
     assert all(x["why_more"] == "One of The Beatles's own top tracks: the seed's artist." for x in own)
