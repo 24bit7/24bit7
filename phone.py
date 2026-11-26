@@ -7,7 +7,8 @@ Windows' device id, which carries the serial, so two of the same phone keep thei
 (Music to start), a limit in GB, and Clear Playlists First. Since 1.44.0 (Ben, 25 Nov 2026) the folder holds two:
 Albums, artist and album folders added from the Devices tab, and Playlists, flat, each song named "Artist - Title"
 beside the .m3u8s that list them, so the phone's player shows each as a playlist. Clear Playlists First clears
-Playlists only. What 1.43 left at the top of the folder is sorted into the two once, the first time it's used.
+Playlists only. Anything else in the folder is never moved (Ben, 26 Nov 2026, after Jo's phone had her own
+folders sorted into Albums): the Devices tab lists it as Other Files, where it can be ticked and deleted.
 
 A phone over USB has no drive letter: it's reached through Windows Portable Devices (WPD), here through comtypes.
 Proved on Ben's Pixel 9a on 23 Nov 2026: a folder made, files written (37 MB a second), a recursive delete with
@@ -37,6 +38,7 @@ PC = "pc"                     # This PC: a folder here, for Syncthing and the li
 LINKS_KEY = "copy_links"      # {USB device id: "app:<id>"}: the phone's app, read from Music/.24bit7
 APP_PORT = 47247              # the phone app's port (android/.../TransferService.kt)
 LAST_KEY = "copy_last"        # the device id last copied to
+NOTE_KEY = "devices_note_seen"   # the Devices tab's note on Albums, Playlists and Other Files, seen once
 DEFAULT_FOLDER = "Music"
 SPARE = 200 * 1000 * 1000     # bytes left free on the phone, so it never fills to the brim
 GB = 1000 * 1000 * 1000       # as phones and Windows' This PC count them for storage
@@ -56,6 +58,16 @@ def _set_meta(key, value):
     con = engine.db()
     con.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (key, json.dumps(value)))
     con.commit()
+
+
+def note_seen():
+    """Whether the Devices tab's note on how the folder is used has been seen (once per 24bit7, Ben, 26 Nov
+    2026)."""
+    return bool(_meta(NOTE_KEY, False))
+
+
+def see_note():
+    _set_meta(NOTE_KEY, True)
 
 
 def key_for(device_id):
@@ -480,205 +492,6 @@ def _albums_count(dirs):
     return n
 
 
-def _move(phone, dirs, src_dir, e, dst_dir, name):
-    """One file to another folder under the chosen one: the device's own move where it has one (This PC), else
-    read, written again and the old one deleted (a phone: the app and Windows' portable devices have no move)."""
-    parent = dirs.get(dst_dir, make=True)
-    hook = getattr(dirs, "on_move", None)
-    if hook is not None:
-        hook()
-    if hasattr(phone, "move"):
-        phone.move(e["id"], parent, name)
-    else:
-        import tempfile
-        data = phone.read(e["id"])
-        fd, tmp = tempfile.mkstemp(suffix=os.path.splitext(name)[1])
-        try:
-            with os.fdopen(fd, "wb") as f:
-                f.write(data)
-            phone.put(parent, tmp, name, len(data))
-        finally:
-            os.remove(tmp)
-        phone.delete([e["id"]])
-    dirs.files[src_dir].pop(e["name"].lower(), None)
-    dirs.listing(dst_dir)[name.lower()] = {"id": None, "name": name, "folder": False, "size": e.get("size")}
-
-
-def _move_tree(phone, dirs, src, dst):
-    """A folder and all it holds to dst, merged with one already there. Returns how many files moved."""
-    if hasattr(phone, "move") and dirs.get(dst) is None:
-        parent_rel, _, name = dst.rpartition("/")
-        phone.move(dirs.get(src), dirs.get(parent_rel, make=True), name)
-        dirs.forget(src)
-        dirs.forget(dst)
-        return 1
-    moved = 0
-    dirs._list(src)
-    for low, real in sorted(dirs.names[src].items()):
-        dirs.ids.setdefault(f"{src}/{real}", dirs.kids[src][low])
-        moved += _move_tree(phone, dirs, f"{src}/{real}", f"{dst}/{real}")
-    for low, e in sorted(dirs.files[src].items()):
-        _move(phone, dirs, src, e, dst, e["name"])
-        moved += 1
-    fid = dirs.get(src)
-    if fid is not None and not phone.list(fid):
-        phone.delete([fid])
-        dirs.forget(src)
-    return moved
-
-
-def _flat_name(path, taken):
-    """'The Doors/L.A. Woman/03 Love Her Madly.flac' as 'The Doors - Love Her Madly.flac', numbered if taken."""
-    folder, _, fname = path.rpartition("/")
-    base, ext = os.path.splitext(fname)
-    title = re.sub(r"^\d+(-\d+)?\s+", "", base) or base
-    artist = path.split("/")[0] if folder else ""
-    stem = safe_name(f"{artist} - {title}" if artist else title)
-    name, n = stem + ext.lower(), 1
-    while name.lower() in taken:
-        n += 1
-        name = f"{stem} ({n}){ext.lower()}"
-    taken.add(name.lower())
-    return name
-
-
-def _arranged(phone, folder):
-    entry = _meta(META_KEY, {}).get(key_for(getattr(phone, "id", None) or phone.name)) or {}
-    return _fkey(folder) in (entry.get("arranged") or [])
-
-
-def arrange(phone, folder, say=print, progress=None):
-    """
-    Once per device and folder (Ben, 25 Nov 2026): the folder as it was before 1.44 sorted into Albums and
-    Playlists. What 24bit7's records say it copied for playlists goes into Playlists, one flat folder ('Artist -
-    Title.flac'), the playlists rewritten to match; any other playlist file goes there too, its lines now pointing
-    into Albums; every other folder at the top (artists, albums) and loose track goes into Albums. Nothing is
-    deleted but folders left empty. Returns how many files moved. progress, if given, is called with (files moved,
-    files to move) as each file goes, where files go one at a time (a phone over WiFi: read and written again,
-    which took Jo's 84 files about half an hour, 25 Nov 2026), so the Devices tab can say how far it's got.
-    """
-    device = key_for(getattr(phone, "id", None) or phone.name)
-    every = _meta(META_KEY, {})
-    entry = dict(every.get(device) or {})
-    fkey = _fkey(folder)
-    if fkey in (entry.get("arranged") or []):
-        return 0
-    root = phone.folder(folder, make=False)
-    moved, lists_moved, albums_moved = 0, 0, 0
-    copied = dict(entry.get("copied") or {})
-    old = dict(copied.pop(fkey, None) or {})
-    if root is not None:
-        dirs = _Dirs(phone, root)
-        dirs._list("")
-        keep = (ALBUMS.lower(), PLAYLISTS.lower())
-        tops = [real for low, real in sorted(dirs.names[""].items()) if not real.startswith(".") and low not in keep]
-        loose = [e for low, e in sorted(dirs.files[""].items()) if not e["name"].startswith(".")]
-        if tops or loose or old:
-            say("  " + t("Sorting {folder} on {phone} into Albums and Playlists, once...", folder=folder,
-                         phone=phone.name))
-            if progress is not None and not hasattr(phone, "move"):
-                count = sum(1 for p in Folder(phone, folder).files if p.split("/")[0] not in keep)
-                done = [0]
-
-                def moved_one():
-                    done[0] += 1
-                    progress(min(done[0], count), count)
-                dirs.on_move = moved_one
-                progress(0, count)
-        if dirs.get(PLAYLISTS) is not None:
-            dirs._list(PLAYLISTS)
-        taken_names = set(dirs.listing(PLAYLISTS)) if dirs.get(PLAYLISTS) is not None else set()
-        new_name = {}   # old path.lower(): its name in Playlists
-        lists = dict(copied.get(_lists_key(folder)) or {})
-        for m3u_low, paths in sorted(old.items()):
-            names = []
-            for p in paths:
-                if p.lower() in new_name:
-                    names.append(new_name[p.lower()])
-                    continue
-                d, _, fname = p.rpartition("/")
-                e = dirs.listing(d).get(fname.lower())
-                if not e or not d:
-                    continue
-                name = _flat_name(p, taken_names)
-                _move(phone, dirs, d, e, PLAYLISTS, name)
-                new_name[p.lower()] = name
-                names.append(name)
-                moved += 1
-            e = dirs.files[""].get(m3u_low)
-            if e is not None:
-                phone.delete([e["id"]])
-                dirs.files[""].pop(m3u_low, None)
-                loose = [x for x in loose if x["name"].lower() != m3u_low]
-            if names:
-                phone.put_text(dirs.get(PLAYLISTS, make=True), (e or {}).get("name") or m3u_low, m3u8_text(names))
-                dirs.listing(PLAYLISTS)[m3u_low] = {"id": None, "name": (e or {}).get("name") or m3u_low,
-                                                    "folder": False, "size": None}
-                lists[m3u_low] = names
-                lists_moved += 1
-        for d in sorted({p.rpartition("/")[0] for p in new_name if "/" in p}, key=lambda d: -d.count("/")):
-            while d:   # artist and album folders the playlists' tracks left empty
-                fid = dirs.get(d)
-                if fid is None or phone.list(fid):
-                    break
-                phone.delete([fid])
-                dirs.forget(d)
-                d = d.rpartition("/")[0]
-        for e in loose:
-            low = e["name"].lower()
-            if low.endswith((".m3u8", ".m3u")):
-                try:
-                    lines = _decode(phone.read(e["id"])).splitlines()
-                except Exception as err:
-                    engine.debug(f"Copy Tracks To: couldn't read {e['name']} ({err})")
-                    continue
-                out = []
-                for line in lines:
-                    s = line.strip()
-                    rel = None if not s or s.startswith("#") else _relative(s)
-                    if rel is None:
-                        out.append(line)
-                    elif rel.lower() in new_name:
-                        out.append(new_name[rel.lower()])
-                    else:
-                        out.append(f"../{ALBUMS}/{rel}")
-                phone.delete([e["id"]])
-                dirs.files[""].pop(low, None)
-                phone.put_text(dirs.get(PLAYLISTS, make=True), e["name"], "\n".join(out) + "\n")
-                lists_moved += 1
-            elif is_track(low):
-                _move(phone, dirs, "", e, ALBUMS, e["name"])
-                moved += 1
-        dirs.names.pop("", None)
-        dirs.kids.pop("", None)
-        dirs.files.pop("", None)
-        dirs._list("")
-        for low, real in sorted(dirs.names[""].items()):
-            if real.startswith(".") or low in keep:
-                continue
-            dirs.ids.setdefault(real, dirs.kids[""][low])
-            moved += _move_tree(phone, dirs, real, f"{ALBUMS}/{real}")
-            albums_moved += 1
-        copied[_lists_key(folder)] = lists
-        if tops or loose or old:
-            parts = []
-            if albums_moved:
-                parts.append(tn("{count} folder into Albums", "{count} folders into Albums", albums_moved))
-            if lists_moved:
-                parts.append(tn("{count} playlist into Playlists", "{count} playlists into Playlists", lists_moved))
-            say("  " + (t("Sorted {folder} on {phone}: {what}.", folder=folder, phone=phone.name,
-                          what=names_text(parts)) if parts else
-                        t("Sorted {folder} on {phone}.", folder=folder, phone=phone.name)))
-    every = _meta(META_KEY, {})
-    if device not in every and getattr(phone, "id", None) is not None and is_wifi(device):
-        return moved   # forgotten while it was being sorted: not put back
-    entry = dict(every.get(device) or {})
-    entry["copied"] = copied
-    entry["arranged"] = sorted(set(entry.get("arranged") or []) | {fkey})
-    every[device] = entry
-    _set_meta(META_KEY, every)
-    return moved
-
 
 def copy_playlist(phone, folder, playlist, tracks, limit_gb=0, clear=False, say=print, progress=None, stop=None):
     """
@@ -691,7 +504,6 @@ def copy_playlist(phone, folder, playlist, tracks, limit_gb=0, clear=False, say=
     """
     started = time.time()
     root = phone.folder(folder, make=True)
-    arrange(phone, folder, say)
     device, copied = _records(phone)
     lkey = _lists_key(folder)
     mine = dict(copied.get(lkey) or {})
@@ -835,7 +647,6 @@ def add_albums(phone, folder, tracks, say=print, progress=None, stop=None, what=
     """
     started = time.time()
     root = phone.folder(folder, make=True)
-    arrange(phone, folder, say)
     dirs = _Dirs(phone, root)
     paths = [f"{ALBUMS}/{p}" for p in file_names(tracks)]
     room = phone.free() - SPARE
@@ -1003,6 +814,15 @@ class Folder:
                 out.append(n)
             return out + [node(r, "file") for r in loose]
         return children(start) if start.lower() in self.folders or not start else []
+
+    def other(self):
+        """
+        Other Files (Ben, 26 Nov 2026): what's in the folder outside Albums and Playlists, as tree() gives it, so
+        it can be ticked and deleted. 24bit7 never moves it: the user's own music, or what a 24bit7 before 1.44
+        copied there.
+        """
+        keep = (ALBUMS.lower(), PLAYLISTS.lower())
+        return [n for n in self.tree("") if n["rel"].split("/")[0].lower() not in keep]
 
     def plan(self, playlists=(), folders=(), files=(), songs=()):
         """
@@ -1506,12 +1326,6 @@ class FolderDevice:
     def read(self, oid):
         with open(oid, "rb") as f:
             return f.read()
-
-    def move(self, oid, parent, name):
-        """A file or folder to another folder under the chosen one, without copying it."""
-        dest = os.path.join(parent, name)
-        os.replace(oid, dest)
-        return dest
 
     def delete(self, ids):
         import shutil

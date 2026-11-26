@@ -25,8 +25,10 @@ def _texts(widget):
     return out
 
 
-def _tab(ui, monkeypatch, ph, known, device=BEN):
+def _tab(ui, monkeypatch, ph, known, device=BEN, note=False):
     import phone
+    if not note:
+        phone.see_note()   # the note on how the folder is used has its own test
     monkeypatch.setattr(phone, "known", lambda: known)
     monkeypatch.setattr(phone, "open_device", lambda device_id, name: ph if ph is not None else
                         (_ for _ in ()).throw(RuntimeError("not answering")))
@@ -395,11 +397,11 @@ def test_search_now_skips_a_search_this_fresh(app):
     assert p._search is True
 
 
-def test_a_phone_just_added_shows_at_once_and_its_sort_is_counted(app, ui, files, monkeypatch):
+def test_a_phone_just_added_shows_at_once(app, ui, files, monkeypatch):
     """
     Ben, 25 Nov 2026: Jo's phone was added, "the dialogue box goes away and it only shows my phone". Its first read
-    was sorting her old folder over WiFi, and the tab waited for it without a word. Now its chip shows at once, the
-    sort says how far it's got, and a read that fails still shows every device.
+    was still out, and the tab waited for it without a word. Now its chip shows at once, and a read that fails
+    still shows every device.
     """
     import threading
     import phone
@@ -423,15 +425,74 @@ def test_a_phone_just_added_shows_at_once_and_its_sort_is_counted(app, ui, files
     tab._job("scan")
     ui.pump(until=lambda: "Jo's Phone" in _texts(tab.chips), timeout=10)
     assert "Jo's Phone" in _texts(tab.chips) and BEN in _texts(tab.chips), "her chip before her read is back"
-    tab._take(("sorting", "app:jo", 31, 84))
-    assert tab.status.cget("text") == ("Sorting Music on Jo's Phone into Albums and Playlists, once: 31 of 84 files "
-                                       "moved. Keep the 24bit7 app open on it.")
-    tab.draw()
-    assert "31 of 84" in tab.status.cget("text"), "a redraw keeps the count"
+    assert tab.status.cget("text") == "Reading Music on Jo's Phone..."
     release.set()
     _settled(ui, tab)
-    assert "Jo's Phone" in _texts(tab.chips) and "app:jo" not in tab.sorting
+    assert "Jo's Phone" in _texts(tab.chips)
     assert tab.status.cget("text") == "Jo's Phone isn't answering. Open the 24bit7 app on it."
     tab._take(("failed", "app:jo", "boom"))
     assert "Jo's Phone" in _texts(tab.chips) and BEN in _texts(tab.chips), "a failed read keeps every chip"
+    assert not ui.errors, ui.errors[0]
+
+
+def test_other_files_are_shown_left_alone_and_can_be_deleted(app, ui, files, monkeypatch):
+    """
+    Ben, 26 Nov 2026: what's already in the folder is left alone, "but it should be readable and manageable via
+    the device tab". Other Files lists it under Albums and Playlists, folders opening to what they hold; tick and
+    Delete as in Albums; with nothing else there, it isn't shown.
+    """
+    import phone
+    ph = _phone(app, files)
+    signal = ph.folder("Music/Signal/Voice", make=True)
+    ph.put_text(signal, "out of my way.mp3", "x" * 50)
+    ph.put_text(ph.folder("Music"), "notes.txt", "x")
+    phone.remember_quietly(BEN, name=BEN)
+    tab = _tab(ui, monkeypatch, ph, [(BEN, "Pixel 9a", "usb", True)])
+    _settled(ui, tab)
+    assert tab.other_box.winfo_ismapped()
+    assert tab.other_head.cget("text").startswith("2 files, "), tab.other_head.cget("text")
+    other = _texts(tab.other.rows)
+    assert "Signal" in other and "notes.txt" in other and "1 track" in other and "Voice" not in other, other
+    assert "Signal" not in _texts(tab.albums.rows), "not one of the albums"
+    tab._fold(("dir", "Signal"))
+    ui.pump(0.2)
+    assert "Voice" in _texts(tab.other.rows)
+    tab.tick_for[("dir", "Signal")].invoke()
+    assert tab.tick_for[("dir", "Signal/Voice")].instate(["selected", "disabled"]), "inside a ticked folder"
+    tab.tick_for[("file", "notes.txt")].invoke()
+    assert tab.note.cget("text").startswith("Deleting Signal and notes takes 1 track"), tab.note.cget("text")
+    tab.delete()
+    ui.pump(until=lambda: not tab.busy, timeout=15)
+    _settled(ui, tab)
+    assert ph.names("Music") == [".thumbnails", "Albums", "Playlists"]
+    assert not tab.other_box.winfo_ismapped(), "nothing else there: Other Files goes"
+    assert "Radiohead" in _texts(tab.albums.rows), "Albums untouched"
+    assert not ui.errors, ui.errors[0]
+
+
+def test_the_note_on_how_the_folder_is_used_comes_once(app, ui, files, monkeypatch):
+    """Ben, 26 Nov 2026: "we should probably have a pop-up when people first go into the Device tab to let them know
+    the convention". Once per 24bit7, naming the phone and folder; OK only."""
+    import phone
+    ph = _phone(app, files)
+    phone.remember_quietly(BEN, name=BEN)
+    assert not phone.note_seen()
+    tab = _tab(ui, monkeypatch, ph, [(BEN, "Pixel 9a", "usb", True)], note=True)
+    ui.pump(until=lambda: tab.folder_note is not None, timeout=10)
+    note = tab.folder_note
+    assert note is not None and note.title() == "How 24bit7 Uses Music on Ben's Phone"
+    text = " ".join(_texts(note))
+    assert "24bit7 copies into two folders inside Music:" in text and "Albums" in text and "Playlists" in text
+    assert "Clear Playlists First empties Playlists only." in text and "Other Files" in text
+    assert not note.cancel_button.winfo_ismapped(), "OK only"
+    note.ok()
+    ui.pump(0.2)
+    assert tab.folder_note is None and phone.note_seen()
+    ui.nb.select(ui.play)
+    ui.pump(0.2)
+    ui.nb.select(tab)
+    tab.shown()
+    _settled(ui, tab)
+    ui.pump(0.3)
+    assert tab.folder_note is None, "once only"
     assert not ui.errors, ui.errors[0]

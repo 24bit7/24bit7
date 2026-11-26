@@ -2152,14 +2152,7 @@
   "Your playlists don't use them.": "Deine Playlists brauchen sie nicht.",
   "Took {count} song out of {name}.": "{count} Titel aus {name} genommen.",
   "Took {count} songs out of {name}.": "{count} Titel aus {name} genommen.",
-  "Sorting {folder} on {phone} into Albums and Playlists, once...": "Sortiere {folder} auf {phone} einmalig in Albums und Playlists...",
-  "{count} folder into Albums": "{count} Ordner nach Albums",
-  "{count} folders into Albums": "{count} Ordner nach Albums",
-  "{count} playlist into Playlists": "{count} Playlist nach Playlists",
-  "{count} playlists into Playlists": "{count} Playlists nach Playlists",
   "{count} already there, kept.": "{count} schon da, behalten.",
-  "Sorted {folder} on {phone}: {what}.": "{folder} auf {phone} sortiert: {what}.",
-  "Sorted {folder} on {phone}.": "{folder} auf {phone} sortiert.",
   "Cleared Playlists on {phone}: {what}.": "Playlists auf {phone} geleert: {what}.",
   "Your {count} album left alone.": "Dein {count} Album bleibt.",
   "Your {count} albums left alone.": "Deine {count} Alben bleiben.",
@@ -2183,5 +2176,12 @@
   "The four-digit code on {phone}'s screen, with the 24bit7 app open:": "Der vierstellige Code auf dem Bildschirm von {phone}, bei geöffneter 24bit7-App:",
   "Looking for {phone}...": "Suche {phone}...",
   "No phone answered to that code. Check the 24bit7 app is open on it, on the same WiFi as this PC.": "Kein Handy hat auf diesen Code geantwortet. Prüfe, ob die 24bit7-App darauf offen ist, im selben WLAN wie dieser PC.",
-  "Sorting {folder} on {phone} into Albums and Playlists, once: {done} of {count} files moved. Keep the 24bit7 app open on it.": "{folder} auf {phone} wird einmalig in Albums und Playlists sortiert: {done} von {count} Dateien verschoben. Lass die 24bit7-App darauf offen."
+  "Other Files": "Andere Dateien",
+  "{count} file, {size}": "{count} Datei, {size}",
+  "{count} files, {size}": "{count} Dateien, {size}",
+  "How 24bit7 Uses {folder} on {phone}": "So nutzt 24bit7 {folder} auf {phone}",
+  "24bit7 copies into two folders inside {folder}:": "24bit7 kopiert in zwei Ordner in {folder}:",
+  "albums and artists you add from this tab.": "Alben und Künstler, die du auf diesem Tab hinzufügst.",
+  "playlists from Save, each song beside the playlist that lists it.": "Playlists von Speichern, jeder Titel neben der Playlist, die ihn enthält.",
+  "Clear Playlists First empties Playlists only. Anything else already in {folder} stays where it is: it shows under Other Files, and you can delete it from here if you want to.": "Playlists vorher leeren leert nur Playlists. Alles andere, was schon in {folder} ist, bleibt, wo es ist: es steht unter Andere Dateien, und du kannst es hier löschen, wenn du willst."
 }

@@ -567,3 +567,6 @@ Ben's Pixel was given a new address by the router and the Devices tab never came
 
 **25 Nov 2026: Search's # Tracks is a box, not a drop-down.**
 Ben's call: it matches the Artist and Track boxes beside it. It takes digits only and keeps one to twenty; anything else goes back to the last good number when you leave it, rather than an error. Enter in empty Artist and Track boxes does nothing, as "Type an artist first." read like an error when you'd only cleared the boxes.
+
+**26 Nov 2026: 24bit7 never moves what's already in a phone's folder.**
+From Jo's phone: added again over WiFi with no records, its folder was Music, and the one-off sort from 1.44.0 started moving her own Music/Music and Signal folders into Albums. Mags first drew a question (move these, or leave them); Ben's rule went further: leave anything already there alone, make it readable and manageable on the Devices tab, and let Clear empty Playlists alone. So the one-off sort is gone, a 24bit7 from before 1.44.0's own copies included (they still play on the phone); the tab lists the rest as Other Files, tick and Delete as in Albums; and the first time the tab shows a folder, a note says how 24bit7 uses it, once per 24bit7. No setting.

@@ -7,8 +7,10 @@ At the top, every device 24bit7 knows, a green dot for one answering now and a g
 + Add a Phone Over WiFi. Under it the chosen device's folder, Rename and Forget (which never touches the phone),
 and what the folder holds against the limit and the free space. Then two lists side by side: Albums (artist and
 album folders, with a box to add an artist, album or track from the library, copied straight in) and Playlists
-(what Save put there, each opening to its songs). Tick and Delete: the amber line says what goes, so there's no
-further question. Open Folder is hidden for a phone on WiFi, since Explorer can't reach it.
+(what Save put there, each opening to its songs). Under them, Other Files: anything else in the folder, which
+24bit7 never moves (Ben, 26 Nov 2026). Tick and Delete: the amber line says what goes, so there's no further
+question. Open Folder is hidden for a phone on WiFi, since Explorer can't reach it. The first time the tab shows a
+folder, a note says how it's used (FolderNote), once per 24bit7.
 
 Every read, add and delete runs on one worker thread, a job at a time (a phone takes seconds), handing its news
 back through a queue the tab reads; the window is never touched from the thread.
@@ -197,6 +199,7 @@ class _List(tk.Frame):
 
 class DevicesTab(tk.Frame):
     LIST_HEIGHT = 360
+    OTHER_HEIGHT = 110
 
     def __init__(self, master, log=print, add_wifi=None):
         super().__init__(master)
@@ -213,7 +216,8 @@ class DevicesTab(tk.Frame):
         self.adding = {}              # artist folder (lower): [done, count] while an add runs
         self.busy = False
         self._due = False   # the page waits for the first read of a device (one draw, not two)
-        self.sorting = {}   # device id: (files moved, files to move) while the one-off sort runs (phone.arrange)
+        self._note_due = False   # the tab is showing and the note on how the folder is used hasn't been seen
+        self.folder_note = None
         self._jobs, self._news = queue.Queue(), queue.Queue()
         self._poll = None
         self._worker = None
@@ -287,6 +291,12 @@ class DevicesTab(tk.Frame):
         self.lists.pack(fill="both", expand=True)
         foot = tk.Frame(outer, bg=bg)
         foot.pack(fill="x", pady=(px(8), 0))
+        # what else is in the folder, left where it is (Ben, 26 Nov 2026): shown only when there is some
+        self.other_box = tk.Frame(outer, bg=bg)
+        self._foot = foot
+        self.other_head = self._heading(self.other_box, t("Other Files"))
+        self.other = _List(self.other_box, self.OTHER_HEIGHT)
+        self.other.pack(fill="x", pady=(px(4), 0))
         self.note = tk.Label(foot, text="", font=("Segoe UI", 9), bg=bg, fg=PALETTE["help_fg"], anchor="w",
                              justify="left")
         self.note.pack(side="left", fill="x", expand=True)
@@ -389,9 +399,6 @@ class DevicesTab(tk.Frame):
                     phone.add_albums(p, s["folder"], tracks, say=say, what=what,
                                      progress=lambda n: self._news.put(("adding", device_id, folder_key, n)))
                 self._news.put(("added", device_id, folder_key))
-            elif kind == "read" and (device_id != phone.PC or p.root):
-                phone.arrange(p, s["folder"], say=say,   # what 1.43 left, sorted the first time it's opened
-                              progress=lambda done, count: self._news.put(("sorting", device_id, done, count)))
             f = phone.Folder(p, s["folder"])
             try:
                 free = p.free()
@@ -447,7 +454,6 @@ class DevicesTab(tk.Frame):
                     and device_id == self.current and self._on_screen == (device_id, _looks(f), True))
             was = self.answering.get(device_id)
             self.answering[device_id], self.contents[device_id], self.free[device_id] = True, f, free
-            self.sorting.pop(device_id, None)
             self.problem.pop(device_id, None)
             if device_id == self.current:
                 self.ticked = {k for k in self.ticked if self._exists(k)}
@@ -462,7 +468,6 @@ class DevicesTab(tk.Frame):
             _, device_id, why = news
             changed = self.answering.get(device_id) is not False or self.problem.get(device_id) != why
             self.answering[device_id], self.problem[device_id] = False, why
-            self.sorting.pop(device_id, None)
             if changed or self._due:
                 self._due = False
                 self._chips()
@@ -496,17 +501,11 @@ class DevicesTab(tk.Frame):
                 self._log(t("{phone} is answering again.", phone=phone.settings(key, "")["name"]))
             self.current = key
             self._job("scan")
-        elif kind == "sorting":
-            _, device_id, done, count = news
-            self.sorting[device_id] = (done, count)
-            if device_id == self.current:
-                self.status.config(text=self._reading(device_id), fg=PALETTE["help_fg"])
         elif kind == "failed":
             device_id = news[1]
             self._log(t("Problem: {e}", e=news[2]))
             if device_id is not None:
                 self.problem[device_id] = news[2]
-                self.sorting.pop(device_id, None)
             self._due = False
             self._chips()   # a read that failed still shows every device
             self.draw()
@@ -515,7 +514,9 @@ class DevicesTab(tk.Frame):
 
     def shown(self):
         """The tab brought forward: the devices looked for again, and the one chosen read again; the network searched
-        too, unless it was in the last SEARCH_FRESH seconds."""
+        too, unless it was in the last SEARCH_FRESH seconds. The note on how the folder is used comes up with the
+        first folder drawn, if it hasn't been seen."""
+        self._note_due = not phone.note_seen()
         self._job("scan")
         presence = getattr(self, "presence", None)
         if presence is not None:
@@ -699,6 +700,7 @@ class DevicesTab(tk.Frame):
                                fg=PALETTE["help_fg"])
             self.albums.clear()
             self.lists.clear()
+            self._draw_other(None, True)
             self._sync_note()
             return
         s, model = self._settings(device)
@@ -723,7 +725,7 @@ class DevicesTab(tk.Frame):
             self.status.config(text=t("{phone} isn't answering. Open the 24bit7 app on it.", phone=s["name"])
                                if kind == "wifi" else t("{phone} isn't plugged in.", phone=s["name"]),
                                fg=PALETTE["amber"])
-        elif f is None or device in self.sorting:
+        elif f is None:
             self.status.config(text=self._reading(device), fg=PALETTE["help_fg"])
         else:
             self.status.config(text="")
@@ -734,23 +736,35 @@ class DevicesTab(tk.Frame):
             self.lists.clear()
             self.albums_head.config(text="")
             self.lists_head.config(text="")
+            self._draw_other(None, True)
             self._sync_note()
             return
         self._show_meter(device, f)
         live = on is not False
         self._draw_albums(f, live)
         self._draw_lists(f, live)
+        self._draw_other(f, live)
         self._on_screen = (device, _looks(f), live)
         self._sync_note()
+        if self._note_due and live and self.folder_note is None:
+            self._note_due = False
+            self.after_idle(lambda: self._show_note(s["name"], s["folder"]))
+
+    def _show_note(self, name, folder):
+        """The note on how the folder is used, once per 24bit7 (Ben, 26 Nov 2026), seen once it's closed."""
+        if phone.note_seen() or self.folder_note is not None or not self.winfo_viewable():
+            return
+        self.folder_note = FolderNote(self, name, folder)
+        self.folder_note.bind("<Destroy>", self._note_closed, add="+")
+
+    def _note_closed(self, event):
+        if event.widget is self.folder_note:
+            self.folder_note = None
+            phone.see_note()
 
     def _reading(self, device):
-        """The line while a device is read: or, the first time a folder from before 1.44 is opened, sorted, with how
-        far it's got (a phone over WiFi moves each file by copying it, which takes a while)."""
+        """The line while a device is read."""
         s, _model = self._settings(device)
-        if device in self.sorting:
-            done, count = self.sorting[device]
-            return t("Sorting {folder} on {phone} into Albums and Playlists, once: {done} of {count} files moved. "
-                     "Keep the 24bit7 app open on it.", folder=s["folder"], phone=s["name"], done=done, count=count)
         return t("Reading {folder} on {phone}...", folder=s["folder"], phone=s["name"])
 
     def _show_meter(self, device, f):
@@ -887,6 +901,37 @@ class DevicesTab(tk.Frame):
                               note=t("also in {lists}", lists=phone.names_text(others)) if others else "",
                               live=live)
         lst.wheel_everywhere()
+
+    def _draw_other(self, f, live):
+        """Other Files: what's in the folder outside Albums and Playlists, folders opening to what they hold; hidden
+        when there's none."""
+        tree = f.other() if f is not None else []
+        if not tree:
+            self.other_box.pack_forget()
+            self.other.clear()
+            return
+        if not self.other_box.winfo_manager():
+            self.other_box.pack(fill="x", pady=(self._px(10), 0), before=self._foot)
+        lst = self.other
+        lst.clear()
+        self.other_head.config(text=tn("{count} file, {size}", "{count} files, {size}",
+                                       sum(len(n["files"]) for n in tree),
+                                       size=phone.size_text(sum(n["size"] for n in tree))))
+        for n in tree:
+            self._other_node(lst, n, 0, live)
+        lst.wheel_everywhere()
+
+    def _other_node(self, lst, n, depth, live):
+        if n["kind"] == "file":
+            self._row(lst, ("file", n["rel"]), n["name"], depth, "", n["size"], live=live)
+            return
+        is_open = n["rel"].lower() in self.opened
+        count = (tn("{count} track", "{count} tracks", n["tracks"]) if n["tracks"] else
+                 tn("{count} file", "{count} files", len(n["files"])))
+        self._row(lst, ("dir", n["rel"]), n["name"], depth, count, n["size"], fold=is_open, live=live)
+        if is_open:
+            for c in n["children"]:
+                self._other_node(lst, c, depth + 1, live)
 
     # --- ticks and Delete -------------------------------------------------------------------------------------
 
@@ -1062,3 +1107,41 @@ class DevicesTab(tk.Frame):
         self.busy = True
         self.draw()
         self._job("add", self.current, label, keys, folder_key)
+
+
+class FolderNote(tabs.PromptWindow):
+    """
+    The note the Devices tab shows the first time it shows a folder (Ben, 26 Nov 2026: "we should probably have a
+    pop-up when people first go into the Device tab to let them know the convention"), as drawn in
+    mockups/sort_rule.html: the two folders 24bit7 copies into, what Clear Playlists First empties, and that
+    anything else stays where it is, under Other Files. OK only.
+    """
+
+    def __init__(self, parent, name, folder):
+        self._name, self._folder = name, folder
+        super().__init__(parent, t("How 24bit7 Uses {folder} on {phone}", folder=folder, phone=name))
+        self.cancel_button.pack_forget()
+
+    def _body(self, inner, bg, fg):
+        px = self._px
+        wrap = px(420)
+
+        def line(text, **kw):
+            tk.Label(inner, text=text, font=("Segoe UI", 10), bg=bg, fg=fg, anchor="w", justify="left",
+                     wraplength=wrap).pack(anchor="w", **kw)
+        line(t("24bit7 copies into two folders inside {folder}:", folder=self._folder), pady=(0, px(6)))
+        rows = tk.Frame(inner, bg=bg)
+        rows.pack(anchor="w", pady=(0, px(8)))
+        # the folders' own names, which are the same in every language (they're what the phone shows)
+        for r, (name, what) in enumerate(((phone.ALBUMS, t("albums and artists you add from this tab.")),
+                                          (phone.PLAYLISTS, t("playlists from Save, each song beside the playlist "
+                                                              "that lists it.")))):
+            tk.Label(rows, text=name, font=("Segoe UI", 10, "bold"), bg=bg, fg=fg, anchor="nw").grid(
+                row=r, column=0, sticky="nw", padx=(0, px(12)))
+            tk.Label(rows, text=what, font=("Segoe UI", 10), bg=bg, fg=fg, anchor="w", justify="left",
+                     wraplength=wrap - px(90)).grid(row=r, column=1, sticky="w")
+        line(t("Clear Playlists First empties Playlists only. Anything else already in {folder} stays where it is: "
+               "it shows under Other Files, and you can delete it from here if you want to.", folder=self._folder))
+
+    def _focus_first(self):
+        self.focus_set()

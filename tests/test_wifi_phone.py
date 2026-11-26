@@ -148,18 +148,26 @@ def test_add_finds_the_phone_by_its_code_and_the_copy_goes_over_wifi(app, phone_
     assert (music / "Albums" / "Seether" / "Disclaimer II" / "03 Broken.flac").exists()
 
 
-def test_the_old_layout_is_sorted_over_wifi_by_copying(app, phone_app, tmp_path):
-    """The app has no move, so sorting what 1.43 left reads each file back and writes it in its new place."""
+def test_jos_own_folders_stay_where_they_are_over_wifi(app, phone_app, tmp_path):
+    """Jo's phone, 25 Nov 2026: added over WiFi, its folder Music, and her own Music/Music and Signal were moved into
+    Albums. Since 26 Nov they stay put, and show as Other Files."""
     import phone
     key, model, _known = phone.add_wifi("4659")
     music = tmp_path / "storage" / "Music"
-    (music / "Godsmack" / "Awake").mkdir(parents=True)
-    (music / "Godsmack" / "Awake" / "01 Sick Of Life.flac").write_bytes(b"y" * 1000)
-    ph = phone.open_device(key, "Ben's Phone")
+    (music / "Music" / "Godsmack" / "Awake").mkdir(parents=True)
+    (music / "Music" / "Godsmack" / "Awake" / "01 Sick Of Life.flac").write_bytes(b"y" * 1000)
+    (music / "Signal").mkdir()
+    (music / "Signal" / "out of my way.mp3").write_bytes(b"z" * 10)
+    ph = phone.open_device(key, "Jo's Phone")
+    track = {"key": "1", "path": str(tmp_path / "Broken.flac"), "artist": "Seether", "title": "Broken", "size": 100,
+             "album": "Disclaimer II", "album_artist": "", "disc": 1, "number": 3}
+    (tmp_path / "Broken.flac").write_bytes(b"x" * 100)
     said = app.Lines()
-    phone.arrange(ph, "Music", say=said)
-    assert (music / "Albums" / "Godsmack" / "Awake" / "01 Sick Of Life.flac").read_bytes() == b"y" * 1000
-    assert sorted(os.listdir(music)) == ["Albums"], said.text()
+    phone.copy_playlist(ph, "Music", "Jo's Mix", [track], say=said)
+    phone.add_albums(ph, "Music", [track], say=said)
+    assert sorted(os.listdir(music)) == ["Albums", "Music", "Playlists", "Signal"], said.text()
+    assert (music / "Music" / "Godsmack" / "Awake" / "01 Sick Of Life.flac").read_bytes() == b"y" * 1000
+    assert [n["name"] for n in phone.Folder(ph, "Music").other()] == ["Music", "Signal"]
 
 
 def test_add_looks_twice_for_a_phone_slow_to_answer(app, phone_app, monkeypatch):
@@ -379,20 +387,3 @@ def test_type_its_code_reconnects_a_phone_that_lost_its_code(app, phone_app):
     s = phone._meta(phone.META_KEY, {})[key]
     assert (s["name"], s["folder"], s["code"], s["address"]) == ("Ben's Phone", "Music/Ben", "4659", phone_app.address)
     assert phone.present() == [key] and phone.asking() == []
-
-
-def test_the_sort_over_wifi_says_how_far_it_has_got(app, phone_app, tmp_path):
-    """Jo's phone, 25 Nov 2026: the one-off sort of 84 files over WiFi took about half an hour and the Devices tab
-    said nothing, so it looked as if her phone hadn't been added. It now counts the files as they go."""
-    import phone
-    key, model, _known = phone.add_wifi("4659")
-    music = tmp_path / "storage" / "Music"
-    (music / "Music" / "Godsmack" / "Awake").mkdir(parents=True)
-    for n in (1, 2, 3):
-        (music / "Music" / "Godsmack" / "Awake" / f"0{n} Song {n}.flac").write_bytes(b"y" * 100)
-    (music / "Loose.flac").write_bytes(b"z" * 10)
-    ph = phone.open_device(key, "Jo's Phone")
-    seen = []
-    phone.arrange(ph, "Music", say=app.Lines(), progress=lambda done, count: seen.append((done, count)))
-    assert seen == [(0, 4), (1, 4), (2, 4), (3, 4), (4, 4)]
-    assert sorted(os.listdir(music / "Albums")) == ["Loose.flac", "Music"]

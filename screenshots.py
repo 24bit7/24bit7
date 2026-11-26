@@ -1137,6 +1137,8 @@ def open_devices_tab(gui, root, nb, play, temp):
     m3u("Road Trip", ("Radiohead", "Airbag", 74), ("The Doors", "Roadhouse Blues", 96),
         ("Tom Petty", "Runnin' Down A Dream", 85))
     m3u("Jo's Mix", ("Florence + The Machine", "Dog Days Are Over", 92), ("Bon Iver", "Holocene", 88))
+    # Other Files (1.45.3): what was on the phone before 24bit7, left where it is
+    make(os.path.join(base, "Music", "Signal"), "Voice Note.mp3", 4)
     demo_id = "\\\\?\\usb#vid_18d1&pid_4ee1#demo#{6ac27878}"
 
     class DemoPhone(phone.FolderDevice):
@@ -1168,7 +1170,7 @@ def open_devices_tab(gui, root, nb, play, temp):
     phone.remember_quietly("app:demo-ben", name="Ben's Phone", code="0000", model="Pixel 9a")
     phone.remember(demo_id, name="Jo's Phone")
     phone.known = lambda: [(demo_id, "Pixel 9a", "usb", True), ("app:demo-ben", "Pixel 9a", "wifi", False)]
-    phone.arrange = lambda *a, **k: None   # the demo folder is laid out already
+    phone.see_note()   # the note on how the folder is used is its own window, not this shot
     tab = gui.attach_devices(root, nb, play, watch=False)
     tab.presence.show()
     nb.select(tab)

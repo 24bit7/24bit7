@@ -304,38 +304,40 @@ def old_layout(app, ph, files):
     phone._set_meta(phone.META_KEY, every)
 
 
-def test_the_folder_is_sorted_into_albums_and_playlists_once(app, files):
-    """Ben, 25 Nov 2026 (agreed with the mock-up): what 24bit7's records say it copied for playlists goes into
-    Playlists, every other artist folder into Albums, said in the console, no question asked."""
+def test_nothing_already_in_the_folder_is_moved(app, files):
+    """
+    Ben, 26 Nov 2026, after Jo's own folders were sorted into Albums: 24bit7 never moves what's already in the
+    folder, its own copies from before 1.44 included. It copies into Albums and Playlists only; the rest is left
+    as it is and listed as Other Files, where it can be ticked and deleted. Clear Playlists First empties
+    Playlists alone.
+    """
     import phone
     ph = FakePhone()
     old_layout(app, ph, files)
     said = app.Lines()
     phone.copy_playlist(ph, "Music", "New", files(("A", "One", 10)), say=said)
-    assert ph.names("Music") == [".thumbnails", "Albums", "Playlists"]
-    assert ph.names("Music/Albums") == ["Godsmack", "Loose.mp3", "Seether"], "The Doors' only track was Jo's Mix's"
-    assert ph.names("Music/Albums/Seether") == ["Karma And Effect"], "Disclaimer II held only Jo's Mix's song"
-    assert ph.names("Music/Playlists") == ["A - One.flac", "Gym.m3u", "Jo's Mix.m3u8", "New.m3u8",
-                                           "Seether - Broken.flac", "The Doors - Riders On The Storm.flac"]
-    assert ph.text("Music/Playlists", "Jo's Mix.m3u8") == ("#EXTM3U\nThe Doors - Riders On The Storm.flac\n"
-                                                          "Seether - Broken.flac\n")
-    assert ph.text("Music/Playlists", "Gym.m3u") == ("#EXTM3U\n../Albums/Godsmack/Awake/01 Sick Of Life.flac\n"
-                                                    "Seether - Broken.flac\n"), "the phone's own, pointed anew"
-    assert said.has("Sorting Music on Ben's Phone into Albums and Playlists, once..."), said.text()
-    assert said.has("Sorted Music on Ben's Phone: 2 folders into Albums and 2 playlists into Playlists."), \
-        said.text()
+    phone.add_albums(ph, "Music", files(("B", "Two", 10, "Second", 2)), say=said)
+    phone.copy_playlist(ph, "Music", "New", files(("A", "One", 10)), clear=True, say=said)
+    assert ph.names("Music") == [".thumbnails", "Albums", "Godsmack", "Gym.m3u", "Jo's Mix.m3u8", "Loose.mp3",
+                                 "Playlists", "Seether", "The Doors"], said.text()
+    assert ph.names("Music/Seether") == ["Disclaimer II", "Karma And Effect"]
+    assert ph.text("Music", "Gym.m3u") == ("#EXTM3U\nGodsmack/Awake/01 Sick Of Life.flac\n"
+                                           "Seether/Disclaimer II/03 Broken.flac\n"), "the phone's own, untouched"
+    assert ph.names("Music/Playlists") == ["A - One.flac", "New.m3u8"]
+    assert not said.has("Sort"), said.text()
     folder = phone.Folder(ph, "Music")
-    assert [p["name"] for p in folder.playlists] == ["Gym", "Jo's Mix", "New"]
-    gym = next(p for p in folder.playlists if p["name"] == "Gym")
-    assert gym["paths"] == ["albums/godsmack/awake/01 sick of life.flac", "playlists/seether - broken.flac"]
-    ph.put_text(ph.folder("Music"), "Later", "x")   # put there by hand later: left where it is
-    said = app.Lines()
-    phone.copy_playlist(ph, "Music", "New", files(("A", "One", 10)), say=said)
-    assert not said.has("Sort"), "once only: " + said.text()
-    assert "Later" in ph.names("Music")
+    other = folder.other()
+    assert [n["name"] for n in other] == ["Godsmack", "Seether", "The Doors", "Gym.m3u", "Jo's Mix.m3u8",
+                                          "Loose.mp3"]
+    assert [n["tracks"] for n in other[:3]] == [1, 2, 1]
+    assert [p["name"] for p in folder.playlists] == ["New"], "Playlists holds only what Save put there"
+    plan = folder.plan(folders=["Seether"], files=["Loose.mp3"])
+    folder.delete(plan, say=app.Lines())
+    assert ph.names("Music") == [".thumbnails", "Albums", "Godsmack", "Gym.m3u", "Jo's Mix.m3u8", "Playlists",
+                                 "The Doors"], "ticked in Other Files and deleted"
 
 
-def test_this_pc_is_sorted_by_moving_not_copying(app, files, tmp_path):
+def test_this_pc_leaves_what_is_there_too(app, files, tmp_path):
     import phone
     pc = phone.FolderDevice()
     sync = tmp_path / "Sync"
@@ -343,9 +345,11 @@ def test_this_pc_is_sorted_by_moving_not_copying(app, files, tmp_path):
     (sync / "Seether" / "Disclaimer II" / "03 Broken.flac").write_bytes(b"x")
     (sync / "Albums" / "Seether" / "Karma").mkdir(parents=True)
     phone.add_albums(pc, str(sync), files(("A", "One", 10, "First", 1)), say=app.Lines())
-    assert sorted(x.name for x in (sync / "Albums" / "Seether").iterdir()) == ["Disclaimer II", "Karma"], "merged"
+    assert sorted(x.name for x in (sync / "Albums" / "Seether").iterdir()) == ["Karma"]
     assert (sync / "Albums" / "A" / "First" / "01 One.flac").exists()
-    assert sorted(x.name for x in sync.iterdir()) == ["Albums"]
+    assert sorted(x.name for x in sync.iterdir()) == ["Albums", "Seether"]
+    pc.root = str(sync)
+    assert [n["name"] for n in phone.Folder(pc, str(sync)).other()] == ["Seether"]
 
 
 def test_adding_an_album_copies_into_albums_and_says_so(app, files):
