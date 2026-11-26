@@ -248,3 +248,75 @@ class SonosClock(threading.Thread, ReadLog):
                 ws.close()
             except Exception:
                 pass
+
+
+# --- what the Sonos is streaming (26 Nov 2026) ------------------------------------------------------
+# A stuck Alexa flash briefing left the Sonos holding the BBC news. Play in JRiver resumed it, the counter ran, and
+# the Speakers played JRiver's track in step with the news. The counter says nothing about what's playing; the
+# Sonos's UPnP TrackURI does: JRiver's tracks come as http://<this PC>:<a JRiver DLNA server's port>/Music/F<key>.wav
+# (the Sonos zone's server is not the Multiroom one the Speakers fetch from, so the port isn't compared).
+
+JRIVER_PATH = re.compile(r"^/Music/F\d+\.", re.I)
+
+
+def track_uri(ip, port=1400, timeout=2):
+    """The Sonos's TrackURI (UPnP AVTransport GetPositionInfo): what it's streaming, "" for nothing."""
+    body = ('<?xml version="1.0"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" '
+            's:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body>'
+            '<u:GetPositionInfo xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID>'
+            '</u:GetPositionInfo></s:Body></s:Envelope>').encode()
+    req = urllib.request.Request(
+        f"http://{ip}:{port}/MediaRenderer/AVTransport/Control", data=body,
+        headers={"Content-Type": 'text/xml; charset="utf-8"',
+                 "SOAPACTION": '"urn:schemas-upnp-org:service:AVTransport:1#GetPositionInfo"'})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        text = r.read().decode("utf-8", errors="replace")
+    m = re.search(r"<TrackURI>(.*?)</TrackURI>", text, re.S)
+    import html
+    return html.unescape(m.group(1)).strip() if m else ""
+
+
+def from_jriver(uri, hosts):
+    """True when uri is a JRiver track served from one of hosts (this PC's addresses)."""
+    u = urllib.parse.urlparse(uri or "")
+    return u.scheme in ("http", "https") and (u.hostname or "").lower() in hosts and bool(JRIVER_PATH.match(u.path))
+
+
+class StreamWatch(threading.Thread):
+    """
+    Asks the Sonos what it's streaming every few seconds, on its own thread. elsewhere is True once two reads in a
+    row named something that isn't a JRiver track from this PC (one read could be a moment between streams).
+    Nothing read, an empty URI or a failed read never counts: the Speakers are only held back on clear word.
+    read stands in for track_uri in tests.
+    """
+
+    def __init__(self, ip, hosts=(), every=2.0, read=None):
+        threading.Thread.__init__(self, daemon=True, name="SonosStream")
+        self.ip, self.every = ip, every
+        self.hosts = {h.lower() for h in hosts if h} | {h.lower() for h in local_addresses()}
+        self.read = read or (lambda: track_uri(self.ip))
+        self.elsewhere = False
+        self.uri = None
+        self._others = 0
+        self.stopping = threading.Event()
+
+    def check(self):
+        try:
+            uri = self.read()
+        except Exception:
+            uri = None
+        self.uri = uri
+        if uri and not from_jriver(uri, self.hosts):
+            self._others += 1
+        else:
+            self._others = 0
+        self.elsewhere = self._others >= 2
+        return self.elsewhere
+
+    def run(self):
+        while not self.stopping.is_set():
+            self.check()
+            self.stopping.wait(self.every)
+
+    def stop(self):
+        self.stopping.set()

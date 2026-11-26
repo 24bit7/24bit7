@@ -30,6 +30,7 @@ import argparse
 import collections
 import threading
 import time
+import urllib.parse
 
 import numpy as np
 
@@ -314,6 +315,8 @@ class Follower:
         self._paused_other = None            # our time JRiver first named another track meanwhile, with no fresh run
         self._together_at = None             # our time both rooms were last started together (_together)
         self._said_wait = False
+        self.stream = None                   # a sonos.StreamWatch: elsewhere while the Sonos plays something not JRiver's
+        self._said_elsewhere = False
         self.leaving = False                 # finish the track the Speakers are on, then stop following
         self._left = False                   # done: run() returns
 
@@ -367,10 +370,26 @@ class Follower:
         else:
             self._follow(now)
 
+    def _elsewhere(self):
+        """
+        True while the Sonos is streaming something that isn't JRiver's (26 Nov 2026: a stuck flash briefing, the
+        BBC news resumed by Play in JRiver). Said once; the Speakers join again by the usual rules once it's back.
+        """
+        w = self.stream
+        if w is None or not w.elsewhere:
+            self._said_elsewhere = False
+            return False
+        if not self._said_elsewhere:
+            self._said_elsewhere = True
+            self.say(f"Note: the {self.leader} is playing something else, so the Speakers are waiting.")
+        return True
+
     def _idle(self, now):
         info = self.info
         if self.leaving:
             self._left = True   # nothing more starts: Output moved away from Multiroom while nothing was playing
+            return
+        if self._elsewhere():
             return
         if not (self._sonos_playing() and info["state"] == mcws.PLAYING and info["key"]):
             return
@@ -466,6 +485,9 @@ class Follower:
 
     def _follow(self, now):
         info = self.info
+        if self._elsewhere():
+            self.finish()
+            return
         if self._clock_lost(now):
             return
         if not self._sonos_playing():
@@ -916,12 +938,16 @@ class Follower:
         """The loop, until stop is set or the Speakers have left (leave_at_track_end)."""
         stop = stop or threading.Event()
         self.begin()
+        if self.stream is not None and not self.stream.is_alive() and hasattr(self.stream, "start"):
+            self.stream.start()
         try:
             while not stop.is_set() and not self._left:
                 self.step()
                 stop.wait(every)
         finally:
             self.finish()
+            if self.stream is not None and hasattr(self.stream, "stop"):
+                self.stream.stop()
 
 
 # --- setting up, and the command line ---------------------------------------------------------
@@ -963,6 +989,8 @@ def build(leader="Sonos", follower="Speakers", server="Multiroom", sonos_name=No
     clock = sonos.SonosClock(s["ip"], s["householdId"], s["groupId"])
     f = Follower(clock, jr, leader, follower, source, output.Output, dev, start, resume, dac, say=say)
     f.reload_output = lambda: output.reload(f.device)
+    if isinstance(source, Source):   # a calibration's clicks aren't JRiver's tracks: nothing to watch
+        f.stream = sonos.StreamWatch(s["ip"], [urllib.parse.urlparse(source.base).hostname])
     return clock, f, description
 
 
