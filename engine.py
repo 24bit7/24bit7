@@ -5812,11 +5812,13 @@ def zone_state(zone=ACTIVE_ZONE):
 
 
 def zone_is_free(zone=ACTIVE_ZONE):
-    """Stopped. A voice build takes the zone over, whatever JRiver reports (after "Alexa, stop"
-    the Sonos is paused but JRiver can still say playing), unless New Playlists is After this
-    track: then only a stopped or paused zone is free, and a playing one is queued after its track."""
+    """Stopped or paused. A paused zone counts as free for the Play tab too (26 Nov 2026: the Sonos
+    left paused by a stuck flash briefing queued a Search build behind the paused track, with
+    nothing pressing play). A voice build takes the zone over, whatever JRiver reports (after
+    "Alexa, stop" the Sonos is paused but JRiver can still say playing), unless New Playlists is
+    After this track: then only a stopped or paused zone is free, and a playing one is queued after its track."""
     if not VOICE_TAKEOVER:
-        return jriver_is_stopped(zone)
+        return jriver_is_stopped(zone, paused_too=True)
     if VOICE_WAIT:   # After this track: a playing zone keeps its track, and the playlist follows it
         return jriver_is_stopped(zone, paused_too=True)
     return True
@@ -6042,7 +6044,7 @@ def send_to_jriver(keys, typed=False, seed_info=None, report=print, zone_name=No
         if VOICE_TAKEOVER:
             debug(f"Voice command: the playlist takes over {zone_label(zone)} now")
         else:
-            debug(f"{zone_label(zone)} was stopped, so the playlist starts there now")
+            debug(f"{zone_label(zone)} was stopped or paused, so the playlist starts there now")
         requests.get(f"{JRIVER_BASE}/Playback/PlayByKey",
                      params={"Key": ",".join(keys), "Zone": zone}, auth=AUTH)
         _multiroom_sent(zone)
@@ -6509,7 +6511,7 @@ class PlayedFilter:
 
 class FastStart:
     """
-    Fast start: when the output zone is stopped, the first track found plays
+    Fast start: when the output zone is stopped or paused, the first track found plays
     straight away and the rest of the playlist follows it into Playing Now.
     Only with JRiver output and a seed that isn't playing: a search, a voice
     command, a Vibe. The first track skips the Hidden Tracks check, for speed.
